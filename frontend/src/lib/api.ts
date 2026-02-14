@@ -598,6 +598,9 @@ export type UpdateSettingsPayload = {
   offerLink?: string | null;
   instructionsLink?: string | null;
   themeAccent?: string;
+  forceSubscribeEnabled?: boolean;
+  forceSubscribeChannelId?: string | null;
+  forceSubscribeMessage?: string | null;
 };
 
 export interface ClientRecord {

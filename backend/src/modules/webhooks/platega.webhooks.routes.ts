@@ -42,16 +42,18 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
     }
 
     // --- ID транзакции ---
-    const transactionId = String(data.id ?? transaction.id ?? "").trim() || undefined;
+    const transactionId = String(data.transactionId ?? data.id ?? transaction.id ?? transaction.transactionId ?? "").trim() || undefined;
     const externalId = String(data.externalId ?? transaction.externalId ?? "").trim() || undefined;
     const invoiceId = String(data.invoiceId ?? transaction.invoiceId ?? "").trim() || undefined;
-    // Также проверяем orderId/order_id
+    // orderId — может прийти напрямую или через payload (мы передаём orderId в payload при создании)
+    const payload = String(data.payload ?? transaction.payload ?? "").trim() || undefined;
     const orderId = String(data.orderId ?? data.order_id ?? data.order ?? data.merchant_order_id ?? "").trim() || undefined;
 
-    console.log("[Platega Webhook] IDs:", { transactionId, externalId, invoiceId, orderId, status });
+    console.log("[Platega Webhook] IDs:", { transactionId, externalId, invoiceId, orderId, payload, status });
 
     // --- Ищем платёж как в Panel: по всем возможным идентификаторам ---
-    const candidateIds = [...new Set([transactionId, externalId, invoiceId, orderId].filter(Boolean) as string[])];
+    // payload — наш orderId, переданный при создании транзакции
+    const candidateIds = [...new Set([payload, orderId, transactionId, externalId, invoiceId].filter(Boolean) as string[])];
 
     if (candidateIds.length === 0) {
       console.warn("[Platega Webhook] No identifiers in webhook", { keys: Object.keys(data) });

@@ -38,7 +38,7 @@ export async function createPlategaTransaction(
     description: description || `Оплата заказа ${orderId}`,
     return: returnUrl,
     failedUrl,
-    orderId,
+    payload: orderId, // orderId передаём через payload — единственное кастомное поле в API Platega
   };
 
   const headers: Record<string, string> = {

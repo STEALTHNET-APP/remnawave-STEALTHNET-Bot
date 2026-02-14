@@ -9,6 +9,21 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Если старый Service Worker перехватил запрос к /api/ и вернул SPA —
+      // удаляем SW и перезагружаем, чтобы запрос ушёл на бэкенд.
+      if (location.pathname.startsWith('/api/')) {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            var p = [];
+            regs.forEach(function(r) { p.push(r.unregister()); });
+            Promise.all(p).then(function() { location.reload(); });
+          });
+        } else {
+          location.reload();
+        }
+      }
+    </script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

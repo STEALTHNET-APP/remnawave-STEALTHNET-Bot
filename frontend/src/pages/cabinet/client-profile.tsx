@@ -109,7 +109,7 @@ export function ClientProfilePage() {
         description: "Пополнение баланса",
       });
       setTopUpModalOpen(false);
-      window.open(res.paymentUrl, "_blank", "noopener,noreferrer");
+      window.location.href = res.paymentUrl;
     } catch (e) {
       setTopUpError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {
@@ -362,7 +362,7 @@ export function ClientProfilePage() {
       )}
 
       <Dialog open={topUpModalOpen} onOpenChange={(open) => !topUpLoading && setTopUpModalOpen(open)}>
-        <DialogContent className="max-w-sm" showCloseButton={!topUpLoading}>
+        <DialogContent className="max-w-sm" showCloseButton={!topUpLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Способ оплаты</DialogTitle>
             <DialogDescription>

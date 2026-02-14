@@ -134,7 +134,7 @@ export function ClientTariffsPage() {
       setPayModal(null);
       setPromoInput("");
       setPromoResult(null);
-      window.open(res.paymentUrl, "_blank", "noopener,noreferrer");
+      window.location.href = res.paymentUrl;
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {
@@ -297,7 +297,7 @@ export function ClientTariffsPage() {
       )}
 
       <Dialog open={!!payModal} onOpenChange={(open) => { if (!open && !payLoading) { setPayModal(null); setPromoInput(""); setPromoResult(null); setPromoError(null); } }}>
-        <DialogContent className="max-w-sm" showCloseButton={!payLoading}>
+        <DialogContent className="max-w-sm" showCloseButton={!payLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Способ оплаты</DialogTitle>
             <DialogDescription>
@@ -312,7 +312,6 @@ export function ClientTariffsPage() {
                 )
               ) : ""}
             </DialogDescription>
-            <p className="text-xs text-muted-foreground mt-1">Оплата откроется в новой вкладке.</p>
           </DialogHeader>
 
           {/* Промокод */}

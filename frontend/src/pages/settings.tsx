@@ -258,6 +258,9 @@ export function SettingsPage() {
         offerLink: settings.offerLink ?? undefined,
         instructionsLink: settings.instructionsLink ?? undefined,
         themeAccent: settings.themeAccent ?? "default",
+        forceSubscribeEnabled: settings.forceSubscribeEnabled ?? false,
+        forceSubscribeChannelId: settings.forceSubscribeChannelId ?? null,
+        forceSubscribeMessage: settings.forceSubscribeMessage ?? null,
       })
       .then((updated) => {
         const u = updated as AdminSettings;
