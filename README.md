@@ -345,6 +345,9 @@ docker compose up -d
 # Запуск (со встроенным nginx + SSL)
 docker compose --profile builtin-nginx up -d
 
+# Остановка (со встроенным nginx + SSL)
+docker compose --profile builtin-nginx down
+
 # Пересборка после обновления кода
 docker compose build api bot
 docker compose up frontend        # пересобрать фронтенд
