@@ -56,6 +56,11 @@ cd remnawave-STEALTHNET-Bot
 bash install.sh
 ```
 
+> [!WARNING]
+> Если после запуска у вас **падает API** сервис, бот отвечает «**❌ fetch failed**», а в логах «docker compose logs -f api» видим ошибку «**Error: P1000: Authentication failed**», значит нужно пересобрать контейнеры командой:
+> 
+> docker compose build api bot
+
 > **Если при запуске появляется ошибка** вида `invalid option nameet: pipefail` — у скрипта могли сохраниться переводы строк в формате Windows (CRLF). Исправление: `sed -i 's/\r$//' install.sh`, затем снова `bash install.sh`.
 
 Интерактивный установщик за 2 минуты настроит всё:
