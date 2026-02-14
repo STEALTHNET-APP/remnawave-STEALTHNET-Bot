@@ -20,13 +20,13 @@
 </p>
 
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/ecd37b8e-68ef-4616-92da-550f8bd9cdb5" width="830" alt="STEALTHNET скриншот 1" />
+</p>
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/5c504c46-0b00-47d1-b767-7afed7f36983" width="830" alt="STEALTHNET скриншот 2" />
+</p>
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/5c504c46-0b00-47d1-b767-7afed7f36983" width="830" alt="STEALTHNET скриншот 1" />
-</p>
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/ecd37b8e-68ef-4616-92da-550f8bd9cdb5" width="830" alt="STEALTHNET скриншот 2" />
-</p>
 
 <p align="center">
   <a href="#быстрый-старт">Быстрый старт</a> &bull;
