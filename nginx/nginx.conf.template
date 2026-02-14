@@ -24,9 +24,8 @@ http {
         image/svg+xml
         font/woff2;
 
-    upstream api {
-        server api:5000;
-    }
+    # Резолвер Docker: имя api резолвится при запросе, а не при старте nginx
+    resolver 127.0.0.11 valid=10s ipv6=off;
 
     server {
         listen 80;
@@ -61,7 +60,8 @@ http {
         index index.html;
 
         location /api/ {
-            proxy_pass http://api;
+            set $api_backend "api:5000";
+            proxy_pass http://$api_backend;
             proxy_http_version 1.1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
