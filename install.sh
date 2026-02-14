@@ -89,7 +89,7 @@ configure_env() {
   echo ""
 
   # Домен
-  ask "Введите домен (например panel.example.com)" "" DOMAIN
+  ask "Введите домен StealthNet панели (например web.example.com), не Remnawave панели!" "" DOMAIN
   while [ -z "$DOMAIN" ]; do
     warn "Домен обязателен!"
     ask "Введите домен" "" DOMAIN
