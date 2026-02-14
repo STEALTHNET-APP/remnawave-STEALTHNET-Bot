@@ -16,6 +16,10 @@ export default defineConfig({
         theme_color: "#0f172a",
         icons: [{ src: "/icon-192.png", sizes: "192x192", type: "image/png" }],
       },
+      workbox: {
+        // Не перехватывать запросы к /api/ — они должны идти на бэкенд
+        navigateFallbackDenylist: [/^\/api\//],
+      },
     }),
   ],
   resolve: {

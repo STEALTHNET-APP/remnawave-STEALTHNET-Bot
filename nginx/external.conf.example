@@ -42,7 +42,7 @@ server {
     root /var/www/stealthnet;
     index index.html;
 
-    # API → бэкенд на порту 5000
+    # API → бэкенд на порту 5000 (обязательно 127.0.0.1, не IP контейнера 172.x.x.x!)
     location /api/ {
         proxy_pass http://127.0.0.1:5000;
         proxy_http_version 1.1;
@@ -55,9 +55,15 @@ server {
         proxy_read_timeout 60s;
     }
 
-    # SPA — React Router
+    # SPA — без этого /admin и другие маршруты дают 404
     location / {
         try_files $uri $uri/ /index.html;
+    }
+
+    # favicon: если нет favicon.ico — отдаём favicon.svg
+    location = /favicon.ico {
+        try_files /favicon.ico /favicon.svg =204;
+        add_header Cache-Control "public, max-age=86400";
     }
 
     # Кэш статики

@@ -319,42 +319,28 @@ export function ClientSubscribePage() {
                             .replace(/\{\{USERNAME\}\}/g, "")
                         : btn.link;
                       const label = getText(btn.text, locale);
-                      // В мини-апп кастомные URL-схемы заблокированы в WebView Telegram.
-                      // Обходной путь: Telegram.WebApp.openLink() открывает системный браузер,
-                      // где промежуточная страница /api/public/deeplink делает redirect на диплинк.
-                      if (isSubscription && isMiniapp) {
-                        const openDeeplink = () => {
-                          // Копируем ссылку подписки в буфер (на случай если приложение не откроется)
+                      // Кнопка «Добавить подписку» — deeplink (happ://, v2rayng:// и т.д.)
+                      // Кастомные URL-схемы не работают в Telegram WebView и ломают SPA при прямом переходе.
+                      // Решение: промежуточная страница /api/public/deeplink (авто-редирект + fallback-кнопка).
+                      // Для мини-аппа: перехватываем клик → tg.openLink() в системном браузере.
+                      // Для обычного сайта: обычная ссылка <a target="_blank"> — не блокируется попап-блокерами.
+                      if (isSubscription) {
+                        const baseUrl = window.location.origin;
+                        const deeplinkUrl = `${baseUrl}/api/public/deeplink?url=${encodeURIComponent(href)}`;
+                        const handleClick = (e: React.MouseEvent) => {
+                          // Копируем ссылку подписки в буфер
                           try { navigator.clipboard?.writeText(subscriptionUrl); } catch { /* ignore */ }
-                          // Открываем промежуточную страницу в системном браузере через Telegram API
-                          const baseUrl = window.location.origin;
-                          const redirectUrl = `${baseUrl}/api/public/deeplink?url=${encodeURIComponent(href)}`;
-                          const tg = window.Telegram?.WebApp;
+                          const tg = (window as { Telegram?: { WebApp?: { openLink?: (url: string) => void } } }).Telegram?.WebApp;
                           if (tg?.openLink) {
-                            tg.openLink(redirectUrl);
-                          } else {
-                            // Fallback: если openLink недоступен — открываем напрямую
-                            window.open(redirectUrl, "_blank");
+                            e.preventDefault();
+                            tg.openLink(deeplinkUrl);
                           }
+                          // Если не мини-апп — ссылка откроется сама (target=_blank)
                         };
                         return (
-                          <Button
-                            key={btnIndex}
-                            variant="default"
-                            size="sm"
-                            className="gap-2 min-h-[44px] cursor-pointer"
-                            onClick={openDeeplink}
-                          >
-                            <Plus className="h-4 w-4 shrink-0" />
-                            {label}
-                          </Button>
-                        );
-                      }
-                      if (isSubscription) {
-                        return (
-                          <Button key={btnIndex} variant="default" size="sm" className="gap-2" asChild>
-                            <a href={href} target="_self">
-                              <Plus className="h-4 w-4" />
+                          <Button key={btnIndex} variant="default" size="sm" className="gap-2 min-h-[44px]" asChild>
+                            <a href={deeplinkUrl} target="_blank" rel="noopener noreferrer" onClick={handleClick}>
+                              <Plus className="h-4 w-4 shrink-0" />
                               {label}
                             </a>
                           </Button>
