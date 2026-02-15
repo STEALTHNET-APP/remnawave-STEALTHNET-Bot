@@ -191,7 +191,7 @@ configure_env() {
 
   # Записываем .env
   cat > "$SCRIPT_DIR/.env" << ENVEOF
-# STEALTHNET 3 — сгенерировано install.sh $(date '+%Y-%m-%d %H:%M')
+# STEALTHNET v3 — сгенерировано install.sh $(date '+%Y-%m-%d %H:%M')
 DOMAIN=$DOMAIN
 
 # PostgreSQL
