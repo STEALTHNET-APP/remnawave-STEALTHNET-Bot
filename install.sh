@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ╔══════════════════════════════════════════════════════════════════╗
-# ║          STEALTHNET 3.1.1 — Автоустановщик                        ║
-# ╚══════════════════════════════════════════════════════════════════╝
+# ╔═══════════════════════════════════════════════════════════════╗
+# ║          STEALTHNET v3 — Автоустановщик                       ║
+# ╚═══════════════════════════════════════════════════════════════╝
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -25,7 +25,7 @@ banner() {
   echo "  ╚════██║   ██║   ██╔══╝  ██╔══██║██║     ██║   ██╔══██║"
   echo "  ███████║   ██║   ███████╗██║  ██║███████╗██║   ██║  ██║"
   echo "  ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝   ╚═╝  ╚═╝"
-  echo -e "                         ${YELLOW}v3.1.1${NC}"
+  echo -e "                         ${YELLOW}v3${NC}"
   echo -e "  ${NC}github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot${NC}"
   echo ""
 }
@@ -195,7 +195,7 @@ configure_env() {
 
   # Записываем .env
   cat > "$SCRIPT_DIR/.env" << ENVEOF
-# STEALTHNET 3.0 — сгенерировано install.sh $(date '+%Y-%m-%d %H:%M')
+# STEALTHNET v3 — сгенерировано install.sh $(date '+%Y-%m-%d %H:%M')
 DOMAIN=$DOMAIN
 
 # PostgreSQL
@@ -352,9 +352,9 @@ show_status() {
 
 show_summary() {
   echo ""
-  echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════════════════════╗${NC}"
-  echo -e "${GREEN}${BOLD}║          STEALTHNET 3.1.1 — Установка завершена!                  ║${NC}"
-  echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════════════════════╝${NC}"
+  echo -e "${GREEN}${BOLD}╔═══════════════════════════════════════════════════════════════╗${NC}"
+  echo -e "${GREEN}${BOLD}║          STEALTHNET v3 — Установка завершена!                 ║${NC}"
+  echo -e "${GREEN}${BOLD}╚═══════════════════════════════════════════════════════════════╝${NC}"
   echo ""
   echo -e "  ${BOLD}Панель:${NC}      https://$DOMAIN/admin"
   echo -e "  ${BOLD}Кабинет:${NC}     https://$DOMAIN/cabinet"
