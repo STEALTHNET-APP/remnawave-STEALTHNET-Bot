@@ -41,7 +41,7 @@ FRONT_PID=$!
 
 echo ""
 echo "=========================================="
-echo "  STEALTHNET 3.0 запущен"
+echo "  STEALTHNET v3 запущен"
 echo "  Frontend:  http://localhost:5173"
 echo "  API:       http://localhost:5000"
 echo "  Логин:     admin@stealthnet.local"
