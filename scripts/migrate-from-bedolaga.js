@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * ═══════════════════════════════════════════════════════════════════
- *  STEALTHNET 3.0 — Миграция из бэкапа «Бедолага Бот»
+ *  STEALTHNET v3 — Миграция из бэкапа «Бедолага Бот»
  * ═══════════════════════════════════════════════════════════════════
  *
  *  Бэкап формата database.json (tar.gz) из Bedolaga Telegram Bot.
@@ -145,7 +145,7 @@ function extractBackup(backupPath) {
 async function migrate() {
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
-║   STEALTHNET 3.0 — Миграция из бэкапа Бедолага Бот         ║
+║   STEALTHNET v3 — Миграция из бэкапа Бедолага Бот            ║
 ╚══════════════════════════════════════════════════════════════╝
 `);
 
@@ -305,7 +305,7 @@ async function migrate() {
     );
 
     // ─── 3. REFERRAL LINKS ───────────────────────────────────
-    logSection("3/6  Реферальные связи");
+    logSection("3/6  Рефералы");
 
     const usersWithReferrer = users.filter((u) => u.referred_by_id);
     stats.referrals.total = usersWithReferrer.length;
@@ -332,7 +332,7 @@ async function migrate() {
 
     log(
       "📊",
-      `Рефералы: ${stats.referrals.linked} связано, ${stats.referrals.errors} ошибок`
+      `Рефералы: ${stats.referrals.linked} создано, ${stats.referrals.errors} ошибок`
     );
 
     // ─── 4. TRANSACTIONS → PAYMENTS ─────────────────────────
@@ -557,7 +557,7 @@ async function migrate() {
 ║  Подписки:      ${String(stats.subscriptions.updated).padStart(4)} обновл.  ${String(stats.subscriptions.skipped).padStart(4)} пропущено             ║
 ║  Платежи:       ${String(stats.transactions.migrated).padStart(4)} создано  ${String(stats.transactions.skipped).padStart(4)} пропущено  ${String(stats.transactions.errors).padStart(3)} ошибок  ║
 ║  Рефералы:      ${String(stats.referrals.linked).padStart(4)} связано                ${String(stats.referrals.errors).padStart(3)} ошибок  ║
-║  Реф.бонусы:    ${String(stats.referralCredits.migrated).padStart(4)} создано                ${String(stats.referralCredits.errors).padStart(3)} ошибок  ║
+║  Реф.платежи:  ${String(stats.referralCredits.migrated).padStart(4)} создано                ${String(stats.referralCredits.errors).padStart(3)} ошибок  ║
 ║  Настройки:     ${String(stats.settings.migrated).padStart(4)} перенесено                            ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
@@ -577,7 +577,7 @@ async function migrate() {
 
     log("💡", "После миграции:");
     log("  ", "  1. Проверьте клиентов в админ-панели");
-    log("  ", "  2. Запустите «Sync from Remna» — привяжет подписки из Remnawave");
+    log("  ", "  2. Запустите «Sync from Remna» — синхронизирует подписки из Remnawave");
     log("  ", "  3. Настройте тарифы (у Бедолаги нет тарифных планов — создайте вручную)");
     log("  ", "  4. Настройте платёжную систему Platega");
     log("  ", `  5. Валюта: ${systemCurrency.toUpperCase()} (из system_settings)`);
