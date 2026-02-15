@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ╔══════════════════════════════════════════════════════════════════╗
-# ║          STEALTHNET 3.0 — Автоустановщик                        ║
+# ║          STEALTHNET 3.1.1 — Автоустановщик                        ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -154,13 +154,13 @@ configure_env() {
   ask "Email администратора" "admin@stealthnet.local" INIT_ADMIN_EMAIL
   DEFAULT_ADMIN_PASS=$(openssl rand -base64 14 2>/dev/null | tr -d $'=+/\n' | head -c 20)
   [ -z "$DEFAULT_ADMIN_PASS" ] && DEFAULT_ADMIN_PASS=$(head -c 20 /dev/urandom | base64 | tr -d $'=+/\n' | head -c 20)
-  ask_secret "Пароль админа (Enter = сгенерировать)" "$DEFAULT_ADMIN_PASS" INIT_ADMIN_PASSWORD
+  ask_secret "Пароль администратора (Enter = сгенерировать)" "$DEFAULT_ADMIN_PASS" INIT_ADMIN_PASSWORD
 
   echo ""
   echo -e "${BOLD}${CYAN}── Remnawave ──${NC}"
   ask "URL панели Remnawave (например https://panel.example.com)" "" REMNA_API_URL
   if [ -n "$REMNA_API_URL" ]; then
-    ask_secret "Токен Remnawave API" "" REMNA_ADMIN_TOKEN
+    ask_secret "Токен Remnawave API (Из панели Remnawave)" "" REMNA_ADMIN_TOKEN
   else
     REMNA_ADMIN_TOKEN=""
   fi
@@ -169,7 +169,7 @@ configure_env() {
   echo -e "${BOLD}${CYAN}── Telegram Bot ──${NC}"
   ask "Токен бота от @BotFather" "" BOT_TOKEN
   if [ -z "$BOT_TOKEN" ]; then
-    warn "Токен бота не указан — бот не будет запущен. Можно добавить позже в .env"
+    warn "Токен бота не указан — бот не сможет запуститься. Токен можно добавить позже в .env"
   fi
 
   echo ""
@@ -353,17 +353,17 @@ show_status() {
 show_summary() {
   echo ""
   echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════════════════════╗${NC}"
-  echo -e "${GREEN}${BOLD}║          STEALTHNET 3.0 — Установка завершена!                  ║${NC}"
+  echo -e "${GREEN}${BOLD}║          STEALTHNET 3.1.1 — Установка завершена!                  ║${NC}"
   echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════════════════════╝${NC}"
   echo ""
   echo -e "  ${BOLD}Панель:${NC}      https://$DOMAIN/admin"
   echo -e "  ${BOLD}Кабинет:${NC}     https://$DOMAIN/cabinet"
-  echo -e "  ${BOLD}Админ:${NC}       $INIT_ADMIN_EMAIL / $INIT_ADMIN_PASSWORD"
+  echo -e "  ${BOLD}Администратор:${NC}       $INIT_ADMIN_EMAIL / $INIT_ADMIN_PASSWORD"
   echo ""
   if [ -n "$BOT_TOKEN" ]; then
     echo -e "  ${BOLD}Telegram Bot:${NC} запущен"
   else
-    echo -e "  ${YELLOW}Telegram Bot:${NC} не настроен (добавьте BOT_TOKEN в .env)"
+    echo -e "  ${YELLOW}Telegram Bot:${NC} не настроен, добавьте BOT_TOKEN в .env"
   fi
   echo ""
   if [ "$USE_BUILTIN_NGINX" != "true" ]; then
