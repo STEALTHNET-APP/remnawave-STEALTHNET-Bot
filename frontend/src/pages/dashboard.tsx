@@ -5,7 +5,7 @@ import {
   Users,
   TrendingUp,
   Server,
-  DollarSign,
+  RussianRuble,
   UserPlus,
   Activity,
   CircleDot,
@@ -201,7 +201,7 @@ export function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
+              <RussianRuble className="h-5 w-5" />
               Статистика продаж
             </CardTitle>
           </CardHeader>
