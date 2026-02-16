@@ -6,7 +6,7 @@ import {
   Loader2,
   TrendingUp,
   Users,
-  DollarSign,
+  RussianRuble,
   ShoppingCart,
   Gift,
   Tag,
@@ -138,9 +138,9 @@ export function AnalyticsPage() {
           Основные метрики
         </h2>
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
-          <MetricCard icon={DollarSign} label="Общий доход" value={fmt(s.totalRevenue)} color="text-green-500" />
-          <MetricCard icon={DollarSign} label="Доход 7 дн." value={fmt(s.rev7)} sub={`${s.cnt7} платежей`} color="text-green-500" />
-          <MetricCard icon={DollarSign} label="Доход 30 дн." value={fmt(s.rev30)} sub={`${s.cnt30} платежей`} color="text-green-500" />
+          <MetricCard icon={RussianRuble} label="Общий доход" value={fmt(s.totalRevenue)} color="text-green-500" />
+          <MetricCard icon={RussianRuble} label="Доход 7 дн." value={fmt(s.rev7)} sub={`${s.cnt7} платежей`} color="text-green-500" />
+          <MetricCard icon={RussianRuble} label="Доход 30 дн." value={fmt(s.rev30)} sub={`${s.cnt30} платежей`} color="text-green-500" />
           <MetricCard icon={ShoppingCart} label="Всего платежей" value={fmt(s.totalPayments)} sub={`${s.paymentsPending} ожидают`} color="text-blue-500" />
           <MetricCard icon={Target} label="Средний чек" value={fmtDec(s.avgCheck)} color="text-indigo-500" />
         </div>
@@ -160,7 +160,7 @@ export function AnalyticsPage() {
           <MetricCard icon={Users} label="Бот + Сайт" value={fmt(s.bothClients)} color="text-emerald-500" />
           <MetricCard icon={Wallet} label="Общий баланс" value={fmtDec(s.totalBalance)} color="text-amber-500" />
           <MetricCard icon={Percent} label="Платящих" value={`${s.payingClients} (${s.payingPercent}%)`} color="text-rose-500" />
-          <MetricCard icon={DollarSign} label="ARPU" value={fmtDec(s.arpu)} sub="доход / клиент" color="text-indigo-500" />
+          <MetricCard icon={RussianRuble} label="ARPU" value={fmtDec(s.arpu)} sub="доход / клиент" color="text-indigo-500" />
           <MetricCard icon={Award} label="По рефералу" value={fmt(s.withReferrer)} sub={`${s.totalClients > 0 ? Math.round((s.withReferrer / s.totalClients) * 100) : 0}% от всех`} color="text-pink-500" />
         </div>
       </section>
@@ -557,3 +557,4 @@ function aggregateByWeekTwo(
   if (weekStart) weeks.push({ label: weekStart, v1: w1, v2: w2 });
   return weeks;
 }
+
