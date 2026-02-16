@@ -55,7 +55,18 @@ const SYSTEM_CONFIG_KEYS = [
   "support_link", "agreement_link", "offer_link", "instructions_link", // Поддержка: тех поддержка, соглашения, оферта, инструкции
   "theme_accent", // Глобальная цветовая тема: default, blue, violet, rose, orange, green, emerald, cyan, amber, red, pink, indigo
   "force_subscribe_enabled", "force_subscribe_channel_id", "force_subscribe_message", // Принудительная подписка на канал/группу
+  // Продажа опций: доп. трафик, доп. устройства, доп. серверы (сквады)
+  "sell_options_enabled", "sell_options_traffic_enabled", "sell_options_traffic_products",
+  "sell_options_devices_enabled", "sell_options_devices_products",
+  "sell_options_servers_enabled", "sell_options_servers_products",
 ];
+
+/** Продукт «Доп. трафик»: объём в ГБ, цена, валюта */
+export type SellOptionTrafficProduct = { id: string; name: string; trafficGb: number; price: number; currency: string };
+/** Продукт «Доп. устройства»: кол-во устройств, цена */
+export type SellOptionDeviceProduct = { id: string; name: string; deviceCount: number; price: number; currency: string };
+/** Продукт «Доп. сервер»: сквад Remna, опционально трафик (ГБ), цена */
+export type SellOptionServerProduct = { id: string; name: string; squadUuid: string; trafficGb?: number; price: number; currency: string };
 
 export type BotButtonConfig = { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string };
 export type BotEmojiEntry = { unicode?: string; tgEmojiId?: string };
@@ -70,6 +81,7 @@ const DEFAULT_BOT_BUTTONS: BotButtonConfig[] = [
   { id: "cabinet", visible: true, label: "🌐 Web Кабинет", order: 6, style: "primary" },
   { id: "support", visible: true, label: "🆘 Поддержка", order: 7, style: "primary" },
   { id: "promocode", visible: true, label: "🎟️ Промокод", order: 8, style: "primary" },
+  { id: "extra_options", visible: true, label: "➕ Доп. опции", order: 9, style: "primary" },
 ];
 
 export type BotMenuTexts = {
@@ -223,9 +235,9 @@ export async function getSystemConfig() {
   const settings = await prisma.systemSetting.findMany({
     where: { key: { in: SYSTEM_CONFIG_KEYS } },
   });
-  const map = Object.fromEntries(settings.map((s) => [s.key, s.value]));
-  const activeLangs = (map.active_languages || "ru,en").split(",").map((s) => s.trim());
-  const activeCurrs = (map.active_currencies || "usd,rub").split(",").map((s) => s.trim());
+  const map = Object.fromEntries(settings.map((s: { key: string; value: string }) => [s.key, s.value]));
+  const activeLangs = (map.active_languages || "ru,en").split(",").map((s: string) => s.trim());
+  const activeCurrs = (map.active_currencies || "usd,rub").split(",").map((s: string) => s.trim());
   return {
     activeLanguages: activeLangs,
     activeCurrencies: activeCurrs,
@@ -276,6 +288,13 @@ export async function getSystemConfig() {
     forceSubscribeEnabled: map.force_subscribe_enabled === "true" || map.force_subscribe_enabled === "1",
     forceSubscribeChannelId: (map.force_subscribe_channel_id ?? "").trim() || null,
     forceSubscribeMessage: (map.force_subscribe_message ?? "").trim() || null,
+    sellOptionsEnabled: map.sell_options_enabled === "true" || map.sell_options_enabled === "1",
+    sellOptionsTrafficEnabled: map.sell_options_traffic_enabled === "true" || map.sell_options_traffic_enabled === "1",
+    sellOptionsTrafficProducts: parseSellOptionTrafficProducts(map.sell_options_traffic_products),
+    sellOptionsDevicesEnabled: map.sell_options_devices_enabled === "true" || map.sell_options_devices_enabled === "1",
+    sellOptionsDevicesProducts: parseSellOptionDeviceProducts(map.sell_options_devices_products),
+    sellOptionsServersEnabled: map.sell_options_servers_enabled === "true" || map.sell_options_servers_enabled === "1",
+    sellOptionsServersProducts: parseSellOptionServerProducts(map.sell_options_servers_products),
   };
 }
 
@@ -320,6 +339,67 @@ function parsePlategaMethods(raw: string | undefined): PlategaMethodConfig[] {
     });
   } catch {
     return DEFAULT_PLATEGA_METHODS;
+  }
+}
+
+function parseSellOptionTrafficProducts(raw: string | undefined): SellOptionTrafficProduct[] {
+  if (!raw?.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x: unknown): x is Record<string, unknown> => x != null && typeof x === "object")
+      .map((x, i) => ({
+        id: typeof x.id === "string" ? x.id : `traffic_${i}`,
+        name: typeof x.name === "string" ? x.name : `+${x.trafficGb ?? 0} ГБ`,
+        trafficGb: typeof x.trafficGb === "number" ? x.trafficGb : Number(x.trafficGb) || 0,
+        price: typeof x.price === "number" ? x.price : Number(x.price) || 0,
+        currency: typeof x.currency === "string" ? x.currency : "rub",
+      }))
+      .filter((p) => p.trafficGb > 0 && p.price >= 0);
+  } catch {
+    return [];
+  }
+}
+
+function parseSellOptionDeviceProducts(raw: string | undefined): SellOptionDeviceProduct[] {
+  if (!raw?.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x: unknown): x is Record<string, unknown> => x != null && typeof x === "object")
+      .map((x, i) => ({
+        id: typeof x.id === "string" ? x.id : `devices_${i}`,
+        name: typeof x.name === "string" ? x.name : `+${x.deviceCount ?? 0} устр.`,
+        deviceCount: typeof x.deviceCount === "number" ? x.deviceCount : Number(x.deviceCount) || 0,
+        price: typeof x.price === "number" ? x.price : Number(x.price) || 0,
+        currency: typeof x.currency === "string" ? x.currency : "rub",
+      }))
+      .filter((p) => p.deviceCount > 0 && p.price >= 0);
+  } catch {
+    return [];
+  }
+}
+
+function parseSellOptionServerProducts(raw: string | undefined): SellOptionServerProduct[] {
+  if (!raw?.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x: unknown): x is Record<string, unknown> => x != null && typeof x === "object")
+      .map((x, i) => ({
+        id: typeof x.id === "string" ? x.id : `server_${i}`,
+        name: typeof x.name === "string" ? x.name : "Доп. сервер",
+        squadUuid: typeof x.squadUuid === "string" ? x.squadUuid : "",
+        trafficGb: typeof x.trafficGb === "number" && x.trafficGb >= 0 ? x.trafficGb : (typeof x.trafficGb !== "undefined" ? Number(x.trafficGb) || 0 : 0),
+        price: typeof x.price === "number" ? x.price : Number(x.price) || 0,
+        currency: typeof x.currency === "string" ? x.currency : "rub",
+      }))
+      .filter((p) => p.squadUuid.length > 0 && p.price >= 0);
+  } catch {
+    return [];
   }
 }
 
@@ -401,5 +481,46 @@ export async function getPublicConfig() {
     forceSubscribeEnabled: full.forceSubscribeEnabled ?? false,
     forceSubscribeChannelId: full.forceSubscribeChannelId ?? null,
     forceSubscribeMessage: full.forceSubscribeMessage ?? null,
+    sellOptionsEnabled: (() => {
+      const so = full as { sellOptionsEnabled?: boolean; sellOptionsTrafficEnabled?: boolean; sellOptionsTrafficProducts?: unknown[]; sellOptionsDevicesEnabled?: boolean; sellOptionsDevicesProducts?: unknown[]; sellOptionsServersEnabled?: boolean; sellOptionsServersProducts?: unknown[] };
+      if (so.sellOptionsEnabled !== true) return false;
+      const hasTraffic = so.sellOptionsTrafficEnabled && (so.sellOptionsTrafficProducts?.length ?? 0) > 0;
+      const hasDevices = so.sellOptionsDevicesEnabled && (so.sellOptionsDevicesProducts?.length ?? 0) > 0;
+      const hasServers = so.sellOptionsServersEnabled && (so.sellOptionsServersProducts?.length ?? 0) > 0;
+      return hasTraffic || hasDevices || hasServers;
+    })(),
+    sellOptions: (() => {
+      const so = full as {
+        sellOptionsEnabled?: boolean;
+        sellOptionsTrafficEnabled?: boolean;
+        sellOptionsTrafficProducts?: SellOptionTrafficProduct[];
+        sellOptionsDevicesEnabled?: boolean;
+        sellOptionsDevicesProducts?: SellOptionDeviceProduct[];
+        sellOptionsServersEnabled?: boolean;
+        sellOptionsServersProducts?: SellOptionServerProduct[];
+      };
+      if (!so.sellOptionsEnabled) return [];
+      const out: Array<
+        { kind: "traffic"; id: string; name: string; trafficGb: number; price: number; currency: string } |
+        { kind: "devices"; id: string; name: string; deviceCount: number; price: number; currency: string } |
+        { kind: "servers"; id: string; name: string; squadUuid: string; trafficGb: number; price: number; currency: string }
+      > = [];
+      if (so.sellOptionsTrafficEnabled && so.sellOptionsTrafficProducts?.length) {
+        for (const p of so.sellOptionsTrafficProducts) {
+          out.push({ kind: "traffic", id: p.id, name: p.name, trafficGb: p.trafficGb, price: p.price, currency: p.currency });
+        }
+      }
+      if (so.sellOptionsDevicesEnabled && so.sellOptionsDevicesProducts?.length) {
+        for (const p of so.sellOptionsDevicesProducts) {
+          out.push({ kind: "devices", id: p.id, name: p.name, deviceCount: p.deviceCount, price: p.price, currency: p.currency });
+        }
+      }
+      if (so.sellOptionsServersEnabled && so.sellOptionsServersProducts?.length) {
+        for (const p of so.sellOptionsServersProducts) {
+          out.push({ kind: "servers", id: p.id, name: p.name, squadUuid: p.squadUuid, trafficGb: p.trafficGb ?? 0, price: p.price, currency: p.currency });
+        }
+      }
+      return out;
+    })(),
   };
 }

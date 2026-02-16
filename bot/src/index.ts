@@ -18,6 +18,8 @@ import {
   topupPaymentMethodButtons,
   payUrlMarkup,
   profileButtons,
+  extraOptionsButtons,
+  optionPaymentMethodButtons,
   langButtons,
   currencyButtons,
   trialConfirmButton,
@@ -495,6 +497,7 @@ bot.command("start", async (ctx) => {
       botButtons: config?.botButtons ?? null,
       botBackLabel: config?.botBackLabel ?? null,
       hasSupportLinks,
+      showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
     });
 
     const photoSource = logoToPhotoSource(config?.logo);
@@ -612,6 +615,7 @@ bot.on("callback_query:data", async (ctx) => {
         botButtons: config?.botButtons ?? null,
         botBackLabel: config?.botBackLabel ?? null,
         hasSupportLinks,
+        showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
       }), entities);
       return;
     }
@@ -733,6 +737,92 @@ bot.on("callback_query:data", async (ctx) => {
         const msg = e instanceof Error ? e.message : "Ошибка создания платежа ЮKassa";
         await editMessageContent(ctx, `❌ ${msg}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
       }
+      return;
+    }
+
+    if (data === "menu:extra_options") {
+      const options = config?.sellOptions ?? [];
+      if (!options.length) {
+        await editMessageContent(ctx, "Доп. опции пока не доступны. Оформите подписку в разделе «Тарифы».", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      const { text, entities } = titleWithEmoji("PACKAGE", "Доп. опции\n\nТрафик, устройства или серверы — докупка к подписке. Выберите опцию:", config?.botEmojis);
+      await editMessageContent(ctx, text, extraOptionsButtons(options, config?.botBackLabel ?? null, innerStyles, innerEmojiIds), entities);
+      return;
+    }
+
+    if (data.startsWith("pay_option_balance:")) {
+      const parts = data.split(":");
+      const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
+      const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
+      const options = config?.sellOptions ?? [];
+      const option = options.find((o) => o.kind === kind && o.id === productId);
+      if (!option) {
+        await editMessageContent(ctx, "Опция не найдена.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      try {
+        const result = await api.payOptionByBalance(token, { kind: option.kind, productId: option.id });
+        await editMessageContent(ctx, `✅ ${result.message}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка оплаты";
+        await editMessageContent(ctx, `❌ ${msg}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
+
+    if (data.startsWith("pay_option_yookassa:")) {
+      const parts = data.split(":");
+      const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
+      const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
+      const options = config?.sellOptions ?? [];
+      const option = options.find((o) => o.kind === kind && o.id === productId);
+      if (!option) {
+        await editMessageContent(ctx, "Опция не найдена.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      try {
+        const payment = await api.createYookassaPayment(token, {
+          extraOption: { kind: option.kind, productId: option.id },
+        });
+        const optName = option.name || (option.kind === "traffic" ? `+${option.trafficGb} ГБ` : option.kind === "devices" ? `+${option.deviceCount} устр.` : "Сервер");
+        const yooTitle = titleWithEmoji("CARD", `Оплата: ${optName} — ${formatMoney(option.price, option.currency)}\n\nНажмите кнопку ниже для оплаты через ЮKassa:`, config?.botEmojis);
+        await editMessageContent(ctx, yooTitle.text, payUrlMarkup(payment.confirmationUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), yooTitle.entities);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
+        const isAuthError = /401|unauthorized|истек|авториз|токен/i.test(msg);
+        const text = isAuthError ? "❌ Сессия истекла. Отправьте /start и попробуйте снова." : `❌ ${msg}`;
+        await editMessageContent(ctx, text, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
+
+    if (data.startsWith("pay_option:")) {
+      const parts = data.split(":");
+      const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
+      const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
+      const options = config?.sellOptions ?? [];
+      const option = options.find((o) => o.kind === kind && o.id === productId);
+      if (!option) {
+        await editMessageContent(ctx, "Опция не найдена. Обновите меню (/start) и попробуйте снова.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      if (option.currency.toUpperCase() !== "RUB") {
+        await editMessageContent(ctx, "Оплата в боте доступна только в рублях (RUB).", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      const client = await api.getMe(token);
+      const optName = option.name || (option.kind === "traffic" ? `+${option.trafficGb} ГБ` : option.kind === "devices" ? `+${option.deviceCount} устр.` : "Сервер");
+      const choiceText = titleWithEmoji("CARD", `Оплата: ${optName} — ${formatMoney(option.price, option.currency)}\n\nВыберите способ оплаты:`, config?.botEmojis);
+      const markup = optionPaymentMethodButtons(
+        option,
+        client.balance,
+        config?.botBackLabel ?? null,
+        innerStyles,
+        innerEmojiIds,
+        config?.yookassaEnabled
+      );
+      await editMessageContent(ctx, choiceText.text, markup, choiceText.entities);
       return;
     }
 

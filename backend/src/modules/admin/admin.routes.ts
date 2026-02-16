@@ -859,6 +859,13 @@ const updateSettingsSchema = z.object({
   forceSubscribeEnabled: z.boolean().optional(),
   forceSubscribeChannelId: z.string().max(200).nullable().optional(),
   forceSubscribeMessage: z.string().max(1000).nullable().optional(),
+  sellOptionsEnabled: z.boolean().optional(),
+  sellOptionsTrafficEnabled: z.boolean().optional(),
+  sellOptionsTrafficProducts: z.string().max(10000).nullable().optional(),
+  sellOptionsDevicesEnabled: z.boolean().optional(),
+  sellOptionsDevicesProducts: z.string().max(10000).nullable().optional(),
+  sellOptionsServersEnabled: z.boolean().optional(),
+  sellOptionsServersProducts: z.string().max(10000).nullable().optional(),
 });
 
 adminRouter.patch("/settings", async (req, res) => {
@@ -1144,6 +1151,34 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.forceSubscribeMessage !== undefined) {
     const val = (updates.forceSubscribeMessage ?? "").trim();
     await prisma.systemSetting.upsert({ where: { key: "force_subscribe_message" }, create: { key: "force_subscribe_message", value: val }, update: { value: val } });
+  }
+  if (updates.sellOptionsEnabled !== undefined) {
+    const val = updates.sellOptionsEnabled ? "true" : "false";
+    await prisma.systemSetting.upsert({ where: { key: "sell_options_enabled" }, create: { key: "sell_options_enabled", value: val }, update: { value: val } });
+  }
+  if (updates.sellOptionsTrafficEnabled !== undefined) {
+    const val = updates.sellOptionsTrafficEnabled ? "true" : "false";
+    await prisma.systemSetting.upsert({ where: { key: "sell_options_traffic_enabled" }, create: { key: "sell_options_traffic_enabled", value: val }, update: { value: val } });
+  }
+  if (updates.sellOptionsTrafficProducts !== undefined) {
+    const val = typeof updates.sellOptionsTrafficProducts === "string" ? updates.sellOptionsTrafficProducts : (updates.sellOptionsTrafficProducts == null ? "" : JSON.stringify(updates.sellOptionsTrafficProducts));
+    await prisma.systemSetting.upsert({ where: { key: "sell_options_traffic_products" }, create: { key: "sell_options_traffic_products", value: val }, update: { value: val } });
+  }
+  if (updates.sellOptionsDevicesEnabled !== undefined) {
+    const val = updates.sellOptionsDevicesEnabled ? "true" : "false";
+    await prisma.systemSetting.upsert({ where: { key: "sell_options_devices_enabled" }, create: { key: "sell_options_devices_enabled", value: val }, update: { value: val } });
+  }
+  if (updates.sellOptionsDevicesProducts !== undefined) {
+    const val = typeof updates.sellOptionsDevicesProducts === "string" ? updates.sellOptionsDevicesProducts : (updates.sellOptionsDevicesProducts == null ? "" : JSON.stringify(updates.sellOptionsDevicesProducts));
+    await prisma.systemSetting.upsert({ where: { key: "sell_options_devices_products" }, create: { key: "sell_options_devices_products", value: val }, update: { value: val } });
+  }
+  if (updates.sellOptionsServersEnabled !== undefined) {
+    const val = updates.sellOptionsServersEnabled ? "true" : "false";
+    await prisma.systemSetting.upsert({ where: { key: "sell_options_servers_enabled" }, create: { key: "sell_options_servers_enabled", value: val }, update: { value: val } });
+  }
+  if (updates.sellOptionsServersProducts !== undefined) {
+    const val = typeof updates.sellOptionsServersProducts === "string" ? updates.sellOptionsServersProducts : (updates.sellOptionsServersProducts == null ? "" : JSON.stringify(updates.sellOptionsServersProducts));
+    await prisma.systemSetting.upsert({ where: { key: "sell_options_servers_products" }, create: { key: "sell_options_servers_products", value: val }, update: { value: val } });
   }
   const config = await getSystemConfig();
   return res.json(config);

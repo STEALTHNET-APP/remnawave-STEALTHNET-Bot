@@ -565,17 +565,31 @@ function ClientEditModal({
                   <h3 className="font-semibold mb-2">Remna (лимиты, сквад, тариф)</h3>
                   <div className="grid gap-4 sm:grid-cols-2 text-sm">
                     <div className="space-y-2">
-                      <Label>Лимит трафика (байт), 0 = без лимита</Label>
+                      <Label>Лимит трафика (ГБ), 0 = без лимита</Label>
                       <Input
                         type="number"
                         min={0}
-                        value={editForm.trafficLimitBytes ?? ""}
-                        onChange={(e) =>
+                        step={0.1}
+                        value={
+                          editForm.trafficLimitBytes !== undefined && editForm.trafficLimitBytes > 0
+                            ? (editForm.trafficLimitBytes / (1024 ** 3)).toFixed(2).replace(/\.?0+$/, "")
+                            : editForm.trafficLimitBytes === 0
+                              ? "0"
+                              : ""
+                        }
+                        onChange={(e) => {
+                          const v = e.target.value;
                           setEditForm((f) => ({
                             ...f,
-                            trafficLimitBytes: e.target.value === "" ? undefined : Number(e.target.value),
-                          }))
-                        }
+                            trafficLimitBytes:
+                              v === ""
+                                ? undefined
+                                : (() => {
+                                    const gb = parseFloat(v);
+                                    return Number.isNaN(gb) ? undefined : Math.round(gb * 1024 ** 3);
+                                  })(),
+                          }));
+                        }}
                         placeholder="0"
                       />
                     </div>

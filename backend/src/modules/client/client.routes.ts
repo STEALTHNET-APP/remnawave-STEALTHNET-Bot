@@ -11,12 +11,16 @@ import {
   generateReferralCode,
   getSystemConfig,
   getPublicConfig,
+  type SellOptionTrafficProduct,
+  type SellOptionDeviceProduct,
+  type SellOptionServerProduct,
 } from "./client.service.js";
 import { requireClientAuth } from "./client.middleware.js";
 import { remnaCreateUser, remnaUpdateUser, remnaAddUsersToInternalSquad, isRemnaConfigured, remnaGetUser, remnaGetUserByUsername, remnaGetUserByEmail, remnaGetUserByTelegramId, extractRemnaUuid } from "../remna/remna.client.js";
 import { sendVerificationEmail, isSmtpConfigured } from "../mail/mail.service.js";
 import { createPlategaTransaction, isPlategaConfigured } from "../platega/platega.service.js";
 import { activateTariffForClient } from "../tariff/tariff-activation.service.js";
+import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
 import { getAuthUrl, exchangeCodeForToken, requestPayment, processPayment } from "../yoomoney/yoomoney.service.js";
 import { createYookassaPayment } from "../yookassa/yookassa.service.js";
 
@@ -878,12 +882,13 @@ clientRouter.get("/subscription", async (req, res) => {
 });
 
 const createPlategaPaymentSchema = z.object({
-  amount: z.number().positive(),
-  currency: z.string().min(1).max(10),
+  amount: z.number().positive().optional(),
+  currency: z.string().min(1).max(10).optional(),
   paymentMethod: z.number().int().min(2).max(13),
   description: z.string().max(500).optional(),
   tariffId: z.string().min(1).optional(),
   promoCode: z.string().max(50).optional(),
+  extraOption: z.object({ kind: z.enum(["traffic", "devices", "servers"]), productId: z.string().min(1) }).optional(),
 });
 clientRouter.post("/payments/platega", async (req, res) => {
   const clientId = (req as unknown as { clientId: string }).clientId;
@@ -891,20 +896,62 @@ clientRouter.post("/payments/platega", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
   }
-  const { amount: originalAmount, currency, paymentMethod, description, tariffId, promoCode: promoCodeStr } = parsed.data;
+  const { amount: originalAmount, currency, paymentMethod, description, tariffId, promoCode: promoCodeStr, extraOption } = parsed.data;
 
   let tariffIdToStore: string | null = null;
-  let finalAmount = originalAmount;
+  let finalAmount: number;
+  let currencyToUse: string;
+  let metadataExtra: Record<string, unknown> | null = null;
 
-  if (tariffId) {
-    const tariff = await prisma.tariff.findUnique({ where: { id: tariffId } });
-    if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
-    tariffIdToStore = tariffId;
+  if (extraOption) {
+    const config = await getSystemConfig();
+    if (!(config as { sellOptionsEnabled?: boolean }).sellOptionsEnabled) {
+      return res.status(400).json({ message: "Продажа опций отключена" });
+    }
+    const cfg = config as {
+      sellOptionsTrafficEnabled?: boolean; sellOptionsTrafficProducts?: SellOptionTrafficProduct[];
+      sellOptionsDevicesEnabled?: boolean; sellOptionsDevicesProducts?: SellOptionDeviceProduct[];
+      sellOptionsServersEnabled?: boolean; sellOptionsServersProducts?: SellOptionServerProduct[];
+    };
+    if (extraOption.kind === "traffic") {
+      const product = cfg.sellOptionsTrafficEnabled && cfg.sellOptionsTrafficProducts?.find((p) => p.id === extraOption.productId);
+      if (!product) return res.status(400).json({ message: "Опция не найдена" });
+      finalAmount = product.price;
+      currencyToUse = product.currency.toUpperCase();
+      metadataExtra = { extraOption: { kind: "traffic", trafficBytes: Math.round(product.trafficGb * 1024 ** 3) } };
+    } else if (extraOption.kind === "devices") {
+      const product = cfg.sellOptionsDevicesEnabled && cfg.sellOptionsDevicesProducts?.find((p) => p.id === extraOption.productId);
+      if (!product) return res.status(400).json({ message: "Опция не найдена" });
+      finalAmount = product.price;
+      currencyToUse = product.currency.toUpperCase();
+      metadataExtra = { extraOption: { kind: "devices", deviceCount: product.deviceCount } };
+    } else {
+      const product = cfg.sellOptionsServersEnabled && cfg.sellOptionsServersProducts?.find((p) => p.id === extraOption.productId);
+      if (!product) return res.status(400).json({ message: "Опция не найдена" });
+      finalAmount = product.price;
+      currencyToUse = product.currency.toUpperCase();
+      metadataExtra = {
+        extraOption: {
+          kind: "servers",
+          squadUuid: product.squadUuid,
+          ...((product.trafficGb ?? 0) > 0 && { trafficBytes: Math.round((product.trafficGb ?? 0) * 1024 ** 3) }),
+        },
+      };
+    }
+  } else {
+    if (originalAmount == null || !currency) return res.status(400).json({ message: "Укажите сумму и валюту" });
+    finalAmount = originalAmount;
+    currencyToUse = currency.toUpperCase();
+    if (tariffId) {
+      const tariff = await prisma.tariff.findUnique({ where: { id: tariffId } });
+      if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
+      tariffIdToStore = tariffId;
+    }
   }
 
-  // Применяем промокод на скидку
+  // Применяем промокод на скидку (не для опций по умолчанию, можно разрешить — тогда скидка с опции)
   let promoCodeRecord: { id: string } | null = null;
-  if (promoCodeStr?.trim()) {
+  if (promoCodeStr?.trim() && !extraOption) {
     const result = await validatePromoCode(promoCodeStr.trim(), clientId);
     if (!result.ok) return res.status(result.status).json({ message: result.error });
     const promo = result.promo;
@@ -938,7 +985,7 @@ clientRouter.post("/payments/platega", async (req, res) => {
 
   const serviceName = config.serviceName?.trim() || "STEALTHNET";
   const orderId = randomUUID();
-  const paymentKind = tariffIdToStore ? "tariff" : "topup";
+  const paymentKind = tariffIdToStore ? "tariff" : metadataExtra ? "option" : "topup";
   const appUrl = (config.publicAppUrl || "").replace(/\/$/, "");
   const returnUrl = appUrl
     ? `${appUrl}/cabinet/dashboard?payment=success&payment_kind=${paymentKind}&oid=${orderId}`
@@ -948,24 +995,29 @@ clientRouter.post("/payments/platega", async (req, res) => {
     : "";
   const plategaDescription = tariffIdToStore
     ? `Тариф ${serviceName} #${orderId}`
-    : `Пополнение баланса ${serviceName} #${orderId}`;
+    : metadataExtra
+      ? `Опция ${serviceName} #${orderId}`
+      : `Пополнение баланса ${serviceName} #${orderId}`;
 
+  const paymentMeta = metadataExtra
+    ? { ...metadataExtra, ...(promoCodeRecord ? { promoCodeId: promoCodeRecord.id, originalAmount: finalAmount } : {}) }
+    : (promoCodeRecord ? { promoCodeId: promoCodeRecord.id, originalAmount: originalAmount ?? finalAmount } : null);
   const payment = await prisma.payment.create({
     data: {
       clientId,
       orderId,
       amount: finalAmount,
-      currency: currency.toUpperCase(),
+      currency: currencyToUse,
       status: "PENDING",
       provider: "platega",
       tariffId: tariffIdToStore,
-      metadata: promoCodeRecord ? JSON.stringify({ promoCodeId: promoCodeRecord.id, originalAmount: originalAmount }) : null,
+      metadata: paymentMeta ? JSON.stringify(paymentMeta) : null,
     },
   });
 
   const result = await createPlategaTransaction(plategaConfig, {
     amount: finalAmount,
-    currency: currency.toUpperCase(),
+    currency: currencyToUse,
     orderId,
     paymentMethod,
     returnUrl,
@@ -1086,6 +1138,98 @@ clientRouter.post("/payments/balance", async (req, res) => {
   });
 });
 
+// ——— Оплата опции (доп. трафик/устройства/сервер) балансом ———
+const payOptionByBalanceSchema = z.object({
+  extraOption: z.object({ kind: z.enum(["traffic", "devices", "servers"]), productId: z.string().min(1) }),
+});
+clientRouter.post("/payments/balance/option", async (req, res) => {
+  const clientRaw = (req as unknown as { clientId: string }).clientId;
+  const parsed = payOptionByBalanceSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
+
+  const config = await getSystemConfig();
+  if (!(config as { sellOptionsEnabled?: boolean }).sellOptionsEnabled) {
+    return res.status(400).json({ message: "Продажа опций отключена" });
+  }
+
+  const cfg = config as {
+    sellOptionsTrafficEnabled?: boolean; sellOptionsTrafficProducts?: SellOptionTrafficProduct[];
+    sellOptionsDevicesEnabled?: boolean; sellOptionsDevicesProducts?: SellOptionDeviceProduct[];
+    sellOptionsServersEnabled?: boolean; sellOptionsServersProducts?: SellOptionServerProduct[];
+  };
+  const { kind, productId } = parsed.data.extraOption;
+  let price: number;
+  let currency: string;
+  let metadataExtra: Record<string, unknown>;
+
+  if (kind === "traffic") {
+    const product = cfg.sellOptionsTrafficEnabled && cfg.sellOptionsTrafficProducts?.find((p) => p.id === productId);
+    if (!product) return res.status(400).json({ message: "Опция не найдена" });
+    price = product.price;
+    currency = product.currency;
+    metadataExtra = { extraOption: { kind: "traffic", trafficBytes: Math.round(product.trafficGb * 1024 ** 3) } };
+  } else if (kind === "devices") {
+    const product = cfg.sellOptionsDevicesEnabled && cfg.sellOptionsDevicesProducts?.find((p) => p.id === productId);
+    if (!product) return res.status(400).json({ message: "Опция не найдена" });
+    price = product.price;
+    currency = product.currency;
+    metadataExtra = { extraOption: { kind: "devices", deviceCount: product.deviceCount } };
+  } else {
+    const product = cfg.sellOptionsServersEnabled && cfg.sellOptionsServersProducts?.find((p) => p.id === productId);
+    if (!product) return res.status(400).json({ message: "Опция не найдена" });
+    price = product.price;
+    currency = product.currency;
+    metadataExtra = {
+        extraOption: {
+          kind: "servers",
+          squadUuid: product.squadUuid,
+          ...((product.trafficGb ?? 0) > 0 && { trafficBytes: Math.round((product.trafficGb ?? 0) * 1024 ** 3) }),
+        },
+      };
+  }
+
+  const clientDb = await prisma.client.findUnique({ where: { id: clientRaw } });
+  if (!clientDb) return res.status(401).json({ message: "Unauthorized" });
+  if (clientDb.balance < price) {
+    return res.status(400).json({ message: `Недостаточно средств. Баланс: ${clientDb.balance.toFixed(2)}, нужно: ${price.toFixed(2)}` });
+  }
+
+  const orderId = randomUUID();
+  const payment = await prisma.payment.create({
+    data: {
+      clientId: clientDb.id,
+      orderId,
+      amount: price,
+      currency: currency.toUpperCase(),
+      status: "PAID",
+      provider: "balance",
+      paidAt: new Date(),
+      metadata: JSON.stringify(metadataExtra),
+    },
+  });
+
+  const applyResult = await applyExtraOptionByPaymentId(payment.id);
+  if (!applyResult.ok) {
+    await prisma.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });
+    return res.status(applyResult.status).json({ message: (applyResult as { error?: string }).error || "Ошибка применения опции" });
+  }
+
+  await prisma.client.update({
+    where: { id: clientDb.id },
+    data: { balance: { decrement: price } },
+  });
+
+  const { distributeReferralRewards } = await import("../referral/referral.service.js");
+  await distributeReferralRewards(payment.id).catch(() => {});
+
+  const newBalance = clientDb.balance - price;
+  return res.json({
+    message: "Опция применена. Списано с баланса.",
+    paymentId: payment.id,
+    newBalance,
+  });
+});
+
 // ——— ЮMoney: пополнение баланса ———
 
 clientRouter.get("/yoomoney/auth-url", async (req, res) => {
@@ -1198,29 +1342,68 @@ clientRouter.post("/yoomoney/process-payment", async (req, res) => {
   return res.json({ message: "Баланс пополнен", newBalance: updated.balance });
 });
 
-// ——— ЮMoney: форма перевода (оплата картой). Пополнение баланса или покупка тарифа ———
+// ——— ЮMoney: форма перевода (оплата картой). Пополнение баланса, тариф или опция ———
 const yoomoneyFormPaymentSchema = z.object({
-  amount: z.number().positive().max(1e7),
+  amount: z.number().positive().max(1e7).optional(),
   paymentType: z.enum(["PC", "AC"]), // PC = с кошелька, AC = с карты
   tariffId: z.string().min(1).optional(),
+  extraOption: z.object({ kind: z.enum(["traffic", "devices", "servers"]), productId: z.string().min(1) }).optional(),
 });
 clientRouter.post("/yoomoney/create-form-payment", async (req, res) => {
   const clientId = (req as unknown as { clientId: string }).clientId;
   const parsed = yoomoneyFormPaymentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: "Укажите сумму и способ оплаты", errors: parsed.error.flatten() });
-  const { amount, paymentType, tariffId: tariffIdBody } = parsed.data;
+  const { amount: amountBody, paymentType, tariffId: tariffIdBody, extraOption } = parsed.data;
   const config = await getSystemConfig();
   const receiver = config.yoomoneyReceiverWallet?.trim();
   if (!receiver) return res.status(503).json({ message: "ЮMoney не настроен" });
 
   let tariffIdToStore: string | null = null;
-  if (tariffIdBody) {
-    const tariff = await prisma.tariff.findUnique({ where: { id: tariffIdBody } });
-    if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
-    tariffIdToStore = tariffIdBody;
+  let amountRounded: number;
+  let metadataObj: Record<string, unknown> = { paymentType };
+
+  if (extraOption) {
+    if (!(config as { sellOptionsEnabled?: boolean }).sellOptionsEnabled) {
+      return res.status(400).json({ message: "Продажа опций отключена" });
+    }
+    const cfg = config as {
+      sellOptionsTrafficEnabled?: boolean; sellOptionsTrafficProducts?: SellOptionTrafficProduct[];
+      sellOptionsDevicesEnabled?: boolean; sellOptionsDevicesProducts?: SellOptionDeviceProduct[];
+      sellOptionsServersEnabled?: boolean; sellOptionsServersProducts?: SellOptionServerProduct[];
+    };
+    if (extraOption.kind === "traffic") {
+      const product = cfg.sellOptionsTrafficEnabled && cfg.sellOptionsTrafficProducts?.find((p) => p.id === extraOption.productId);
+      if (!product) return res.status(400).json({ message: "Опция не найдена" });
+      amountRounded = Math.round(product.price * 100) / 100;
+      metadataObj = { paymentType, extraOption: { kind: "traffic", trafficBytes: Math.round(product.trafficGb * 1024 ** 3) } };
+    } else if (extraOption.kind === "devices") {
+      const product = cfg.sellOptionsDevicesEnabled && cfg.sellOptionsDevicesProducts?.find((p) => p.id === extraOption.productId);
+      if (!product) return res.status(400).json({ message: "Опция не найдена" });
+      amountRounded = Math.round(product.price * 100) / 100;
+      metadataObj = { paymentType, extraOption: { kind: "devices", deviceCount: product.deviceCount } };
+    } else {
+      const product = cfg.sellOptionsServersEnabled && cfg.sellOptionsServersProducts?.find((p) => p.id === extraOption.productId);
+      if (!product) return res.status(400).json({ message: "Опция не найдена" });
+      amountRounded = Math.round(product.price * 100) / 100;
+      metadataObj = {
+        paymentType,
+        extraOption: {
+          kind: "servers",
+          squadUuid: product.squadUuid,
+          ...((product.trafficGb ?? 0) > 0 && { trafficBytes: Math.round((product.trafficGb ?? 0) * 1024 ** 3) }),
+        },
+      };
+    }
+  } else {
+    if (amountBody == null) return res.status(400).json({ message: "Укажите сумму" });
+    amountRounded = Math.round(amountBody * 100) / 100;
+    if (tariffIdBody) {
+      const tariff = await prisma.tariff.findUnique({ where: { id: tariffIdBody } });
+      if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
+      tariffIdToStore = tariffIdBody;
+    }
   }
 
-  const amountRounded = Math.round(amount * 100) / 100;
   const orderId = randomUUID();
   const payment = await prisma.payment.create({
     data: {
@@ -1231,14 +1414,18 @@ clientRouter.post("/yoomoney/create-form-payment", async (req, res) => {
       status: "PENDING",
       provider: "yoomoney_form",
       tariffId: tariffIdToStore,
-      metadata: JSON.stringify({ paymentType }),
+      metadata: JSON.stringify(metadataObj),
     },
   });
 
   const serviceName = config.serviceName?.trim() || "STEALTHNET";
   const appUrl = (config.publicAppUrl || "").replace(/\/$/, "");
   const successURL = appUrl ? `${appUrl}/cabinet?yoomoney_form=success` : "";
-  const targets = tariffIdToStore ? `Тариф ${serviceName} #${orderId}` : `Пополнение баланса ${serviceName} #${orderId}`;
+  const targets = tariffIdToStore
+    ? `Тариф ${serviceName} #${orderId}`
+    : extraOption
+      ? `Опция ${serviceName} #${orderId}`
+      : `Пополнение баланса ${serviceName} #${orderId}`;
   const params = new URLSearchParams({
     receiver,
     "quickpay-form": "shop",
@@ -1297,32 +1484,81 @@ clientRouter.get("/yoomoney/form-payment/:paymentId", async (req, res) => {
   });
 });
 
-// ——— ЮKassa API: создание платежа (тариф или пополнение), редирект на confirmation_url ———
+// ——— ЮKassa API: создание платежа (тариф, пополнение или опция), редирект на confirmation_url ———
 const yookassaCreatePaymentSchema = z.object({
-  amount: z.number().positive().max(1e7),
-  currency: z.string().min(1).max(10),
+  amount: z.number().positive().max(1e7).optional(),
+  currency: z.string().min(1).max(10).optional(),
   tariffId: z.string().min(1).optional(),
   promoCode: z.string().optional(),
+  extraOption: z.object({
+    kind: z.enum(["traffic", "devices", "servers"]),
+    productId: z.string().min(1),
+  }).optional(),
 });
 clientRouter.post("/yookassa/create-payment", async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = yookassaCreatePaymentSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ message: "Укажите сумму и валюту", errors: parsed.error.flatten() });
-    const { amount, currency, tariffId: tariffIdBody, promoCode } = parsed.data;
+    if (!parsed.success) return res.status(400).json({ message: "Неверные параметры", errors: parsed.error.flatten() });
+    const { amount: amountBody, currency: currencyBody, tariffId: tariffIdBody, promoCode, extraOption } = parsed.data;
     const config = await getSystemConfig();
     const shopId = config.yookassaShopId?.trim();
     const secretKey = config.yookassaSecretKey?.trim();
     if (!shopId || !secretKey) return res.status(503).json({ message: "ЮKassa не настроена" });
 
-    const currencyUpper = currency.toUpperCase();
-    if (currencyUpper !== "RUB") return res.status(400).json({ message: "ЮKassa принимает только рубли (RUB)" });
-
+    let amountRounded: number;
+    let currencyUpper: string;
     let tariffIdToStore: string | null = null;
-    if (tariffIdBody) {
-      const tariff = await prisma.tariff.findUnique({ where: { id: tariffIdBody } });
-      if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
-      tariffIdToStore = tariffIdBody;
+    let metadataObj: Record<string, unknown> = promoCode ? { promoCode } : {};
+
+    if (extraOption) {
+      if (!(config as { sellOptionsEnabled?: boolean }).sellOptionsEnabled) {
+        return res.status(400).json({ message: "Продажа опций отключена" });
+      }
+      const cfg = config as {
+        sellOptionsTrafficEnabled?: boolean;
+        sellOptionsTrafficProducts?: SellOptionTrafficProduct[];
+        sellOptionsDevicesEnabled?: boolean;
+        sellOptionsDevicesProducts?: SellOptionDeviceProduct[];
+        sellOptionsServersEnabled?: boolean;
+        sellOptionsServersProducts?: SellOptionServerProduct[];
+      };
+      if (extraOption.kind === "traffic") {
+        const product = cfg.sellOptionsTrafficEnabled && cfg.sellOptionsTrafficProducts?.find((p) => p.id === extraOption.productId);
+        if (!product) return res.status(400).json({ message: "Опция не найдена" });
+        amountRounded = Math.round(product.price * 100) / 100;
+        currencyUpper = product.currency.toUpperCase();
+        metadataObj = { extraOption: { kind: "traffic", trafficBytes: Math.round(product.trafficGb * 1024 ** 3) } };
+      } else if (extraOption.kind === "devices") {
+        const product = cfg.sellOptionsDevicesEnabled && cfg.sellOptionsDevicesProducts?.find((p) => p.id === extraOption.productId);
+        if (!product) return res.status(400).json({ message: "Опция не найдена" });
+        amountRounded = Math.round(product.price * 100) / 100;
+        currencyUpper = product.currency.toUpperCase();
+        metadataObj = { extraOption: { kind: "devices", deviceCount: product.deviceCount } };
+      } else {
+        const product = cfg.sellOptionsServersEnabled && cfg.sellOptionsServersProducts?.find((p) => p.id === extraOption.productId);
+        if (!product) return res.status(400).json({ message: "Опция не найдена" });
+        amountRounded = Math.round(product.price * 100) / 100;
+        currencyUpper = product.currency.toUpperCase();
+        metadataObj = {
+        extraOption: {
+          kind: "servers",
+          squadUuid: product.squadUuid,
+          ...((product.trafficGb ?? 0) > 0 && { trafficBytes: Math.round((product.trafficGb ?? 0) * 1024 ** 3) }),
+        },
+      };
+      }
+      if (currencyUpper !== "RUB") return res.status(400).json({ message: "ЮKassa принимает только рубли (RUB)" });
+    } else {
+      if (amountBody == null || !currencyBody) return res.status(400).json({ message: "Укажите сумму и валюту" });
+      currencyUpper = currencyBody.toUpperCase();
+      if (currencyUpper !== "RUB") return res.status(400).json({ message: "ЮKassa принимает только рубли (RUB)" });
+      if (tariffIdBody) {
+        const tariff = await prisma.tariff.findUnique({ where: { id: tariffIdBody } });
+        if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
+        tariffIdToStore = tariffIdBody;
+      }
+      amountRounded = Math.round(amountBody * 100) / 100;
     }
 
     const client = await prisma.client.findUnique({
@@ -1331,7 +1567,6 @@ clientRouter.post("/yookassa/create-payment", async (req, res) => {
     });
     const customerEmail = client?.email?.trim() || null;
 
-    const amountRounded = Math.round(amount * 100) / 100;
     const orderId = randomUUID();
     const payment = await prisma.payment.create({
       data: {
@@ -1342,7 +1577,7 @@ clientRouter.post("/yookassa/create-payment", async (req, res) => {
         status: "PENDING",
         provider: "yookassa",
         tariffId: tariffIdToStore,
-        metadata: promoCode ? JSON.stringify({ promoCode }) : null,
+        metadata: Object.keys(metadataObj).length > 0 ? JSON.stringify(metadataObj) : null,
       },
     });
 
@@ -1351,7 +1586,9 @@ clientRouter.post("/yookassa/create-payment", async (req, res) => {
     const returnUrl = appUrl ? `${appUrl}/cabinet?yookassa=success` : "";
     const description = tariffIdToStore
       ? `Тариф ${serviceName} #${orderId}`
-      : `Пополнение баланса ${serviceName} #${orderId}`;
+      : extraOption
+        ? `Опция ${serviceName} #${orderId}`
+        : `Пополнение баланса ${serviceName} #${orderId}`;
 
     const result = await createYookassaPayment({
       shopId,
