@@ -49,9 +49,11 @@ function calculateExpireAt(currentExpireAt: Date | null, durationDays: number): 
 
 /**
  * Активирует тариф для клиента в Remnawave:
- * - обновляет/создаёт пользователя с expireAt, trafficLimit, deviceLimit
+ * - обновляет/создаёт пользователя с expireAt, trafficLimitBytes (в байтах), deviceLimit
  * - назначает activeInternalSquads
  * - При повторной покупке ДОБАВЛЯЕТ дни к текущему сроку подписки
+ *
+ * Лимит трафика: в панели 1 ГБ = 1 ГиБ = 1024³ байт; в Remna передаём значение в байтах как есть.
  */
 export async function activateTariffForClient(
   client: { id: string; remnawaveUuid: string | null; email: string | null; telegramId: string | null },

@@ -32,6 +32,7 @@ import { ClientProfilePage } from "@/pages/cabinet/client-profile";
 import { ClientReferralPage } from "@/pages/cabinet/client-referral";
 import { ClientSubscribePage } from "@/pages/cabinet/client-subscribe";
 import { ClientYooMoneyPayPage } from "@/pages/cabinet/client-yoomoney-pay";
+import { ClientExtraOptionsPage } from "@/pages/cabinet/client-extra-options";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { state } = useAuth();
@@ -191,6 +192,14 @@ function AppRoutes() {
           element={
             <RequireClientAuth>
               <ClientYooMoneyPayPage />
+            </RequireClientAuth>
+          }
+        />
+        <Route
+          path="extra-options"
+          element={
+            <RequireClientAuth>
+              <ClientExtraOptionsPage />
             </RequireClientAuth>
           }
         />

@@ -814,6 +814,7 @@ function TariffModal({
               onChange={(e) => setTrafficGb(e.target.value)}
               placeholder="Не ограничено"
             />
+            <p className="text-xs text-muted-foreground mt-1">1 ГБ = 1024³ байт (ГиБ). В Remna передаётся лимит в байтах.</p>
           </div>
           <div>
             <Label htmlFor="tariff-devices">Лимит устройств</Label>

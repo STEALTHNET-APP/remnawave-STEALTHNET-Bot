@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useClientAuth } from "@/contexts/client-auth";
 import { CabinetConfigProvider, useCabinetConfig } from "@/contexts/cabinet-config";
 import { createContext, useContext } from "react";
 import { useIsMiniapp } from "@/hooks/use-is-miniapp";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, User, LogOut, Shield, Users, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, Package, User, LogOut, Shield, Users, Sun, Moon, PlusCircle } from "lucide-react";
 import { useTheme } from "@/contexts/theme";
 
 const IsMiniappContext = createContext(false);
@@ -13,9 +13,10 @@ export function useCabinetMiniapp() {
   return useContext(IsMiniappContext);
 }
 
-const NAV_ITEMS = [
+const ALL_NAV_ITEMS = [
   { to: "/cabinet/dashboard", label: "Главная", icon: LayoutDashboard },
   { to: "/cabinet/tariffs", label: "Тарифы", icon: Package },
+  { to: "/cabinet/extra-options", label: "Опции", icon: PlusCircle },
   { to: "/cabinet/referral", label: "Рефералы", icon: Users },
   { to: "/cabinet/profile", label: "Профиль", icon: User },
 ];
@@ -41,6 +42,10 @@ function MobileCabinetShell() {
   const location = useLocation();
   const { state, logout, refreshProfile } = useClientAuth();
   const config = useCabinetConfig();
+  const navItems = useMemo(
+    () => (config?.sellOptionsEnabled ? ALL_NAV_ITEMS : ALL_NAV_ITEMS.filter((item) => item.to !== "/cabinet/extra-options")),
+    [config?.sellOptionsEnabled]
+  );
   const [logoError, setLogoError] = useState(false);
   useEffect(() => { setLogoError(false); }, [config?.logo]);
   useEffect(() => {
@@ -84,7 +89,7 @@ function MobileCabinetShell() {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="flex items-center justify-around h-16 max-w-lg mx-auto">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
+          {navItems.map(({ to, label, icon: Icon }) => {
             const active = location.pathname === to;
             return (
               <Link key={to} to={to} className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs min-w-0">
@@ -120,6 +125,10 @@ function CabinetShell() {
   const location = useLocation();
   const { state, logout, refreshProfile } = useClientAuth();
   const config = useCabinetConfig();
+  const navItems = useMemo(
+    () => (config?.sellOptionsEnabled ? ALL_NAV_ITEMS : ALL_NAV_ITEMS.filter((item) => item.to !== "/cabinet/extra-options")),
+    [config?.sellOptionsEnabled]
+  );
   const isMiniapp = useIsMiniapp();
   const isMobile = useIsMobile();
   const [logoError, setLogoError] = useState(false);
@@ -150,7 +159,7 @@ function CabinetShell() {
             {serviceName ? <span className="hidden sm:inline truncate">{serviceName}</span> : null}
           </Link>
           <nav className="flex items-center gap-1">
-            {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+            {navItems.map(({ to, label, icon: Icon }) => (
               <Link key={to} to={to}>
                 <Button
                   variant={location.pathname === to ? "secondary" : "ghost"}

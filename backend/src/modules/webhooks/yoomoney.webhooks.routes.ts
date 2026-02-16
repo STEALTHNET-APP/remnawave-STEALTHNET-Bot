@@ -10,6 +10,17 @@ import { createHash } from "crypto";
 import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { activateTariffByPaymentId } from "../tariff/tariff-activation.service.js";
+import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
+
+function hasExtraOptionInMetadata(metadata: string | null): boolean {
+  if (!metadata?.trim()) return false;
+  try {
+    const obj = JSON.parse(metadata) as Record<string, unknown>;
+    return obj?.extraOption != null && typeof obj.extraOption === "object";
+  } catch {
+    return false;
+  }
+}
 import { distributeReferralRewards } from "../referral/referral.service.js";
 
 export const yoomoneyWebhooksRouter = Router();
@@ -126,19 +137,19 @@ yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
   const labelNorm = label.trim();
 
   // Как в Panel: ищем сначала по id (мы пишем payment.id в label), потом по orderId, потом по operation_id
-  let payment: { id: string; clientId: string; amount: number; tariffId: string | null; status: string } | null = null;
+  let payment: { id: string; clientId: string; amount: number; tariffId: string | null; status: string; metadata: string | null } | null = null;
 
   // 1) По payment.id (наш label при создании = payment.id)
   payment = await prisma.payment.findFirst({
     where: { id: labelNorm, provider: "yoomoney_form" },
-    select: { id: true, clientId: true, amount: true, tariffId: true, status: true },
+    select: { id: true, clientId: true, amount: true, tariffId: true, status: true, metadata: true },
   });
 
   // 2) По orderId (как в Panel: label = order_id)
   if (!payment) {
     payment = await prisma.payment.findFirst({
       where: { orderId: labelNorm, provider: "yoomoney_form" },
-      select: { id: true, clientId: true, amount: true, tariffId: true, status: true },
+      select: { id: true, clientId: true, amount: true, tariffId: true, status: true, metadata: true },
     });
   }
 
@@ -146,7 +157,7 @@ yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
   if (!payment && operationId) {
     payment = await prisma.payment.findFirst({
       where: { externalId: operationId, provider: "yoomoney_form" },
-      select: { id: true, clientId: true, amount: true, tariffId: true, status: true },
+      select: { id: true, clientId: true, amount: true, tariffId: true, status: true, metadata: true },
     });
   }
 
@@ -165,7 +176,8 @@ yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
     return res.status(200).send("OK");
   }
 
-  const isTopUp = !payment.tariffId;
+  const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
+  const isTopUp = !payment.tariffId && !isExtraOption;
 
   if (isTopUp) {
     await prisma.$transaction([
@@ -190,13 +202,22 @@ yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
       where: { id: payment.id },
       data: { status: "PAID", paidAt: new Date(), externalId: operationId },
     });
-    console.log("[YooMoney Webhook] Payment PAID (tariff)", { paymentId: payment.id, operationId, notificationType });
+    console.log("[YooMoney Webhook] Payment PAID (tariff/option)", { paymentId: payment.id, operationId, notificationType });
 
-    const activation = await activateTariffByPaymentId(payment.id);
-    if (activation.ok) {
-      console.log("[YooMoney Webhook] Tariff activated", { paymentId: payment.id });
+    if (isExtraOption) {
+      const result = await applyExtraOptionByPaymentId(payment.id);
+      if (result.ok) {
+        console.log("[YooMoney Webhook] Extra option applied", { paymentId: payment.id });
+      } else {
+        console.error("[YooMoney Webhook] Extra option apply failed", { paymentId: payment.id, error: (result as { error?: string }).error });
+      }
     } else {
-      console.error("[YooMoney Webhook] Tariff activation failed", { paymentId: payment.id, error: (activation as { error?: string }).error });
+      const activation = await activateTariffByPaymentId(payment.id);
+      if (activation.ok) {
+        console.log("[YooMoney Webhook] Tariff activated", { paymentId: payment.id });
+      } else {
+        console.error("[YooMoney Webhook] Tariff activation failed", { paymentId: payment.id, error: (activation as { error?: string }).error });
+      }
     }
   }
 

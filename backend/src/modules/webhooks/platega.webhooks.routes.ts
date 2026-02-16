@@ -9,7 +9,18 @@
 import { Router } from "express";
 import { prisma } from "../../db.js";
 import { activateTariffByPaymentId } from "../tariff/tariff-activation.service.js";
+import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
 import { distributeReferralRewards } from "../referral/referral.service.js";
+
+function hasExtraOptionInMetadata(metadata: string | null): boolean {
+  if (!metadata?.trim()) return false;
+  try {
+    const obj = JSON.parse(metadata) as Record<string, unknown>;
+    return obj?.extraOption != null && typeof obj.extraOption === "object";
+  } catch {
+    return false;
+  }
+}
 
 export const plategaWebhooksRouter = Router();
 
@@ -100,7 +111,8 @@ async function ensureTariffActivation(paymentId: string): Promise<void> {
       where: { id: paymentId },
       select: { status: true, tariffId: true, metadata: true },
     });
-    if (!row || row.status !== "PAID" || !row.tariffId) {
+    const hasExtra = hasExtraOptionInMetadata(row?.metadata ?? null);
+    if (!row || row.status !== "PAID" || (!row.tariffId && !hasExtra)) {
       return { claimed: false as const, reason: "not_paid_or_no_tariff" };
     }
 
@@ -129,7 +141,14 @@ async function ensureTariffActivation(paymentId: string): Promise<void> {
 
   if (!claim.claimed) return;
 
-  const activation = await activateTariffByPaymentId(paymentId);
+  const row = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    select: { tariffId: true, metadata: true },
+  });
+  const isExtraOption = row ? hasExtraOptionInMetadata(row.metadata) : false;
+  const activation = isExtraOption
+    ? await applyExtraOptionByPaymentId(paymentId)
+    : await activateTariffByPaymentId(paymentId);
   await prisma.$transaction(async (tx) => {
     const row = await tx.payment.findUnique({
       where: { id: paymentId },

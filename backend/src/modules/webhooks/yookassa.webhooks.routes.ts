@@ -7,7 +7,18 @@
 import { Router } from "express";
 import { prisma } from "../../db.js";
 import { activateTariffByPaymentId } from "../tariff/tariff-activation.service.js";
+import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
 import { distributeReferralRewards } from "../referral/referral.service.js";
+
+function hasExtraOptionInMetadata(metadata: string | null): boolean {
+  if (!metadata?.trim()) return false;
+  try {
+    const obj = JSON.parse(metadata) as Record<string, unknown>;
+    return obj?.extraOption != null && typeof obj.extraOption === "object";
+  } catch {
+    return false;
+  }
+}
 
 export const yookassaWebhooksRouter = Router();
 
@@ -52,7 +63,7 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
 
   const payment = await prisma.payment.findFirst({
     where: { id: paymentId, provider: "yookassa" },
-    select: { id: true, clientId: true, amount: true, tariffId: true, status: true },
+    select: { id: true, clientId: true, amount: true, tariffId: true, status: true, metadata: true },
   });
 
   if (!payment) {
@@ -71,7 +82,9 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
     data: { status: "PAID", paidAt: new Date(), externalId: yookassaId },
   });
 
-  const isTopUp = !payment.tariffId;
+  const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
+  const isTopUp = !payment.tariffId && !isExtraOption;
+
   if (isTopUp) {
     await prisma.client.update({
       where: { id: payment.clientId },
@@ -82,6 +95,16 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
       clientId: payment.clientId,
       amount: payment.amount,
     });
+  } else if (isExtraOption) {
+    const result = await applyExtraOptionByPaymentId(payment.id);
+    if (result.ok) {
+      console.log("[YooKassa Webhook] Extra option applied", { paymentId: payment.id });
+    } else {
+      console.error("[YooKassa Webhook] Extra option apply failed", {
+        paymentId: payment.id,
+        error: (result as { error?: string }).error,
+      });
+    }
   } else {
     const activation = await activateTariffByPaymentId(payment.id);
     if (activation.ok) {

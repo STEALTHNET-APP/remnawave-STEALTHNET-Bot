@@ -412,7 +412,7 @@ export const api = {
 
   async clientCreatePlategaPayment(
     token: string,
-    data: { amount: number; currency: string; paymentMethod: number; description?: string; tariffId?: string; promoCode?: string }
+    data: { amount?: number; currency?: string; paymentMethod: number; description?: string; tariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
   ): Promise<{ paymentUrl: string; orderId: string; paymentId: string; discountApplied?: boolean; finalAmount?: number }> {
     return request("/client/payments/platega", { method: "POST", body: JSON.stringify(data), token });
   },
@@ -437,13 +437,21 @@ export const api = {
     return request("/client/payments/balance", { method: "POST", body: JSON.stringify(data), token });
   },
 
+  /** Оплата опции (доп. трафик/устройства/сервер) с баланса */
+  async clientPayOptionByBalance(
+    token: string,
+    data: { extraOption: { kind: "traffic" | "devices" | "servers"; productId: string } }
+  ): Promise<{ message: string; paymentId: string; newBalance: number }> {
+    return request("/client/payments/balance/option", { method: "POST", body: JSON.stringify(data), token });
+  },
+
   async getYoomoneyAuthUrl(token: string): Promise<{ url: string }> {
     return request("/client/yoomoney/auth-url", { token });
   },
-  /** Форма перевода ЮMoney (оплата картой). Пополнение баланса или покупка тарифа (tariffId опционально). */
+  /** Форма перевода ЮMoney (оплата картой). Пополнение баланса, тариф или опция (tariffId/extraOption опционально). */
   async yoomoneyCreateFormPayment(
     token: string,
-    data: { amount: number; paymentType: "PC" | "AC"; tariffId?: string }
+    data: { amount?: number; paymentType: "PC" | "AC"; tariffId?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
   ): Promise<{ paymentId: string; paymentUrl: string; form: { receiver: string; sum: number; label: string; paymentType: string; successURL: string }; successURL: string }> {
     return request("/client/yoomoney/create-form-payment", { method: "POST", body: JSON.stringify(data), token });
   },
@@ -463,7 +471,7 @@ export const api = {
   /** ЮKassa API: создание платежа (тариф или пополнение), возвращает confirmationUrl для редиректа. */
   async yookassaCreatePayment(
     token: string,
-    data: { amount: number; currency: string; tariffId?: string; promoCode?: string }
+    data: { amount?: number; currency?: string; tariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
   ): Promise<{ paymentId: string; confirmationUrl: string; yookassaPaymentId: string }> {
     return request("/client/yookassa/create-payment", { method: "POST", body: JSON.stringify(data), token });
   },
@@ -612,6 +620,13 @@ export type UpdateSettingsPayload = {
   forceSubscribeEnabled?: boolean;
   forceSubscribeChannelId?: string | null;
   forceSubscribeMessage?: string | null;
+  sellOptionsEnabled?: boolean;
+  sellOptionsTrafficEnabled?: boolean;
+  sellOptionsTrafficProducts?: string | null;
+  sellOptionsDevicesEnabled?: boolean;
+  sellOptionsDevicesProducts?: string | null;
+  sellOptionsServersEnabled?: boolean;
+  sellOptionsServersProducts?: string | null;
 };
 
 export interface ClientRecord {
@@ -710,6 +725,14 @@ export interface AdminSettings {
   forceSubscribeEnabled?: boolean;
   forceSubscribeChannelId?: string | null;
   forceSubscribeMessage?: string | null;
+  /** Продажа опций: доп. трафик, устройства, серверы */
+  sellOptionsEnabled?: boolean;
+  sellOptionsTrafficEnabled?: boolean;
+  sellOptionsTrafficProducts?: { id: string; name: string; trafficGb: number; price: number; currency: string }[];
+  sellOptionsDevicesEnabled?: boolean;
+  sellOptionsDevicesProducts?: { id: string; name: string; deviceCount: number; price: number; currency: string }[];
+  sellOptionsServersEnabled?: boolean;
+  sellOptionsServersProducts?: { id: string; name: string; squadUuid: string; trafficGb?: number; price: number; currency: string }[];
 }
 
 /** Конфиг страницы подписки (формат как sub.stealthnet.app) */
@@ -1001,6 +1024,12 @@ export type CreatePromoCodePayload = {
 
 export type UpdatePromoCodePayload = Partial<CreatePromoCodePayload>;
 
+/** Одна опция для продажи в кабинете (трафик / устройства / сервер) */
+export type PublicSellOption =
+  | { kind: "traffic"; id: string; name: string; trafficGb: number; price: number; currency: string }
+  | { kind: "devices"; id: string; name: string; deviceCount: number; price: number; currency: string }
+  | { kind: "servers"; id: string; name: string; squadUuid: string; trafficGb?: number; price: number; currency: string };
+
 export interface PublicConfig {
   activeLanguages: string[];
   activeCurrencies: string[];
@@ -1018,4 +1047,6 @@ export interface PublicConfig {
   trialEnabled?: boolean;
   trialDays?: number;
   themeAccent?: string;
+  sellOptionsEnabled?: boolean;
+  sellOptions?: PublicSellOption[];
 }

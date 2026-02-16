@@ -312,16 +312,14 @@ export function ClientTariffsPage() {
                         <CardContent className="flex flex-row items-center gap-3 py-2.5 px-3 min-h-0 min-w-0">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold leading-tight truncate">{t.name}</p>
-                            <div className="flex items-center gap-x-3 gap-y-0 mt-0.5 text-xs text-muted-foreground">
+                            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0 text-xs text-muted-foreground">
                               <span className="flex items-center gap-1">
                                 <Calendar className="h-3 w-3 shrink-0 opacity-70" />
                                 {t.durationDays} дн.
                               </span>
                               <span className="flex items-center gap-1">
                                 <Wifi className="h-3 w-3 shrink-0 opacity-70" />
-                                {t.trafficLimitBytes != null && t.trafficLimitBytes > 0
-                                  ? `${(t.trafficLimitBytes / 1024 / 1024 / 1024).toFixed(1)} ГБ`
-                                  : "∞"}
+                                {t.trafficLimitBytes != null && t.trafficLimitBytes > 0 ? `${(t.trafficLimitBytes / 1024 / 1024 / 1024).toFixed(1)} ГБ` : "∞"}
                               </span>
                               <span className="flex items-center gap-1">
                                 <Smartphone className="h-3 w-3 shrink-0 opacity-70" />
@@ -329,14 +327,14 @@ export function ClientTariffsPage() {
                               </span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex flex-col items-center gap-1 shrink-0">
                             <span className="text-sm font-semibold tabular-nums whitespace-nowrap" title={formatMoney(t.price, t.currency)}>
                               {formatMoney(t.price, t.currency)}
                             </span>
                             {token ? (
                               <Button
                                 size="sm"
-                                className="h-7 px-2.5 text-xs gap-1"
+                                className="h-7 px-2.5 text-xs gap-1 w-full"
                                 onClick={() => setPayModal({ tariff: { id: t.id, name: t.name, price: t.price, currency: t.currency } })}
                               >
                                 <CreditCard className="h-3 w-3 shrink-0" />

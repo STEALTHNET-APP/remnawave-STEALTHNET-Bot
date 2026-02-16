@@ -60,6 +60,12 @@ export async function getPublicConfig(): Promise<{
   forceSubscribeEnabled?: boolean;
   forceSubscribeChannelId?: string | null;
   forceSubscribeMessage?: string | null;
+  sellOptionsEnabled?: boolean;
+  sellOptions?: Array<
+    | { kind: "traffic"; id: string; name: string; trafficGb: number; price: number; currency: string }
+    | { kind: "devices"; id: string; name: string; deviceCount: number; price: number; currency: string }
+    | { kind: "servers"; id: string; name: string; squadUuid: string; trafficGb?: number; price: number; currency: string }
+  >;
 } | null> {
   return fetchJson("/api/public/config");
 }
@@ -107,32 +113,33 @@ export async function getPublicTariffs(): Promise<{
   return fetchJson("/api/public/tariffs");
 }
 
-/** Создать платёж Platega (возвращает paymentUrl) */
+/** Создать платёж Platega (возвращает paymentUrl). Для опции — extraOption. */
 export async function createPlategaPayment(
   token: string,
   body: {
-    amount: number;
-    currency: string;
+    amount?: number;
+    currency?: string;
     paymentMethod: number;
     description?: string;
     tariffId?: string;
+    extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string };
   }
 ): Promise<{ paymentUrl: string; orderId: string; paymentId: string }> {
   return fetchJson("/api/client/payments/platega", { method: "POST", body, token });
 }
 
-/** Создать платёж ЮMoney (оплата картой). Для тарифа передать tariffId. */
+/** Создать платёж ЮMoney (оплата картой). Для тарифа — tariffId, для опции — extraOption. */
 export async function createYoomoneyPayment(
   token: string,
-  body: { amount: number; paymentType: "AC"; tariffId?: string }
+  body: { amount?: number; paymentType: "PC" | "AC"; tariffId?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
 ): Promise<{ paymentId: string; paymentUrl: string }> {
   return fetchJson("/api/client/yoomoney/create-form-payment", { method: "POST", body, token });
 }
 
-/** Создать платёж ЮKassa (карта, СБП). Только RUB. Для тарифа — tariffId. */
+/** Создать платёж ЮKassa (карта, СБП). Только RUB. Для тарифа — tariffId. Для опции — extraOption. */
 export async function createYookassaPayment(
   token: string,
-  body: { amount: number; currency: string; tariffId?: string }
+  body: { amount?: number; currency?: string; tariffId?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
 ): Promise<{ paymentId: string; confirmationUrl: string }> {
   return fetchJson("/api/client/yookassa/create-payment", { method: "POST", body, token });
 }
@@ -153,6 +160,14 @@ export async function activateTrial(token: string): Promise<{ message: string }>
 /** Оплата тарифа балансом */
 export async function payByBalance(token: string, tariffId: string): Promise<{ message: string; paymentId: string; newBalance: number }> {
   return fetchJson("/api/client/payments/balance", { method: "POST", body: { tariffId }, token });
+}
+
+/** Оплата опции (доп. трафик/устройства/сервер) с баланса */
+export async function payOptionByBalance(
+  token: string,
+  extraOption: { kind: "traffic" | "devices" | "servers"; productId: string }
+): Promise<{ message: string; paymentId: string; newBalance: number }> {
+  return fetchJson("/api/client/payments/balance/option", { method: "POST", body: { extraOption }, token });
 }
 
 /** Активировать промо-ссылку (PromoGroup) */

@@ -39,6 +39,7 @@ const MENU_IDS: Record<string, string> = {
   vpn: "menu:vpn",
   support: "menu:support",
   promocode: "menu:promocode",
+  extra_options: "menu:extra_options",
 };
 
 const DEFAULT_BUTTONS: BotButtonConfig[] = [
@@ -51,6 +52,7 @@ const DEFAULT_BUTTONS: BotButtonConfig[] = [
   { id: "cabinet", visible: true, label: "🌐 Web Кабинет", order: 6, style: "primary" },
   { id: "support", visible: true, label: "🆘 Поддержка", order: 7, style: "primary" },
   { id: "promocode", visible: true, label: "🎟️ Промокод", order: 8, style: "primary" },
+  { id: "extra_options", visible: true, label: "➕ Доп. опции", order: 9, style: "primary" },
 ];
 
 function toStyle(s: string | undefined): ButtonStyle | undefined | null {
@@ -87,6 +89,7 @@ export function mainMenu(opts: {
   botButtons?: BotButtonConfig[] | null;
   botBackLabel?: string | null;
   hasSupportLinks?: boolean;
+  showExtraOptions?: boolean;
 }): InlineMarkup {
   const list = (opts.botButtons && opts.botButtons.length > 0 ? opts.botButtons : DEFAULT_BUTTONS)
     .filter((b) => b.visible)
@@ -95,6 +98,7 @@ export function mainMenu(opts: {
       if (b.id === "vpn") return opts.showVpn;
       if (b.id === "cabinet") return !!opts.appUrl?.trim();
       if (b.id === "support") return !!opts.hasSupportLinks;
+      if (b.id === "extra_options") return opts.showExtraOptions === true;
       return true;
     })
     .sort((a, b) => a.order - b.order);
@@ -327,6 +331,56 @@ export function topupPaymentMethodButtons(
     rows.push([btn(m.label, `topup:${amount}:${m.id}`, "primary", cardId)]);
   }
   rows.push([btn(back, "menu:topup", backSty, emojiIds?.back)]);
+  return { inline_keyboard: rows };
+}
+
+type SellOptionItem =
+  | { kind: "traffic"; id: string; name: string; trafficGb: number; price: number; currency: string }
+  | { kind: "devices"; id: string; name: string; deviceCount: number; price: number; currency: string }
+  | { kind: "servers"; id: string; name: string; squadUuid: string; trafficGb?: number; price: number; currency: string };
+
+/** Кнопки списка доп. опций (трафик, устройства, серверы). */
+export function extraOptionsButtons(
+  options: SellOptionItem[],
+  backLabel?: string | null,
+  innerStyles?: InnerButtonStyles,
+  emojiIds?: InnerEmojiIds
+): InlineMarkup {
+  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
+  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
+  const cardId = emojiIds?.card;
+  const rows: InlineButton[][] = options.map((o) => {
+    const extra = o.kind === "servers" && (o.trafficGb ?? 0) > 0 ? ` + ${o.trafficGb} ГБ` : "";
+    const label = `${o.name || o.kind}${extra} — ${o.price} ${o.currency}`.slice(0, 64);
+    return [btn(label, `pay_option:${o.kind}:${o.id}`, "success", cardId)];
+  });
+  rows.push([btn(back, "menu:main", backSty, emojiIds?.back)]);
+  return { inline_keyboard: rows };
+}
+
+/** Кнопки выбора способа оплаты опции: баланс (если хватает) и ЮKassa. */
+export function optionPaymentMethodButtons(
+  option: SellOptionItem,
+  balance: number,
+  backLabel: string | null,
+  innerStyles?: InnerButtonStyles,
+  emojiIds?: InnerEmojiIds,
+  yookassaEnabled?: boolean
+): InlineMarkup {
+  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
+  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
+  const cardId = emojiIds?.card;
+  const rows: InlineButton[][] = [];
+  if (balance >= option.price) {
+    rows.push([btn(`💰 Оплатить балансом (${option.price} ₽)`, `pay_option_balance:${option.kind}:${option.id}`, "success", cardId)]);
+  }
+  if (yookassaEnabled !== false) {
+    rows.push([btn("💳 Карта / СБП (ЮKassa)", `pay_option_yookassa:${option.kind}:${option.id}`, "primary", cardId)]);
+  }
+  if (rows.length === 0) {
+    rows.push([btn("💳 Оплата (ЮKassa)", `pay_option_yookassa:${option.kind}:${option.id}`, "primary", cardId)]);
+  }
+  rows.push([btn(back, "menu:extra_options", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }
 

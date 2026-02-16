@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { RefreshCw, Download, Upload, Link2, Settings2, Gift, Users, ArrowLeftRight, Mail, MessageCircle, CreditCard, ChevronDown, Copy, Check, Bot, FileJson, Palette, Wallet } from "lucide-react";
+import { RefreshCw, Download, Upload, Link2, Settings2, Gift, Users, ArrowLeftRight, Mail, MessageCircle, CreditCard, ChevronDown, Copy, Check, Bot, FileJson, Palette, Wallet, Package, Plus, Trash2 } from "lucide-react";
 import { ACCENT_PALETTES } from "@/contexts/theme";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -33,6 +33,7 @@ const DEFAULT_BOT_BUTTONS: BotButtonItem[] = [
   { id: "cabinet", visible: true, label: "🌐 Web Кабинет", order: 6, style: "primary", emojiKey: "SERVERS" },
   { id: "support", visible: true, label: "🆘 Поддержка", order: 7, style: "primary", emojiKey: "NOTE" },
   { id: "promocode", visible: true, label: "🎟️ Промокод", order: 8, style: "primary", emojiKey: "STAR" },
+  { id: "extra_options", visible: true, label: "➕ Доп. опции", order: 9, style: "primary", emojiKey: "PACKAGE" },
 ];
 
 const BOT_EMOJI_KEYS = ["HEADER", "MAIN_MENU", "STATUS", "BALANCE", "TARIFFS", "PACKAGE", "PROFILE", "CARD", "TRIAL", "LINK", "SERVERS", "BACK", "PUZZLE", "DATE", "TIME", "TRAFFIC", "ACTIVE_GREEN", "ACTIVE_YELLOW", "INACTIVE", "CONNECT", "NOTE", "STAR", "CROWN", "DURATION", "DEVICES", "LOCATION", "CUSTOM_1", "CUSTOM_2", "CUSTOM_3", "CUSTOM_4", "CUSTOM_5"] as const;
@@ -136,6 +137,13 @@ export function SettingsPage() {
         agreementLink: (data as AdminSettings).agreementLink ?? "",
         offerLink: (data as AdminSettings).offerLink ?? "",
         instructionsLink: (data as AdminSettings).instructionsLink ?? "",
+        sellOptionsEnabled: (data as AdminSettings).sellOptionsEnabled ?? false,
+        sellOptionsTrafficEnabled: (data as AdminSettings).sellOptionsTrafficEnabled ?? false,
+        sellOptionsTrafficProducts: (data as AdminSettings).sellOptionsTrafficProducts ?? [],
+        sellOptionsDevicesEnabled: (data as AdminSettings).sellOptionsDevicesEnabled ?? false,
+        sellOptionsDevicesProducts: (data as AdminSettings).sellOptionsDevicesProducts ?? [],
+        sellOptionsServersEnabled: (data as AdminSettings).sellOptionsServersEnabled ?? false,
+        sellOptionsServersProducts: (data as AdminSettings).sellOptionsServersProducts ?? [],
       });
     }).finally(() => setLoading(false));
   }, [token]);
@@ -206,6 +214,31 @@ export function SettingsPage() {
     }
   }
 
+  async function saveOptionsOnly() {
+    if (!settings) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const payload = {
+        sellOptionsEnabled: settings.sellOptionsEnabled ?? false,
+        sellOptionsTrafficEnabled: settings.sellOptionsTrafficEnabled ?? false,
+        sellOptionsTrafficProducts: (settings.sellOptionsTrafficProducts?.length ? JSON.stringify(settings.sellOptionsTrafficProducts) : "") as string | null,
+        sellOptionsDevicesEnabled: settings.sellOptionsDevicesEnabled ?? false,
+        sellOptionsDevicesProducts: (settings.sellOptionsDevicesProducts?.length ? JSON.stringify(settings.sellOptionsDevicesProducts) : "") as string | null,
+        sellOptionsServersEnabled: settings.sellOptionsServersEnabled ?? false,
+        sellOptionsServersProducts: (settings.sellOptionsServersProducts?.length ? JSON.stringify(settings.sellOptionsServersProducts) : "") as string | null,
+      };
+      const updated = await api.updateSettings(token, payload);
+      const u = updated as AdminSettings;
+      setSettings((prev) => (prev ? { ...prev, ...u } : prev));
+      setMessage("Настройки опций сохранены");
+    } catch {
+      setMessage("Ошибка сохранения");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!settings) return;
@@ -268,6 +301,13 @@ export function SettingsPage() {
         forceSubscribeEnabled: settings.forceSubscribeEnabled ?? false,
         forceSubscribeChannelId: settings.forceSubscribeChannelId ?? null,
         forceSubscribeMessage: settings.forceSubscribeMessage ?? null,
+        sellOptionsEnabled: settings.sellOptionsEnabled ?? false,
+        sellOptionsTrafficEnabled: settings.sellOptionsTrafficEnabled ?? false,
+        sellOptionsTrafficProducts: settings.sellOptionsTrafficProducts?.length ? JSON.stringify(settings.sellOptionsTrafficProducts) : null,
+        sellOptionsDevicesEnabled: settings.sellOptionsDevicesEnabled ?? false,
+        sellOptionsDevicesProducts: settings.sellOptionsDevicesProducts?.length ? JSON.stringify(settings.sellOptionsDevicesProducts) : null,
+        sellOptionsServersEnabled: settings.sellOptionsServersEnabled ?? false,
+        sellOptionsServersProducts: settings.sellOptionsServersProducts?.length ? JSON.stringify(settings.sellOptionsServersProducts) : null,
       })
       .then((updated) => {
         const u = updated as AdminSettings;
@@ -295,7 +335,7 @@ export function SettingsPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full grid grid-cols-2 sm:grid-cols-9 gap-2 p-2 h-auto bg-muted/50 rounded-2xl border shadow-sm">
+        <TabsList className="w-full grid grid-cols-2 sm:grid-cols-10 gap-2 p-2 h-auto bg-muted/50 rounded-2xl border shadow-sm">
           <TabsTrigger value="general" className="gap-2 py-3 px-4 rounded-xl">
             <Settings2 className="h-4 w-4 shrink-0" />
             Общие
@@ -327,6 +367,10 @@ export function SettingsPage() {
           <TabsTrigger value="theme" className="gap-2 py-3 px-4 rounded-xl">
             <Palette className="h-4 w-4 shrink-0" />
             Тема
+          </TabsTrigger>
+          <TabsTrigger value="options" className="gap-2 py-3 px-4 rounded-xl">
+            <Package className="h-4 w-4 shrink-0" />
+            Опции
           </TabsTrigger>
           <TabsTrigger value="sync" className="gap-2 py-3 px-4 rounded-xl">
             <ArrowLeftRight className="h-4 w-4 shrink-0" />
@@ -970,7 +1014,7 @@ export function SettingsPage() {
                     type="number"
                     min={0}
                     step={0.1}
-                    value={settings.trialTrafficLimitBytes != null ? (settings.trialTrafficLimitBytes / 1e9).toFixed(1) : ""}
+                    value={settings.trialTrafficLimitBytes != null ? (settings.trialTrafficLimitBytes / (1024 ** 3)).toFixed(1) : ""}
                     onChange={(e) => {
                       const v = e.target.value.trim();
                       if (v === "") {
@@ -979,10 +1023,11 @@ export function SettingsPage() {
                       }
                       const n = parseFloat(v);
                       if (Number.isNaN(n)) return;
-                      setSettings((s) => (s ? { ...s, trialTrafficLimitBytes: Math.round(n * 1e9) } : s));
+                      setSettings((s) => (s ? { ...s, trialTrafficLimitBytes: Math.round(n * 1024 ** 3) } : s));
                     }}
                     placeholder="— без лимита"
                   />
+                  <p className="text-xs text-muted-foreground">1 ГБ = 1024³ байт (ГиБ). Как в тарифах — так и в Remna передаётся лимит в байтах.</p>
                 </div>
                 {message && <p className="text-sm text-muted-foreground">{message}</p>}
                 <Button type="submit" disabled={saving}>
@@ -1558,6 +1603,193 @@ export function SettingsPage() {
                 >
                   {saving ? "Сохранение…" : "Сохранить тему"}
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="options">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Продажа опций
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Доп. трафик, доп. устройства и доп. серверы (сквады) — клиенты могут докупать их после оформления подписки. Опции применяются к пользователю в Remna после оплаты.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="sell-options-enabled"
+                  checked={settings.sellOptionsEnabled ?? false}
+                  onCheckedChange={(c) => setSettings((s) => (s ? { ...s, sellOptionsEnabled: !!c } : s))}
+                />
+                <Label htmlFor="sell-options-enabled" className="cursor-pointer">Включить продажу опций</Label>
+              </div>
+
+              <Collapsible defaultOpen>
+                <CollapsibleTrigger className="flex items-center gap-2 font-medium">
+                  <ChevronDown className="h-4 w-4" />
+                  Доп. трафик (ГБ)
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-3 space-y-3">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Checkbox
+                      id="sell-traffic-enabled"
+                      checked={settings.sellOptionsTrafficEnabled ?? false}
+                      onCheckedChange={(c) => setSettings((s) => (s ? { ...s, sellOptionsTrafficEnabled: !!c } : s))}
+                    />
+                    <Label htmlFor="sell-traffic-enabled" className="cursor-pointer">Включить</Label>
+                  </div>
+                  <div className="rounded-md border overflow-x-auto overflow-hidden">
+                    <table className="w-full text-sm min-w-[400px] [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left p-2 font-medium">Название</th>
+                          <th className="text-left p-2 font-medium w-24">ГБ</th>
+                          <th className="text-left p-2 font-medium w-28">Цена</th>
+                          <th className="text-left p-2 font-medium w-24">Валюта</th>
+                          <th className="w-10" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(settings.sellOptionsTrafficProducts ?? []).map((p, i) => (
+                          <tr key={p.id} className="border-b last:border-0">
+                            <td className="p-2"><Input className="h-9 w-full max-w-[180px]" placeholder="Название" value={p.name} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsTrafficProducts) return s; const arr = [...s.sellOptionsTrafficProducts]; arr[i] = { ...arr[i], name: e.target.value }; return { ...s, sellOptionsTrafficProducts: arr }; })} /></td>
+                            <td className="p-2"><Input type="number" min={0.1} step={0.5} className="h-9 w-full" value={p.trafficGb || ""} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsTrafficProducts) return s; const arr = [...s.sellOptionsTrafficProducts]; arr[i] = { ...arr[i], trafficGb: parseFloat(e.target.value) || 0 }; return { ...s, sellOptionsTrafficProducts: arr }; })} /></td>
+                            <td className="p-2"><Input type="number" min={0} step={1} className="h-9 w-full" value={p.price || ""} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsTrafficProducts) return s; const arr = [...s.sellOptionsTrafficProducts]; arr[i] = { ...arr[i], price: parseFloat(e.target.value) || 0 }; return { ...s, sellOptionsTrafficProducts: arr }; })} /></td>
+                            <td className="p-2">
+                              <select className="h-9 rounded-md border px-2 w-full bg-background" value={p.currency} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsTrafficProducts) return s; const arr = [...s.sellOptionsTrafficProducts]; arr[i] = { ...arr[i], currency: e.target.value }; return { ...s, sellOptionsTrafficProducts: arr }; })}>
+                                {ALLOWED_CURRENCIES.map((c) => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+                              </select>
+                            </td>
+                            <td className="p-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSettings((s) => (s ? { ...s, sellOptionsTrafficProducts: (s.sellOptionsTrafficProducts ?? []).filter((_, j) => j !== i) } : s))}><Trash2 className="h-4 w-4" /></Button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-3">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setSettings((s) => (s ? { ...s, sellOptionsTrafficProducts: [...(s.sellOptionsTrafficProducts ?? []), { id: `traffic_${Date.now()}`, name: "", trafficGb: 5, price: 0, currency: "rub" }] } : s))}>
+                      <Plus className="h-4 w-4 mr-1" /> Добавить
+                    </Button>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Collapsible defaultOpen>
+                <CollapsibleTrigger className="flex items-center gap-2 font-medium">
+                  <ChevronDown className="h-4 w-4" />
+                  Доп. устройства
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-3 space-y-3">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Checkbox
+                      id="sell-devices-enabled"
+                      checked={settings.sellOptionsDevicesEnabled ?? false}
+                      onCheckedChange={(c) => setSettings((s) => (s ? { ...s, sellOptionsDevicesEnabled: !!c } : s))}
+                    />
+                    <Label htmlFor="sell-devices-enabled" className="cursor-pointer">Включить</Label>
+                  </div>
+                  <div className="rounded-md border overflow-x-auto overflow-hidden">
+                    <table className="w-full text-sm min-w-[400px] [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left p-2 font-medium">Название</th>
+                          <th className="text-left p-2 font-medium w-20">Шт.</th>
+                          <th className="text-left p-2 font-medium w-28">Цена</th>
+                          <th className="text-left p-2 font-medium w-24">Валюта</th>
+                          <th className="w-10" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(settings.sellOptionsDevicesProducts ?? []).map((p, i) => (
+                          <tr key={p.id} className="border-b last:border-0">
+                            <td className="p-2"><Input className="h-9 w-full max-w-[180px]" placeholder="Название" value={p.name} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsDevicesProducts) return s; const arr = [...s.sellOptionsDevicesProducts]; arr[i] = { ...arr[i], name: e.target.value }; return { ...s, sellOptionsDevicesProducts: arr }; })} /></td>
+                            <td className="p-2"><Input type="number" min={1} className="h-9 w-full" value={p.deviceCount || ""} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsDevicesProducts) return s; const arr = [...s.sellOptionsDevicesProducts]; arr[i] = { ...arr[i], deviceCount: parseInt(e.target.value, 10) || 0 }; return { ...s, sellOptionsDevicesProducts: arr }; })} /></td>
+                            <td className="p-2"><Input type="number" min={0} step={1} className="h-9 w-full" value={p.price || ""} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsDevicesProducts) return s; const arr = [...s.sellOptionsDevicesProducts]; arr[i] = { ...arr[i], price: parseFloat(e.target.value) || 0 }; return { ...s, sellOptionsDevicesProducts: arr }; })} /></td>
+                            <td className="p-2">
+                              <select className="h-9 rounded-md border px-2 w-full bg-background" value={p.currency} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsDevicesProducts) return s; const arr = [...s.sellOptionsDevicesProducts]; arr[i] = { ...arr[i], currency: e.target.value }; return { ...s, sellOptionsDevicesProducts: arr }; })}>
+                                {ALLOWED_CURRENCIES.map((c) => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+                              </select>
+                            </td>
+                            <td className="p-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSettings((s) => (s ? { ...s, sellOptionsDevicesProducts: (s.sellOptionsDevicesProducts ?? []).filter((_, j) => j !== i) } : s))}><Trash2 className="h-4 w-4" /></Button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-3">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setSettings((s) => (s ? { ...s, sellOptionsDevicesProducts: [...(s.sellOptionsDevicesProducts ?? []), { id: `devices_${Date.now()}`, name: "", deviceCount: 1, price: 0, currency: "rub" }] } : s))}>
+                      <Plus className="h-4 w-4 mr-1" /> Добавить
+                    </Button>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Collapsible defaultOpen>
+                <CollapsibleTrigger className="flex items-center gap-2 font-medium">
+                  <ChevronDown className="h-4 w-4" />
+                  Доп. серверы (сквады)
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-3 space-y-3">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Checkbox
+                      id="sell-servers-enabled"
+                      checked={settings.sellOptionsServersEnabled ?? false}
+                      onCheckedChange={(c) => setSettings((s) => (s ? { ...s, sellOptionsServersEnabled: !!c } : s))}
+                    />
+                    <Label htmlFor="sell-servers-enabled" className="cursor-pointer">Включить</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Сквады из Remna (вкладка Синхронизация). Выберите сквад и укажите цену.</p>
+                  <div className="rounded-md border overflow-x-auto overflow-hidden">
+                    <table className="w-full text-sm min-w-[520px] [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left p-2 font-medium">Название</th>
+                          <th className="text-left p-2 font-medium">Сквад</th>
+                          <th className="text-left p-2 font-medium w-20">ГБ</th>
+                          <th className="text-left p-2 font-medium w-28">Цена</th>
+                          <th className="text-left p-2 font-medium w-24">Валюта</th>
+                          <th className="w-10" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(settings.sellOptionsServersProducts ?? []).map((p, i) => (
+                          <tr key={p.id} className="border-b last:border-0">
+                            <td className="p-2"><Input className="h-9 w-full max-w-[160px]" placeholder="Название" value={p.name} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsServersProducts) return s; const arr = [...s.sellOptionsServersProducts]; arr[i] = { ...arr[i], name: e.target.value }; return { ...s, sellOptionsServersProducts: arr }; })} /></td>
+                            <td className="p-2">
+                              <select className="h-9 rounded-md border px-2 w-full min-w-[180px] bg-background" value={p.squadUuid} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsServersProducts) return s; const arr = [...s.sellOptionsServersProducts]; arr[i] = { ...arr[i], squadUuid: e.target.value }; return { ...s, sellOptionsServersProducts: arr }; })}>
+                                <option value="">— Сквад —</option>
+                                {squads.map((sq) => <option key={sq.uuid} value={sq.uuid}>{sq.name || sq.uuid}</option>)}
+                              </select>
+                            </td>
+                            <td className="p-2"><Input type="number" min={0} step={0.5} className="h-9 w-full" placeholder="0" value={p.trafficGb ?? ""} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsServersProducts) return s; const arr = [...s.sellOptionsServersProducts]; arr[i] = { ...arr[i], trafficGb: parseFloat(e.target.value) || 0 }; return { ...s, sellOptionsServersProducts: arr }; })} /></td>
+                            <td className="p-2"><Input type="number" min={0} step={1} className="h-9 w-full" value={p.price || ""} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsServersProducts) return s; const arr = [...s.sellOptionsServersProducts]; arr[i] = { ...arr[i], price: parseFloat(e.target.value) || 0 }; return { ...s, sellOptionsServersProducts: arr }; })} /></td>
+                            <td className="p-2">
+                              <select className="h-9 rounded-md border px-2 w-full bg-background" value={p.currency} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsServersProducts) return s; const arr = [...s.sellOptionsServersProducts]; arr[i] = { ...arr[i], currency: e.target.value }; return { ...s, sellOptionsServersProducts: arr }; })}>
+                                {ALLOWED_CURRENCIES.map((c) => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+                              </select>
+                            </td>
+                            <td className="p-1"><Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSettings((s) => (s ? { ...s, sellOptionsServersProducts: (s.sellOptionsServersProducts ?? []).filter((_, j) => j !== i) } : s))}><Trash2 className="h-4 w-4" /></Button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-3">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setSettings((s) => (s ? { ...s, sellOptionsServersProducts: [...(s.sellOptionsServersProducts ?? []), { id: `server_${Date.now()}`, name: "", squadUuid: squads[0]?.uuid ?? "", trafficGb: 0, price: 0, currency: "rub" }] } : s))}>
+                      <Plus className="h-4 w-4 mr-1" /> Добавить
+                    </Button>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+
+              <div className="pt-4 border-t">
+                {message && <p className="text-sm text-muted-foreground mb-2">{message}</p>}
+                <Button type="button" onClick={saveOptionsOnly} disabled={saving}>{saving ? "Сохранение…" : "Сохранить настройки опций"}</Button>
               </div>
             </CardContent>
           </Card>
