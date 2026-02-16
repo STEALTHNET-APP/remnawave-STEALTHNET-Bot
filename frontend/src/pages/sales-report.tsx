@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Download, ChevronLeft, ChevronRight, DollarSign, ShoppingCart, Filter } from "lucide-react";
+import { Loader2, Download, ChevronLeft, ChevronRight, RussianRuble, ShoppingCart, Filter } from "lucide-react";
 
 function formatDate(s: string | null) {
   if (!s) return "—";
@@ -137,7 +137,7 @@ export function SalesReportPage() {
           <Card>
             <CardContent className="pt-6 flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <DollarSign className="h-5 w-5" />
+                <RussianRuble className="h-5 w-5" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Общая сумма (фильтр)</p>
