@@ -141,7 +141,7 @@ clientAuthRouter.post("/register", async (req, res) => {
       config.serviceName
     );
     if (!sendResult.ok) {
-      await prisma.pendingEmailRegistration.deleteMany({ where: { verificationToken } }).catch(() => {});
+      await prisma.pendingEmailRegistration.deleteMany({ where: { verificationToken } }).catch(() => { });
       return res.status(500).json({ message: "Failed to send verification email. Try again later." });
     }
 
@@ -200,13 +200,13 @@ clientAuthRouter.post("/verify-email", async (req, res) => {
   });
   if (!pending) return res.status(400).json({ message: "Invalid or expired link" });
   if (new Date() > pending.expiresAt) {
-    await prisma.pendingEmailRegistration.delete({ where: { id: pending.id } }).catch(() => {});
+    await prisma.pendingEmailRegistration.delete({ where: { id: pending.id } }).catch(() => { });
     return res.status(400).json({ message: "Link expired. Please register again." });
   }
 
   const existingClient = await prisma.client.findUnique({ where: { email: pending.email } });
   if (existingClient) {
-    await prisma.pendingEmailRegistration.delete({ where: { id: pending.id } }).catch(() => {});
+    await prisma.pendingEmailRegistration.delete({ where: { id: pending.id } }).catch(() => { });
     const signToken = signClientToken(existingClient.id);
     return res.json({ token: signToken, client: toClientShape(existingClient) });
   }
@@ -238,7 +238,7 @@ clientAuthRouter.post("/verify-email", async (req, res) => {
     },
   });
 
-  await prisma.pendingEmailRegistration.delete({ where: { id: pending.id } }).catch(() => {});
+  await prisma.pendingEmailRegistration.delete({ where: { id: pending.id } }).catch(() => { });
 
   const signToken = signClientToken(client.id);
   return res.status(201).json({ token: signToken, client: toClientShape(client) });
@@ -842,17 +842,17 @@ clientRouter.post("/promo-code/activate", async (req, res) => {
   return res.json({ message: `Промокод активирован! Подписка на ${promo.durationDays} дн. подключена.` });
 });
 
-/** Определить отображаемое имя тарифа: Триал, название с сайта или «Тариф не выбран» */
-async function resolveTariffDisplayName(remnaUserData: unknown): Promise<string> {
-  const user = (remnaUserData as { response?: { activeInternalSquads?: { uuid?: string }[] }; activeInternalSquads?: { uuid?: string }[] })?.response
-    ?? (remnaUserData as { activeInternalSquads?: { uuid?: string }[] });
-  const squadUuid = user?.activeInternalSquads?.[0]?.uuid;
-  if (!squadUuid) return "Тариф не выбран";
-  const config = await getSystemConfig();
-  if (config.trialSquadUuid?.trim() === squadUuid) return "Триал";
-  const tariffs = await prisma.tariff.findMany({ select: { name: true, internalSquadUuids: true } });
-  const match = tariffs.find((t) => t.internalSquadUuids.includes(squadUuid));
-  return match?.name ?? "Тариф не выбран";
+// Определить отображаемое имя тарифа по последнему оплаченному платежу клиента
+async function resolveTariffDisplayName(clientId: string): Promise<string> {
+  const lastPaidPayment = await prisma.payment.findFirst({
+    where: { clientId, status: "PAID", tariffId: { not: null } },
+    orderBy: { paidAt: "desc" },
+    select: { tariff: { select: { category: { select: { name: true } } } } },
+  });
+  if (lastPaidPayment?.tariff?.category?.name) return lastPaidPayment.tariff.category.name;
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { trialUsed: true } });
+  if (client?.trialUsed) return "Триал";
+  return "Тариф не выбран";
 }
 
 clientRouter.get("/subscription", async (req, res) => {
@@ -864,7 +864,7 @@ clientRouter.get("/subscription", async (req, res) => {
   if (result.error) {
     return res.json({ subscription: null, tariffDisplayName: null, message: result.error });
   }
-  const tariffDisplayName = await resolveTariffDisplayName(result.data ?? null);
+  const tariffDisplayName = await resolveTariffDisplayName(client.id);
   return res.json({ subscription: result.data ?? null, tariffDisplayName });
 });
 
@@ -1116,7 +1116,7 @@ clientRouter.post("/payments/balance", async (req, res) => {
 
   // Реферальные начисления
   const { distributeReferralRewards } = await import("../referral/referral.service.js");
-  await distributeReferralRewards(payment.id).catch(() => {});
+  await distributeReferralRewards(payment.id).catch(() => { });
 
   return res.json({
     message: `Тариф «${tariff.name}» активирован! Списано ${finalPrice.toFixed(2)} ${tariff.currency.toUpperCase()} с баланса.`,
@@ -1167,12 +1167,12 @@ clientRouter.post("/payments/balance/option", async (req, res) => {
     price = product.price;
     currency = product.currency;
     metadataExtra = {
-        extraOption: {
-          kind: "servers",
-          squadUuid: product.squadUuid,
-          ...((product.trafficGb ?? 0) > 0 && { trafficBytes: Math.round((product.trafficGb ?? 0) * 1024 ** 3) }),
-        },
-      };
+      extraOption: {
+        kind: "servers",
+        squadUuid: product.squadUuid,
+        ...((product.trafficGb ?? 0) > 0 && { trafficBytes: Math.round((product.trafficGb ?? 0) * 1024 ** 3) }),
+      },
+    };
   }
 
   const clientDb = await prisma.client.findUnique({ where: { id: clientRaw } });
@@ -1207,7 +1207,7 @@ clientRouter.post("/payments/balance/option", async (req, res) => {
   });
 
   const { distributeReferralRewards } = await import("../referral/referral.service.js");
-  await distributeReferralRewards(payment.id).catch(() => {});
+  await distributeReferralRewards(payment.id).catch(() => { });
 
   const newBalance = clientDb.balance - price;
   return res.json({
@@ -1528,12 +1528,12 @@ clientRouter.post("/yookassa/create-payment", async (req, res) => {
         amountRounded = Math.round(product.price * 100) / 100;
         currencyUpper = product.currency.toUpperCase();
         metadataObj = {
-        extraOption: {
-          kind: "servers",
-          squadUuid: product.squadUuid,
-          ...((product.trafficGb ?? 0) > 0 && { trafficBytes: Math.round((product.trafficGb ?? 0) * 1024 ** 3) }),
-        },
-      };
+          extraOption: {
+            kind: "servers",
+            squadUuid: product.squadUuid,
+            ...((product.trafficGb ?? 0) > 0 && { trafficBytes: Math.round((product.trafficGb ?? 0) * 1024 ** 3) }),
+          },
+        };
       }
       if (currencyUpper !== "RUB") return res.status(400).json({ message: "ЮKassa принимает только рубли (RUB)" });
     } else {
@@ -1589,7 +1589,7 @@ clientRouter.post("/yookassa/create-payment", async (req, res) => {
     });
 
     if (!result.ok) {
-      await prisma.payment.delete({ where: { id: payment.id } }).catch(() => {});
+      await prisma.payment.delete({ where: { id: payment.id } }).catch(() => { });
       return res.status(500).json({ message: result.error });
     }
 
