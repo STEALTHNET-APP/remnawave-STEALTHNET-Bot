@@ -358,13 +358,15 @@ export function extraOptionsButtons(
   return { inline_keyboard: rows };
 }
 
-/** Кнопки выбора способа оплаты опции: баланс (если хватает) и ЮKassa. */
+/** Кнопки выбора способа оплаты опции: баланс, ЮMoney, ЮKassa, Platega. */
 export function optionPaymentMethodButtons(
   option: SellOptionItem,
   balance: number,
   backLabel: string | null,
   innerStyles?: InnerButtonStyles,
   emojiIds?: InnerEmojiIds,
+  plategaMethods: { id: number; label: string }[] = [],
+  yoomoneyEnabled?: boolean,
   yookassaEnabled?: boolean
 ): InlineMarkup {
   const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
@@ -374,8 +376,14 @@ export function optionPaymentMethodButtons(
   if (balance >= option.price) {
     rows.push([btn(`💰 Оплатить балансом (${option.price} ₽)`, `pay_option_balance:${option.kind}:${option.id}`, "success", cardId)]);
   }
+  if (yoomoneyEnabled) {
+    rows.push([btn("💳 ЮMoney — карта", `pay_option_yoomoney:${option.kind}:${option.id}`, "primary", cardId)]);
+  }
   if (yookassaEnabled !== false) {
-    rows.push([btn("💳 Карта / СБП (ЮKassa)", `pay_option_yookassa:${option.kind}:${option.id}`, "primary", cardId)]);
+    rows.push([btn("💳 ЮKassa — карта / СБП", `pay_option_yookassa:${option.kind}:${option.id}`, "primary", cardId)]);
+  }
+  for (const m of plategaMethods) {
+    rows.push([btn(m.label, `pay_option_platega:${option.kind}:${option.id}:${m.id}`, "primary", cardId)]);
   }
   if (rows.length === 0) {
     rows.push([btn("💳 Оплата (ЮKassa)", `pay_option_yookassa:${option.kind}:${option.id}`, "primary", cardId)]);

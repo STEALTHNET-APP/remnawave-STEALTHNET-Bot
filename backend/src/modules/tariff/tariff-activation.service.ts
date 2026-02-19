@@ -12,6 +12,7 @@ import {
   remnaGetUserByTelegramId,
   remnaGetUserByEmail,
   extractRemnaUuid,
+  remnaUsernameFromClient,
 } from "../remna/remna.client.js";
 
 export type ActivationResult = { ok: true } | { ok: false; error: string; status: number };
@@ -55,7 +56,13 @@ function calculateExpireAt(currentExpireAt: Date | null, durationDays: number): 
  * Лимит трафика: в панели 1 ГБ = 1 ГиБ = 1024³ байт; в Remna передаём значение в байтах как есть.
  */
 export async function activateTariffForClient(
-  client: { id: string; remnawaveUuid: string | null; email: string | null; telegramId: string | null },
+  client: {
+    id: string;
+    remnawaveUuid: string | null;
+    email: string | null;
+    telegramId: string | null;
+    telegramUsername?: string | null;
+  },
   tariff: { durationDays: number; trafficLimitBytes: bigint | null; deviceLimit: number | null; internalSquadUuids: string[] },
 ): Promise<ActivationResult> {
   if (!isRemnaConfigured()) return { ok: false, error: "Сервис временно недоступен", status: 503 };
@@ -98,16 +105,21 @@ export async function activateTariffForClient(
     const expireAt = calculateExpireAt(currentExpireAt, tariff.durationDays);
 
     if (!existingUuid) {
-      const rawName = client.email?.split("@")[0] || `user${client.id.slice(-6)}`;
-      const username = rawName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 36) || "u_" + Date.now().toString(36);
-      const finalUsername = username.length >= 3 ? username : "u_" + username;
+      const displayUsername = remnaUsernameFromClient({
+        telegramUsername: client.telegramUsername,
+        telegramId: client.telegramId,
+        email: client.email,
+        clientIdFallback: client.id,
+      });
       const createRes = await remnaCreateUser({
-        username: finalUsername,
+        username: displayUsername,
         trafficLimitBytes,
         trafficLimitStrategy: "NO_RESET",
         expireAt,
         hwidDeviceLimit: hwidDeviceLimit ?? undefined,
         activeInternalSquads: tariff.internalSquadUuids,
+        ...(client.telegramId?.trim() && { telegramId: parseInt(client.telegramId, 10) }),
+        ...(client.email?.trim() && { email: client.email.trim() }),
       });
       existingUuid = extractRemnaUuid(createRes.data);
     }
@@ -139,7 +151,7 @@ export async function activateTariffByPaymentId(paymentId: string): Promise<Acti
 
   const client = await prisma.client.findUnique({
     where: { id: payment.clientId },
-    select: { id: true, remnawaveUuid: true, email: true, telegramId: true },
+    select: { id: true, remnawaveUuid: true, email: true, telegramId: true, telegramUsername: true },
   });
   if (!client) {
     return { ok: false, error: "Клиент не найден", status: 404 };

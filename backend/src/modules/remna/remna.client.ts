@@ -104,6 +104,41 @@ export function extractRemnaUuid(d: unknown): string | null {
     : null;
 }
 
+/**
+ * Формирует username для Remna (3–36 символов, только [a-zA-Z0-9_-]).
+ * Приоритет: Telegram username → Telegram ID (tg123) → email (local part) → fallback.
+ */
+export function remnaUsernameFromClient(opts: {
+  telegramUsername?: string | null;
+  telegramId?: string | null;
+  email?: string | null;
+  clientIdFallback?: string;
+}): string {
+  const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 36);
+  if (opts.telegramUsername?.trim()) {
+    const u = sanitize(opts.telegramUsername.trim());
+    if (u.length >= 3) return u;
+  }
+  if (opts.telegramId?.trim()) {
+    const t = "tg" + opts.telegramId.trim().replace(/\D/g, "");
+    if (t.length >= 3) return t.slice(0, 36);
+  }
+  if (opts.email?.trim()) {
+    const local = opts.email.split("@")[0]?.trim();
+    if (local) {
+      const e = sanitize(local);
+      if (e.length >= 3) return e;
+    }
+    const full = sanitize(opts.email.trim());
+    if (full.length >= 3) return full;
+  }
+  const fallback = opts.clientIdFallback
+    ? "user" + opts.clientIdFallback.slice(-8).replace(/[^a-zA-Z0-9_-]/g, "0")
+    : "user" + Date.now().toString(36);
+  const out = sanitize(fallback);
+  return out.length >= 3 ? out : "u_" + out.slice(0, 34);
+}
+
 /** POST /api/users */
 export function remnaCreateUser(body: Record<string, unknown>) {
   return remnaFetch<unknown>("/api/users", { method: "POST", body: JSON.stringify(body) });

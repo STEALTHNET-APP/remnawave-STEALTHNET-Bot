@@ -336,10 +336,13 @@ export function ClientSubscribePage() {
                         const handleClick = (e: React.MouseEvent) => {
                           // Копируем ссылку подписки в буфер
                           try { navigator.clipboard?.writeText(subscriptionUrl); } catch { /* ignore */ }
-                          const tg = (window as { Telegram?: { WebApp?: { openLink?: (url: string) => void } } }).Telegram?.WebApp;
+                          const tg = (window as { Telegram?: { WebApp?: { openLink?: (url: string, options?: { try_instant_view?: boolean }) => void; platform?: string } } }).Telegram?.WebApp;
                           if (tg?.openLink) {
                             e.preventDefault();
-                            tg.openLink(deeplinkUrl);
+                            // try_instant_view: false — открывать во внешнем браузере, а не в Instant View.
+                            // На Android/Windows иначе ссылка может открыться во встроенном браузере Telegram,
+                            // и переход по кастомной схеме (v2rayng:// и т.д.) не сработает.
+                            tg.openLink(deeplinkUrl, { try_instant_view: false });
                           }
                           // Если не мини-апп — ссылка откроется сама (target=_blank)
                         };

@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
+import { openPaymentInBrowser } from "@/lib/open-payment-url";
 
 function formatMoney(amount: number, currency: string) {
   return new Intl.NumberFormat("ru-RU", {
@@ -76,7 +77,7 @@ export function ClientExtraOptionsPage() {
         extraOption: { kind: option.kind, productId: option.id },
       });
       setPayModal(null);
-      if (res.confirmationUrl) window.location.href = res.confirmationUrl;
+      if (res.confirmationUrl) openPaymentInBrowser(res.confirmationUrl);
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {
@@ -94,7 +95,7 @@ export function ClientExtraOptionsPage() {
         extraOption: { kind: option.kind, productId: option.id },
       });
       setPayModal(null);
-      window.location.href = res.paymentUrl;
+      openPaymentInBrowser(res.paymentUrl);
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {
@@ -112,7 +113,7 @@ export function ClientExtraOptionsPage() {
         extraOption: { kind: option.kind, productId: option.id },
       });
       setPayModal(null);
-      if (res.paymentUrl) window.location.href = res.paymentUrl;
+      if (res.paymentUrl) openPaymentInBrowser(res.paymentUrl);
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {

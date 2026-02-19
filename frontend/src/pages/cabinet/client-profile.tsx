@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { User, Wallet, Copy, Check, CreditCard, Loader2 } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
+import { openPaymentInBrowser } from "@/lib/open-payment-url";
 import { api } from "@/lib/api";
 import type { ClientPayment } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,6 @@ function formatPaymentStatus(status: string): string {
 }
 
 export function ClientProfilePage() {
-  const navigate = useNavigate();
   const { state, refreshProfile } = useClientAuth();
   const [payments, setPayments] = useState<ClientPayment[]>([]);
   const [preferredLang, setPreferredLang] = useState(state.client?.preferredLang ?? "ru");
@@ -113,7 +112,7 @@ export function ClientProfilePage() {
         description: "Пополнение баланса",
       });
       setTopUpModalOpen(false);
-      window.location.href = res.paymentUrl;
+      openPaymentInBrowser(res.paymentUrl);
     } catch (e) {
       setTopUpError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {
@@ -134,9 +133,11 @@ export function ClientProfilePage() {
       const res = await api.yoomoneyCreateFormPayment(token, { amount, paymentType });
       setTopUpModalOpen(false);
       if (res.paymentUrl) {
-        window.location.href = res.paymentUrl;
-      } else {
-        navigate("/cabinet/yoomoney-pay", { state: { form: res.form } });
+        openPaymentInBrowser(res.paymentUrl);
+      } else if (res.form) {
+        const f = res.form;
+        const yoomoneyUrl = `https://yoomoney.ru/quickpay/confirm.xml?quickpay-form=shop&receiver=${encodeURIComponent(f.receiver)}&sum=${f.sum}&label=${encodeURIComponent(f.label)}&paymentType=${f.paymentType}&successURL=${encodeURIComponent(f.successURL)}`;
+        openPaymentInBrowser(yoomoneyUrl);
       }
     } catch (e) {
       setTopUpError(e instanceof Error ? e.message : "Ошибка создания платежа");
@@ -157,7 +158,7 @@ export function ClientProfilePage() {
     try {
       const res = await api.yookassaCreatePayment(token, { amount, currency: "RUB" });
       setTopUpModalOpen(false);
-      if (res.confirmationUrl) window.location.href = res.confirmationUrl;
+      if (res.confirmationUrl) openPaymentInBrowser(res.confirmationUrl);
     } catch (e) {
       setTopUpError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {

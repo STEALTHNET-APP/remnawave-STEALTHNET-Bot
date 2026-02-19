@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
+import { openPaymentInBrowser } from "@/lib/open-payment-url";
 
 function formatMoney(amount: number, currency: string) {
   return new Intl.NumberFormat("ru-RU", {
@@ -54,15 +55,16 @@ export function ClientTariffsPage() {
   const showTrial = trialConfig.trialEnabled && !client?.trialUsed;
 
   const isMobileOrMiniapp = useCabinetMiniapp();
-  const useCollapsibleCategories = tariffs.length > 1 && isMobileOrMiniapp;
+  // В мини-аппе/мобиле один и тот же вид: карточка категории + список тарифов (и для 1, и для нескольких категорий)
+  const useCategoryCardLayout = isMobileOrMiniapp;
   const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
 
   // По умолчанию открыта первая категория (мобильная/мини-апп)
   useEffect(() => {
-    if (useCollapsibleCategories && tariffs.length > 0) {
+    if (useCategoryCardLayout && tariffs.length > 0) {
       setExpandedCategoryId((prev) => (prev === null ? tariffs[0].id : prev));
     }
-  }, [useCollapsibleCategories, tariffs]);
+  }, [useCategoryCardLayout, tariffs]);
 
   useEffect(() => {
     api.getPublicTariffs().then((r) => {
@@ -151,7 +153,7 @@ export function ClientTariffsPage() {
       setPayModal(null);
       setPromoInput("");
       setPromoResult(null);
-      window.location.href = res.paymentUrl;
+      openPaymentInBrowser(res.paymentUrl);
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {
@@ -199,7 +201,7 @@ export function ClientTariffsPage() {
       setPayModal(null);
       setPromoInput("");
       setPromoResult(null);
-      if (res.paymentUrl) window.location.href = res.paymentUrl;
+      if (res.paymentUrl) openPaymentInBrowser(res.paymentUrl);
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {
@@ -227,7 +229,7 @@ export function ClientTariffsPage() {
       setPayModal(null);
       setPromoInput("");
       setPromoResult(null);
-      if (res.confirmationUrl) window.location.href = res.confirmationUrl;
+      if (res.confirmationUrl) openPaymentInBrowser(res.confirmationUrl);
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {
@@ -277,7 +279,7 @@ export function ClientTariffsPage() {
             Тарифы пока не опубликованы. Обратитесь в поддержку.
           </CardContent>
         </Card>
-      ) : useCollapsibleCategories ? (
+      ) : useCategoryCardLayout ? (
         <div className="space-y-1">
           {tariffs.map((cat, catIndex) => (
             <Collapsible

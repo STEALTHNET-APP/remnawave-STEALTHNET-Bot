@@ -13,6 +13,7 @@ import {
   remnaGetUserByEmail,
   remnaGetUserByUsername,
   extractRemnaUuid,
+  remnaUsernameFromClient,
 } from "../remna/remna.client.js";
 import { getSystemConfig } from "../client/client.service.js";
 
@@ -243,19 +244,19 @@ export async function createRemnaUsersForClientsWithoutUuid(): Promise<{
         const res = await remnaGetUserByEmail(c.email.trim());
         uuid = extractRemnaUuid(res.data);
       }
+      const displayUsername = remnaUsernameFromClient({
+        telegramUsername: c.telegramUsername,
+        telegramId: c.telegramId,
+        email: c.email,
+        clientIdFallback: c.id,
+      });
       if (!uuid) {
-        const rawName = c.email?.split("@")[0] || `user${c.id.slice(-6)}`;
-        const username = rawName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 36) || "u_" + Date.now().toString(36);
-        const finalUsername = username.length >= 3 ? username : "u_" + username;
-        const byUsernameRes = await remnaGetUserByUsername(finalUsername);
+        const byUsernameRes = await remnaGetUserByUsername(displayUsername);
         uuid = extractRemnaUuid(byUsernameRes.data);
       }
       if (!uuid) {
-        const rawName = c.email?.split("@")[0] || `user${c.id.slice(-6)}`;
-        const username = rawName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 36) || "u_" + Date.now().toString(36);
-        const finalUsername = username.length >= 3 ? username : "u_" + username;
         const createRes = await remnaCreateUser({
-          username: finalUsername,
+          username: displayUsername,
           trafficLimitBytes: 0,
           trafficLimitStrategy: "NO_RESET",
           expireAt: new Date(Date.now() - 1000).toISOString(),

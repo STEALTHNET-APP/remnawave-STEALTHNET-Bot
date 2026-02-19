@@ -16,7 +16,7 @@ import {
   type SellOptionServerProduct,
 } from "./client.service.js";
 import { requireClientAuth } from "./client.middleware.js";
-import { remnaCreateUser, remnaUpdateUser, isRemnaConfigured, remnaGetUser, remnaGetUserByUsername, remnaGetUserByEmail, remnaGetUserByTelegramId, extractRemnaUuid } from "../remna/remna.client.js";
+import { remnaCreateUser, remnaUpdateUser, isRemnaConfigured, remnaGetUser, remnaGetUserByUsername, remnaGetUserByEmail, remnaGetUserByTelegramId, extractRemnaUuid, remnaUsernameFromClient } from "../remna/remna.client.js";
 import { sendVerificationEmail, isSmtpConfigured } from "../mail/mail.service.js";
 import { createPlategaTransaction, isPlategaConfigured } from "../platega/platega.service.js";
 import { activateTariffForClient } from "../tariff/tariff-activation.service.js";
@@ -328,11 +328,13 @@ clientAuthRouter.post("/telegram-miniapp", async (req, res) => {
   const configForDefaults = await getSystemConfig();
   let remnawaveUuid: string | null = null;
   if (isRemnaConfigured()) {
-    const rawName = `tg${tgUser.id}`;
-    const username = rawName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 36) || "user_" + Date.now().toString(36);
+    const username = remnaUsernameFromClient({
+      telegramUsername: telegramUsername ?? undefined,
+      telegramId,
+    });
     // Без активной подписки — как при регистрации по email; доступ после триала или оплаты
     const remnaRes = await remnaCreateUser({
-      username: username.length >= 3 ? username : "u_" + username,
+      username,
       trafficLimitBytes: 0,
       trafficLimitStrategy: "NO_RESET",
       expireAt: new Date(Date.now() - 1000).toISOString(),
@@ -521,7 +523,7 @@ clientRouter.get("/referral-stats", async (req, res) => {
 });
 
 clientRouter.post("/trial", async (req, res) => {
-  const client = (req as unknown as { client: { id: string; remnawaveUuid: string | null; trialUsed: boolean; email: string | null; telegramId: string | null } }).client;
+  const client = (req as unknown as { client: { id: string; remnawaveUuid: string | null; trialUsed: boolean; email: string | null; telegramId: string | null; telegramUsername?: string | null } }).client;
   if (client.trialUsed) {
     return res.status(400).json({ message: "Триал уже использован" });
   }
@@ -568,11 +570,14 @@ clientRouter.post("/trial", async (req, res) => {
       existingUuid = extractRemnaUuid(byEmailRes.data);
       if (existingUuid) currentExpireAt = extractCurrentExpireAt(byEmailRes.data);
     }
+    const displayUsername = remnaUsernameFromClient({
+      telegramUsername: client.telegramUsername,
+      telegramId: client.telegramId,
+      email: client.email,
+      clientIdFallback: client.id,
+    });
     if (!existingUuid) {
-      const rawName = client.email?.split("@")[0] || `user${client.id.slice(-6)}`;
-      const username = rawName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 36) || "u_" + Date.now().toString(36);
-      const finalUsername = username.length >= 3 ? username : "u_" + username;
-      const byUsernameRes = await remnaGetUserByUsername(finalUsername);
+      const byUsernameRes = await remnaGetUserByUsername(displayUsername);
       existingUuid = extractRemnaUuid(byUsernameRes.data);
       if (existingUuid) currentExpireAt = extractCurrentExpireAt(byUsernameRes.data);
     }
@@ -580,16 +585,15 @@ clientRouter.post("/trial", async (req, res) => {
     const expireAt = calculateExpireAt(currentExpireAt, trialDays);
 
     if (!existingUuid) {
-      const rawName = client.email?.split("@")[0] || `user${client.id.slice(-6)}`;
-      const username = rawName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 36) || "u_" + Date.now().toString(36);
-      const finalUsername = username.length >= 3 ? username : "u_" + username;
       const createRes = await remnaCreateUser({
-        username: finalUsername,
+        username: displayUsername,
         trafficLimitBytes,
         trafficLimitStrategy: "NO_RESET",
         expireAt,
         hwidDeviceLimit: hwidDeviceLimit ?? undefined,
         activeInternalSquads: [trialSquadUuid],
+        ...(client.telegramId?.trim() && { telegramId: parseInt(client.telegramId, 10) }),
+        ...(client.email?.trim() && { email: client.email.trim() }),
       });
       existingUuid = extractRemnaUuid(createRes.data);
     }
@@ -624,7 +628,7 @@ clientRouter.post("/trial", async (req, res) => {
 
 // ——— Активация промо-ссылки ———
 clientRouter.post("/promo/activate", async (req, res) => {
-  const client = (req as unknown as { client: { id: string; remnawaveUuid: string | null; email: string | null; telegramId: string | null } }).client;
+  const client = (req as unknown as { client: { id: string; remnawaveUuid: string | null; email: string | null; telegramId: string | null; telegramUsername?: string | null } }).client;
   const { code } = req.body as { code?: string };
   if (!code?.trim()) return res.status(400).json({ message: "Промокод не указан" });
 
@@ -679,18 +683,23 @@ clientRouter.post("/promo/activate", async (req, res) => {
       existingUuid = extractRemnaUuid(byEmailRes.data);
       if (existingUuid) currentExpireAt = extractCurrentExpireAt(byEmailRes.data);
     }
+    const displayUsername = remnaUsernameFromClient({
+      telegramUsername: client.telegramUsername,
+      telegramId: client.telegramId,
+      email: client.email,
+      clientIdFallback: client.id,
+    });
     const expireAt = calculateExpireAt(currentExpireAt, group.durationDays);
     if (!existingUuid) {
-      const rawName = client.email?.split("@")[0] || `user${client.id.slice(-6)}`;
-      const username = rawName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 36) || "u_" + Date.now().toString(36);
-      const finalUsername = username.length >= 3 ? username : "u_" + username;
       const createRes = await remnaCreateUser({
-        username: finalUsername,
+        username: displayUsername,
         trafficLimitBytes,
         trafficLimitStrategy: "NO_RESET",
         expireAt,
         hwidDeviceLimit: hwidDeviceLimit ?? undefined,
         activeInternalSquads: [group.squadUuid],
+        ...(client.telegramId?.trim() && { telegramId: parseInt(client.telegramId, 10) }),
+        ...(client.email?.trim() && { email: client.email.trim() }),
       });
       existingUuid = extractRemnaUuid(createRes.data);
     }
@@ -764,7 +773,7 @@ clientRouter.post("/promo-code/check", async (req, res) => {
 
 /** Применить промокод FREE_DAYS — активирует подписку */
 clientRouter.post("/promo-code/activate", async (req, res) => {
-  const client = (req as unknown as { client: { id: string; remnawaveUuid: string | null; email: string | null; telegramId: string | null } }).client;
+  const client = (req as unknown as { client: { id: string; remnawaveUuid: string | null; email: string | null; telegramId: string | null; telegramUsername?: string | null } }).client;
   const { code } = req.body as { code?: string };
   if (!code?.trim()) return res.status(400).json({ message: "Промокод не указан" });
 
@@ -816,18 +825,23 @@ clientRouter.post("/promo-code/activate", async (req, res) => {
       existingUuid = extractRemnaUuid(byEmailRes.data);
       if (existingUuid) currentExpireAt = extractCurrentExpireAt(byEmailRes.data);
     }
+    const displayUsername = remnaUsernameFromClient({
+      telegramUsername: client.telegramUsername,
+      telegramId: client.telegramId,
+      email: client.email,
+      clientIdFallback: client.id,
+    });
     const expireAt = calculateExpireAt(currentExpireAt, promo.durationDays);
     if (!existingUuid) {
-      const rawName = client.email?.split("@")[0] || `user${client.id.slice(-6)}`;
-      const username = rawName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 36) || "u_" + Date.now().toString(36);
-      const finalUsername = username.length >= 3 ? username : "u_" + username;
       const createRes = await remnaCreateUser({
-        username: finalUsername,
+        username: displayUsername,
         trafficLimitBytes,
         trafficLimitStrategy: "NO_RESET",
         expireAt,
         hwidDeviceLimit: hwidDeviceLimit ?? undefined,
         activeInternalSquads: [promo.squadUuid],
+        ...(client.telegramId?.trim() && { telegramId: parseInt(client.telegramId, 10) }),
+        ...(client.email?.trim() && { email: client.email.trim() }),
       });
       existingUuid = extractRemnaUuid(createRes.data);
     }
@@ -842,17 +856,31 @@ clientRouter.post("/promo-code/activate", async (req, res) => {
   return res.json({ message: `Промокод активирован! Подписка на ${promo.durationDays} дн. подключена.` });
 });
 
-/** Определить отображаемое имя тарифа: Триал, название с сайта или «Тариф не выбран» */
+/** Определить отображаемое имя тарифа: Триал, название с сайта или «Тариф не выбран».
+ *  Поддерживает activeInternalSquads как массив строк (uuid) или объектов { uuid }.
+ *  Приоритет: сначала ищем совпадение с оплаченным тарифом, затем — триал. */
 async function resolveTariffDisplayName(remnaUserData: unknown): Promise<string> {
-  const user = (remnaUserData as { response?: { activeInternalSquads?: { uuid?: string }[] }; activeInternalSquads?: { uuid?: string }[] })?.response
-    ?? (remnaUserData as { activeInternalSquads?: { uuid?: string }[] });
-  const squadUuid = user?.activeInternalSquads?.[0]?.uuid;
-  if (!squadUuid) return "Тариф не выбран";
+  const raw = remnaUserData as { response?: { activeInternalSquads?: unknown[] }; activeInternalSquads?: unknown[] };
+  const user = raw?.response ?? raw;
+  const ais = user?.activeInternalSquads;
+  const squadUuids: string[] = [];
+  if (Array.isArray(ais)) {
+    for (const s of ais) {
+      const u = s != null && typeof s === "object" && "uuid" in s ? (s as { uuid: unknown }).uuid : s;
+      if (typeof u === "string") squadUuids.push(u);
+    }
+  }
+  if (squadUuids.length === 0) return "Тариф не выбран";
   const config = await getSystemConfig();
-  if (config.trialSquadUuid?.trim() === squadUuid) return "Триал";
+  const trialUuid = config.trialSquadUuid?.trim() || null;
   const tariffs = await prisma.tariff.findMany({ select: { name: true, internalSquadUuids: true } });
-  const match = tariffs.find((t) => t.internalSquadUuids.includes(squadUuid));
-  return match?.name ?? "Тариф не выбран";
+  for (const squadUuid of squadUuids) {
+    if (trialUuid === squadUuid) continue;
+    const match = tariffs.find((t) => t.internalSquadUuids.includes(squadUuid));
+    if (match?.name) return match.name;
+  }
+  if (trialUuid && squadUuids.includes(trialUuid)) return "Триал";
+  return "Тариф не выбран";
 }
 
 clientRouter.get("/subscription", async (req, res) => {
@@ -864,7 +892,17 @@ clientRouter.get("/subscription", async (req, res) => {
   if (result.error) {
     return res.json({ subscription: null, tariffDisplayName: null, message: result.error });
   }
-  const tariffDisplayName = await resolveTariffDisplayName(result.data ?? null);
+  let tariffDisplayName = await resolveTariffDisplayName(result.data ?? null);
+  // Если по Remna показывается «Триал» или «Тариф не выбран», но клиент оплачивал тариф — берём название из последней оплаты
+  if (tariffDisplayName === "Триал" || tariffDisplayName === "Тариф не выбран") {
+    const lastPaidTariff = await prisma.payment.findFirst({
+      where: { clientId: client.id, status: "PAID", tariffId: { not: null } },
+      orderBy: { paidAt: "desc" },
+      select: { tariff: { select: { name: true } } },
+    });
+    const name = lastPaidTariff?.tariff?.name?.trim();
+    if (name) tariffDisplayName = name;
+  }
   return res.json({ subscription: result.data ?? null, tariffDisplayName });
 });
 
@@ -1643,24 +1681,30 @@ publicConfigRouter.get("/deeplink", (req, res) => {
   if (!url) return res.status(400).send("Missing url parameter");
   // HTML-страница с авто-редиректом + кнопка-fallback
   const safeUrl = url.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const safeUrlJs = url.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r");
   const html = `<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Открытие приложения…</title>
 <style>
-  body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0d1117;color:#e6edf3}
+  body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0d1117;color:#e6edf3;padding:16px;box-sizing:border-box}
   .btn{display:inline-block;margin-top:24px;padding:14px 32px;background:#2ea043;color:#fff;border:none;border-radius:12px;font-size:17px;text-decoration:none;cursor:pointer}
   .btn:active{opacity:.85}
   .sub{margin-top:16px;font-size:13px;color:#8b949e;max-width:90%;text-align:center;word-break:break-all}
+  .hint{margin-top:12px;font-size:12px;color:#8b949e;max-width:90%;text-align:center}
 </style>
 </head><body>
 <p>Открываем приложение…</p>
 <a class="btn" href="${safeUrl}" id="open">Открыть приложение</a>
 <p class="sub">Если приложение не открылось — нажмите кнопку выше.<br>Ссылка подписки скопирована в буфер обмена.</p>
+<p class="hint" id="androidHint" style="display:none">На Android или в Telegram на ПК: если страница открылась внутри Telegram, зайдите в Настройки → Чаты → «Открывать ссылки во внешнем браузере» и нажмите кнопку ещё раз.</p>
 <script>
-  // Авто-редирект через 300мс (даём странице отрисоваться)
-  setTimeout(function(){ window.location.href = "${safeUrl.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"; }, 300);
+  (function(){
+    var ua = navigator.userAgent || "";
+    if (/Android|Windows|tdesktop/i.test(ua)) document.getElementById("androidHint").style.display = "block";
+    setTimeout(function(){ try { window.location.href = "${safeUrlJs}"; } catch (e) {} }, 300);
+  })();
 </script>
 </body></html>`;
   res.type("html").send(html);

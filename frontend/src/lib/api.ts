@@ -515,7 +515,7 @@ export const api = {
     return request("/client/auth/me", { token });
   },
 
-  async clientSubscription(token: string): Promise<{ subscription: unknown; message?: string }> {
+  async clientSubscription(token: string): Promise<{ subscription: unknown; tariffDisplayName?: string | null; message?: string }> {
     return request("/client/subscription", { token });
   },
 

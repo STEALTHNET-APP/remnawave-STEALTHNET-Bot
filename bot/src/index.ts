@@ -822,6 +822,65 @@ bot.on("callback_query:data", async (ctx) => {
       return;
     }
 
+    if (data.startsWith("pay_option_yoomoney:")) {
+      const parts = data.split(":");
+      const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
+      const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
+      const options = config?.sellOptions ?? [];
+      const option = options.find((o) => o.kind === kind && o.id === productId);
+      if (!option) {
+        await editMessageContent(ctx, "Опция не найдена.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      try {
+        const payment = await api.createYoomoneyPayment(token, {
+          amount: option.price,
+          paymentType: "AC",
+          extraOption: { kind: option.kind, productId: option.id },
+        });
+        const optName = option.name || (option.kind === "traffic" ? `+${option.trafficGb} ГБ` : option.kind === "devices" ? `+${option.deviceCount} устр.` : "Сервер");
+        const yooTitle = titleWithEmoji("CARD", `Оплата: ${optName} — ${formatMoney(option.price, option.currency)}\n\nНажмите кнопку ниже для оплаты через ЮMoney:`, config?.botEmojis);
+        await editMessageContent(ctx, yooTitle.text, payUrlMarkup(payment.paymentUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), yooTitle.entities);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка создания платежа ЮMoney";
+        await editMessageContent(ctx, `❌ ${msg}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
+
+    if (data.startsWith("pay_option_platega:")) {
+      const parts = data.split(":");
+      const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
+      const productId = parts.length > 3 ? parts.slice(2, -1).join(":") : parts[2] ?? "";
+      const methodId = parts.length >= 4 ? Number(parts[parts.length - 1]) : Number(parts[2]);
+      const options = config?.sellOptions ?? [];
+      const option = options.find((o) => o.kind === kind && o.id === productId);
+      if (!option) {
+        await editMessageContent(ctx, "Опция не найдена.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      if (!Number.isFinite(methodId)) {
+        await editMessageContent(ctx, "Неверный способ оплаты.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      try {
+        const payment = await api.createPlategaPayment(token, {
+          amount: option.price,
+          currency: option.currency,
+          paymentMethod: methodId,
+          description: option.name || `${option.kind} ${option.id}`,
+          extraOption: { kind: option.kind, productId: option.id },
+        });
+        const optName = option.name || (option.kind === "traffic" ? `+${option.trafficGb} ГБ` : option.kind === "devices" ? `+${option.deviceCount} устр.` : "Сервер");
+        const payTitle = titleWithEmoji("CARD", `Оплата: ${optName} — ${formatMoney(option.price, option.currency)}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
+        await editMessageContent(ctx, payTitle.text, payUrlMarkup(payment.paymentUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), payTitle.entities);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
+        await editMessageContent(ctx, `❌ ${msg}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
+
     if (data.startsWith("pay_option:")) {
       const parts = data.split(":");
       const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
@@ -845,7 +904,9 @@ bot.on("callback_query:data", async (ctx) => {
         config?.botBackLabel ?? null,
         innerStyles,
         innerEmojiIds,
-        config?.yookassaEnabled
+        config?.plategaMethods ?? [],
+        !!config?.yoomoneyEnabled,
+        !!config?.yookassaEnabled
       );
       await editMessageContent(ctx, choiceText.text, markup, choiceText.entities);
       return;
