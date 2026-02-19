@@ -85,6 +85,15 @@ function logSection(title) {
   console.log(`${"═".repeat(60)}`);
 }
 
+function parseCommaSeparated(val) {
+  if (!val) return null;
+  try {
+    const parsed = JSON.parse(val);
+    if (Array.isArray(parsed)) return parsed.join(",");
+  } catch {}
+  return val;
+}
+
 function parseSquadIds(squadIds, squadId) {
   if (squadIds) {
     try {
@@ -566,11 +575,16 @@ async function migrate() {
       const sysRes = await oldDb.query(`SELECT * FROM system_setting LIMIT 1`);
       if (sysRes.rows.length > 0) {
         const s = sysRes.rows[0];
+        const currency = systemCurrency || s.default_currency || "usd";
+        const activeCurrencies = systemCurrency
+          ? systemCurrency
+          : parseCommaSeparated(s.active_currencies) || "usd,rub";
+        const activeLanguages = parseCommaSeparated(s.active_languages) || "ru,en";
         settingsToMigrate.push(
           { key: "default_language", value: s.default_language || "ru" },
-          { key: "default_currency", value: s.default_currency || "usd" },
-          { key: "active_languages", value: s.active_languages || '["ru","en"]' },
-          { key: "active_currencies", value: s.active_currencies || '["usd","rub"]' }
+          { key: "default_currency", value: currency },
+          { key: "active_languages", value: activeLanguages },
+          { key: "active_currencies", value: activeCurrencies }
         );
       }
     } catch {
@@ -636,6 +650,17 @@ async function migrate() {
       }
     } catch {
       log("⚠️", "Таблица настроек триалов не найдена");
+    }
+
+    // Если FORCE_CURRENCY задан, гарантируем что валюта будет записана в настройки
+    if (FORCE_CURRENCY) {
+      const hasCurrency = settingsToMigrate.some((s) => s.key === "default_currency");
+      if (!hasCurrency) {
+        settingsToMigrate.push(
+          { key: "default_currency", value: FORCE_CURRENCY },
+          { key: "active_currencies", value: FORCE_CURRENCY }
+        );
+      }
     }
 
     // Записываем настройки (upsert)
