@@ -26,13 +26,14 @@
 
 ## Сборка образа
 
+Из корня репозитория (для Dockerfile с путями `proxy-node/...`):
+
 ```bash
-cd proxy-node
-docker build -t stealthnet/proxy-node:latest .
+docker build -f proxy-node/Dockerfile -t stealthnet/proxy-node:latest .
 ```
 
 Далее используйте docker-compose из админки (образ уже указан как `stealthnet/proxy-node:latest`).
 
-## Реализация
+## Реализация (Phase 1.5)
 
-Сейчас в образ входит только **агент** (регистрация + heartbeat каждые 60 сек). Интеграция с 3proxy или gost для выдачи SOCKS5/HTTP по списку слотов — следующий шаг (генерация конфига из GET /slots и перезапуск прокси-сервера).
+Образ включает **агент** и **3proxy**. Агент регистрируется, шлёт heartbeat и по GET /slots получает список слотов; по нему генерирует файл пользователей (`login:CL:password`) и конфиг 3proxy, затем запускает/перезапускает 3proxy. Доступны SOCKS5 (по умолчанию 1080) и HTTP-прокси (8080). Клиенты подключаются по выданным логин/пароль.
