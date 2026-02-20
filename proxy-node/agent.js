@@ -126,7 +126,7 @@ async function register() {
   const res = await fetch(`${API_URL}/api/proxy-nodes/register`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ name: "", socksPort, httpPort }),
+    body: JSON.stringify({ name: "" }),
   });
   const text = await res.text();
   if (!res.ok) {
