@@ -40,7 +40,7 @@ function slotsSignature(slots, customConfigJson) {
     ? ""
     : slots.map((s) => `${s.id}:${s.userIdentifier}:${s.secret || ""}`).join("|");
   const configPart = customConfigJson || "";
-  return `${protocol}:${port}:${slotsPart}:${configPart}`;
+  return `${protocol}:${port}:${tlsEnabled}:${slotsPart}:${configPart}`;
 }
 
 /** Формирует массив users для sing-box из слотов в зависимости от протокола. */
@@ -238,9 +238,10 @@ async function startSingbox() {
   console.log("sing-box started (protocol:", protocol + ", port:", port + ")");
 }
 
-async function applySlots(slots, customConfigJson, protocolFromApi, portFromApi) {
+async function applySlots(slots, customConfigJson, protocolFromApi, portFromApi, tlsEnabledFromApi) {
   if (protocolFromApi) protocol = protocolFromApi;
   if (portFromApi) port = portFromApi;
+  if (tlsEnabledFromApi !== undefined) tlsEnabled = tlsEnabledFromApi;
 
   const sig = slotsSignature(slots, customConfigJson);
   if (sig === lastSlotsSignature) return;
@@ -288,13 +289,14 @@ async function register() {
 
 async function getSlots(nodeId) {
   const res = await fetch(`${API_URL}/api/singbox-nodes/${nodeId}/slots`, { headers });
-  if (!res.ok) return { slots: [], customConfigJson: null, protocol: null, port: null };
+  if (!res.ok) return { slots: [], customConfigJson: null, protocol: null, port: null, tlsEnabled: undefined };
   const data = await res.json();
   return {
     slots: data.slots || [],
     customConfigJson: data.customConfigJson ?? null,
     protocol: data.protocol ?? null,
     port: data.port ?? null,
+    tlsEnabled: data.tlsEnabled,
   };
 }
 
@@ -323,8 +325,8 @@ async function main() {
   }
 
   const tick = async () => {
-    const { slots, customConfigJson, protocol: apiProtocol, port: apiPort } = await getSlots(nodeId);
-    await applySlots(slots, customConfigJson, apiProtocol, apiPort);
+    const { slots, customConfigJson, protocol: apiProtocol, port: apiPort, tlsEnabled: apiTls } = await getSlots(nodeId);
+    await applySlots(slots, customConfigJson, apiProtocol, apiPort, apiTls);
     await heartbeat(nodeId, slots);
     if (slots.length > 0) {
       console.log("Slots:", slots.length, "Protocol:", protocol);
