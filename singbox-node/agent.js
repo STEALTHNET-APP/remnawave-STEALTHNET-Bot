@@ -35,9 +35,12 @@ if (!API_URL || !TOKEN) {
   process.exit(1);
 }
 
-function slotsSignature(slots) {
-  if (!slots || slots.length === 0) return "";
-  return slots.map((s) => `${s.id}:${s.userIdentifier}:${s.secret || ""}`).join("|");
+function slotsSignature(slots, customConfigJson) {
+  const slotsPart = (!slots || slots.length === 0)
+    ? ""
+    : slots.map((s) => `${s.id}:${s.userIdentifier}:${s.secret || ""}`).join("|");
+  const configPart = customConfigJson || "";
+  return `${protocol}:${port}:${slotsPart}:${configPart}`;
 }
 
 /** Формирует массив users для sing-box из слотов в зависимости от протокола. */
@@ -195,13 +198,24 @@ function writeConfig(config) {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), "utf8");
 }
 
-function startSingbox() {
-  if (singboxProcess) {
-    try {
-      singboxProcess.kill("SIGTERM");
-      singboxProcess = null;
-    } catch (_) {}
-  }
+function stopSingbox() {
+  return new Promise((resolve) => {
+    if (!singboxProcess) return resolve();
+    const proc = singboxProcess;
+    singboxProcess = null;
+    const timeout = setTimeout(() => {
+      try { proc.kill("SIGKILL"); } catch (_) {}
+      resolve();
+    }, 5000);
+    proc.on("exit", () => { clearTimeout(timeout); resolve(); });
+    try { proc.kill("SIGTERM"); } catch (_) { clearTimeout(timeout); resolve(); }
+  });
+}
+
+async function startSingbox() {
+  await stopSingbox();
+  // Small delay to let OS release the UDP socket
+  await new Promise((r) => setTimeout(r, 500));
   const bin = "sing-box";
   singboxProcess = spawn(bin, ["run", "-c", CONFIG_PATH], {
     stdio: ["ignore", "pipe", "pipe"],
@@ -219,13 +233,13 @@ function startSingbox() {
   console.log("sing-box started (protocol:", protocol + ", port:", port + ")");
 }
 
-function applySlots(slots, customConfigJson, protocolFromApi, portFromApi) {
-  const sig = slotsSignature(slots);
-  if (sig === lastSlotsSignature && !customConfigJson) return;
-  lastSlotsSignature = sig;
-
+async function applySlots(slots, customConfigJson, protocolFromApi, portFromApi) {
   if (protocolFromApi) protocol = protocolFromApi;
   if (portFromApi) port = portFromApi;
+
+  const sig = slotsSignature(slots, customConfigJson);
+  if (sig === lastSlotsSignature) return;
+  lastSlotsSignature = sig;
 
   const users = buildUsers(slots);
   let config;
@@ -244,7 +258,7 @@ function applySlots(slots, customConfigJson, protocolFromApi, portFromApi) {
     config = buildDefaultConfig(port, users, tlsPaths);
   }
   writeConfig(config);
-  startSingbox();
+  await startSingbox();
 }
 
 async function register() {
@@ -304,7 +318,7 @@ async function main() {
 
   const tick = async () => {
     const { slots, customConfigJson, protocol: apiProtocol, port: apiPort } = await getSlots(nodeId);
-    applySlots(slots, customConfigJson, apiProtocol, apiPort);
+    await applySlots(slots, customConfigJson, apiProtocol, apiPort);
     await heartbeat(nodeId, slots);
     if (slots.length > 0) {
       console.log("Slots:", slots.length, "Protocol:", protocol);
