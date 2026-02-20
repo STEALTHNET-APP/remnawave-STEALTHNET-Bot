@@ -6,11 +6,14 @@
 
 const fs = require("fs");
 const path = require("path");
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 
 const API_URL = (process.env.STEALTHNET_API_URL || "").replace(/\/$/, "");
 const TOKEN = process.env.SINGBOX_NODE_TOKEN || "";
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, "config.json");
+const APP_DIR = path.dirname(CONFIG_PATH);
+const CERT_PATH = path.join(APP_DIR, "cert.pem");
+const KEY_PATH = path.join(APP_DIR, "key.pem");
 const POLL_INTERVAL_MS = (parseInt(process.env.POLL_INTERVAL_SEC || "60", 10) || 60) * 1000;
 const MANAGED_INBOUND_TAG = "stealthnet-in";
 
@@ -58,8 +61,28 @@ function buildUsers(slots) {
   return list;
 }
 
+/** Генерирует самоподписанный сертификат для TLS (HYSTERIA2/TROJAN), если файлов ещё нет. */
+function ensureTlsCert() {
+  if (fs.existsSync(CERT_PATH) && fs.existsSync(KEY_PATH)) {
+    return { certPath: CERT_PATH, keyPath: KEY_PATH };
+  }
+  if (!fs.existsSync(APP_DIR)) fs.mkdirSync(APP_DIR, { recursive: true });
+  const subj = "/CN=stealthnet-inbound";
+  const r = spawnSync("openssl", [
+    "req", "-x509", "-newkey", "rsa:2048",
+    "-keyout", KEY_PATH, "-out", CERT_PATH,
+    "-days", "3650", "-nodes", "-subj", subj,
+  ], { stdio: "pipe", encoding: "utf8" });
+  if (r.status !== 0) {
+    console.error("openssl failed:", r.stderr || r.error);
+    return null;
+  }
+  console.log("Generated self-signed TLS cert for", protocol);
+  return { certPath: CERT_PATH, keyPath: KEY_PATH };
+}
+
 /** Минимальный шаблон конфига по протоколу (без customConfigJson). */
-function buildDefaultConfig(portVal, users) {
+function buildDefaultConfig(portVal, users, tlsPaths) {
   const listenPort = portVal || port;
   let inbound;
   if (protocol === "VLESS") {
@@ -81,22 +104,28 @@ function buildDefaultConfig(portVal, users) {
     };
     if (inbound.users.length === 0) inbound.password = "replace-me-or-add-slots";
   } else if (protocol === "TROJAN") {
+    const tls = tlsPaths
+      ? { enabled: true, server_name: "localhost", certificate_path: tlsPaths.certPath, key_path: tlsPaths.keyPath }
+      : {};
     inbound = {
       type: "trojan",
       tag: MANAGED_INBOUND_TAG,
       listen: "::",
       listen_port: listenPort,
       users: users.map((u) => ({ name: u.name, password: u.password })),
-      tls: {},
+      tls,
     };
   } else if (protocol === "HYSTERIA2") {
+    const tls = tlsPaths
+      ? { enabled: true, server_name: "localhost", certificate_path: tlsPaths.certPath, key_path: tlsPaths.keyPath }
+      : {};
     inbound = {
       type: "hysteria2",
       tag: MANAGED_INBOUND_TAG,
       listen: "::",
       listen_port: listenPort,
       users: users.map((u) => ({ name: u.name, password: u.password })),
-      tls: {},
+      tls,
     };
   } else {
     inbound = {
@@ -188,7 +217,15 @@ function applySlots(slots, customConfigJson, protocolFromApi, portFromApi) {
     config = mergeCustomConfig(customConfigJson, users);
     if (!config) return;
   } else {
-    config = buildDefaultConfig(port, users);
+    let tlsPaths = null;
+    if (protocol === "TROJAN" || protocol === "HYSTERIA2") {
+      tlsPaths = ensureTlsCert();
+      if (!tlsPaths) {
+        console.error("TLS required for " + protocol + ". Could not generate certificate (install openssl).");
+        return;
+      }
+    }
+    config = buildDefaultConfig(port, users, tlsPaths);
   }
   writeConfig(config);
   startSingbox();
