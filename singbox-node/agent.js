@@ -175,6 +175,8 @@ function mergeCustomConfig(customJson, users) {
       managed.tls.key_path = tlsPaths.keyPath;
     }
   }
+  // Порт из админки (передан в applySlots через portFromApi) — подставляем в инбаунд
+  managed.listen_port = port;
   return config;
 }
 
