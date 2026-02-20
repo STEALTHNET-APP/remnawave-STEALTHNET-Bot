@@ -20,6 +20,7 @@ import { remnaCreateUser, remnaUpdateUser, isRemnaConfigured, remnaGetUser, remn
 import { sendVerificationEmail, isSmtpConfigured } from "../mail/mail.service.js";
 import { createPlategaTransaction, isPlategaConfigured } from "../platega/platega.service.js";
 import { activateTariffForClient } from "../tariff/tariff-activation.service.js";
+import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.service.js";
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
 import { getAuthUrl, exchangeCodeForToken, requestPayment, processPayment } from "../yoomoney/yoomoney.service.js";
 import { createYookassaPayment } from "../yookassa/yookassa.service.js";
@@ -883,6 +884,39 @@ async function resolveTariffDisplayName(remnaUserData: unknown): Promise<string>
   return "Тариф не выбран";
 }
 
+clientRouter.get("/proxy-slots", async (req, res) => {
+  const client = (req as unknown as { client: { id: string } }).client;
+  const now = new Date();
+  const slots = await prisma.proxySlot.findMany({
+    where: { clientId: client.id, status: "ACTIVE", expiresAt: { gt: now } },
+    select: {
+      id: true,
+      login: true,
+      password: true,
+      expiresAt: true,
+      trafficLimitBytes: true,
+      trafficUsedBytes: true,
+      connectionLimit: true,
+      node: { select: { publicHost: true, socksPort: true, httpPort: true } },
+    },
+    orderBy: { expiresAt: "asc" },
+  });
+  return res.json({
+    slots: slots.map((s) => ({
+      id: s.id,
+      login: s.login,
+      password: s.password,
+      expiresAt: s.expiresAt.toISOString(),
+      trafficLimitBytes: s.trafficLimitBytes?.toString() ?? null,
+      trafficUsedBytes: s.trafficUsedBytes.toString(),
+      connectionLimit: s.connectionLimit,
+      host: s.node.publicHost ?? "host",
+      socksPort: s.node.socksPort,
+      httpPort: s.node.httpPort,
+    })),
+  });
+});
+
 clientRouter.get("/subscription", async (req, res) => {
   const client = (req as unknown as { client: { id: string; remnawaveUuid: string | null } }).client;
   if (!client.remnawaveUuid) {
@@ -912,6 +946,7 @@ const createPlategaPaymentSchema = z.object({
   paymentMethod: z.number().int().min(2).max(13),
   description: z.string().max(500).optional(),
   tariffId: z.string().min(1).optional(),
+  proxyTariffId: z.string().min(1).optional(),
   promoCode: z.string().max(50).optional(),
   extraOption: z.object({ kind: z.enum(["traffic", "devices", "servers"]), productId: z.string().min(1) }).optional(),
 });
@@ -921,9 +956,10 @@ clientRouter.post("/payments/platega", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
   }
-  const { amount: originalAmount, currency, paymentMethod, description, tariffId, promoCode: promoCodeStr, extraOption } = parsed.data;
+  const { amount: originalAmount, currency, paymentMethod, description, tariffId, proxyTariffId, promoCode: promoCodeStr, extraOption } = parsed.data;
 
   let tariffIdToStore: string | null = null;
+  let proxyTariffIdToStore: string | null = null;
   let finalAmount: number;
   let currencyToUse: string;
   let metadataExtra: Record<string, unknown> | null = null;
@@ -972,6 +1008,12 @@ clientRouter.post("/payments/platega", async (req, res) => {
       if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
       tariffIdToStore = tariffId;
     }
+    if (proxyTariffId) {
+      const proxyTariff = await prisma.proxyTariff.findUnique({ where: { id: proxyTariffId } });
+      if (!proxyTariff || !proxyTariff.enabled) return res.status(400).json({ message: "Прокси-тариф не найден" });
+      proxyTariffIdToStore = proxyTariffId;
+      if (originalAmount == null) { finalAmount = proxyTariff.price; currencyToUse = proxyTariff.currency.toUpperCase(); }
+    }
   }
 
   // Применяем промокод на скидку (не для опций по умолчанию, можно разрешить — тогда скидка с опции)
@@ -1010,7 +1052,7 @@ clientRouter.post("/payments/platega", async (req, res) => {
 
   const serviceName = config.serviceName?.trim() || "STEALTHNET";
   const orderId = randomUUID();
-  const paymentKind = tariffIdToStore ? "tariff" : metadataExtra ? "option" : "topup";
+  const paymentKind = tariffIdToStore ? "tariff" : proxyTariffIdToStore ? "proxy" : metadataExtra ? "option" : "topup";
   const appUrl = (config.publicAppUrl || "").replace(/\/$/, "");
   const returnUrl = appUrl
     ? `${appUrl}/cabinet/dashboard?payment=success&payment_kind=${paymentKind}&oid=${orderId}`
@@ -1020,7 +1062,9 @@ clientRouter.post("/payments/platega", async (req, res) => {
     : "";
   const plategaDescription = tariffIdToStore
     ? `Тариф ${serviceName} #${orderId}`
-    : metadataExtra
+    : proxyTariffIdToStore
+      ? `Прокси ${serviceName} #${orderId}`
+      : metadataExtra
       ? `Опция ${serviceName} #${orderId}`
       : `Пополнение баланса ${serviceName} #${orderId}`;
 
@@ -1036,6 +1080,7 @@ clientRouter.post("/payments/platega", async (req, res) => {
       status: "PENDING",
       provider: "platega",
       tariffId: tariffIdToStore,
+      proxyTariffId: proxyTariffIdToStore,
       metadata: paymentMeta ? JSON.stringify(paymentMeta) : null,
     },
   });
@@ -1074,21 +1119,58 @@ clientRouter.post("/payments/platega", async (req, res) => {
   });
 });
 
-// ——— Оплата тарифа балансом ———
+// ——— Оплата тарифа или прокси-тарифа балансом ———
 
 const payByBalanceSchema = z.object({
-  tariffId: z.string().min(1),
+  tariffId: z.string().min(1).optional(),
+  proxyTariffId: z.string().min(1).optional(),
   promoCode: z.string().max(50).optional(),
-});
+}).refine((d) => (d.tariffId ? 1 : 0) + (d.proxyTariffId ? 1 : 0) === 1, { message: "Укажите tariffId или proxyTariffId" });
 
 clientRouter.post("/payments/balance", async (req, res) => {
   const clientRaw = (req as unknown as { client: { id: string; remnawaveUuid: string | null; email: string | null; telegramId: string | null } }).client;
   const parsed = payByBalanceSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: "Invalid input", errors: parsed.error.flatten() });
 
-  const { tariffId, promoCode: promoCodeStr } = parsed.data;
+  const { tariffId, proxyTariffId, promoCode: promoCodeStr } = parsed.data;
 
-  const tariff = await prisma.tariff.findUnique({ where: { id: tariffId } });
+  if (proxyTariffId) {
+    const tariff = await prisma.proxyTariff.findUnique({ where: { id: proxyTariffId } });
+    if (!tariff || !tariff.enabled) return res.status(400).json({ message: "Прокси-тариф не найден" });
+    const clientDb = await prisma.client.findUnique({ where: { id: clientRaw.id } });
+    if (!clientDb) return res.status(401).json({ message: "Unauthorized" });
+    if (clientDb.balance < tariff.price) {
+      return res.status(400).json({ message: `Недостаточно средств. Баланс: ${clientDb.balance.toFixed(2)}, нужно: ${tariff.price.toFixed(2)}` });
+    }
+    const payment = await prisma.payment.create({
+      data: {
+        clientId: clientRaw.id,
+        orderId: randomUUID(),
+        amount: tariff.price,
+        currency: tariff.currency.toUpperCase(),
+        status: "PAID",
+        provider: "balance",
+        proxyTariffId: tariff.id,
+        paidAt: new Date(),
+      },
+    });
+    const proxyResult = await createProxySlotsByPaymentId(payment.id);
+    if (!proxyResult.ok) return res.status(proxyResult.status).json({ message: proxyResult.error });
+    await prisma.client.update({
+      where: { id: clientRaw.id },
+      data: { balance: { decrement: tariff.price } },
+    });
+    const { distributeReferralRewards } = await import("../referral/referral.service.js");
+    await distributeReferralRewards(payment.id).catch(() => {});
+    const { notifyProxySlotsCreated } = await import("../notification/telegram-notify.service.js");
+    await notifyProxySlotsCreated(clientRaw.id, proxyResult.slotIds, tariff.name).catch(() => {});
+    return res.json({
+      message: `Прокси «${tariff.name}» оплачены! Списано ${tariff.price.toFixed(2)} ${tariff.currency.toUpperCase()} с баланса.`,
+      newBalance: clientDb.balance - tariff.price,
+    });
+  }
+
+  const tariff = await prisma.tariff.findUnique({ where: { id: tariffId! } });
   if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
 
   let finalPrice = tariff.price;
@@ -1372,18 +1454,20 @@ const yoomoneyFormPaymentSchema = z.object({
   amount: z.number().positive().max(1e7).optional(),
   paymentType: z.enum(["PC", "AC"]), // PC = с кошелька, AC = с карты
   tariffId: z.string().min(1).optional(),
+  proxyTariffId: z.string().min(1).optional(),
   extraOption: z.object({ kind: z.enum(["traffic", "devices", "servers"]), productId: z.string().min(1) }).optional(),
 });
 clientRouter.post("/yoomoney/create-form-payment", async (req, res) => {
   const clientId = (req as unknown as { clientId: string }).clientId;
   const parsed = yoomoneyFormPaymentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: "Укажите сумму и способ оплаты", errors: parsed.error.flatten() });
-  const { amount: amountBody, paymentType, tariffId: tariffIdBody, extraOption } = parsed.data;
+  const { amount: amountBody, paymentType, tariffId: tariffIdBody, proxyTariffId: proxyTariffIdBody, extraOption } = parsed.data;
   const config = await getSystemConfig();
   const receiver = config.yoomoneyReceiverWallet?.trim();
   if (!receiver) return res.status(503).json({ message: "ЮMoney не настроен" });
 
   let tariffIdToStore: string | null = null;
+  let proxyTariffIdToStore: string | null = null;
   let amountRounded: number;
   let metadataObj: Record<string, unknown> = { paymentType };
 
@@ -1420,12 +1504,19 @@ clientRouter.post("/yoomoney/create-form-payment", async (req, res) => {
       };
     }
   } else {
-    if (amountBody == null) return res.status(400).json({ message: "Укажите сумму" });
-    amountRounded = Math.round(amountBody * 100) / 100;
+    if (amountBody == null && !proxyTariffIdBody) return res.status(400).json({ message: "Укажите сумму" });
     if (tariffIdBody) {
       const tariff = await prisma.tariff.findUnique({ where: { id: tariffIdBody } });
       if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
       tariffIdToStore = tariffIdBody;
+      amountRounded = Math.round((amountBody ?? tariff.price) * 100) / 100;
+    } else if (proxyTariffIdBody) {
+      const proxyTariff = await prisma.proxyTariff.findUnique({ where: { id: proxyTariffIdBody } });
+      if (!proxyTariff || !proxyTariff.enabled) return res.status(400).json({ message: "Прокси-тариф не найден" });
+      proxyTariffIdToStore = proxyTariffIdBody;
+      amountRounded = Math.round((amountBody ?? proxyTariff.price) * 100) / 100;
+    } else {
+      amountRounded = Math.round((amountBody ?? 0) * 100) / 100;
     }
   }
 
@@ -1439,6 +1530,7 @@ clientRouter.post("/yoomoney/create-form-payment", async (req, res) => {
       status: "PENDING",
       provider: "yoomoney_form",
       tariffId: tariffIdToStore,
+      proxyTariffId: proxyTariffIdToStore,
       metadata: JSON.stringify(metadataObj),
     },
   });
@@ -1448,9 +1540,11 @@ clientRouter.post("/yoomoney/create-form-payment", async (req, res) => {
   const successURL = appUrl ? `${appUrl}/cabinet?yoomoney_form=success` : "";
   const targets = tariffIdToStore
     ? `Тариф ${serviceName} #${orderId}`
-    : extraOption
-      ? `Опция ${serviceName} #${orderId}`
-      : `Пополнение баланса ${serviceName} #${orderId}`;
+    : proxyTariffIdToStore
+      ? `Прокси ${serviceName} #${orderId}`
+      : extraOption
+        ? `Опция ${serviceName} #${orderId}`
+        : `Пополнение баланса ${serviceName} #${orderId}`;
   const params = new URLSearchParams({
     receiver,
     "quickpay-form": "shop",
@@ -1514,6 +1608,7 @@ const yookassaCreatePaymentSchema = z.object({
   amount: z.number().positive().max(1e7).optional(),
   currency: z.string().min(1).max(10).optional(),
   tariffId: z.string().min(1).optional(),
+  proxyTariffId: z.string().min(1).optional(),
   promoCode: z.string().optional(),
   extraOption: z.object({
     kind: z.enum(["traffic", "devices", "servers"]),
@@ -1525,7 +1620,7 @@ clientRouter.post("/yookassa/create-payment", async (req, res) => {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = yookassaCreatePaymentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Неверные параметры", errors: parsed.error.flatten() });
-    const { amount: amountBody, currency: currencyBody, tariffId: tariffIdBody, promoCode, extraOption } = parsed.data;
+    const { amount: amountBody, currency: currencyBody, tariffId: tariffIdBody, proxyTariffId: proxyTariffIdBody, promoCode, extraOption } = parsed.data;
     const config = await getSystemConfig();
     const shopId = config.yookassaShopId?.trim();
     const secretKey = config.yookassaSecretKey?.trim();
@@ -1534,6 +1629,7 @@ clientRouter.post("/yookassa/create-payment", async (req, res) => {
     let amountRounded: number;
     let currencyUpper: string;
     let tariffIdToStore: string | null = null;
+    let proxyTariffIdToStore: string | null = null;
     let metadataObj: Record<string, unknown> = promoCode ? { promoCode } : {};
 
     if (extraOption) {
@@ -1575,15 +1671,22 @@ clientRouter.post("/yookassa/create-payment", async (req, res) => {
       }
       if (currencyUpper !== "RUB") return res.status(400).json({ message: "ЮKassa принимает только рубли (RUB)" });
     } else {
-      if (amountBody == null || !currencyBody) return res.status(400).json({ message: "Укажите сумму и валюту" });
-      currencyUpper = currencyBody.toUpperCase();
+      currencyUpper = (currencyBody ?? "RUB").toUpperCase();
       if (currencyUpper !== "RUB") return res.status(400).json({ message: "ЮKassa принимает только рубли (RUB)" });
       if (tariffIdBody) {
         const tariff = await prisma.tariff.findUnique({ where: { id: tariffIdBody } });
         if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
         tariffIdToStore = tariffIdBody;
+        amountRounded = Math.round((amountBody ?? tariff.price) * 100) / 100;
+      } else if (proxyTariffIdBody) {
+        const proxyTariff = await prisma.proxyTariff.findUnique({ where: { id: proxyTariffIdBody } });
+        if (!proxyTariff || !proxyTariff.enabled) return res.status(400).json({ message: "Прокси-тариф не найден" });
+        proxyTariffIdToStore = proxyTariffIdBody;
+        amountRounded = Math.round((amountBody ?? proxyTariff.price) * 100) / 100;
+      } else {
+        if (amountBody == null) return res.status(400).json({ message: "Укажите сумму" });
+        amountRounded = Math.round(amountBody * 100) / 100;
       }
-      amountRounded = Math.round(amountBody * 100) / 100;
     }
 
     const client = await prisma.client.findUnique({
@@ -1602,6 +1705,7 @@ clientRouter.post("/yookassa/create-payment", async (req, res) => {
         status: "PENDING",
         provider: "yookassa",
         tariffId: tariffIdToStore,
+        proxyTariffId: proxyTariffIdToStore,
         metadata: Object.keys(metadataObj).length > 0 ? JSON.stringify(metadataObj) : null,
       },
     });
@@ -1611,9 +1715,11 @@ clientRouter.post("/yookassa/create-payment", async (req, res) => {
     const returnUrl = appUrl ? `${appUrl}/cabinet?yookassa=success` : "";
     const description = tariffIdToStore
       ? `Тариф ${serviceName} #${orderId}`
-      : extraOption
-        ? `Опция ${serviceName} #${orderId}`
-        : `Пополнение баланса ${serviceName} #${orderId}`;
+      : proxyTariffIdToStore
+        ? `Прокси ${serviceName} #${orderId}`
+        : extraOption
+          ? `Опция ${serviceName} #${orderId}`
+          : `Пополнение баланса ${serviceName} #${orderId}`;
 
     const result = await createYookassaPayment({
       shopId,
@@ -1760,5 +1866,35 @@ publicConfigRouter.get("/tariffs", async (_req, res) => {
   } catch (e) {
     console.error("GET /public/tariffs error:", e);
     return res.status(500).json({ message: "Ошибка загрузки тарифов" });
+  }
+});
+
+// GET /api/public/proxy-tariffs — публичный список тарифов прокси (для бота и кабинета)
+publicConfigRouter.get("/proxy-tariffs", async (_req, res) => {
+  try {
+    const list = await prisma.proxyCategory.findMany({
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      include: { tariffs: { where: { enabled: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] } },
+    });
+    return res.json({
+      items: list.map((c) => ({
+        id: c.id,
+        name: c.name,
+        sortOrder: c.sortOrder,
+        tariffs: c.tariffs.map((t) => ({
+          id: t.id,
+          name: t.name,
+          proxyCount: t.proxyCount,
+          durationDays: t.durationDays,
+          trafficLimitBytes: t.trafficLimitBytes?.toString() ?? null,
+          connectionLimit: t.connectionLimit,
+          price: t.price,
+          currency: t.currency,
+        })),
+      })),
+    });
+  } catch (e) {
+    console.error("GET /public/proxy-tariffs error:", e);
+    return res.status(500).json({ message: "Ошибка загрузки тарифов прокси" });
   }
 });

@@ -15,6 +15,10 @@ import {
   tariffPayButtons,
   tariffsOfCategoryButtons,
   tariffPaymentMethodButtons,
+  proxyTariffPayButtons,
+  proxyTariffsOfCategoryButtons,
+  proxyCategoryButtons,
+  proxyPaymentMethodButtons,
   topupPaymentMethodButtons,
   payUrlMarkup,
   profileButtons,
@@ -498,9 +502,13 @@ bot.command("start", async (ctx) => {
     // Проверка подписки на канал
     if (await enforceSubscription(ctx, config)) return;
 
-    const subRes = await api.getSubscription(auth.token).catch(() => ({ subscription: null }));
+    const [subRes, proxyRes] = await Promise.all([
+      api.getSubscription(auth.token).catch(() => ({ subscription: null })),
+      api.getPublicProxyTariffs().catch(() => ({ items: [] })),
+    ]);
     const vpnUrl = getSubscriptionUrl(subRes.subscription);
     const showTrial = Boolean(config?.trialEnabled && !client.trialUsed);
+    const showProxy = proxyRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
     const appUrl = config?.publicAppUrl?.replace(/\/$/, "") ?? null;
 
     const { text, entities } = buildMainMenuText({
@@ -518,6 +526,7 @@ bot.command("start", async (ctx) => {
     const markup = mainMenu({
       showTrial,
       showVpn: Boolean(vpnUrl),
+      showProxy,
       appUrl,
       botButtons: config?.botButtons ?? null,
       botBackLabel: config?.botBackLabel ?? null,
@@ -619,9 +628,14 @@ bot.on("callback_query:data", async (ctx) => {
       : undefined;
 
     if (data === "menu:main") {
-      const [client, subRes] = await Promise.all([api.getMe(token), api.getSubscription(token).catch(() => ({ subscription: null }))]);
+      const [client, subRes, proxyRes] = await Promise.all([
+        api.getMe(token),
+        api.getSubscription(token).catch(() => ({ subscription: null })),
+        api.getPublicProxyTariffs().catch(() => ({ items: [] })),
+      ]);
       const vpnUrl = getSubscriptionUrl(subRes.subscription);
       const showTrial = Boolean(config?.trialEnabled && !client.trialUsed);
+      const showProxy = proxyRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
       const name = config?.serviceName?.trim() || "Кабинет";
       const { text, entities } = buildMainMenuText({
         serviceName: name,
@@ -636,6 +650,7 @@ bot.on("callback_query:data", async (ctx) => {
       await editMessageContent(ctx, text, mainMenu({
         showTrial,
         showVpn: Boolean(vpnUrl),
+        showProxy,
         appUrl,
         botButtons: config?.botButtons ?? null,
         botBackLabel: config?.botBackLabel ?? null,
@@ -703,10 +718,155 @@ bot.on("callback_query:data", async (ctx) => {
       return;
     }
 
+    if (data === "menu:proxy") {
+      const { items } = await api.getPublicProxyTariffs();
+      if (!items?.length || items.every((c: { tariffs: unknown[] }) => !c.tariffs?.length)) {
+        await editMessageContent(ctx, "Тарифы прокси пока не настроены.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      const cats = items.filter((c: { tariffs: unknown[] }) => c.tariffs?.length > 0);
+      if (cats.length === 1 && cats[0]!.tariffs.length <= 5) {
+        const head = cats[0]!.name;
+        const lines = cats[0]!.tariffs.map((t: { name: string; price: number; currency: string }) => `• ${t.name} — ${t.price} ${t.currency}`).join("\n");
+        await editMessageContent(ctx, `🌐 Прокси\n\n${head}\n${lines}\n\nВыберите тариф:`, proxyTariffPayButtons(cats, config?.botBackLabel ?? null, innerStyles, innerEmojiIds));
+      } else {
+        await editMessageContent(ctx, "🌐 Прокси\n\nВыберите категорию:", proxyTariffPayButtons(cats, config?.botBackLabel ?? null, innerStyles, innerEmojiIds));
+      }
+      return;
+    }
+
+    if (data.startsWith("cat_proxy:")) {
+      const categoryId = data.slice("cat_proxy:".length);
+      const { items } = await api.getPublicProxyTariffs();
+      const category = items?.find((c: { id: string }) => c.id === categoryId);
+      if (!category?.tariffs?.length) {
+        await editMessageContent(ctx, "Категория не найдена.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      const head = category.name;
+      const lines = category.tariffs.map((t: { name: string; price: number; currency: string }) => `• ${t.name} — ${t.price} ${t.currency}`).join("\n");
+      await editMessageContent(ctx, `🌐 ${head}\n\n${lines}\n\nВыберите тариф:`, proxyTariffsOfCategoryButtons(category, config?.botBackLabel ?? null, innerStyles, "menu:proxy", innerEmojiIds));
+      return;
+    }
+
+    if (data === "menu:my_proxy") {
+      const { slots } = await api.getProxySlots(token);
+      if (!slots?.length) {
+        await editMessageContent(ctx, "📋 Мои прокси\n\nУ вас пока нет активных прокси. Купите тариф в разделе «Прокси».", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      let text = "📋 Мои прокси\n\n";
+      for (const s of slots) {
+        text += `• SOCKS5: \`socks5://${s.login}:${s.password}@${s.host}:${s.socksPort}\`\n`;
+        text += `• HTTP: \`http://${s.login}:${s.password}@${s.host}:${s.httpPort}\`\n`;
+        text += `  До: ${new Date(s.expiresAt).toLocaleString("ru-RU")}\n\n`;
+      }
+      text += "Скопируйте строку в настройки прокси приложения.";
+      await editMessageContent(ctx, text.slice(0, 4096), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      return;
+    }
+
+    if (data.startsWith("pay_proxy_balance:")) {
+      const proxyTariffId = data.slice("pay_proxy_balance:".length);
+      try {
+        const result = await api.payByBalance(token, { proxyTariffId });
+        await editMessageContent(ctx, `✅ ${result.message}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка оплаты";
+        await editMessageContent(ctx, `❌ ${msg}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
+
+    if (data.startsWith("pay_proxy_yoomoney:")) {
+      const proxyTariffId = data.slice("pay_proxy_yoomoney:".length);
+      const { items } = await api.getPublicProxyTariffs();
+      const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === proxyTariffId);
+      if (!tariff) {
+        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      try {
+        const payment = await api.createYoomoneyPayment(token, { amount: tariff.price, paymentType: "AC", proxyTariffId });
+        await editMessageContent(ctx, `Оплата: ${tariff.name} — ${formatMoney(tariff.price, tariff.currency)}\n\nНажмите для оплаты через ЮMoney:`, payUrlMarkup(payment.paymentUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
+        await editMessageContent(ctx, `❌ ${msg}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
+
+    if (data.startsWith("pay_proxy_yookassa:")) {
+      const proxyTariffId = data.slice("pay_proxy_yookassa:".length);
+      const { items } = await api.getPublicProxyTariffs();
+      const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === proxyTariffId);
+      if (!tariff) {
+        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      if (tariff.currency.toUpperCase() !== "RUB") {
+        await editMessageContent(ctx, "ЮKassa принимает только рубли (RUB).", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      try {
+        const payment = await api.createYookassaPayment(token, { amount: tariff.price, currency: "RUB", proxyTariffId });
+        await editMessageContent(ctx, `Оплата: ${tariff.name} — ${formatMoney(tariff.price, tariff.currency)}\n\nНажмите для оплаты через ЮKassa:`, payUrlMarkup(payment.confirmationUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
+        await editMessageContent(ctx, `❌ ${msg}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
+
+    if (data.startsWith("pay_proxy:")) {
+      const rest = data.slice("pay_proxy:".length);
+      const parts = rest.split(":");
+      const proxyTariffId = parts[0];
+      const methodIdFromBtn = parts.length >= 2 ? Number(parts[1]) : null;
+      const { items } = await api.getPublicProxyTariffs();
+      const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === proxyTariffId);
+      if (!tariff) {
+        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      const methods = config?.plategaMethods ?? [];
+      const client = await api.getMe(token);
+      const balanceLabel = client.balance >= tariff.price ? `💰 Оплатить балансом (${formatMoney(client.balance, client.preferredCurrency)})` : null;
+      if (methodIdFromBtn != null && Number.isFinite(methodIdFromBtn)) {
+        try {
+          const payment = await api.createPlategaPayment(token, {
+            amount: tariff.price,
+            currency: tariff.currency,
+            paymentMethod: methodIdFromBtn,
+            description: `Прокси: ${tariff.name}`,
+            proxyTariffId: tariff.id,
+          });
+          await editMessageContent(ctx, `Оплата: ${tariff.name} — ${formatMoney(tariff.price, tariff.currency)}\n\nНажмите для оплаты:`, payUrlMarkup(payment.paymentUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : "Ошибка";
+          await editMessageContent(ctx, `❌ ${msg}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        }
+        return;
+      }
+      const markup = proxyPaymentMethodButtons(
+        proxyTariffId,
+        methods,
+        config?.botBackLabel ?? null,
+        innerStyles?.back,
+        innerEmojiIds,
+        balanceLabel,
+        !!config?.yoomoneyEnabled,
+        !!config?.yookassaEnabled,
+        tariff.currency,
+      );
+      await editMessageContent(ctx, `Оплата: ${tariff.name} — ${formatMoney(tariff.price, tariff.currency)}\n\nВыберите способ оплаты:`, markup);
+      return;
+    }
+
     if (data.startsWith("pay_tariff_balance:")) {
       const tariffId = data.slice("pay_tariff_balance:".length);
       try {
-        const result = await api.payByBalance(token, tariffId);
+        const result = await api.payByBalance(token, { tariffId });
         await editMessageContent(ctx, `✅ ${result.message}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Ошибка оплаты";

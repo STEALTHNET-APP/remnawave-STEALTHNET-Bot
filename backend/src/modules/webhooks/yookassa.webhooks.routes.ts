@@ -7,9 +7,10 @@
 import { Router } from "express";
 import { prisma } from "../../db.js";
 import { activateTariffByPaymentId } from "../tariff/tariff-activation.service.js";
+import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.service.js";
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
 import { distributeReferralRewards } from "../referral/referral.service.js";
-import { notifyBalanceToppedUp, notifyTariffActivated } from "../notification/telegram-notify.service.js";
+import { notifyBalanceToppedUp, notifyTariffActivated, notifyProxySlotsCreated } from "../notification/telegram-notify.service.js";
 
 function hasExtraOptionInMetadata(metadata: string | null): boolean {
   if (!metadata?.trim()) return false;
@@ -64,7 +65,7 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
 
   const payment = await prisma.payment.findFirst({
     where: { id: paymentId, provider: "yookassa" },
-    select: { id: true, clientId: true, amount: true, currency: true, tariffId: true, status: true, metadata: true },
+    select: { id: true, clientId: true, amount: true, currency: true, tariffId: true, proxyTariffId: true, status: true, metadata: true },
   });
 
   if (!payment) {
@@ -84,7 +85,7 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
   });
 
   const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
-  const isTopUp = !payment.tariffId && !isExtraOption;
+  const isTopUp = !payment.tariffId && !payment.proxyTariffId && !isExtraOption;
 
   if (isTopUp) {
     await prisma.client.update({
@@ -105,6 +106,18 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
       console.error("[YooKassa Webhook] Extra option apply failed", {
         paymentId: payment.id,
         error: (result as { error?: string }).error,
+      });
+    }
+  } else if (payment.proxyTariffId) {
+    const proxyResult = await createProxySlotsByPaymentId(payment.id);
+    if (proxyResult.ok) {
+      console.log("[YooKassa Webhook] Proxy slots created", { paymentId: payment.id, slots: proxyResult.slotsCreated });
+      const tariff = await prisma.proxyTariff.findUnique({ where: { id: payment.proxyTariffId }, select: { name: true } });
+      await notifyProxySlotsCreated(payment.clientId, proxyResult.slotIds, tariff?.name ?? undefined).catch(() => {});
+    } else {
+      console.error("[YooKassa Webhook] Proxy slots creation failed", {
+        paymentId: payment.id,
+        error: proxyResult.error,
       });
     }
   } else {

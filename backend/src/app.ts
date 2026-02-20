@@ -5,6 +5,8 @@ import rateLimit from "express-rate-limit";
 import { env } from "./config/index.js";
 import { authRouter } from "./modules/auth/index.js";
 import { adminRouter } from "./modules/admin/admin.routes.js";
+import { proxyAdminRouter } from "./modules/proxy/proxy.admin.routes.js";
+import { proxyAgentRouter } from "./modules/proxy/proxy.agent.routes.js";
 import { clientRouter, publicConfigRouter } from "./modules/client/client.routes.js";
 import { remnaWebhooksRouter } from "./modules/webhooks/remna.webhooks.routes.js";
 import { plategaWebhooksRouter } from "./modules/webhooks/platega.webhooks.routes.js";
@@ -46,6 +48,8 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/admin/proxy", proxyAdminRouter);
+app.use("/api/proxy-nodes", proxyAgentRouter);
 app.use("/api/client", clientRouter);
 app.use("/api/public", publicConfigRouter);
 app.use("/api/webhooks", remnaWebhooksRouter);

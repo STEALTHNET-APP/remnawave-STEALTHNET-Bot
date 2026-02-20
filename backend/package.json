@@ -1,6 +1,6 @@
 {
   "name": "stealthnet-api",
-  "version": "3.1.6",
+  "version": "3.1.7",
   "description": "STEALTHNET 3.0 — модульный Web API",
   "type": "module",
   "main": "dist/index.js",

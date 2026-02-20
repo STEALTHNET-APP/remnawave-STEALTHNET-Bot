@@ -32,6 +32,8 @@ function resolveStyle(configured: ButtonStyle | undefined | null, fallback: Butt
 
 const MENU_IDS: Record<string, string> = {
   tariffs: "menu:tariffs",
+  proxy: "menu:proxy",
+  my_proxy: "menu:my_proxy",
   profile: "menu:profile",
   topup: "menu:topup",
   referral: "menu:referral",
@@ -44,6 +46,8 @@ const MENU_IDS: Record<string, string> = {
 
 const DEFAULT_BUTTONS: BotButtonConfig[] = [
   { id: "tariffs", visible: true, label: "📦 Тарифы", order: 0, style: "success" },
+  { id: "proxy", visible: true, label: "🌐 Прокси", order: 0.5, style: "primary" },
+  { id: "my_proxy", visible: true, label: "📋 Мои прокси", order: 0.6, style: "primary" },
   { id: "profile", visible: true, label: "👤 Профиль", order: 1, style: "" },
   { id: "topup", visible: true, label: "💳 Пополнить баланс", order: 2, style: "success" },
   { id: "referral", visible: true, label: "🔗 Реферальная программа", order: 3, style: "primary" },
@@ -85,6 +89,7 @@ export type InnerEmojiIds = {
 export function mainMenu(opts: {
   showTrial: boolean;
   showVpn: boolean;
+  showProxy?: boolean;
   appUrl: string | null;
   botButtons?: BotButtonConfig[] | null;
   botBackLabel?: string | null;
@@ -96,6 +101,7 @@ export function mainMenu(opts: {
     .filter((b) => {
       if (b.id === "trial") return opts.showTrial;
       if (b.id === "vpn") return opts.showVpn;
+      if (b.id === "proxy" || b.id === "my_proxy") return opts.showProxy === true;
       if (b.id === "cabinet") return !!opts.appUrl?.trim();
       if (b.id === "support") return !!opts.hasSupportLinks;
       if (b.id === "extra_options") return opts.showExtraOptions === true;
@@ -304,6 +310,91 @@ export function tariffPaymentMethodButtons(
     rows.push([btn(m.label, `pay_tariff:${tariffId}:${m.id}`, "primary", cardId)]);
   }
   rows.push([btn(back, "menu:tariffs", backSty, emojiIds?.back)]);
+  return { inline_keyboard: rows };
+}
+
+/** Кнопки категорий прокси (аналогично тарифам) */
+export function proxyCategoryButtons(
+  categories: { id: string; name: string; tariffs: { id: string; name: string; price: number; currency: string }[] }[],
+  backLabel?: string | null,
+  innerStyles?: InnerButtonStyles,
+  emojiIds?: InnerEmojiIds
+): InlineMarkup {
+  const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
+  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
+  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
+  const tariffId = emojiIds?.tariff;
+  const rows: InlineButton[][] = categories.map((cat) => {
+    const label = cat.name.slice(0, 64);
+    return [btn(label, `cat_proxy:${cat.id}`, tariffPay, tariffId)];
+  });
+  rows.push([btn(back, "menu:main", backSty, emojiIds?.back)]);
+  return { inline_keyboard: rows };
+}
+
+/** Кнопки тарифов прокси одной категории */
+export function proxyTariffsOfCategoryButtons(
+  category: { name: string; tariffs: { id: string; name: string; price: number; currency: string }[] },
+  backLabel?: string | null,
+  innerStyles?: InnerButtonStyles,
+  backData = "menu:proxy",
+  emojiIds?: InnerEmojiIds
+): InlineMarkup {
+  const rows: InlineButton[][] = [];
+  const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
+  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
+  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
+  const tariffId = emojiIds?.tariff;
+  for (const t of category.tariffs) {
+    rows.push([btn(`${t.name} — ${t.price} ${t.currency}`.slice(0, 64), `pay_proxy:${t.id}`, tariffPay, tariffId)]);
+  }
+  rows.push([btn(back, backData, backSty, emojiIds?.back)]);
+  return { inline_keyboard: rows };
+}
+
+/** Кнопки прокси-тарифов (категории или список тарифов) */
+export function proxyTariffPayButtons(
+  categories: { id: string; name: string; tariffs: { id: string; name: string; price: number; currency: string }[] }[],
+  backLabel?: string | null,
+  innerStyles?: InnerButtonStyles,
+  emojiIds?: InnerEmojiIds
+): InlineMarkup {
+  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
+  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
+  if (categories.length === 0) return { inline_keyboard: [[btn(back, "menu:main", backSty, emojiIds?.back)]] };
+  if (categories.length === 1 && categories[0]!.tariffs.length <= 5) {
+    return proxyTariffsOfCategoryButtons(categories[0]!, backLabel, innerStyles, "menu:main", emojiIds);
+  }
+  return proxyCategoryButtons(categories, backLabel, innerStyles, emojiIds);
+}
+
+/** Кнопки способа оплаты для прокси-тарифа */
+export function proxyPaymentMethodButtons(
+  proxyTariffId: string,
+  methods: { id: number; label: string }[],
+  backLabel?: string | null,
+  backStyle?: string,
+  emojiIds?: InnerEmojiIds,
+  balanceLabel?: string | null,
+  yoomoneyEnabled?: boolean,
+  yookassaEnabled?: boolean,
+  currency?: string,
+): InlineMarkup {
+  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
+  const backSty = resolveStyle(toStyle(backStyle), "danger");
+  const cardId = emojiIds?.card;
+  const rows: InlineButton[][] = [];
+  if (balanceLabel) rows.push([btn(balanceLabel, `pay_proxy_balance:${proxyTariffId}`, "success", cardId)]);
+  if (yoomoneyEnabled && (!currency || currency.toUpperCase() === "RUB")) {
+    rows.push([btn("💳 ЮMoney — карта", `pay_proxy_yoomoney:${proxyTariffId}`, "primary", cardId)]);
+  }
+  if (yookassaEnabled && (!currency || currency.toUpperCase() === "RUB")) {
+    rows.push([btn("💳 ЮKassa — карта / СБП", `pay_proxy_yookassa:${proxyTariffId}`, "primary", cardId)]);
+  }
+  for (const m of methods) {
+    rows.push([btn(m.label, `pay_proxy:${proxyTariffId}:${m.id}`, "primary", cardId)]);
+  }
+  rows.push([btn(back, "menu:proxy", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }
 

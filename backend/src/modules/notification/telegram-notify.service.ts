@@ -83,3 +83,28 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+
+/**
+ * Отправить уведомление о создании прокси-слотов (после оплаты).
+ */
+export async function notifyProxySlotsCreated(clientId: string, slotIds: string[], tariffName?: string): Promise<void> {
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { telegramId: true } });
+  if (!client?.telegramId || slotIds.length === 0) return;
+
+  const slots = await prisma.proxySlot.findMany({
+    where: { id: { in: slotIds } },
+    select: { node: { select: { publicHost: true, socksPort: true, httpPort: true } }, login: true, password: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const name = tariffName?.trim() || "Прокси";
+  let text = `✅ <b>Прокси «${escapeHtml(name)}»</b> оплачены.\n\n`;
+  for (const s of slots) {
+    const host = s.node.publicHost ?? "host";
+    text += `• SOCKS5: <code>socks5://${escapeHtml(s.login)}:${escapeHtml(s.password)}@${escapeHtml(host)}:${s.node.socksPort}</code>\n`;
+    text += `• HTTP: <code>http://${escapeHtml(s.login)}:${escapeHtml(s.password)}@${escapeHtml(host)}:${s.node.httpPort}</code>\n\n`;
+  }
+  text += "Скопируйте строку в настройки прокси вашего приложения.";
+
+  await sendTelegramToUser(client.telegramId, text);
+}

@@ -38,6 +38,8 @@ import { getSystemConfig } from "../client/client.service.js";
 import { syncFromRemna, syncToRemna, createRemnaUsersForClientsWithoutUuid } from "../sync/sync.service.js";
 import { distributeReferralRewards } from "../referral/referral.service.js";
 import { activateTariffByPaymentId } from "../tariff/tariff-activation.service.js";
+import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.service.js";
+import { notifyProxySlotsCreated } from "../notification/telegram-notify.service.js";
 import { registerBackupRoutes } from "../backup/backup.routes.js";
 import { runBroadcast, getBroadcastRecipientsCount } from "../broadcast/broadcast.service.js";
 import { runRule, runAllRules, getEligibleClientIds } from "../auto-broadcast/auto-broadcast.service.js";
@@ -253,7 +255,7 @@ adminRouter.patch("/payments/:id", asyncRoute(async (req, res) => {
     return res.json({ payment: { ...payment, status: "PAID" }, referral: result });
   }
   const now = new Date();
-  const isTopUp = (payment.provider === "yoomoney_form" || payment.provider === "platega" || payment.provider === "yookassa") && !payment.tariffId;
+  const isTopUp = (payment.provider === "yoomoney_form" || payment.provider === "platega" || payment.provider === "yookassa") && !payment.tariffId && !payment.proxyTariffId;
   if (isTopUp) {
     await prisma.$transaction([
       prisma.payment.update({
@@ -272,15 +274,25 @@ adminRouter.patch("/payments/:id", asyncRoute(async (req, res) => {
     });
   }
 
-  // Активируем тариф в Remnawave
+  // Активируем тариф в Remnawave или создаём прокси-слоты
   let activation: { ok: boolean; error?: string } = { ok: false, error: "no tariff" };
+  let proxySlots: { ok: boolean; slotsCreated?: number; error?: string } = { ok: false };
   if (payment.tariffId) {
     activation = await activateTariffByPaymentId(paymentId);
+  } else if (payment.proxyTariffId) {
+    const proxyResult = await createProxySlotsByPaymentId(paymentId);
+    if (proxyResult.ok) {
+      proxySlots = { ok: true, slotsCreated: proxyResult.slotsCreated };
+      const tariff = await prisma.proxyTariff.findUnique({ where: { id: payment.proxyTariffId }, select: { name: true } });
+      await notifyProxySlotsCreated(payment.clientId, proxyResult.slotIds, tariff?.name ?? undefined).catch(() => {});
+    } else {
+      proxySlots = { ok: false, error: proxyResult.error };
+    }
   }
 
   const result = await distributeReferralRewards(paymentId);
   const updated = await prisma.payment.findUnique({ where: { id: paymentId } });
-  return res.json({ payment: updated, referral: result, activation, balanceCredited: isTopUp });
+  return res.json({ payment: updated, referral: result, activation, proxySlots: proxySlots.ok ? proxySlots : undefined, balanceCredited: isTopUp });
 }));
 
 /** Сериализация тарифа для JSON (BigInt → number) */

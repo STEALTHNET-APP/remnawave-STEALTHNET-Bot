@@ -10,6 +10,7 @@ import { createHash } from "crypto";
 import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { activateTariffByPaymentId } from "../tariff/tariff-activation.service.js";
+import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.service.js";
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
 
 function hasExtraOptionInMetadata(metadata: string | null): boolean {
@@ -22,7 +23,7 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
   }
 }
 import { distributeReferralRewards } from "../referral/referral.service.js";
-import { notifyBalanceToppedUp, notifyTariffActivated } from "../notification/telegram-notify.service.js";
+import { notifyBalanceToppedUp, notifyTariffActivated, notifyProxySlotsCreated } from "../notification/telegram-notify.service.js";
 
 export const yoomoneyWebhooksRouter = Router();
 
@@ -138,19 +139,21 @@ yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
   const labelNorm = label.trim();
 
   // Как в Panel: ищем сначала по id (мы пишем payment.id в label), потом по orderId, потом по operation_id
-  let payment: { id: string; clientId: string; amount: number; tariffId: string | null; status: string; metadata: string | null } | null = null;
+  type PaymentRow = { id: string; clientId: string; amount: number; tariffId: string | null; proxyTariffId: string | null; status: string; metadata: string | null };
+  let payment: PaymentRow | null = null;
 
+  const paymentSelect = { id: true, clientId: true, amount: true, tariffId: true, proxyTariffId: true, status: true, metadata: true } as const;
   // 1) По payment.id (наш label при создании = payment.id)
   payment = await prisma.payment.findFirst({
     where: { id: labelNorm, provider: "yoomoney_form" },
-    select: { id: true, clientId: true, amount: true, tariffId: true, status: true, metadata: true },
+    select: paymentSelect,
   });
 
   // 2) По orderId (как в Panel: label = order_id)
   if (!payment) {
     payment = await prisma.payment.findFirst({
       where: { orderId: labelNorm, provider: "yoomoney_form" },
-      select: { id: true, clientId: true, amount: true, tariffId: true, status: true, metadata: true },
+      select: paymentSelect,
     });
   }
 
@@ -158,7 +161,7 @@ yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
   if (!payment && operationId) {
     payment = await prisma.payment.findFirst({
       where: { externalId: operationId, provider: "yoomoney_form" },
-      select: { id: true, clientId: true, amount: true, tariffId: true, status: true, metadata: true },
+      select: paymentSelect,
     });
   }
 
@@ -178,7 +181,7 @@ yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
   }
 
   const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
-  const isTopUp = !payment.tariffId && !isExtraOption;
+  const isTopUp = !payment.tariffId && !payment.proxyTariffId && !isExtraOption;
 
   if (isTopUp) {
     await prisma.$transaction([
@@ -212,6 +215,15 @@ yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
         console.log("[YooMoney Webhook] Extra option applied", { paymentId: payment.id });
       } else {
         console.error("[YooMoney Webhook] Extra option apply failed", { paymentId: payment.id, error: (result as { error?: string }).error });
+      }
+    } else if (payment.proxyTariffId) {
+      const proxyResult = await createProxySlotsByPaymentId(payment.id);
+      if (proxyResult.ok) {
+        console.log("[YooMoney Webhook] Proxy slots created", { paymentId: payment.id, slots: proxyResult.slotsCreated });
+        const tariff = await prisma.proxyTariff.findUnique({ where: { id: payment.proxyTariffId }, select: { name: true } });
+        await notifyProxySlotsCreated(payment.clientId, proxyResult.slotIds, tariff?.name ?? undefined).catch(() => {});
+      } else {
+        console.error("[YooMoney Webhook] Proxy slots creation failed", { paymentId: payment.id, error: proxyResult.error });
       }
     } else {
       const activation = await activateTariffByPaymentId(payment.id);

@@ -25,6 +25,7 @@ import { SalesReportPage } from "@/pages/sales-report";
 import { BackupPage } from "@/pages/backup";
 import { BroadcastPage } from "@/pages/broadcast";
 import { AutoBroadcastPage } from "@/pages/auto-broadcast";
+import { ProxyPage } from "@/pages/proxy";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { CabinetLayout } from "@/pages/cabinet/cabinet-layout";
 import { ClientLoginPage } from "@/pages/cabinet/client-login";
@@ -37,6 +38,7 @@ import { ClientReferralPage } from "@/pages/cabinet/client-referral";
 import { ClientSubscribePage } from "@/pages/cabinet/client-subscribe";
 import { ClientYooMoneyPayPage } from "@/pages/cabinet/client-yoomoney-pay";
 import { ClientExtraOptionsPage } from "@/pages/cabinet/client-extra-options";
+import { ClientProxyPage } from "@/pages/cabinet/client-proxy";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { state } = useAuth();
@@ -141,6 +143,7 @@ function AppRoutes() {
         <Route path="sales-report" element={<ForceChangePassword><SalesReportPage /></ForceChangePassword>} />
         <Route path="broadcast" element={<ForceChangePassword><BroadcastPage /></ForceChangePassword>} />
         <Route path="auto-broadcast" element={<ForceChangePassword><AutoBroadcastPage /></ForceChangePassword>} />
+        <Route path="proxy" element={<ForceChangePassword><ProxyPage /></ForceChangePassword>} />
         <Route path="backup" element={<ForceChangePassword><BackupPage /></ForceChangePassword>} />
       </Route>
       <Route
@@ -208,6 +211,14 @@ function AppRoutes() {
           element={
             <RequireClientAuth>
               <ClientExtraOptionsPage />
+            </RequireClientAuth>
+          }
+        />
+        <Route
+          path="proxy"
+          element={
+            <RequireClientAuth>
+              <ClientProxyPage />
             </RequireClientAuth>
           }
         />

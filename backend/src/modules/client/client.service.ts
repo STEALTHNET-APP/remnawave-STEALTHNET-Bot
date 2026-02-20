@@ -427,7 +427,7 @@ export async function getPublicConfig() {
     let iconCustomEmojiId: string | undefined;
     if (entry) {
       if (entry.tgEmojiId) iconCustomEmojiId = entry.tgEmojiId;
-      if (entry.unicode && !entry.tgEmojiId) label = (entry.unicode + " " + label).trim();
+      if (entry.unicode) label = (entry.unicode + " " + label).trim();
     }
     return { id: b.id, visible: b.visible, label, order: b.order, style: b.style, iconCustomEmojiId };
   });
@@ -488,6 +488,7 @@ export async function getPublicConfig() {
     forceSubscribeEnabled: full.forceSubscribeEnabled ?? false,
     forceSubscribeChannelId: full.forceSubscribeChannelId ?? null,
     forceSubscribeMessage: full.forceSubscribeMessage ?? null,
+    showProxyEnabled: await prisma.proxyTariff.count({ where: { enabled: true } }).then((n) => n > 0),
     sellOptionsEnabled: (() => {
       const so = full as { sellOptionsEnabled?: boolean; sellOptionsTrafficEnabled?: boolean; sellOptionsTrafficProducts?: unknown[]; sellOptionsDevicesEnabled?: boolean; sellOptionsDevicesProducts?: unknown[]; sellOptionsServersEnabled?: boolean; sellOptionsServersProducts?: unknown[] };
       if (so.sellOptionsEnabled !== true) return false;

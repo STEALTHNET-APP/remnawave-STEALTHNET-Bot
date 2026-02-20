@@ -29,6 +29,7 @@ export const MANAGER_SECTIONS = [
   { key: "broadcast", label: "Рассылка" },
   { key: "auto-broadcast", label: "Авто-рассылка" },
   { key: "backup", label: "Бэкапы" },
+  { key: "proxy", label: "Прокси" },
   { key: "settings", label: "Настройки" },
 ] as const;
 
@@ -169,6 +170,81 @@ export const api = {
 
   async remnaNodeRestart(token: string, nodeUuid: string): Promise<unknown> {
     return request(`/admin/remna/nodes/${nodeUuid}/restart`, { method: "POST", token });
+  },
+
+  // ——— Прокси-ноды ———
+  async getProxyNodes(token: string): Promise<{ items: ProxyNodeListItem[] }> {
+    return request("/admin/proxy/nodes", { token });
+  },
+
+  async createProxyNode(token: string, data?: { name?: string }): Promise<CreateProxyNodeResponse> {
+    return request("/admin/proxy/nodes", { method: "POST", body: JSON.stringify(data ?? {}), token });
+  },
+
+  async getProxyNode(token: string, id: string): Promise<ProxyNodeDetail> {
+    return request(`/admin/proxy/nodes/${id}`, { token });
+  },
+
+  async updateProxyNode(token: string, id: string, data: { name?: string; status?: string; capacity?: number | null; socksPort?: number; httpPort?: number }): Promise<unknown> {
+    return request(`/admin/proxy/nodes/${id}`, { method: "PATCH", body: JSON.stringify(data), token });
+  },
+
+  async deleteProxyNode(token: string, id: string): Promise<void> {
+    return request(`/admin/proxy/nodes/${id}`, { method: "DELETE", token });
+  },
+
+  async getProxyCategories(token: string): Promise<{ items: { id: string; name: string; sortOrder: number; tariffs: { id: string; categoryId: string; name: string; proxyCount: number; durationDays: number; trafficLimitBytes: string | null; connectionLimit: number | null; price: number; currency: string; sortOrder: number; enabled: boolean; nodeIds: string[] }[] }[] }> {
+    return request("/admin/proxy/categories", { token });
+  },
+  async createProxyCategory(token: string, data: { name: string; sortOrder?: number }): Promise<{ id: string; name: string; sortOrder: number }> {
+    return request("/admin/proxy/categories", { method: "POST", body: JSON.stringify(data), token });
+  },
+  async updateProxyCategory(token: string, id: string, data: { name?: string; sortOrder?: number }): Promise<unknown> {
+    return request(`/admin/proxy/categories/${id}`, { method: "PATCH", body: JSON.stringify(data), token });
+  },
+  async deleteProxyCategory(token: string, id: string): Promise<void> {
+    return request(`/admin/proxy/categories/${id}`, { method: "DELETE", token });
+  },
+
+  async getProxyTariffs(token: string, categoryId?: string): Promise<{ items: { id: string; categoryId: string; categoryName: string; name: string; proxyCount: number; durationDays: number; trafficLimitBytes: string | null; connectionLimit: number | null; price: number; currency: string; sortOrder: number; enabled: boolean }[] }> {
+    const q = categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : "";
+    return request(`/admin/proxy/tariffs${q}`, { token });
+  },
+  async createProxyTariff(token: string, data: { categoryId: string; name: string; proxyCount: number; durationDays: number; trafficLimitBytes?: string | number | null; connectionLimit?: number | null; price: number; currency: string; sortOrder?: number; enabled?: boolean; nodeIds?: string[] }): Promise<unknown> {
+    return request("/admin/proxy/tariffs", { method: "POST", body: JSON.stringify(data), token });
+  },
+  async updateProxyTariff(token: string, id: string, data: Partial<{ name: string; proxyCount: number; durationDays: number; trafficLimitBytes: string | number | null; connectionLimit: number | null; price: number; currency: string; sortOrder: number; enabled: boolean; nodeIds: string[] }>): Promise<unknown> {
+    return request(`/admin/proxy/tariffs/${id}`, { method: "PATCH", body: JSON.stringify(data), token });
+  },
+  async deleteProxyTariff(token: string, id: string): Promise<void> {
+    return request(`/admin/proxy/tariffs/${id}`, { method: "DELETE", token });
+  },
+
+  async getProxySlotsAdmin(token: string): Promise<{ items: ProxySlotAdminItem[] }> {
+    return request("/admin/proxy/slots", { token });
+  },
+
+  async updateProxySlotAdmin(token: string, id: string, data: { login?: string; password?: string; connectionLimit?: number | null; status?: string; expiresAt?: string }): Promise<unknown> {
+    return request(`/admin/proxy/slots/${id}`, { method: "PATCH", body: JSON.stringify(data), token });
+  },
+
+  async deleteProxySlotAdmin(token: string, id: string): Promise<void> {
+    return request(`/admin/proxy/slots/${id}`, { method: "DELETE", token });
+  },
+
+  /** Скачивает CSV со списком прокси-слотов. */
+  async downloadProxySlotsCsv(token: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/admin/proxy/slots/export?format=csv`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(res.statusText || "Export failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "proxy-slots.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   },
 
   async getClients(
@@ -525,13 +601,27 @@ export const api = {
 
   async clientCreatePlategaPayment(
     token: string,
-    data: { amount?: number; currency?: string; paymentMethod: number; description?: string; tariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
+    data: { amount?: number; currency?: string; paymentMethod: number; description?: string; tariffId?: string; proxyTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
   ): Promise<{ paymentUrl: string; orderId: string; paymentId: string; discountApplied?: boolean; finalAmount?: number }> {
     return request("/client/payments/platega", { method: "POST", body: JSON.stringify(data), token });
   },
 
   async getPublicTariffs(): Promise<{ items: PublicTariffCategory[] }> {
     return request("/public/tariffs");
+  },
+
+  /** Публичный список тарифов прокси по категориям */
+  async getPublicProxyTariffs(): Promise<{
+    items: { id: string; name: string; sortOrder: number; tariffs: { id: string; name: string; proxyCount: number; durationDays: number; trafficLimitBytes: string | null; connectionLimit: number | null; price: number; currency: string }[] }[];
+  }> {
+    return request("/public/proxy-tariffs");
+  },
+
+  /** Активные прокси-слоты клиента */
+  async getProxySlots(token: string): Promise<{
+    slots: { id: string; login: string; password: string; host: string; socksPort: number; httpPort: number; expiresAt: string; trafficLimitBytes: string | null; trafficUsedBytes: string; connectionLimit: number | null }[];
+  }> {
+    return request("/client/proxy-slots", { token });
   },
 
   async getPublicConfig(): Promise<PublicConfig> {
@@ -545,7 +635,7 @@ export const api = {
 
   async clientPayByBalance(
     token: string,
-    data: { tariffId: string; promoCode?: string }
+    data: { tariffId?: string; proxyTariffId?: string; promoCode?: string }
   ): Promise<{ message: string; paymentId: string; newBalance: number }> {
     return request("/client/payments/balance", { method: "POST", body: JSON.stringify(data), token });
   },
@@ -561,10 +651,10 @@ export const api = {
   async getYoomoneyAuthUrl(token: string): Promise<{ url: string }> {
     return request("/client/yoomoney/auth-url", { token });
   },
-  /** Форма перевода ЮMoney (оплата картой). Пополнение баланса, тариф или опция (tariffId/extraOption опционально). */
+  /** Форма перевода ЮMoney (оплата картой). Пополнение баланса, тариф, прокси или опция. */
   async yoomoneyCreateFormPayment(
     token: string,
-    data: { amount?: number; paymentType: "PC" | "AC"; tariffId?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
+    data: { amount?: number; paymentType: "PC" | "AC"; tariffId?: string; proxyTariffId?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
   ): Promise<{ paymentId: string; paymentUrl: string; form: { receiver: string; sum: number; label: string; paymentType: string; successURL: string }; successURL: string }> {
     return request("/client/yoomoney/create-form-payment", { method: "POST", body: JSON.stringify(data), token });
   },
@@ -581,10 +671,10 @@ export const api = {
     return request("/client/yoomoney/process-payment", { method: "POST", body: JSON.stringify(data), token });
   },
 
-  /** ЮKassa API: создание платежа (тариф или пополнение), возвращает confirmationUrl для редиректа. */
+  /** ЮKassa API: создание платежа (тариф, прокси или пополнение), возвращает confirmationUrl для редиректа. */
   async yookassaCreatePayment(
     token: string,
-    data: { amount?: number; currency?: string; tariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
+    data: { amount?: number; currency?: string; tariffId?: string; proxyTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
   ): Promise<{ paymentId: string; confirmationUrl: string; yookassaPaymentId: string }> {
     return request("/client/yookassa/create-payment", { method: "POST", body: JSON.stringify(data), token });
   },
@@ -975,7 +1065,80 @@ export interface RemnaNode {
   totalRam?: string | null;
 }
 
+export interface ProxySlotAdminItem {
+  id: string;
+  nodeId: string;
+  nodeName: string;
+  publicHost: string | null;
+  socksPort: number;
+  httpPort: number;
+  clientId: string;
+  clientEmail: string | null;
+  clientTelegram: string | null;
+  clientTelegramId: string | null;
+  login: string;
+  password: string;
+  expiresAt: string;
+  trafficLimitBytes: string | null;
+  trafficUsedBytes: string;
+  connectionLimit: number | null;
+  currentConnections: number;
+  status: string;
+  createdAt: string;
+}
+
 export type RemnaNodesResponse = { response?: RemnaNode[] };
+
+export interface ProxyNodeListItem {
+  id: string;
+  name: string;
+  status: string;
+  lastSeenAt: string | null;
+  publicHost: string | null;
+  socksPort: number;
+  httpPort: number;
+  capacity: number | null;
+  currentConnections: number;
+  trafficInBytes: string;
+  trafficOutBytes: string;
+  slotsCount: number;
+  createdAt: string;
+}
+
+export interface CreateProxyNodeResponse {
+  node: { id: string; name: string; status: string; token: string; createdAt: string };
+  dockerCompose: string;
+  instructions: string;
+}
+
+export interface ProxyNodeDetail {
+  id: string;
+  name: string;
+  status: string;
+  lastSeenAt: string | null;
+  publicHost: string | null;
+  socksPort: number;
+  httpPort: number;
+  capacity: number | null;
+  currentConnections: number;
+  trafficInBytes: string;
+  trafficOutBytes: string;
+  metadata: string | null;
+  createdAt: string;
+  updatedAt: string;
+  slots: Array<{
+    id: string;
+    login: string;
+    expiresAt: string;
+    trafficLimitBytes: string | null;
+    connectionLimit: number | null;
+    trafficUsedBytes: string;
+    currentConnections: number;
+    status: string;
+    client: { id: string; email: string | null; telegramUsername: string | null; telegramId: string | null };
+    createdAt: string;
+  }>;
+}
 
 export type RemnaSystemStats = {
   response?: {
@@ -1225,6 +1388,7 @@ export interface PublicConfig {
   themeAccent?: string;
   sellOptionsEnabled?: boolean;
   sellOptions?: PublicSellOption[];
+  showProxyEnabled?: boolean;
   googleAnalyticsId?: string | null;
   yandexMetrikaId?: string | null;
 }

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Shield, LayoutDashboard, Users, CreditCard, Settings, LogOut, KeyRound,
   Megaphone, Tag, BarChart3, FileText, ExternalLink, Sun, Moon, Monitor,
-  Palette, Menu, X, Database, Target, UserCog, Send, CalendarClock,
+  Palette, Menu, X, Database, Target, UserCog, Send, CalendarClock, Globe,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
 import { useTheme, ACCENT_PALETTES, type ThemeMode, type ThemeAccent } from "@/contexts/theme";
@@ -12,13 +12,14 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 
-const PANEL_VERSION = "3.1.6";
+const PANEL_VERSION = "3.1.7";
 const GITHUB_URL = "https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot";
 
 const navWithSections: { to: string; label: string; icon: typeof LayoutDashboard; section: string }[] = [
   { to: "/admin", label: "Дашборд", icon: LayoutDashboard, section: "dashboard" },
   { to: "/admin/clients", label: "Клиенты", icon: Users, section: "clients" },
   { to: "/admin/tariffs", label: "Тарифы", icon: CreditCard, section: "tariffs" },
+  { to: "/admin/proxy", label: "Прокси", icon: Globe, section: "proxy" },
   { to: "/admin/promo", label: "Промо-ссылки", icon: Megaphone, section: "promo" },
   { to: "/admin/promo-codes", label: "Промокоды", icon: Tag, section: "promo-codes" },
   { to: "/admin/analytics", label: "Аналитика", icon: BarChart3, section: "analytics" },

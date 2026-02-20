@@ -105,6 +105,20 @@ export async function getSubscription(token: string): Promise<{ subscription: un
   return fetchJson("/api/client/subscription", { token });
 }
 
+/** Публичный список тарифов прокси по категориям */
+export async function getPublicProxyTariffs(): Promise<{
+  items: { id: string; name: string; tariffs: { id: string; name: string; proxyCount: number; durationDays: number; price: number; currency: string }[] }[];
+}> {
+  return fetchJson("/api/public/proxy-tariffs");
+}
+
+/** Активные прокси-слоты клиента */
+export async function getProxySlots(token: string): Promise<{
+  slots: { id: string; login: string; password: string; host: string; socksPort: number; httpPort: number; expiresAt: string }[];
+}> {
+  return fetchJson("/api/client/proxy-slots", { token });
+}
+
 /** Публичный список тарифов по категориям (emoji из админки по коду ordinary/premium) */
 export async function getPublicTariffs(): Promise<{
   items: {
@@ -118,7 +132,7 @@ export async function getPublicTariffs(): Promise<{
   return fetchJson("/api/public/tariffs");
 }
 
-/** Создать платёж Platega (возвращает paymentUrl). Для опции — extraOption. */
+/** Создать платёж Platega (возвращает paymentUrl). Для опции — extraOption. Для прокси — proxyTariffId. */
 export async function createPlategaPayment(
   token: string,
   body: {
@@ -127,24 +141,25 @@ export async function createPlategaPayment(
     paymentMethod: number;
     description?: string;
     tariffId?: string;
+    proxyTariffId?: string;
     extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string };
   }
 ): Promise<{ paymentUrl: string; orderId: string; paymentId: string }> {
   return fetchJson("/api/client/payments/platega", { method: "POST", body, token });
 }
 
-/** Создать платёж ЮMoney (оплата картой). Для тарифа — tariffId, для опции — extraOption. */
+/** Создать платёж ЮMoney (оплата картой). Для тарифа — tariffId, для прокси — proxyTariffId, для опции — extraOption. */
 export async function createYoomoneyPayment(
   token: string,
-  body: { amount?: number; paymentType: "PC" | "AC"; tariffId?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
+  body: { amount?: number; paymentType: "PC" | "AC"; tariffId?: string; proxyTariffId?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
 ): Promise<{ paymentId: string; paymentUrl: string }> {
   return fetchJson("/api/client/yoomoney/create-form-payment", { method: "POST", body, token });
 }
 
-/** Создать платёж ЮKassa (карта, СБП). Только RUB. Для тарифа — tariffId. Для опции — extraOption. */
+/** Создать платёж ЮKassa (карта, СБП). Только RUB. Для тарифа — tariffId, для прокси — proxyTariffId, для опции — extraOption. */
 export async function createYookassaPayment(
   token: string,
-  body: { amount?: number; currency?: string; tariffId?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
+  body: { amount?: number; currency?: string; tariffId?: string; proxyTariffId?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string } }
 ): Promise<{ paymentId: string; confirmationUrl: string }> {
   return fetchJson("/api/client/yookassa/create-payment", { method: "POST", body, token });
 }
@@ -162,9 +177,12 @@ export async function activateTrial(token: string): Promise<{ message: string }>
   return fetchJson("/api/client/trial", { method: "POST", body: {}, token });
 }
 
-/** Оплата тарифа балансом */
-export async function payByBalance(token: string, tariffId: string): Promise<{ message: string; paymentId: string; newBalance: number }> {
-  return fetchJson("/api/client/payments/balance", { method: "POST", body: { tariffId }, token });
+/** Оплата тарифа или прокси-тарифа балансом */
+export async function payByBalance(
+  token: string,
+  opts: { tariffId?: string; proxyTariffId?: string }
+): Promise<{ message: string; paymentId?: string; newBalance?: number }> {
+  return fetchJson("/api/client/payments/balance", { method: "POST", body: opts, token });
 }
 
 /** Оплата опции (доп. трафик/устройства/сервер) с баланса */

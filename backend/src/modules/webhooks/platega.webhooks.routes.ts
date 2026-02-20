@@ -9,9 +9,10 @@
 import { Router } from "express";
 import { prisma } from "../../db.js";
 import { activateTariffByPaymentId } from "../tariff/tariff-activation.service.js";
+import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.service.js";
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
 import { distributeReferralRewards } from "../referral/referral.service.js";
-import { notifyBalanceToppedUp, notifyTariffActivated } from "../notification/telegram-notify.service.js";
+import { notifyBalanceToppedUp, notifyTariffActivated, notifyProxySlotsCreated } from "../notification/telegram-notify.service.js";
 
 function hasExtraOptionInMetadata(metadata: string | null): boolean {
   if (!metadata?.trim()) return false;
@@ -34,6 +35,7 @@ type PaymentRow = {
   amount: number;
   currency: string;
   tariffId: string | null;
+  proxyTariffId: string | null;
   metadata: string | null;
 };
 
@@ -46,6 +48,7 @@ const PAYMENT_SELECT = {
   amount: true,
   currency: true,
   tariffId: true,
+  proxyTariffId: true,
   metadata: true,
 } as const;
 
@@ -99,6 +102,7 @@ async function findPlategaPaymentByAnyId(candidateIds: string[]): Promise<Paymen
         amount: byOrder.amount,
         currency: byOrder.currency,
         tariffId: byOrder.tariffId,
+        proxyTariffId: byOrder.proxyTariffId,
         metadata: byOrder.metadata,
       };
     }
@@ -110,10 +114,10 @@ async function ensureTariffActivation(paymentId: string): Promise<void> {
   const claim = await prisma.$transaction(async (tx) => {
     const row = await tx.payment.findUnique({
       where: { id: paymentId },
-      select: { status: true, tariffId: true, metadata: true },
+      select: { status: true, tariffId: true, proxyTariffId: true, metadata: true, clientId: true },
     });
     const hasExtra = hasExtraOptionInMetadata(row?.metadata ?? null);
-    if (!row || row.status !== "PAID" || (!row.tariffId && !hasExtra)) {
+    if (!row || row.status !== "PAID" || (!row.tariffId && !row.proxyTariffId && !hasExtra)) {
       return { claimed: false as const, reason: "not_paid_or_no_tariff" };
     }
 
@@ -144,12 +148,22 @@ async function ensureTariffActivation(paymentId: string): Promise<void> {
 
   const row = await prisma.payment.findUnique({
     where: { id: paymentId },
-    select: { tariffId: true, metadata: true },
+    select: { tariffId: true, proxyTariffId: true, clientId: true, metadata: true },
   });
   const isExtraOption = row ? hasExtraOptionInMetadata(row.metadata) : false;
-  const activation = isExtraOption
-    ? await applyExtraOptionByPaymentId(paymentId)
-    : await activateTariffByPaymentId(paymentId);
+  let activation: { ok: boolean; error?: string; slotIds?: string[] } = { ok: false };
+  if (isExtraOption) {
+    activation = await applyExtraOptionByPaymentId(paymentId);
+  } else if (row?.proxyTariffId) {
+    const proxyResult = await createProxySlotsByPaymentId(paymentId);
+    activation = proxyResult.ok ? { ok: true, slotIds: proxyResult.slotIds } : { ok: false, error: proxyResult.error };
+    if (activation.ok && activation.slotIds?.length && row.clientId) {
+      const tariff = await prisma.proxyTariff.findUnique({ where: { id: row.proxyTariffId! }, select: { name: true } });
+      await notifyProxySlotsCreated(row.clientId, activation.slotIds, tariff?.name ?? undefined).catch(() => {});
+    }
+  } else {
+    activation = await activateTariffByPaymentId(paymentId);
+  }
   await prisma.$transaction(async (tx) => {
     const row = await tx.payment.findUnique({
       where: { id: paymentId },
@@ -245,7 +259,7 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
       return res.status(200).json({ received: true });
     }
 
-    const isTopUp = !payment.tariffId;
+    const isTopUp = !payment.tariffId && !payment.proxyTariffId;
     if (isTopUp) {
       const changed = await prisma.$transaction(async (tx) => {
         const upd = await tx.payment.updateMany({
@@ -292,6 +306,7 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
     if (payment.tariffId) {
       await notifyTariffActivated(payment.clientId, payment.id).catch(() => {});
     }
+    // proxyTariffId: notifyProxySlotsCreated вызывается из ensureTariffActivation
     await distributeReferralRewards(payment.id).catch((e) => {
       console.error("[Platega Webhook] Referral distribution error", { paymentId: payment.id, error: e });
     });

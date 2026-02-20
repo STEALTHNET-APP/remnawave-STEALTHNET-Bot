@@ -78,6 +78,7 @@ model Client {
   promoActivations PromoActivation[]
   promoCodeUsages  PromoCodeUsage[]
   autoBroadcastLogs AutoBroadcastLog[]
+  proxySlots ProxySlot[]
 
   @@index([telegramId])
   @@index([email])
@@ -117,6 +118,7 @@ model Payment {
   provider     String?  // yookassa, cryptobot, etc.
   externalId   String?  @map("external_id")
   tariffId     String?  @map("tariff_id")
+  proxyTariffId String? @map("proxy_tariff_id")
   remnawaveUserId String? @map("remnawave_user_id")
   metadata     String?  @db.Text // JSON
   createdAt    DateTime @default(now()) @map("created_at")
@@ -125,11 +127,13 @@ model Payment {
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
   tariff Tariff? @relation(fields: [tariffId], references: [id], onDelete: SetNull)
+  proxyTariff ProxyTariff? @relation(fields: [proxyTariffId], references: [id], onDelete: SetNull)
   referralCredits ReferralCredit[]
 
   @@index([clientId])
   @@index([status])
   @@index([tariffId])
+  @@index([proxyTariffId])
   @@map("payments")
 }
 
@@ -293,4 +297,106 @@ model AutoBroadcastLog {
   @@index([ruleId])
   @@index([clientId])
   @@map("auto_broadcast_logs")
+}
+
+// ——— Прокси-ноды и продажа прокси ———
+model ProxyNode {
+  id                  String   @id @default(cuid())
+  name                String   @default("")  // Название (админ или нода при регистрации)
+  token               String   @unique       // Токен для регистрации и heartbeat
+  status              String   @default("OFFLINE") // ONLINE | OFFLINE | DISABLED
+  lastSeenAt          DateTime? @map("last_seen_at")
+  publicHost          String?  @map("public_host") // IP или домен (из регистрации/heartbeat)
+  socksPort           Int      @default(1080) @map("socks_port")
+  httpPort            Int      @default(8080) @map("http_port")
+  capacity            Int?     // Макс. слотов (опционально)
+  currentConnections  Int      @default(0) @map("current_connections")
+  trafficInBytes      BigInt   @default(0) @map("traffic_in_bytes")
+  trafficOutBytes     BigInt   @default(0) @map("traffic_out_bytes")
+  metadata            String?  @db.Text     // JSON от агента (CPU, RAM, версия)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  slots ProxySlot[]
+  tariffAssignments ProxyTariffNode[]
+
+  @@map("proxy_nodes")
+}
+
+model ProxyCategory {
+  id        String   @id @default(cuid())
+  name      String
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tariffs ProxyTariff[]
+
+  @@map("proxy_categories")
+}
+
+model ProxyTariff {
+  id                 String   @id @default(cuid())
+  categoryId         String   @map("category_id")
+  name               String   // «1 прокси 30 дней»
+  proxyCount         Int      @map("proxy_count")   // Кол-во прокси в пакете
+  durationDays       Int      @map("duration_days")
+  trafficLimitBytes  BigInt?  @map("traffic_limit_bytes") // На один слот (null = без лимита)
+  connectionLimit    Int?     @map("connection_limit")     // На один слот
+  price              Float    @default(0)
+  currency           String   @default("usd")
+  sortOrder          Int      @default(0) @map("sort_order")
+  enabled            Boolean  @default(true)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  category   ProxyCategory   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  payments   Payment[]
+  slots      ProxySlot[]
+  assignedNodes ProxyTariffNode[]
+
+  @@index([categoryId])
+  @@map("proxy_tariffs")
+}
+
+model ProxyTariffNode {
+  id       String @id @default(cuid())
+  tariffId String @map("tariff_id")
+  nodeId   String @map("node_id")
+
+  tariff ProxyTariff @relation(fields: [tariffId], references: [id], onDelete: Cascade)
+  node   ProxyNode   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@unique([tariffId, nodeId])
+  @@index([tariffId])
+  @@index([nodeId])
+  @@map("proxy_tariff_nodes")
+}
+
+model ProxySlot {
+  id                 String   @id @default(cuid())
+  nodeId             String   @map("node_id")
+  clientId           String   @map("client_id")
+  proxyTariffId      String?  @map("proxy_tariff_id")
+  login              String   // Уникален в рамках ноды
+  password           String   // В открытом виде для выдачи и конфига на ноде
+  expiresAt          DateTime @map("expires_at")
+  trafficLimitBytes  BigInt?  @map("traffic_limit_bytes")
+  connectionLimit    Int?     @map("connection_limit")
+  trafficUsedBytes   BigInt   @default(0) @map("traffic_used_bytes")
+  currentConnections Int     @default(0) @map("current_connections")
+  status             String   @default("ACTIVE") // ACTIVE | EXPIRED | REVOKED
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  node        ProxyNode    @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  client      Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  proxyTariff ProxyTariff? @relation(fields: [proxyTariffId], references: [id], onDelete: SetNull)
+
+  @@unique([nodeId, login])
+  @@index([nodeId])
+  @@index([clientId])
+  @@index([proxyTariffId])
+  @@index([status])
+  @@map("proxy_slots")
 }
