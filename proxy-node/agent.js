@@ -14,6 +14,7 @@ const SOCKS_PORT = parseInt(process.env.SOCKS_PORT || "1080", 10);
 const HTTP_PORT = parseInt(process.env.HTTP_PORT || "8080", 10);
 const CONFIG_PATH = process.env.CONFIG_PATH || path.join(__dirname, "3proxy.cfg");
 const PASSWD_PATH = process.env.PASSWD_PATH || path.join(__dirname, "passwd");
+const LOG_PATH = process.env.LOG_PATH || path.join(path.dirname(CONFIG_PATH), "3proxy.log");
 const POLL_INTERVAL_MS = (parseInt(process.env.POLL_INTERVAL_SEC || "60", 10) || 60) * 1000;
 
 if (!API_URL || !TOKEN) {
@@ -28,6 +29,11 @@ const headers = {
 
 let proxyProcess = null;
 let lastSlotsSignature = null;
+// Метрики: трафик по логинам (bytes in+out на слот), общий трафик ноды, текущие соединения (если будет источник)
+let stats = { trafficIn: 0, trafficOut: 0, byLogin: {} };
+let logReadOffset = 0;
+// 3proxy logformat "L %U %I %O" → одна строка на запись: L login bytesIn bytesOut
+const TRAFFIC_LINE = /^L\s+(\S+)\s+(\d+)\s+(\d+)/;
 
 function slotsSignature(slots) {
   if (!slots || slots.length === 0) return "";
@@ -43,14 +49,17 @@ function writePasswd(slots) {
 
 function writeConfig(slots) {
   const dir = path.dirname(CONFIG_PATH);
-  if (!dir && dir !== "." && !fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (!dir || (dir !== "." && !fs.existsSync(dir))) fs.mkdirSync(dir, { recursive: true });
+  const logDir = path.dirname(LOG_PATH);
+  if (logDir && logDir !== "." && !fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+  // Формат "L %U %I %O" — имя пользователя (%U), байты входящие (%I), исходящие (%O). L = local time (обязательно для logformat).
   const cfg = [
     "nserver 8.8.8.8",
     "nserver 8.8.4.4",
     "nscache 65536",
     "timeouts 1 5 30 60 180 1800 15 60",
-    "log /dev/stdout D",
-    "logformat \"- +_L%t.%. %N.%p %E %U %C:%c %R:%r %O %I %h %T\"",
+    `log ${LOG_PATH}`,
+    'logformat "L %U %I %O"',
     `users $${PASSWD_PATH}`,
     "auth strong",
     "allow *",
@@ -110,11 +119,57 @@ async function register() {
   return data.nodeId;
 }
 
-async function heartbeat(nodeId) {
+function collectStatsFromLog() {
+  try {
+    if (!fs.existsSync(LOG_PATH)) return;
+    const size = fs.statSync(LOG_PATH).size;
+    if (size < logReadOffset) logReadOffset = 0; // ротация: новый файл
+    if (logReadOffset >= size) return;
+    const fd = fs.openSync(LOG_PATH, "r");
+    const buf = Buffer.alloc(256 * 1024);
+    let offset = logReadOffset;
+    let n = 0;
+    while ((n = fs.readSync(fd, buf, 0, buf.length, offset)) > 0) {
+      offset += n;
+      const chunk = buf.toString("utf8", 0, n);
+      const lines = chunk.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(TRAFFIC_LINE);
+        if (m) {
+          const login = m[1];
+          const inB = parseInt(m[2], 10) || 0;
+          const outB = parseInt(m[3], 10) || 0;
+          stats.trafficIn += inB;
+          stats.trafficOut += outB;
+          if (!stats.byLogin[login]) stats.byLogin[login] = 0;
+          stats.byLogin[login] += inB + outB;
+        }
+      }
+    }
+    fs.closeSync(fd);
+    logReadOffset = offset;
+  } catch (err) {
+    if (err.code !== "ENOENT") console.error("Log read error:", err.message);
+  }
+}
+
+async function heartbeat(nodeId, slots) {
+  collectStatsFromLog();
+  const slotsPayload = (slots || []).map((s) => ({
+    slotId: s.id,
+    trafficUsed: stats.byLogin[s.login] || 0,
+    connections: 0,
+  }));
+  const body = {
+    connections: 0,
+    trafficIn: stats.trafficIn,
+    trafficOut: stats.trafficOut,
+    slots: slotsPayload.length ? slotsPayload : undefined,
+  };
   const res = await fetch(`${API_URL}/api/proxy-nodes/${nodeId}/heartbeat`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ connections: 0, trafficIn: 0, trafficOut: 0 }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     console.error("Heartbeat failed:", res.status, await res.text());
@@ -136,11 +191,12 @@ async function main() {
   }
 
   const tick = async () => {
-    await heartbeat(nodeId);
     const slots = await getSlots(nodeId);
     applySlots(slots);
+    await heartbeat(nodeId, slots);
     if (slots.length > 0) {
-      console.log("Slots:", slots.length);
+      const total = stats.trafficIn + stats.trafficOut;
+      console.log("Slots:", slots.length, "Traffic:", Math.round(total / 1024), "KB");
     }
   };
 
