@@ -136,6 +136,55 @@ async function createBotWithProxy(token: string): Promise<Bot> {
 /** Общая логика для основного (единственного) бота. */
 const composer = new Composer<Context>();
 
+// ——— Журнал действий клиентов (для админки → «Действия в боте») ———
+//
+// Единая точка входа для ЛЮБОГО update'а: команда, нажатие inline-кнопки, текстовое
+// сообщение, медиа. Логирование fire-and-forget (не await'ится) — не должно замедлять
+// или ронять ответ пользователю ни при каких обстоятельствах, поэтому обёрнуто в try/catch.
+// Регистрируется первым в composer, поэтому срабатывает раньше всех остальных обработчиков.
+function classifyUpdate(ctx: Context): { type: string; action: string; label?: string } | null {
+  const cq = ctx.callbackQuery;
+  if (cq?.data) {
+    // Формат callback_data в этом боте — "namespace:params..." (напр. "pay_tariff:123:usd").
+    // Берём namespace как машинное "action", полный data — как label для расследований.
+    const ns = cq.data.split(":")[0] || cq.data;
+    return { type: "callback", action: `callback:${ns}`, label: cq.data.slice(0, 500) };
+  }
+  const msg = ctx.message;
+  if (msg?.text) {
+    if (msg.text.startsWith("/")) {
+      const cmd = msg.text.slice(1).split(/[\s@]/)[0]?.toLowerCase() || "unknown";
+      return { type: "command", action: `command:${cmd}`, label: msg.text.slice(0, 500) };
+    }
+    return { type: "text", action: "message:text", label: msg.text.slice(0, 500) };
+  }
+  if (msg?.photo) return { type: "photo", action: "message:photo" };
+  if (msg?.video) return { type: "video", action: "message:video" };
+  if (msg?.document) return { type: "document", action: "message:document" };
+  return null;
+}
+
+composer.use((ctx, next) => {
+  try {
+    const from = ctx.from;
+    if (from?.id) {
+      const parsed = classifyUpdate(ctx);
+      if (parsed) {
+        api.logClientAction({
+          telegramId: from.id,
+          telegramUsername: from.username,
+          type: parsed.type,
+          action: parsed.action,
+          label: parsed.label,
+        });
+      }
+    }
+  } catch {
+    // логирование не должно мешать обработке update'а.
+  }
+  return next();
+});
+
 // ——— Принудительная подписка на канал ———
 
 type SubscriptionCheckState = "subscribed" | "not_subscribed" | "cannot_verify";
@@ -487,6 +536,10 @@ const lastBroadcastMessage = new Map<number, string | BroadcastPayload>();
 // Админ: сквады — список для добавления/удаления (clientId + items с uuid/name)
 const lastSquadsForAdd = new Map<number, { clientId: string; items: { uuid: string; name: string }[] }>();
 const lastSquadsForRemove = new Map<number, { clientId: string; items: { uuid: string; name: string }[] }>();
+// Админ: выдача подписки — список тарифов для выбора (clientId + items), затем выбранный тариф
+const lastTariffsForGrant = new Map<number, { clientId: string; items: api.BotAdminTariffItem[] }>();
+// Админ: выдача подписки — ожидание ввода кастомного срока (дней) для clientId:tariffId[:optionId]
+const awaitingGrantCustomDays = new Map<number, { clientId: string; tariffId: string; optionId?: string }>();
 // Устройства (HWID): список для экрана «Удалить устройство» (индекс в callback)
 // храним subscriptionType + subscriptionId — нужны при удалении,
 // чтобы backend знал из какой подписки удалять (раньше удалял только root → secondary error).
@@ -2622,6 +2675,8 @@ composer.on("callback_query:data", async (ctx) => {
       lastBroadcastMessage.delete(userId);
       lastSquadsForAdd.delete(userId);
       lastSquadsForRemove.delete(userId);
+      lastTariffsForGrant.delete(userId);
+      awaitingGrantCustomDays.delete(userId);
       const markup: InlineMarkup = {
         inline_keyboard: [
           [{ text: "📊 Статистика", callback_data: "admin:stats" }],
@@ -2789,6 +2844,7 @@ composer.on("callback_query:data", async (ctx) => {
         kb.push([{ text: "🚫 Заблокировать", callback_data: `admin:block:${client.id}` }]);
       }
       kb.push([{ text: "💵 Пополнить баланс", callback_data: `admin:balance:${client.id}` }]);
+      kb.push([{ text: "🎁 Выдать подписку", callback_data: `admin:grant:${client.id}` }]);
       if (client.remnawaveUuid) {
         kb.push(
           [
@@ -2981,6 +3037,122 @@ composer.on("callback_query:data", async (ctx) => {
           inline_keyboard: [[{ text: "◀️ К клиенту", callback_data: `admin:client:${clientId}` }]],
         });
       }
+      return;
+    }
+    if (data.startsWith("admin:grant:")) {
+      const clientId = data.slice("admin:grant:".length);
+      if (!clientId) return;
+      try {
+        const { items } = await api.getBotAdminTariffs(userId);
+        if (!items.length) {
+          await editMessageContent(ctx, "Нет доступных тарифов.", {
+            inline_keyboard: [[{ text: "◀️ К клиенту", callback_data: `admin:client:${clientId}` }]],
+          });
+          return;
+        }
+        lastTariffsForGrant.set(userId, { clientId, items });
+        const rows: InlineMarkup["inline_keyboard"] = items.slice(0, 30).map((t, i) => [
+          {
+            text: `🎁 ${t.name}${t.priceOptions.length ? ` — от ${Math.min(...t.priceOptions.map((o) => o.price))} ${t.currency.toUpperCase()}` : ""}`,
+            callback_data: `admin:granttariff:${clientId}:${i}`,
+          },
+        ]);
+        rows.push([{ text: "◀️ К клиенту", callback_data: `admin:client:${clientId}` }]);
+        await editMessageContent(ctx, "🎁 Выдача подписки\n\nВыберите тариф:", { inline_keyboard: rows });
+      } catch (e: unknown) {
+        await editMessageContent(ctx, `❌ ${e instanceof Error ? e.message : "Ошибка"}`, {
+          inline_keyboard: [[{ text: "◀️ К клиенту", callback_data: `admin:client:${clientId}` }]],
+        });
+      }
+      return;
+    }
+    if (data.startsWith("admin:granttariff:")) {
+      const rest = data.slice("admin:granttariff:".length);
+      const [clientId, tariffIndexStr] = rest.split(":");
+      if (!clientId) return;
+      const stored = lastTariffsForGrant.get(userId);
+      const tariffIndex = parseInt(tariffIndexStr ?? "", 10);
+      if (!stored || stored.clientId !== clientId || Number.isNaN(tariffIndex) || tariffIndex < 0 || tariffIndex >= stored.items.length) {
+        await editMessageContent(ctx, "Сессия истекла. Начните заново.", {
+          inline_keyboard: [[{ text: "◀️ К клиенту", callback_data: `admin:client:${clientId}` }]],
+        });
+        return;
+      }
+      const tariff = stored.items[tariffIndex]!;
+      const rows: InlineMarkup["inline_keyboard"] = tariff.priceOptions.map((o, i) => [
+        { text: `${o.durationDays} дн. (обычно ${o.price} ${tariff.currency.toUpperCase()})`, callback_data: `admin:grantopt:${clientId}:${tariffIndex}:${i}` },
+      ]);
+      if (!tariff.priceOptions.length) {
+        rows.push([{ text: `${tariff.durationDays} дн. (по умолчанию)`, callback_data: `admin:grantopt:${clientId}:${tariffIndex}:default` }]);
+      }
+      rows.push([{ text: "✏️ Свой срок (дней)", callback_data: `admin:grantcustom:${clientId}:${tariffIndex}` }]);
+      rows.push([{ text: "◀️ К тарифам", callback_data: `admin:grant:${clientId}` }]);
+      await editMessageContent(ctx, `🎁 Тариф: ${tariff.name}\n\nВыберите срок выдачи (бесплатно):`, { inline_keyboard: rows });
+      return;
+    }
+    if (data.startsWith("admin:grantopt:")) {
+      const rest = data.slice("admin:grantopt:".length);
+      const [clientId, tariffIndexStr, optionRef] = rest.split(":");
+      if (!clientId) return;
+      const stored = lastTariffsForGrant.get(userId);
+      const tariffIndex = parseInt(tariffIndexStr ?? "", 10);
+      if (!stored || stored.clientId !== clientId || Number.isNaN(tariffIndex) || tariffIndex < 0 || tariffIndex >= stored.items.length) {
+        await editMessageContent(ctx, "Сессия истекла. Начните заново.", {
+          inline_keyboard: [[{ text: "◀️ К клиенту", callback_data: `admin:client:${clientId}` }]],
+        });
+        return;
+      }
+      const tariff = stored.items[tariffIndex]!;
+      let tariffPriceOptionId: string | undefined;
+      if (optionRef !== "default") {
+        const optIndex = parseInt(optionRef ?? "", 10);
+        const opt = tariff.priceOptions[optIndex];
+        if (!opt) {
+          await editMessageContent(ctx, "Опция не найдена. Начните заново.", {
+            inline_keyboard: [[{ text: "◀️ К клиенту", callback_data: `admin:client:${clientId}` }]],
+          });
+          return;
+        }
+        tariffPriceOptionId = opt.id;
+      }
+      try {
+        const result = await api.postBotAdminGrantTariff(userId, clientId, {
+          tariffId: tariff.id,
+          tariffPriceOptionId,
+          note: "Выдано через админ-панель бота",
+        });
+        lastTariffsForGrant.delete(userId);
+        await editMessageContent(
+          ctx,
+          `✅ Подписка выдана!\n\nТариф: ${result.tariff.name}\nСрок: ${result.tariff.durationDays} дн.`,
+          { inline_keyboard: [[{ text: "◀️ К клиенту", callback_data: `admin:client:${clientId}` }]] }
+        );
+      } catch (e: unknown) {
+        await editMessageContent(ctx, `❌ ${e instanceof Error ? e.message : "Ошибка"}`, {
+          inline_keyboard: [[{ text: "◀️ К клиенту", callback_data: `admin:client:${clientId}` }]],
+        });
+      }
+      return;
+    }
+    if (data.startsWith("admin:grantcustom:")) {
+      const rest = data.slice("admin:grantcustom:".length);
+      const [clientId, tariffIndexStr] = rest.split(":");
+      if (!clientId) return;
+      const stored = lastTariffsForGrant.get(userId);
+      const tariffIndex = parseInt(tariffIndexStr ?? "", 10);
+      if (!stored || stored.clientId !== clientId || Number.isNaN(tariffIndex) || tariffIndex < 0 || tariffIndex >= stored.items.length) {
+        await editMessageContent(ctx, "Сессия истекла. Начните заново.", {
+          inline_keyboard: [[{ text: "◀️ К клиенту", callback_data: `admin:client:${clientId}` }]],
+        });
+        return;
+      }
+      const tariff = stored.items[tariffIndex]!;
+      awaitingGrantCustomDays.set(userId, { clientId, tariffId: tariff.id });
+      await editMessageContent(
+        ctx,
+        `✏️ Введите срок выдачи в днях для тарифа «${tariff.name}» (число от 1 до 3650):`,
+        { inline_keyboard: [[{ text: "◀️ Отмена", callback_data: `admin:granttariff:${clientId}:${tariffIndex}` }]] }
+      );
       return;
     }
     if (data.startsWith("admin:payments:")) {
@@ -7139,6 +7311,66 @@ composer.on("callback_query:data", async (ctx) => {
       return;
     }
 
+    // «🗑 Удалить подписку» — клиент сам удаляет СВОЮ ненужную доп. подписку.
+    // Доступно только для secondary (кнопка вообще не рисуется для root — см. subDetailButtons).
+    // Confirm-диалог → deleteSubscription API → удаление пользователя в Remna + записи в БД.
+    if (data.startsWith("sub:delete:")) {
+      const rest = data.slice("sub:delete:".length);
+      const sep = rest.indexOf(":");
+      if (sep === -1) return;
+      const subType = rest.slice(0, sep) as "root" | "secondary";
+      const subId = rest.slice(sep + 1);
+      if (subType === "root") {
+        await editMessageContent(
+          ctx,
+          "❌ Главную подписку удалить нельзя.",
+          { inline_keyboard: [[{ text: "← К подписке", callback_data: `sub:detail:${subType}:${subId}` }]] },
+        );
+        return;
+      }
+      await editMessageContent(
+        ctx,
+        "🗑 Удалить эту подписку?\n\n" +
+        "• Подписка будет удалена безвозвратно вместе с доступом в Remnawave\n" +
+        "• Ссылка для подключения перестанет работать\n" +
+        "• Возврата денег НЕТ\n\n" +
+        "Подтвердить удаление?",
+        {
+          inline_keyboard: [
+            [{ text: "✅ Да, удалить", callback_data: `sub:delete_confirm:${subType}:${subId}` }],
+            [{ text: "❌ Отмена", callback_data: `sub:detail:${subType}:${subId}` }],
+          ],
+        },
+      );
+      return;
+    }
+    if (data.startsWith("sub:delete_confirm:")) {
+      const rest = data.slice("sub:delete_confirm:".length);
+      const sep = rest.indexOf(":");
+      if (sep === -1) return;
+      const subType = rest.slice(0, sep) as "root" | "secondary";
+      const subId = rest.slice(sep + 1);
+      try {
+        await api.deleteSubscription(token, subType, subId);
+        await editMessageContent(
+          ctx,
+          "🗑 Подписка удалена.",
+          {
+            inline_keyboard: [
+              [{ text: "📋 Мои подписки", callback_data: "menu:my_subs" }],
+              [{ text: "🏠 Главное меню", callback_data: "menu:main" }],
+            ],
+          },
+        );
+      } catch (e: unknown) {
+        const errMsg = e instanceof Error ? e.message : "Ошибка";
+        await editMessageContent(ctx, `❌ ${errMsg}`, {
+          inline_keyboard: [[{ text: "📋 Мои подписки", callback_data: "menu:my_subs" }]],
+        });
+      }
+      return;
+    }
+
     if (data.startsWith("sub:reissue:")) {
       const rest = data.slice("sub:reissue:".length);
       const sep = rest.indexOf(":");
@@ -7928,6 +8160,35 @@ composer.on("message:text", async (ctx) => {
     try {
       const result = await api.patchBotAdminClientBalance(userId, clientId, num);
       await ctx.reply(`✅ Баланс пополнен. Новый баланс: ${result.newBalance}`);
+    } catch (e: unknown) {
+      await ctx.reply(`❌ ${e instanceof Error ? e.message : "Ошибка"}`);
+    }
+    return;
+  }
+
+  // Админ: ввод кастомного срока (в днях) для выдачи подписки
+  if (awaitingGrantCustomDays.has(userId)) {
+    const pending = awaitingGrantCustomDays.get(userId);
+    awaitingGrantCustomDays.delete(userId);
+    const config = await api.getPublicConfig();
+    if (!config?.botAdminTelegramIds?.includes(String(userId)) || !pending) {
+      await ctx.reply("Доступ запрещён или сессия истекла.");
+      return;
+    }
+    const days = parseInt((ctx.message.text ?? "").trim(), 10);
+    if (!Number.isFinite(days) || days < 1 || days > 3650) {
+      await ctx.reply("Введите целое число дней от 1 до 3650.");
+      return;
+    }
+    try {
+      const result = await api.postBotAdminGrantTariff(userId, pending.clientId, {
+        tariffId: pending.tariffId,
+        tariffPriceOptionId: pending.optionId,
+        customDurationDays: days,
+        note: "Выдано через админ-панель бота (кастомный срок)",
+      });
+      lastTariffsForGrant.delete(userId);
+      await ctx.reply(`✅ Подписка выдана!\n\nТариф: ${result.tariff.name}\nСрок: ${result.tariff.durationDays} дн.`);
     } catch (e: unknown) {
       await ctx.reply(`❌ ${e instanceof Error ? e.message : "Ошибка"}`);
     }
