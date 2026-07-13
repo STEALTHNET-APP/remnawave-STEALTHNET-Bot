@@ -37,6 +37,28 @@ async function fetchJson<T>(path: string, opts?: { method?: string; body?: unkno
   return data as T;
 }
 
+/**
+ * Журнал действий клиента в боте (для админки → «Действия в боте»).
+ * Fire-and-forget: НИКОГДА не await'ится в вызывающем коде и не должна ронять
+ * или замедлять обработку update'а пользователем — все ошибки глотаются здесь.
+ */
+export function logClientAction(input: {
+  telegramId: number;
+  telegramUsername?: string;
+  type: string;
+  action: string;
+  label?: string;
+}): void {
+  if (!API_URL) return;
+  fetch(`${API_URL}/api/public/bot-activity`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(input),
+  }).catch(() => {
+    // сеть недоступна / бэкенд не отвечает — не критично, просто теряем одну запись лога.
+  });
+}
+
 /** Привязка Telegram к аккаунту по коду (вызывается ботом при /link КОД) */
 export async function linkTelegramFromBot(code: string, telegramId: number, telegramUsername?: string): Promise<{ message: string }> {
   const botToken = process.env.BOT_TOKEN || "";
@@ -387,6 +409,18 @@ export async function reissueSubscription(
   id: string,
 ): Promise<{ ok: boolean; subscriptionUrl: string | null; message?: string }> {
   return fetchJson(`/api/client/subscription/${type}/${encodeURIComponent(id)}/reissue`, { token, method: "POST" });
+}
+
+/**
+ * Удаление клиентом СВОЕЙ ненужной доп. подписки (secondary).
+ * Главную (root) подписку удалить нельзя — backend вернёт 400.
+ */
+export async function deleteSubscription(
+  token: string,
+  type: "root" | "secondary",
+  id: string,
+): Promise<{ ok: boolean }> {
+  return fetchJson(`/api/client/subscription/${type}/${encodeURIComponent(id)}/delete`, { token, method: "POST" });
 }
 
 /** Список устройств (HWID) пользователя в Remna */
@@ -1014,7 +1048,54 @@ export async function postBotAdminClientRemnaSquadRemove(telegramId: number, cli
   return data as { ok: boolean; activeInternalSquads: string[] };
 }
 
-// ——— Gift / Secondary Subscriptions API ———
+// ——— Bot Admin: тарифы и выдача подписки ———
+
+export type BotAdminTariffPriceOption = { id: string; durationDays: number; price: number };
+
+export type BotAdminTariffItem = {
+  id: string;
+  name: string;
+  currency: string;
+  categoryId: string;
+  categoryName: string;
+  durationDays: number;
+  price: number;
+  priceOptions: BotAdminTariffPriceOption[];
+};
+
+export async function getBotAdminTariffs(telegramId: number): Promise<{ items: BotAdminTariffItem[] }> {
+  const botToken = process.env.BOT_TOKEN || "";
+  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/tariffs?telegramId=${telegramId}`, {
+    headers: { "X-Telegram-Bot-Token": botToken },
+  });
+  const data = (await res.json().catch(() => ({}))) as { items: BotAdminTariffItem[] } | { message?: string };
+  if (!res.ok) {
+    const msg = typeof (data as { message?: string }).message === "string" ? (data as { message: string }).message : `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return data as { items: BotAdminTariffItem[] };
+}
+
+export async function postBotAdminGrantTariff(
+  telegramId: number,
+  clientId: string,
+  body: { tariffId: string; tariffPriceOptionId?: string; customDurationDays?: number; note?: string }
+): Promise<{ ok: boolean; paymentId: string | null; subscriptionId: string; tariff: { id: string; name: string; durationDays: number } }> {
+  const botToken = process.env.BOT_TOKEN || "";
+  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/grant-tariff`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Telegram-Bot-Token": botToken },
+    body: JSON.stringify({ telegramId, ...body }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = typeof (data as { message?: string }).message === "string" ? (data as { message: string }).message : `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return data as { ok: boolean; paymentId: string | null; subscriptionId: string; tariff: { id: string; name: string; durationDays: number } };
+}
+
+
 
 /** Купить дополнительную подписку (оплата балансом) */
 export async function buyGiftSubscription(
