@@ -8,7 +8,7 @@
 import { Router, Request, Response } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { prisma } from "../../db.js";
+import { prisma, createPayment } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { markPaymentPaid } from "../payment/mark-paid.service.js";
 import { getBroadcastRecipientsCount, runBroadcast } from "../broadcast/broadcast.service.js";
@@ -439,6 +439,153 @@ botAdminRouter.post("/clients/:id/remna/squads/remove", async (req, res) => {
   const updateRes = await remnaUpdateUser({ uuid: remnaUuid, activeInternalSquads: currentSquads });
   if (updateRes.error) return res.status(updateRes.status >= 400 ? updateRes.status : 500).json({ message: updateRes.error });
   return res.json({ ok: true, activeInternalSquads: currentSquads });
+});
+
+// ——— Тарифы / выдача подписки ———
+
+/** GET /api/bot-admin/tariffs — список тарифов с опциями цен (для выдачи подписки из бота) */
+botAdminRouter.get("/tariffs", async (req, res) => {
+  const admin = await requireBotAdmin(req, res);
+  if (!admin) return;
+  const list = await prisma.tariff.findMany({
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    include: {
+      category: { select: { id: true, name: true } },
+      priceOptions: { orderBy: [{ sortOrder: "asc" }, { durationDays: "asc" }] },
+    },
+  });
+  const items = list.map((t) => ({
+    id: t.id,
+    name: t.name,
+    currency: t.currency,
+    categoryId: t.categoryId,
+    categoryName: t.category?.name ?? "",
+    durationDays: t.durationDays,
+    price: t.price,
+    priceOptions: t.priceOptions.map((o) => ({ id: o.id, durationDays: o.durationDays, price: o.price })),
+  }));
+  return res.json({ items });
+});
+
+const grantTariffSchema = z.object({
+  tariffId: z.string().min(1),
+  tariffPriceOptionId: z.string().min(1).optional(),
+  // Нестандартный срок (перебивает опцию/legacy длительность тарифа).
+  customDurationDays: z.number().int().min(1).max(3650).optional(),
+  note: z.string().max(500).optional(),
+});
+
+/**
+ * POST /api/bot-admin/clients/:id/grant-tariff
+ * Выдаёт тариф клиенту вручную (без оплаты) прямо из Telegram-бота.
+ * Создаёт запись Payment (amount=0, provider="admin_grant") и активирует
+ * новую подписку в Remnawave — та же логика, что используется в веб-админке.
+ */
+botAdminRouter.post("/clients/:id/grant-tariff", async (req, res) => {
+  const admin = await requireBotAdmin(req, res);
+  if (!admin) return;
+  const parsed = clientIdParam.safeParse(req.params);
+  if (!parsed.success) return res.status(400).json({ message: "Invalid client id" });
+  const body = grantTariffSchema.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ message: "Invalid input", errors: body.error.flatten() });
+
+  const clientId = parsed.data.id;
+  const { tariffId, tariffPriceOptionId, customDurationDays, note } = body.data;
+
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { id: true, remnawaveUuid: true, email: true, telegramId: true, telegramUsername: true },
+  });
+  if (!client) return res.status(404).json({ message: "Клиент не найден" });
+
+  const tariff = await prisma.tariff.findUnique({
+    where: { id: tariffId },
+    include: { priceOptions: { orderBy: [{ sortOrder: "asc" }, { durationDays: "asc" }] } },
+  });
+  if (!tariff) return res.status(404).json({ message: "Тариф не найден" });
+
+  let selectedOption: { id: string; durationDays: number; price: number } | null = null;
+  if (tariffPriceOptionId) {
+    const opt = tariff.priceOptions.find((o) => o.id === tariffPriceOptionId);
+    if (!opt) return res.status(400).json({ message: "Опция цены не найдена в этом тарифе" });
+    selectedOption = { id: opt.id, durationDays: opt.durationDays, price: opt.price };
+  } else if (tariff.priceOptions.length > 0) {
+    const sorted = [...tariff.priceOptions].sort((a, b) => a.price - b.price);
+    selectedOption = { id: sorted[0].id, durationDays: sorted[0].durationDays, price: sorted[0].price };
+  }
+
+  const now = new Date();
+  const effectiveDurationDays = customDurationDays ?? selectedOption?.durationDays ?? tariff.durationDays;
+
+  const orderId = `bot-admin-grant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  let paymentId: string | null = null;
+  try {
+    const payment = await createPayment({
+      data: {
+        clientId,
+        orderId,
+        amount: 0,
+        currency: tariff.currency,
+        status: "PAID",
+        provider: "admin_grant",
+        tariffId: tariff.id,
+        tariffPriceOptionId: selectedOption?.id ?? null,
+        deviceCount: 0,
+        paidAt: now,
+        metadata: JSON.stringify({ grantedBy: `tg:${admin.telegramId}`, note: note ?? null, kind: "admin_grant" }),
+      },
+      select: { id: true },
+    });
+    paymentId = payment.id;
+  } catch (e) {
+    console.error("[bot-admin/grant-tariff] Не удалось создать Payment:", e);
+    return res.status(500).json({ message: "Не удалось создать запись платежа" });
+  }
+
+  const { createAdditionalSubscription } = await import("../gift/gift.service.js");
+  const subResult = await createAdditionalSubscription(clientId, {
+    id: tariff.id,
+    name: tariff.name,
+    price: selectedOption?.price ?? tariff.price,
+    durationDays: effectiveDurationDays,
+    trafficLimitBytes: tariff.trafficLimitBytes,
+    deviceLimit: tariff.deviceLimit,
+    includedDevices: tariff.includedDevices,
+    internalSquadUuids: tariff.internalSquadUuids,
+    trafficResetMode: tariff.trafficResetMode ?? undefined,
+  }, { skipConfigCheck: true, extraDevices: 0, purchasedAsGift: false });
+
+  if (!subResult.ok) {
+    if (paymentId) {
+      await prisma.payment.update({
+        where: { id: paymentId },
+        data: { status: "FAILED", metadata: JSON.stringify({ grantedBy: `tg:${admin.telegramId}`, note: note ?? null, kind: "admin_grant", error: subResult.error }) },
+      }).catch(() => { /* ignore */ });
+    }
+    return res.status(subResult.status && subResult.status >= 400 ? subResult.status : 500).json({
+      ok: false,
+      message: subResult.error ?? "Ошибка активации тарифа",
+    });
+  }
+
+  await prisma.payment.update({
+    where: { id: paymentId },
+    data: { subscriptionId: subResult.data.subscriptionId },
+  }).catch(() => { /* ignore */ });
+
+  try {
+    const { notifyTariffActivated } = await import("../notification/telegram-notify.service.js");
+    await notifyTariffActivated(clientId, paymentId);
+  } catch (e) {
+    console.error("[bot-admin/grant-tariff] notify client failed:", e);
+  }
+
+  return res.json({
+    ok: true,
+    paymentId,
+    subscriptionId: subResult.data.subscriptionId,
+    tariff: { id: tariff.id, name: tariff.name, durationDays: effectiveDurationDays },
+  });
 });
 
 // ——— Платежи ———
