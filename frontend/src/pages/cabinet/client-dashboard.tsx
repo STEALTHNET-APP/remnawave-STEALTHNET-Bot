@@ -264,8 +264,8 @@ function ClassicDashboardPage() {
     const payment = searchParams.get("payment");
     const paymentKind = searchParams.get("payment_kind");
     // T-pay-success-modal (WolfVPN): ЕДИНЫЙ детект возврата с любой платёжки.
-    // Бэкенд редиректит по-разному: ?payment=success, ?yookassa=success, ?heleket=success,
-    // ?yoomoney_form=success, ?lava=success, ?lavatop=success, ?overpay=return.
+    // Бэкенд редиректит по-разному: ?payment=success, ?yoomoney_form=success, ?yookassa=success,
+    // ?heleket=success, ?lava=success, ?lavatop=success, ?overpay=return.
     const providerSuccess =
       payment === "success" ||
       searchParams.get("yoomoney_form") === "success" ||
@@ -987,7 +987,7 @@ function ClassicDashboardPage() {
         {/* 2. Как подключиться — показываем ТОЛЬКО когда нет активной ссылки (триал/выбор тарифа)
             или есть доп.пробники. При активной подписке блок скрыт — подключение уже в её карточке. */}
         {(!vpnUrl || showMultiTrials) && (
-        <section className="order-4 rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl p-5 shadow-sm overflow-hidden transition-all duration-300">
+        <section className="order-first rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl p-5 shadow-sm overflow-hidden transition-all duration-300">
           <h2 className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground/80 mb-4">
              <div className="p-1.5 bg-primary/20 rounded-lg">
               <Wifi className="h-4 w-4 shrink-0 text-primary" />
