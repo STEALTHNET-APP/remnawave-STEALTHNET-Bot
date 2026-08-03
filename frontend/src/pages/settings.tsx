@@ -5139,7 +5139,7 @@ export function SettingsPage() {
                 </Button>
               </div>
 
-              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 text-sm text-blue-200 space-y-2">
+              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 text-sm text-blue-700 dark:text-blue-200 space-y-2">
                 <p><strong>{t("admin.settings.nalog_how_title")}</strong></p>
                 <ul className="list-disc list-inside space-y-1 text-xs">
                   <li>{t("admin.settings.nalog_how_1")}</li>
@@ -5209,7 +5209,7 @@ export function SettingsPage() {
                 </p>
               </div>
 
-              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 text-sm text-blue-200 space-y-2">
+              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 text-sm text-blue-700 dark:text-blue-200 space-y-2">
                 <p><strong>{t("admin.settings.map_maxmind_title")}</strong></p>
                 <ul className="list-disc list-inside space-y-1 text-xs">
                   <li>{t("admin.settings.map_maxmind_1")}</li>
