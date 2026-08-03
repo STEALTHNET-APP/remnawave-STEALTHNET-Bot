@@ -41,9 +41,9 @@ async function sendDocumentToTelegram(
   }
 }
 
-async function runAutoBackup(): Promise<void> {
+async function runAutoBackup(options: { force?: boolean } = {}): Promise<void> {
   const config = await getSystemConfig();
-  if (!config.autoBackupEnabled) return;
+  if (!options.force && !config.autoBackupEnabled) return;
 
   const botToken = config.telegramBotToken?.trim();
   const groupId = config.notificationTelegramGroupId?.trim();

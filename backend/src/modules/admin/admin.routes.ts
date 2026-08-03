@@ -5409,7 +5409,7 @@ adminRouter.get("/analytics", async (_req, res) => {
 adminRouter.post("/backup/send-to-telegram", asyncRoute(async (_req, res) => {
   const { runAutoBackup } = await import("../backup/auto-backup.scheduler.js");
   try {
-    await runAutoBackup();
+    await runAutoBackup({ force: true });
     return res.json({ ok: true, message: "Бэкап создан и отправлен в Telegram" });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
