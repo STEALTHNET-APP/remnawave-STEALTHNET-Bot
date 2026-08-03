@@ -134,7 +134,7 @@ export function LoginPage() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="admin@stealthnet.local"
+                    placeholder="admin@site.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
