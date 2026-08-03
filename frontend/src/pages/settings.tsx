@@ -2327,7 +2327,7 @@ export function SettingsPage() {
                           <p className="text-[11px] text-muted-foreground mb-2">Username аккаунта поддержки или t.me-ссылка. Появляется в кнопке «Поддержка» в главном меню.</p>
                           <Input
                             value={settings.supportLink ?? ""}
-                            onChange={(e) => setSettings((s) => (s ? { ...s, supportLink: e.target.value || undefined } : s))}
+                            onChange={(e) => setSettings((s) => (s ? { ...s, supportLink: e.target.value } : s))}
                             placeholder={t("admin.settings.bot_support_placeholder")}
                           />
                         </div>
@@ -2339,7 +2339,7 @@ export function SettingsPage() {
                           <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph или внешняя страница с правилами использования сервиса.</p>
                           <Input
                             value={settings.agreementLink ?? ""}
-                            onChange={(e) => setSettings((s) => (s ? { ...s, agreementLink: e.target.value || undefined } : s))}
+                            onChange={(e) => setSettings((s) => (s ? { ...s, agreementLink: e.target.value } : s))}
                             placeholder="https://telegra.ph/..."
                           />
                         </div>
@@ -2351,7 +2351,7 @@ export function SettingsPage() {
                           <p className="text-[11px] text-muted-foreground mb-2">Юридическая оферта (особенно нужна при работе через ИП/самозанятость).</p>
                           <Input
                             value={settings.offerLink ?? ""}
-                            onChange={(e) => setSettings((s) => (s ? { ...s, offerLink: e.target.value || undefined } : s))}
+                            onChange={(e) => setSettings((s) => (s ? { ...s, offerLink: e.target.value } : s))}
                             placeholder="https://telegra.ph/..."
                           />
                         </div>
@@ -2363,7 +2363,7 @@ export function SettingsPage() {
                           <p className="text-[11px] text-muted-foreground mb-2">Инструкции для клиентов как подключить VPN на разных устройствах.</p>
                           <Input
                             value={settings.instructionsLink ?? ""}
-                            onChange={(e) => setSettings((s) => (s ? { ...s, instructionsLink: e.target.value || undefined } : s))}
+                            onChange={(e) => setSettings((s) => (s ? { ...s, instructionsLink: e.target.value } : s))}
                             placeholder="https://telegra.ph/..."
                           />
                         </div>
@@ -2376,7 +2376,7 @@ export function SettingsPage() {
                           <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph-статья «Как пользоваться рефералкой». Кнопка «📖 Инструкции» под «Поделиться ссылкой» в разделе рефералки бота. Пусто = дефолтная ссылка.</p>
                           <Input
                             value={settings.referralInstructionsUrl ?? ""}
-                            onChange={(e) => setSettings((s) => (s ? { ...s, referralInstructionsUrl: e.target.value || undefined } : s))}
+                            onChange={(e) => setSettings((s) => (s ? { ...s, referralInstructionsUrl: e.target.value } : s))}
                             placeholder="https://telegra.ph/Kak-polzovatsya-referalnoj-programmoj-i-zarabatyvat-05-28"
                           />
                         </div>
@@ -2389,7 +2389,7 @@ export function SettingsPage() {
                           <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph-страница с правилами возврата средств. Появляется кнопкой в «Помощь → Документы».</p>
                           <Input
                             value={(settings as { refundLink?: string | null }).refundLink ?? ""}
-                            onChange={(e) => setSettings((s) => (s ? { ...s, refundLink: e.target.value || undefined } as typeof s : s))}
+                            onChange={(e) => setSettings((s) => (s ? { ...s, refundLink: e.target.value } as typeof s : s))}
                             placeholder="https://telegra.ph/..."
                           />
                         </div>
