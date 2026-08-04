@@ -299,9 +299,13 @@ docker compose ps
 # بروزرسانی به آخرین نسخه (برنچ main)
 git pull origin main
 
-# آپدیت به یک نسخه پایدار خاص:
+# آپدیت به یک نسخه پایدار خاص
 git fetch --tags
 git checkout v3.1.3
+
+# یا به‌روزرسانی به یک شاخهٔ مشخص (برای مثال، شاخهٔ LTS)
+git fetch --tags
+git checkout origin lts
 
 # وضعیت سرویس‌ها
 docker compose ps

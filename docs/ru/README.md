@@ -362,9 +362,13 @@ docker compose ps
 git pull origin main
 
 
-# Обновление до конкретной версии (более стабильно, релиз версии):
+# Обновление до конкретной версии (более стабильно, релиз версии)
 git fetch --tags
 git checkout v3.1.3
+
+# Или аналогичное обновление до конкретной ветки (например, ветки LTS)
+git fetch --tags
+git checkout origin lts
 
 # Статус сервисов
 docker compose ps

@@ -367,9 +367,13 @@ docker compose ps
 # Update to the latest commit (latest main branch, not always stable)
 git pull origin main
 
-# Update to a specific version (more stable, release version):
+# Update to a specific version (more stable, release version)
 git fetch --tags
 git checkout v3.1.3
+
+# Or update to a specific branch (for example, the LTS branch)
+git fetch --tags
+git checkout origin lts
 
 # Services status
 docker compose ps
