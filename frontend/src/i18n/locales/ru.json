@@ -1071,6 +1071,8 @@
       "topic_id_placeholder": "ID топика",
       "service_name": "Название сервиса",
       "service_name_hint": "Отображается в шапке админки и в кабинете клиента",
+      "service_description": "Описание сервиса",
+      "service_description_hint": "Используется в meta description, OG/Twitter preview и PWA manifest",
       "logo": "Логотип",
       "logo_alt": "Логотип",
       "upload_another": "Загрузить другой",

@@ -18,8 +18,8 @@ export default defineConfig({
             ],
             manifest: {
                 name: "STEALTHNET",
-                short_name: "STEALTHNET",
-                description: "Личный кабинет и админка STEALTHNET — VPN на базе Remnawave",
+                short_name: "VPN",
+                description: "Личный кабинет и админка VPN на базе Remnawave",
                 lang: "ru",
                 start_url: "/cabinet",
                 scope: "/",
