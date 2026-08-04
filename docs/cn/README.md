@@ -360,9 +360,15 @@ docker compose ps
 # 更新到最新的提交（最新的 main 分支，不一定稳定）
 git pull origin main
 
-# 更新到特定版本（更稳定，发布版本）：
+# 或更新到指定分支（例如 LTS 分支）
 git fetch --tags
-git checkout v3.1.3
+git checkout lts
+git pull origin lts
+
+# 更新到特定版本（更稳定，发布版本）
+git fetch --tags
+git checkout v5.3.0
+git pull origin v5.3.0
 
 # 服务状态
 docker compose ps
