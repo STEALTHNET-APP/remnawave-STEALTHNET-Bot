@@ -1137,7 +1137,7 @@ function buildMainMenuText(opts: {
 
   // Приветствие + имя сервиса в ОДНУ строку, жирным:
   // «👋 Добро пожаловать в 🛡 STEALTHNET».
-  pushLine("welcomeGreeting", `**${t(menuTexts, "welcomeGreeting")} в ${t(menuTexts, "welcomeTitlePrefix")}${name}**`);
+  pushLine("welcomeGreeting", `**${t(menuTexts, "welcomeGreeting")}${t(menuTexts, "welcomeTitlePrefix")}${name}**`);
   // Баланс — сразу под шапкой (выше списка подписок), жирным.
   pushLine("balancePrefix", `**${t(menuTexts, "balancePrefix")}${balanceStr}**`);
 
