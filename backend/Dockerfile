@@ -1,9 +1,10 @@
 FROM node:22-alpine AS builder
 
 WORKDIR /app
-COPY package.json package-lock.json* ./
+COPY backend/package.json backend/package-lock.json* ./
 RUN npm ci
-COPY . .
+COPY backend/. .
+COPY version.json ./version.json
 RUN npx prisma generate
 RUN npm run build
 
@@ -23,6 +24,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/i18n/*.json ./dist/i18n/
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/version.json ./version.json
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/subpage-00000000-0000-0000-0000-000000000000.json ./
 # Бэкап-копия в /app/defaults — используется бэкендом как fallback,
@@ -31,7 +33,7 @@ COPY --from=builder /app/subpage-00000000-0000-0000-0000-000000000000.json ./
 # версию из образа (т.е. с момента сборки).
 RUN mkdir -p /app/defaults && \
     cp /app/subpage-00000000-0000-0000-0000-000000000000.json /app/defaults/
-COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY backend/docker-entrypoint.sh /app/docker-entrypoint.sh
 
 RUN npx prisma generate \
   && chmod +x /app/docker-entrypoint.sh

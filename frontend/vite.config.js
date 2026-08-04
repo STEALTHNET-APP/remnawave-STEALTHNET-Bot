@@ -110,6 +110,7 @@ export default defineConfig({
     },
     server: {
         port: 5173,
+        fs: { allow: [path.resolve(__dirname, "..")] },
         proxy: {
             "/api": { target: "http://localhost:5001", changeOrigin: true },
         },

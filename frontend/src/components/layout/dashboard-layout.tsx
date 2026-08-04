@@ -19,9 +19,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api, type AdminNotificationCounters } from "@/lib/api";
 import { InboxBell } from "@/components/inbox-bell";
+import appVersion from "../../../../version.json";
 
-const PANEL_VERSION = "5.2.0";
-const GITHUB_URL = "https://github.com/systemmaster1200-eng/remnawave-STEALTHNET-Bot";
+const PANEL_VERSION = appVersion.version;
+const GITHUB_URL = "https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot";
 
 // пункт меню может быть защищён action'ом
 // вместо обычной секции — для гранулярных прав менеджеров (например, «Продажи через баланс»).

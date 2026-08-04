@@ -36,8 +36,8 @@ services:
   # API не был доступен с внешних интерфейсов.
   api:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: stealthnet-api
     restart: unless-stopped
     ports:
@@ -148,8 +148,8 @@ services:
   # Одноразовый контейнер для сборки фронтенда в volume
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: stealthnet-frontend-build
     volumes:
       - frontend_dist:/out
