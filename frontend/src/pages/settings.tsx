@@ -766,6 +766,7 @@ export function SettingsPage() {
         trialDeviceLimit: settings.trialDeviceLimit ?? null,
         trialTrafficLimitBytes: settings.trialTrafficLimitBytes ?? null,
         serviceName: settings.serviceName,
+        serviceDescription: settings.serviceDescription ?? null,
         logo: settings.logo ?? null,
         logoBot: settings.logoBot ?? null,
         favicon: settings.favicon ?? null,
@@ -1364,6 +1365,15 @@ export function SettingsPage() {
                       onChange={(e) => setSettings((s) => (s ? { ...s, serviceName: e.target.value } : s))}
                     />
                     <p className="text-[11px] text-muted-foreground">{t("admin.settings.service_name_hint")}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("admin.settings.service_description")}</Label>
+                    <Textarea
+                      value={settings.serviceDescription ?? ""}
+                      onChange={(e) => setSettings((s) => (s ? { ...s, serviceDescription: e.target.value || null } : s))}
+                      rows={2}
+                    />
+                    <p className="text-[11px] text-muted-foreground">{t("admin.settings.service_description_hint")}</p>
                   </div>
                 <div className="space-y-2">
                   <Label>{t("admin.settings.logo")}</Label>

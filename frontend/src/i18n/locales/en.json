@@ -1071,6 +1071,8 @@
       "topic_id_placeholder": "Topic ID",
       "service_name": "Service name",
       "service_name_hint": "Displayed in admin header and client cabinet",
+      "service_description": "Service description",
+      "service_description_hint": "Used in meta description, OG/Twitter preview and PWA manifest",
       "logo": "Logo",
       "logo_alt": "Logo",
       "upload_another": "Upload another",

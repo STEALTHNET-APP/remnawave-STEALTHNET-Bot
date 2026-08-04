@@ -19,6 +19,7 @@ const DIST_PATH = process.env.FRONTEND_DIST_PATH || "/var/www/stealthnet";
 const INDEX_FILE = path.join(DIST_PATH, "index.html");
 const DEFAULT_BRAND = "STEALTHNET";
 const DEFAULT_DESC = "STEALTHNET — личный кабинет и админка VPN на базе Remnawave";
+const BRAND_PLACEHOLDERS = [DEFAULT_BRAND, "VPN Service"];
 
 interface CachedTemplate {
   raw: string;
@@ -63,7 +64,8 @@ async function resolveBrand(): Promise<BrandValues> {
   if (brandCache && Date.now() - brandCache.at < BRAND_TTL_MS) return brandCache.value;
   const cfg = await getSystemConfig().catch(() => null);
   const brand = (cfg?.serviceName ?? "").trim() || DEFAULT_BRAND;
-  const description =
+  const customDescription = (cfg?.serviceDescription ?? "").trim();
+  const description = customDescription ? customDescription :
     brand === DEFAULT_BRAND
       ? DEFAULT_DESC
       : `${brand} — личный кабинет и админка VPN на базе Remnawave`;
@@ -86,10 +88,11 @@ export function invalidateTemplateCache() {
 }
 
 function renderHtml(tpl: string, b: BrandValues): string {
-  // Заменяем все вхождения "STEALTHNET" в шаблоне (это бренд-плейсхолдер
-  // в meta/title/manifest-name и т. п. — никаких ложных срабатываний быть
-  // не должно, так как имя редкое).
-  let out = tpl.replaceAll(DEFAULT_BRAND, escapeHtml(b.brand));
+  // Заменяем бренд-плейсхолдеры в meta/title/manifest-name на имя из БД.
+  let out = tpl;
+  for (const placeholder of BRAND_PLACEHOLDERS) {
+    out = out.replaceAll(placeholder, escapeHtml(b.brand));
+  }
 
   // Прицельно правим description-тег (он всегда генерируется при сборке).
   out = out.replace(

@@ -28,7 +28,7 @@ server {
 
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
 
-    client_max_body_size 20M;
+    client_max_body_size 200M;
 
     # Gzip
     gzip on;
@@ -57,8 +57,28 @@ server {
     }
 
     # SPA — без этого /admin и другие маршруты дают 404
+    location = / {
+        proxy_pass http://127.0.0.1:5000/_spa;
+    }
+    
+    location = /index.html {
+        proxy_pass http://127.0.0.1:5000/_spa;
+    }
+    
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files $uri $uri/ /_spa;
+    }
+    
+    location = /_spa {
+        internal;
+
+        proxy_pass http://127.0.0.1:5000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     # favicon: если нет favicon.ico — отдаём favicon.svg
@@ -67,7 +87,19 @@ server {
         add_header Cache-Control "public, max-age=86400";
     }
 
+    # Service Worker — без кэша, чтобы браузер всегда проверял обновления
+    location ~* ^/(sw\.js|workbox-.*)$ {
+        expires off;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+
     # Кэш статики
+    location = /manifest.webmanifest {
+        expires off;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Content-Type "application/manifest+json" always;
+    }
+
     location ~* \.(js|css|ico|png|jpg|jpeg|svg|woff2|woff|ttf|webp|gif)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";

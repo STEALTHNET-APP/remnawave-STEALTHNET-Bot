@@ -446,7 +446,7 @@ function AppRoutes() {
 
 function TitleAndThemeSync() {
   const location = useLocation();
-  const [config, setConfig] = useState<{ serviceName: string; favicon: string | null } | null>(null);
+  const [config, setConfig] = useState<{ serviceName: string; serviceDescription: string | null; favicon: string | null } | null>(null);
 
   // Подтягиваем конфиг при смене маршрута (в т.ч. после сохранения настроек), чтобы favicon обновился
   useEffect(() => {
@@ -455,18 +455,20 @@ function TitleAndThemeSync() {
       .then((cfg) => {
         setConfig({
           serviceName: cfg.serviceName ?? "",
+          serviceDescription: cfg.serviceDescription ?? null,
           favicon: (cfg as { favicon?: string | null }).favicon ?? null,
         });
         // Глобальная тема из настроек
       })
       .catch(() => {
-        setConfig({ serviceName: "", favicon: null });
+        setConfig({ serviceName: "", serviceDescription: null, favicon: null });
       });
   }, [location.pathname]);
 
   // Title и favicon
   useEffect(() => {
-    const base = config?.serviceName ?? "";
+    if (!config) return;
+    const base = config.serviceName ?? "";
     let suffix = "";
     if (location.pathname.startsWith("/admin")) suffix = " — Admin";
     else if (location.pathname.startsWith("/cabinet")) suffix = " — Кабинет";
@@ -481,7 +483,16 @@ function TitleAndThemeSync() {
     // Также подменяем <link rel="manifest"> на динамический эндпоинт
     // /api/public/manifest.webmanifest когда есть custom favicon — иначе
     // PWA install/Add-to-home-screen покажет дефолтную иконку сборки.
-    const favicon = config?.favicon ?? null;
+    if (config.serviceDescription) {
+      let meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+      if (!meta) {
+        meta = document.createElement("meta");
+        meta.name = "description";
+        document.head.appendChild(meta);
+      }
+      meta.content = config.serviceDescription;
+    }
+    const favicon = config.favicon ?? null;
     const existingCustom = document.querySelectorAll<HTMLLinkElement>('link[data-custom-favicon="1"]');
     const builtin = document.querySelectorAll<HTMLLinkElement>(
       'link[rel="icon"]:not([data-custom-favicon]), link[rel="apple-touch-icon"]:not([data-custom-favicon]), link[rel="shortcut icon"]:not([data-custom-favicon]), link[rel="mask-icon"]:not([data-custom-favicon])'

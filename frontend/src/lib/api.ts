@@ -3151,6 +3151,7 @@ export type UpdateSettingsPayload = {
   trialDeviceLimit?: number | null;
   trialTrafficLimitBytes?: number | null;
   serviceName?: string;
+  serviceDescription?: string | null;
   logo?: string | null;
   logoBot?: string | null;
   favicon?: string | null;
@@ -3638,6 +3639,7 @@ export interface AdminSettings {
   trialDeviceLimit?: number | null;
   trialTrafficLimitBytes?: number | null;
   serviceName: string;
+  serviceDescription?: string | null;
   logo?: string | null;
   logoBot?: string | null;
   favicon?: string | null;
@@ -5130,6 +5132,7 @@ export interface PublicConfig {
   defaultLanguage?: string;
   defaultCurrency?: string;
   serviceName: string;
+  serviceDescription?: string | null;
   logo?: string | null;
   favicon?: string | null;
   cabinetDesign?: "classic" | "stealth";
