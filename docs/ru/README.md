@@ -361,14 +361,15 @@ docker compose ps
 # Обновление до последнего коммита (до последней мастер ветки, не всегда стабильно)
 git pull origin main
 
+# Или аналогичное обновление до конкретной ветки (например, ветки LTS)
+git fetch --tags
+git checkout lts
+git pull origin lts
 
 # Обновление до конкретной версии (более стабильно, релиз версии)
 git fetch --tags
-git checkout v3.1.3
-
-# Или аналогичное обновление до конкретной ветки (например, ветки LTS)
-git fetch --tags
-git checkout origin lts
+git checkout v5.3.0
+git pull origin v5.3.0
 
 # Статус сервисов
 docker compose ps
