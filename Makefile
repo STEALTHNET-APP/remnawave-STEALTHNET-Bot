@@ -3,7 +3,7 @@
 
 DOCKER_COMPOSE := docker compose
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
-SCRIPT_VERSION := v1.0.0
+SCRIPT_VERSION := v1.0.1
 MENU_TARGETS := update rebuild watch docker frontend logs start stop restart ps status clean alias
 
 .DEFAULT_GOAL := menu
@@ -22,8 +22,8 @@ menu: ## 🧭 Interactive command menu
 		printf "\033[0m"; \
 		branch=$$(git branch --show-current 2>/dev/null); \
 		[ -n "$$branch" ] || branch=$$(git rev-parse --short HEAD 2>/dev/null || printf "unknown"); \
-		printf "\033[2m$(SCRIPT_VERSION)\033[0m  \033[36m[\033[0m\033[1;36m%s\033[0m\033[36m]\033[0m\n\n" "$$branch"; \
 		printf "\033[1mSelect command:\033[0m\n\n"; \
+		printf "  \033[2m$(SCRIPT_VERSION)\033[0m  \033[36m[\033[0m\033[1;36m%s\033[0m\033[36m]\033[0m\n\n" "$$branch"; \
 		i=1; \
 		for target in $$targets; do \
 			desc=$$(awk -v target="$$target" '\''BEGIN {FS=":.*##"} $$1 == target {gsub(/^[ \t]+/, "", $$2); print $$2; exit}'\'' $(MAKEFILE_LIST)); \
