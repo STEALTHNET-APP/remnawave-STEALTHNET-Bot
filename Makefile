@@ -20,7 +20,9 @@ menu: ## 🧭 Interactive command menu
 		printf " ███████║   ██║   ███████╗██║  ██║███████╗██║   ██║  ██║██║ ╚████║███████╗   ██║\n"; \
 		printf " ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝   ╚═╝\n"; \
 		printf "\033[0m"; \
-		printf "\033[2m$(SCRIPT_VERSION)\033[0m\n\n"; \
+		branch=$$(git branch --show-current 2>/dev/null); \
+		[ -n "$$branch" ] || branch=$$(git rev-parse --short HEAD 2>/dev/null || printf "unknown"); \
+		printf "\033[2m$(SCRIPT_VERSION)\033[0m  \033[36m[\033[0m\033[1;36m%s\033[0m\033[36m]\033[0m\n\n" "$$branch"; \
 		printf "\033[1mSelect command:\033[0m\n\n"; \
 		i=1; \
 		for target in $$targets; do \
