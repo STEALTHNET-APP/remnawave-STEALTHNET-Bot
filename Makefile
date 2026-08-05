@@ -3,7 +3,7 @@
 
 DOCKER_COMPOSE := docker compose
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
-SCRIPT_VERSION := 1.0.0
+SCRIPT_VERSION := v1.0.0
 MENU_TARGETS := update rebuild watch docker frontend logs start stop restart ps status clean alias
 
 .DEFAULT_GOAL := menu
@@ -20,7 +20,7 @@ menu: ## 🧭 Interactive command menu
 		printf " ███████║   ██║   ███████╗██║  ██║███████╗██║   ██║  ██║██║ ╚████║███████╗   ██║\n"; \
 		printf " ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝   ╚═╝\n"; \
 		printf "\033[0m"; \
-		printf "\033[2m%46s\033[0m\n\n" "v$(SCRIPT_VERSION)"; \
+		printf "\033[2m%46s\033[0m\n\n" "$(SCRIPT_VERSION)"; \
 		printf "\033[1mSelect command:\033[0m\n\n"; \
 		i=1; \
 		for target in $$targets; do \
