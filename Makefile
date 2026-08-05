@@ -3,7 +3,7 @@
 
 DOCKER_COMPOSE := docker compose
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
-SCRIPT_VERSION := v1.0.4
+SCRIPT_VERSION := v1.0.5
 PANEL_VERSION := $(shell awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' version.json 2>/dev/null)
 PANEL_VERSION_DISPLAY := $(if $(PANEL_VERSION),v$(PANEL_VERSION),unknown)
 MENU_TARGETS := update rebuild watch docker frontend logs start stop restart ps status clean alias
@@ -88,7 +88,25 @@ status: ## ❤️  All containers
 	$(DOCKER_COMPOSE) ps --all
 
 clean: ## 🧹 Remove unused Docker resources
-	docker system prune -f
+	@bash -c '\
+		timeout_seconds=30; \
+		printf "Removing unused Docker resources (timeout %ss)...\n" "$$timeout_seconds"; \
+		docker system prune -f & \
+		pid=$$!; \
+		stop_child() { kill "$$pid" 2>/dev/null || true; sleep 1; kill -9 "$$pid" 2>/dev/null || true; wait "$$pid" 2>/dev/null || true; }; \
+		trap "stop_child; exit 0" INT; \
+		elapsed=0; \
+		while kill -0 "$$pid" 2>/dev/null; do \
+			if [ "$$elapsed" -ge "$$timeout_seconds" ]; then \
+				stop_child; \
+				printf "Docker prune timed out after %ss\n" "$$timeout_seconds"; \
+				exit 1; \
+			fi; \
+			sleep 1; \
+			elapsed=$$((elapsed + 1)); \
+		done; \
+		wait "$$pid"; \
+	'
 
 update: ## 🌿 Pull current branch or replace it with origin/current
 	@bash -c '\
