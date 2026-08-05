@@ -53,11 +53,11 @@ rebuild: docker frontend ## 🔄 Rebuild containers and frontend
 watch: rebuild ## 👀 Rebuild project and follow logs
 	@bash -c 'trap "" INT; $(MAKE) --no-print-directory logs; code=$$?; trap - INT; [ "$$code" -eq 130 ] && exit 0; exit "$$code"'
 
-docker: ##  🐳 Rebuild Docker containers only
+docker: ## 🐳 Rebuild Docker containers only
 	$(DOCKER_COMPOSE) down
 	$(DOCKER_COMPOSE) up -d --build
 
-frontend: ## ⚛️ Rebuild frontend only
+frontend:  ## ⚛️ Rebuild frontend only
 	bash $(FRONT_SCRIPT)
 
 logs: ## 📜 Follow Docker logs only
@@ -67,10 +67,10 @@ logs: ## 📜 Follow Docker logs only
 ## Docker
 ##
 
-start: ##  ▶️ Start containers
+start:  ## ▶️ Start containers
 	$(DOCKER_COMPOSE) up -d
 
-stop: ##  ⏹️ Stop containers
+stop:  ## ⏹️ Stop containers
 	$(DOCKER_COMPOSE) down
 
 restart: ## 🔁 Quick restart containers
@@ -79,7 +79,7 @@ restart: ## 🔁 Quick restart containers
 ps: ## 📦 Running containers
 	$(DOCKER_COMPOSE) ps
 
-status: ##  ❤️ All containers
+status:  ## ❤️ All containers
 	$(DOCKER_COMPOSE) ps --all
 
 clean: ## 🧹 Remove unused Docker resources
