@@ -57,7 +57,7 @@ docker: ## 🐳 Rebuild Docker containers only
 	$(DOCKER_COMPOSE) down
 	$(DOCKER_COMPOSE) up -d --build
 
-frontend:  ## ⚛️ Rebuild frontend only
+frontend: ## ⚛️  Rebuild frontend only
 	bash $(FRONT_SCRIPT)
 
 logs: ## 📜 Follow Docker logs only
