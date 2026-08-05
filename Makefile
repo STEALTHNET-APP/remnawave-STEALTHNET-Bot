@@ -1,9 +1,9 @@
-.PHONY: menu watch rebuild docker frontend logs start stop restart \
-        ps status clean reset-dev alias
+.PHONY: menu reset-branch watch rebuild docker frontend logs start stop restart \
+        ps status clean alias
 
 DOCKER_COMPOSE := docker compose
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
-MENU_TARGETS := rebuild watch docker frontend logs start stop restart ps status clean reset-dev alias
+MENU_TARGETS := reset-branch rebuild watch docker frontend logs start stop restart ps status clean alias
 
 .DEFAULT_GOAL := menu
 
@@ -85,18 +85,19 @@ status: ## ❤️  All containers
 clean: ## 🧹 Remove unused Docker resources
 	docker system prune -f
 
-reset-dev: ## 🌿 Replace local dev with origin/dev
+reset-branch: ## 🌿 Replace current branch with origin/current
 	@bash -c '\
-		printf "Delete local dev and switch to origin/dev? [y/N] "; \
+		branch="$$(git branch --show-current)"; \
+		[ -n "$$branch" ] || { printf "Not on a branch\n"; exit 1; }; \
+		printf "Delete local %s and switch to origin/%s? [y/N] " "$$branch" "$$branch"; \
 		read -r answer; \
 		case "$$answer" in y|Y|yes|YES) ;; *) printf "Skipped\n"; exit 0 ;; esac; \
 		git diff --quiet && git diff --cached --quiet || { printf "Working tree has uncommitted changes\n"; exit 1; }; \
-		git fetch origin dev; \
-		if git show-ref --verify --quiet refs/heads/dev; then \
-			[ "$$(git branch --show-current)" = dev ] && git switch --detach; \
-			git branch -D dev; \
-		fi; \
-		git switch --track -c dev origin/dev; \
+		git fetch origin "$$branch"; \
+		git show-ref --verify --quiet "refs/remotes/origin/$$branch" || { printf "origin/%s not found\n" "$$branch"; exit 1; }; \
+		git switch --detach; \
+		git branch -D "$$branch"; \
+		git switch --track -c "$$branch" "origin/$$branch"; \
 	'
 
 alias: ## ⚡ Add/remove 'st' command for 'make'
