@@ -3,7 +3,9 @@
 
 DOCKER_COMPOSE := docker compose
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
-SCRIPT_VERSION := v1.0.3
+SCRIPT_VERSION := v1.0.4
+PANEL_VERSION := $(shell awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' version.json 2>/dev/null)
+PANEL_VERSION_DISPLAY := $(if $(PANEL_VERSION),v$(PANEL_VERSION),unknown)
 MENU_TARGETS := update rebuild watch docker frontend logs start stop restart ps status clean alias
 
 .DEFAULT_GOAL := menu
@@ -22,7 +24,7 @@ menu: ## 🧭 Interactive command menu
 		printf "\033[0m\n"; \
 		branch=$$(git branch --show-current 2>/dev/null); \
 		[ -n "$$branch" ] || branch=$$(git rev-parse --short HEAD 2>/dev/null || printf "unknown"); \
-		printf "\033[1mSelect command:\033[0m    \033[2m$(SCRIPT_VERSION)\033[0m  \033[36m[\033[0m\033[1;36m%s\033[0m\033[36m]\033[0m\n\n" "$$branch"; \
+		printf "\033[1mSelect command:\033[0m    \033[2mScript $(SCRIPT_VERSION) • STEALTHNET $(PANEL_VERSION_DISPLAY)\033[0m \033[36m[\033[0m\033[1;36m%s\033[0m\033[36m]\033[0m\n\n" "$$branch"; \
 		i=1; \
 		for target in $$targets; do \
 			desc=$$(awk -v target="$$target" '\''BEGIN {FS=":.*##"} $$1 == target {gsub(/^[ \t]+/, "", $$2); print $$2; exit}'\'' $(MAKEFILE_LIST)); \
