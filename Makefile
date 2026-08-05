@@ -20,7 +20,7 @@ menu: ## 🧭 Interactive command menu
 		printf " ███████║   ██║   ███████╗██║  ██║███████╗██║   ██║  ██║██║ ╚████║███████╗   ██║\n"; \
 		printf " ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝   ╚═╝\n"; \
 		printf "\033[0m"; \
-		printf "\033[2mVersion: $(SCRIPT_VERSION)\033[0m\n\n"; \
+		printf "\033[2m%46s\033[0m\n\n" "v$(SCRIPT_VERSION)"; \
 		printf "\033[1mSelect command:\033[0m\n\n"; \
 		i=1; \
 		for target in $$targets; do \
