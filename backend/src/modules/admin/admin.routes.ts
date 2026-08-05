@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express, { Router } from "express";
 import multer from "multer";
+import { APP_VERSION } from "../../config/app-version.js";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma, createPayment } from "../../db.js";
@@ -2708,7 +2709,7 @@ adminRouter.get("/settings", asyncRoute(async (_req, res) => {
 
 /** Версия панели — для мониторинга. Под auth, чтобы не светить наружу. */
 adminRouter.get("/version", asyncRoute(async (_req, res) => {
-  return res.json({ version: "5.2.0" });
+  return res.json({ version: APP_VERSION });
 }));
 
 /**
