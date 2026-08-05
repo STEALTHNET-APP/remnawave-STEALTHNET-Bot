@@ -67,10 +67,10 @@ logs: ## 📜 Follow Docker logs only
 ## Docker
 ##
 
-start:  ## ▶️ Start containers
+start: ## ▶️  Start containers
 	$(DOCKER_COMPOSE) up -d
 
-stop:  ## ⏹️ Stop containers
+stop: ## ⏹️  Stop containers
 	$(DOCKER_COMPOSE) down
 
 restart: ## 🔁 Quick restart containers
@@ -79,7 +79,7 @@ restart: ## 🔁 Quick restart containers
 ps: ## 📦 Running containers
 	$(DOCKER_COMPOSE) ps
 
-status:  ## ❤️ All containers
+status: ## ❤️  All containers
 	$(DOCKER_COMPOSE) ps --all
 
 clean: ## 🧹 Remove unused Docker resources
