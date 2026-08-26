@@ -1,0 +1,106 @@
+name: git-cliff
+
+on:
+  push:
+    branches:
+      - main
+      - lts
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  update_release_draft:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch the full commit and tag history.
+
+      - name: Generate Changelog with git-cliff
+        id: git-cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: .github/cliff.toml
+          args: --unreleased --bump
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Normalize the generated version into a tag name.
+      - name: Prepare Tag Name
+        id: tag
+        run: |
+          RAW_VER="${{ steps.git-cliff.outputs.version }}"
+          if [[ "$RAW_VER" == v* ]]; then
+            echo "version=$RAW_VER" >> $GITHUB_OUTPUT
+          else
+            echo "version=v$RAW_VER" >> $GITHUB_OUTPUT
+          fi
+
+      # Update the existing draft release or create a single new draft via GitHub CLI.
+      - name: Create or Update Single Draft Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ steps.tag.outputs.version }}
+          CHANGELOG_TEXT: ${{ steps.git-cliff.outputs.content }}
+        run: |
+          # Save the generated changelog to a temporary notes file.
+          echo "$CHANGELOG_TEXT" > notes.md
+
+          # Convert direct commit links to PR references when GitHub can map the commit to a PR.
+          # Also remove standalone merge commits so the release notes do not duplicate PR entries.
+          python3 <<'PY'
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          notes = Path("notes.md")
+          text = notes.read_text()
+          cache = {}
+
+          def pr_number(sha):
+              # Cache GitHub API lookups because the same commit may appear more than once.
+              if sha not in cache:
+                  result = subprocess.run(
+                      ["gh", "api", f"repos/{repo}/commits/{sha}/pulls", "--jq", ".[0].number // empty"],
+                      text=True,
+                      capture_output=True,
+                      check=False,
+                  )
+                  cache[sha] = result.stdout.strip() if result.returncode == 0 else ""
+              return cache[sha]
+
+          def replace_commit_link(match):
+              # Replace a commit link with (#PR) only when GitHub returns an associated PR.
+              number = pr_number(match.group("sha"))
+              return f"(#{number})" if number else match.group(0)
+
+          # Replace git-cliff commit links with PR references for commits associated with PRs.
+          text = re.sub(
+              r"\(\[`(?P<short>[0-9a-f]{7})`\]\(https://github\.com/[^/]+/[^/]+/commit/(?P<sha>[0-9a-f]{40})\)\)",
+              replace_commit_link,
+              text,
+          )
+
+          # Remove empty changelog sections left after filtering merge commits.
+          text = re.sub(r"(?ms)^## [^\n]+\n(?:\s*\n)*(?=(?:## |---|\Z))", "", text)
+
+          notes.write_text(text + "\n")
+          PY
+
+          # Find the tag name of the currently open draft release.
+          DRAFT_TAG=$(gh api repos/${{ github.repository }}/releases --jq '.[] | select(.draft == true) | .tag_name' | head -n 1)
+
+          if [ -n "$DRAFT_TAG" ]; then
+            echo "Updating existing draft ($DRAFT_TAG) -> rewriting/renaming to $NEW_TAG..."
+            gh release edit "$DRAFT_TAG" --tag "$NEW_TAG" --title "$NEW_TAG" --notes-file notes.md
+          else
+            echo "No draft releases found. Creating a new draft for version $NEW_TAG..."
+            gh release create "$NEW_TAG" --draft --title "$NEW_TAG" --notes-file notes.md
+          fi
