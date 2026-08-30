@@ -1,0 +1,79 @@
+[changelog]
+header = ""
+
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+## {{ group }}
+{% for commit in commits %}
+{% if commit.remote.pr_number %}\
+- {{ commit.message | split(pat="\n") | first | trim | upper_first }} (#{{ commit.remote.pr_number }}) {% if commit.remote.username %}@{{ commit.remote.username }}{% elif commit.author.name %}@{{ commit.author.name }}{% endif %}
+{% else %}\
+- {{ commit.message | split(pat="\n") | first | trim | upper_first }} ([`{{ commit.id | truncate(length=7, end="") }}`](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }})) {% if commit.remote.username %}@{{ commit.remote.username }}{% elif commit.author.name %}@{{ commit.author.name }}{% endif %}
+{% endif %}\
+{% endfor %}
+{% endfor %}
+{% if github %}
+{% if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 %}
+## ❤️ New Contributors
+{% for contributor in github.contributors | filter(attribute="is_first_time", value=true) %}
+- @{{ contributor.username }} made their first contribution{% if contributor.pr_number %} in #{{ contributor.pr_number }}{% endif %}
+{% endfor %}
+{% endif %}
+{% endif %}
+{% if previous.version and version %}
+---
+
+**Full Changelog**: [`{{ previous.version }}...{{ version }}`](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/compare/{{ previous.version }}...{{ version }})
+{% endif %}
+"""
+footer = ""
+trim = true
+
+[bump]
+initial_tag = "v0.1.0"
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+split_commits = false
+
+commit_parsers = [
+  # Skip release automation and merge-only commit titles.
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "(?i).*skip release.*", skip = true },
+  { message = "^Merge pull request #", skip = true },
+  { message = "^Merge branch ", skip = true },
+
+  { body = ".*BREAKING CHANGE.*", group = "💥 Breaking Changes" },
+  { message = "^.*!: ", group = "💥 Breaking Changes" },
+
+  { message = "^feat", group = "⭐ Features" },
+
+  { message = "^fix", group = "🐞 Bug Fixes" },
+
+  # 🛠 Improvements
+  { message = "^perf", group = "🛠 Improvements" },
+  { message = "^refactor", group = "🛠 Improvements" },
+  { message = "^style", group = "🛠 Improvements" },
+  { message = "^chore", group = "🛠 Improvements" },
+
+  { message = "^docs", group = "📖 Documentation" },
+
+  { message = "^i18n", group = "🌍 Localization" },
+  { message = "^loc", group = "🌍 Localization" },
+
+  { message = "^deps", group = "🌀 External Changes" },
+  { message = "^build\\(deps\\)", group = "🌀 External Changes" },
+  { message = "^chore\\(deps\\)", group = "🌀 External Changes" },
+  { message = "^plugin", group = "🌀 External Changes" },
+
+  # Put all other commits and PRs into the improvements group.
+  { message = ".*", group = "🛠 Improvements" },
+]
+
+protect_breaking_commits = false
+filter_commits = false
+tag_pattern = "v?[0-9].*"
+skip_tags = ""
+ignore_tags = ""
+sort_commits = "oldest"
