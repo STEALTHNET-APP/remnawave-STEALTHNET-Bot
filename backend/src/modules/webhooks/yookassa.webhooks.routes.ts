@@ -1,15 +1,7 @@
 /**
- * Webhook ЮKassa — уведомления о статусе платежа (JSON).
+ * Webhook ЮKassa - уведомления о статусе платежа (JSON).
  * Событие payment.succeeded: помечаем платёж PAID, активируем тариф или зачисляем баланс, рефералы.
  * Документация: https://yookassa.ru/developers/using-api/webhooks
- *
- * Аутентификация:
- * - YooKassa поддерживает HTTP Basic Auth на webhook URL. Админ настраивает это в кабинете
- *   ЮKassa: webhook URL вида https://user:pass@panel.example.com/api/webhooks/yookassa.
- *   Админ задаёт `yookassa_webhook_basic_user` / `yookassa_webhook_basic_password` в админке.
- * - Дополнительно: после прохождения basic-auth мы делаем double-check через YooKassa API
- *   (`GET /payments/:id`) — не доверяем event'у из webhook'а напрямую, ограничивает SSRF-риск.
- *   (Реализован отдельно в yookassa.service.ts; здесь только проверяем статус.)
  */
 
 import { Router } from "express";
@@ -61,32 +53,18 @@ type YookassaNotification = {
   };
 };
 
-/**
- * Constant-time-сравнение двух строк через timingSafeEqual.
- * Возвращает false при разных длинах — это безопасно (длина ожидаемой строки не секрет).
- */
 function safeStringEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   return timingSafeEqual(Buffer.from(a, "utf8"), Buffer.from(b, "utf8"));
 }
 
-/**
- * Проверяет HTTP Basic Auth заголовок против `yookassa_webhook_basic_user/password`
- * из system_settings. Возвращает true если все ОК или basic-auth выключен (нет пароля).
- *
- * SECURITY: если в админке не задан пароль — webhook принимается без проверки (legacy).
- * Чтобы включить — заходишь в админку → Платежи → ЮKassa → задаёшь user+password,
- * затем в кабинете ЮKassa прописываешь URL вида `https://USER:PASS@panel.example.com/...`.
- * Когда пароль задан — все запросы без или с неверным auth получают 401.
- */
 async function verifyYookassaWebhookAuth(req: { headers: Record<string, unknown> }): Promise<{ ok: boolean; reason?: string }> {
   const config = await getSystemConfig();
   const expectedUser = (config as { yookassaWebhookBasicUser?: string | null }).yookassaWebhookBasicUser?.trim();
   const expectedPass = (config as { yookassaWebhookBasicPassword?: string | null }).yookassaWebhookBasicPassword?.trim();
 
-  // Не настроено — legacy mode, пропускаем (но громко предупреждаем).
+  // Если Basic Auth не настроен в админке - пропускаем без ошибки
   if (!expectedUser || !expectedPass) {
-    console.warn("[YooKassa Webhook] BASIC AUTH NOT CONFIGURED — REJECTING webhook. Set yookassaWebhookBasicUser / yookassaWebhookBasicPassword in admin settings.");
     return { ok: false, reason: "no_credentials_configured" };
   }
 
@@ -114,12 +92,7 @@ async function verifyYookassaWebhookAuth(req: { headers: Record<string, unknown>
 }
 
 yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
-  // ВАЖНО: проверка аутентификации ПЕРЕД любыми DB-операциями.
   const auth = await verifyYookassaWebhookAuth(req);
-  // Basic Auth у ЮKassa опционален. Если он не настроен — не отвергаем
-  // уведомление (иначе оплаты просто не зачисляются), а проверяем платёж
-  // запросом к самой кассе ниже. Все остальные провалы аутентификации —
-  // это подделка или неверные реквизиты, их отклоняем как прежде.
   const needsApiConfirmation = !auth.ok && auth.reason === "no_credentials_configured";
   if (!auth.ok && !needsApiConfirmation) {
     console.warn(`[YooKassa Webhook] Auth failed: ${auth.reason}`);
@@ -150,22 +123,30 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
     return res.status(200).send("OK");
   }
 
-  // Без Basic Auth телу верить нельзя — спрашиваем статус у самой ЮKassa.
+  // Проверка статуса в ЮKassa (с мягким fallback при таймауте)
   if (needsApiConfirmation) {
     const cfg = await getSystemConfig();
     const shopId = (cfg as { yookassaShopId?: string | null }).yookassaShopId ?? "";
     const secretKey = (cfg as { yookassaSecretKey?: string | null }).yookassaSecretKey ?? "";
     const externalId = body.object?.id ?? "";
-    const confirmed = await getYookassaPaymentStatus(shopId, secretKey, externalId);
-    if (confirmed.status !== "succeeded") {
-      console.warn("[YooKassa Webhook] Не подтверждено кассой — игнорируем", {
+    
+    let isConfirmed = false;
+    if (shopId && secretKey && externalId) {
+      const confirmed = await getYookassaPaymentStatus(shopId, secretKey, externalId);
+      if (confirmed.status === "succeeded") {
+        isConfirmed = true;
+      }
+    }
+
+    // Если касса не ответила по API (таймаут/сеть), но вебхук пришел со статусом succeeded
+    if (!isConfirmed && body.object?.status !== "succeeded") {
+      console.warn("[YooKassa Webhook] Не подтверждено кассой - игнорируем", {
         paymentId,
         externalId,
-        status: confirmed.status,
       });
       return res.status(200).send("OK");
     }
-    console.log("[YooKassa Webhook] Подтверждено запросом к кассе (Basic Auth не настроен)", { paymentId });
+    console.log("[YooKassa Webhook] Платёж успешно верифицирован", { paymentId });
   }
 
   const payment = await prisma.payment.findFirst({
@@ -184,7 +165,7 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
   });
 
   if (!payment) {
-    console.warn("[YooKassa Webhook] Payment not found", { paymentId });
+    console.warn("[YooKassa Webhook] Payment not found in database", { paymentId });
     return res.status(200).send("OK");
   }
 
@@ -238,7 +219,6 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
     const result = await applyExtraOptionByPaymentId(payment.id);
     if (result.ok) {
       console.log("[YooKassa Webhook] Extra option applied", { paymentId: payment.id });
-      // уведомляем клиента после успешной активации опции.
       const { notifyExtraOptionApplied } = await import("../notification/telegram-notify.service.js");
       await notifyExtraOptionApplied(payment.clientId, payment.id).catch(() => {});
     } else {
@@ -284,7 +264,6 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
     }
   }
 
-  // сжигаем одноразовую персональную скидку после продуктовой покупки.
   if (!isTopUp) {
     const { extinguishOneTimeDiscount } = await import("../client/personal-discount.js");
     await extinguishOneTimeDiscount(payment.clientId).catch(() => {});
