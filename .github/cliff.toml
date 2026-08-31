@@ -2,30 +2,39 @@
 header = ""
 
 body = """
-{% for group, commits in commits | group_by(attribute="group") %}
+{%- for group, commits in commits | group_by(attribute="group") -%}
 ## {{ group }}
-{% for commit in commits %}
-{% if commit.remote.pr_number %}\
-- {{ commit.message | split(pat="\n") | first | trim | upper_first }} (#{{ commit.remote.pr_number }}) {% if commit.remote.username %}@{{ commit.remote.username }}{% elif commit.author.name %}@{{ commit.author.name }}{% endif %}
-{% else %}\
-- {{ commit.message | split(pat="\n") | first | trim | upper_first }} ([`{{ commit.id | truncate(length=7, end="") }}`](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }})) {% if commit.remote.username %}@{{ commit.remote.username }}{% elif commit.author.name %}@{{ commit.author.name }}{% endif %}
-{% endif %}\
-{% endfor %}
-{% endfor %}
-{% if github %}
-{% if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 %}
+
+{% for commit in commits -%}
+{% if commit.remote.pr_number -%}
+- {{ commit.message | split(pat="\n") | first | trim | upper_first }} (#{{ commit.remote.pr_number }}) {% if commit.remote.username %}@{{ commit.remote.username }}{% endif %}
+
+
+{% else -%}
+- {{ commit.message | split(pat="\n") | first | trim | upper_first }} ([`{{ commit.id | truncate(length=7, end="") }}`](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }})) {% if commit.remote.username %}@{{ commit.remote.username }}{% endif %}
+
+
+{% endif -%}
+{% endfor -%}
+{% endfor -%}
+{% if github -%}
+{% if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 -%}
 ## ❤️ New Contributors
-{% for contributor in github.contributors | filter(attribute="is_first_time", value=true) %}
+
+{% for contributor in github.contributors | filter(attribute="is_first_time", value=true) -%}
 - @{{ contributor.username }} made their first contribution{% if contributor.pr_number %} in #{{ contributor.pr_number }}{% endif %}
-{% endfor %}
-{% endif %}
-{% endif %}
-{% if previous.version and version %}
+
+{% endfor -%}
+{% endif -%}
+{% endif -%}
+{% if previous.version and version -%}
+
 ---
 
 **Full Changelog**: [`{{ previous.version }}...{{ version }}`](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/compare/{{ previous.version }}...{{ version }})
-{% endif %}
+{% endif -%}
 """
+
 footer = ""
 trim = true
 
