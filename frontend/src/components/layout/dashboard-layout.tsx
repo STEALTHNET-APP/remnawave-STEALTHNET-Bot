@@ -11,6 +11,7 @@ import {
   RefreshCw, Layers, FileCode2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useRemnaCapabilities } from "@/lib/use-remna-capabilities";
 import { useAdminLanguageSync } from "@/i18n/use-language-sync";
 import { WhatsNew510 } from "@/components/admin/whats-new-510";
 import { useAuth } from "@/contexts/auth";
@@ -122,9 +123,13 @@ function NavItems({ onClick }: { onClick?: () => void }) {
   const location = useLocation();
   const admin = useAuth().state.admin;
   const allNav = useNavSections();
-  const nav = admin
+  // Гео-карта живёт на /api/ip-control, а этот раздел вырезан в Remnawave 3.x —
+  // на таких панелях пункт меню только вводит в заблуждение.
+  const caps = useRemnaCapabilities();
+  const navBySection = admin
     ? allNav.filter((item) => canAccessSection(admin.role, admin.allowedSections, item.section, item.requiredAction))
     : allNav;
+  const nav = caps.ipControl ? navBySection : navBySection.filter((item) => item.to !== "/admin/geo-map");
 
   const groupedNav = nav.reduce((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];

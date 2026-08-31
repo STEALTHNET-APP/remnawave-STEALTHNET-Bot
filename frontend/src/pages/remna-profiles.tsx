@@ -354,9 +354,9 @@ export function RemnaProfilesPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <code className="font-mono text-[10px] text-muted-foreground/70">{p.uuid.slice(0, 8)}…</code>
+                      <code className="font-mono text-[10px] text-muted-foreground/70">{String(p.uuid ?? "").slice(0, 8)}…</code>
                       {(p.inbounds ?? []).map((ib) => (
-                        <code key={ib.uuid} className="font-mono text-[11px] bg-foreground/[0.04] dark:bg-white/[0.03] border border-border px-1.5 py-0.5 rounded text-muted-foreground">{ib.tag ?? ib.uuid.slice(0, 8)}{ib.port ? ` :${ib.port}` : ""}</code>
+                        <code key={ib.uuid} className="font-mono text-[11px] bg-foreground/[0.04] dark:bg-white/[0.03] border border-border px-1.5 py-0.5 rounded text-muted-foreground">{ib.tag ?? String(ib.uuid ?? "").slice(0, 8)}{ib.port ? ` :${ib.port}` : ""}</code>
                       ))}
                     </div>
                   </div>

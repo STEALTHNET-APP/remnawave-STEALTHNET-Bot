@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/auth";
+import { useRemnaCapabilities } from "@/lib/use-remna-capabilities";
 import { api, type AdminSettings, type AutoRenewStats, type SyncResult, type SyncToRemnaResult, type SyncCreateRemnaForMissingResult, type SubscriptionPageConfig, type SshConfig } from "@/lib/api";
 import { SubscriptionPageEditor } from "@/components/subscription-page-editor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -423,6 +424,8 @@ export function SettingsPage() {
   const [landingDevicesList, setLandingDevicesList] = useState<string[]>(defaultDevicesList);
   const [landingQuickStartList, setLandingQuickStartList] = useState<string[]>(defaultQuickStartList);
   const token = state.accessToken!;
+  // На Remnawave 3.x ручки happ-шифрования нет — тумблер обещал бы несбыточное.
+  const remnaCaps = useRemnaCapabilities();
 
   useEffect(() => {
     let cancelled = false;
@@ -3867,7 +3870,8 @@ export function SettingsPage() {
                   <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={settings.happCryptEnabled === true}
+                      checked={settings.happCryptEnabled === true && remnaCaps.happCrypt}
+                      disabled={!remnaCaps.happCrypt}
                       onChange={(e) => setSettings((s) => (s ? { ...s, happCryptEnabled: e.target.checked } : s))}
                       className="rounded border w-4 h-4"
                     />

@@ -3,6 +3,7 @@
  */
 
 import { readFile } from "node:fs/promises";
+import { getRemnaCapabilities } from "../remna/remna-capabilities.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express, { Router } from "express";
@@ -391,6 +392,14 @@ adminRouter.post("/remna/hosts/bulk/:action", async (req, res) => {
 });
 adminRouter.get("/remna/torrent/reports", async (req, res) => remnaPass(await remnaGetTorrentReports({ start: Number(req.query.start) || 0, size: Number(req.query.size) || 50 }), res));
 adminRouter.get("/remna/torrent/stats", async (_req, res) => remnaPass(await remnaGetTorrentStats(), res));
+/**
+ * Что умеет подключённая Remnawave. Фронт по этому ответу прячет блоки,
+ * которых в 3.x больше нет (гео-карта на /api/ip-control, ссылки happ://).
+ */
+adminRouter.get("/remna/capabilities", async (_req, res) => {
+  res.json(await getRemnaCapabilities());
+});
+
 adminRouter.post("/remna/drop-connections", async (req, res) => remnaPass(await remnaDropConnections(req.body?.dropBy), res));
 
 adminRouter.get("/remna/nodes-metrics", async (_req, res) => {

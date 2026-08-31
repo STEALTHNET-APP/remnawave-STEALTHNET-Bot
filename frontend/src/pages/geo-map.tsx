@@ -11,6 +11,7 @@ import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
 import type { GeoMapResponse, GeoMapNode } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useRemnaCapabilities } from "@/lib/use-remna-capabilities";
 
 const TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>';
@@ -113,6 +114,7 @@ function FitBounds({ nodes }: { nodes: GeoMapNode[] }) {
 
 export function GeoMapPage() {
   const { state } = useAuth();
+  const caps = useRemnaCapabilities();
   const token = state.accessToken ?? "";
   const [data, setData] = useState<GeoMapResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -192,6 +194,28 @@ export function GeoMapPage() {
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <p className="text-muted-foreground text-sm">Загружаем карту…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // На Remnawave 3.x раздела /api/ip-control нет — карте неоткуда брать данные.
+  if (!caps.ipControl) {
+    return (
+      <div className="flex flex-col gap-3.5 relative">
+        <div className="flex items-start gap-3">
+          <div>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Карта нод</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Живая география нод и подключений клиентов.</p>
+          </div>
+        </div>
+        <div className="bg-card border border-border rounded-2xl py-16 flex flex-col items-center justify-center text-center px-6">
+          <h3 className="text-[13.5px] font-bold tracking-tight">Недоступно на Remnawave 3.x</h3>
+          <p className="text-sm text-muted-foreground mt-1 max-w-md">
+            Карта строится по IP-адресам подключений, а раздел API, который их отдавал
+            (<code className="text-xs">/api/ip-control</code>), в Remnawave 3.x удалён.
+            Как только появится замена — вернём раздел.
+          </p>
         </div>
       </div>
     );

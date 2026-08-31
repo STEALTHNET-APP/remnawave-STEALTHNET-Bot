@@ -391,7 +391,7 @@ export function RemnaHostsPage() {
               >
                 <option value="">Выберите инбаунд</option>
                 {(selectedProfile?.inbounds ?? []).map((ib) => (
-                  <option key={ib.uuid} value={ib.uuid}>{ib.tag ?? ib.uuid.slice(0, 8)}{ib.type ? ` · ${ib.type}` : ""}{ib.port ? ` · :${ib.port}` : ""}</option>
+                  <option key={ib.uuid} value={ib.uuid}>{ib.tag ?? String(ib.uuid ?? "").slice(0, 8)}{ib.type ? ` · ${ib.type}` : ""}{ib.port ? ` · :${ib.port}` : ""}</option>
                 ))}
               </select>
             </div>
