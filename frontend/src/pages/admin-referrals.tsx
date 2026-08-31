@@ -1,8 +1,8 @@
 /**
- * Admin → Рефералка (редизайн 30.05.2026)
+ * Admin  Рефералка (редизайн 30.05.2026)
  *
  * При открытии — обзор: hero-статистика сети + топ-рефереры (медали).
- * Поиск клиента (живой автокомплит) → детальная карточка:
+ * Поиск клиента (живой автокомплит)  детальная карточка:
  *  - Реферер (изменить / отвязать)
  *  - Заработок: суммарно + L1/L2/L3
  *  - Приглашённые + история начислений
@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import {
   Users, Search, RefreshCw, UserPlus, UserMinus, Link2, Copy,
   TrendingUp, Award, ChevronRight, Loader2, Crown, Medal, Wallet,
-  Network, ArrowLeft, Gift, Hash,
+  ArrowLeft, Gift, Hash,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtMskShort } from "@/lib/datetime";
@@ -43,9 +43,9 @@ type NetworkStats = {
 
 const LEVEL_LABELS: Record<number, string> = { 1: "L1 · прямые", 2: "L2", 3: "L3" };
 const LEVEL_RING: Record<number, string> = {
-  1: "from-emerald-500/15 to-emerald-500/5 border-emerald-500/25 text-emerald-300",
-  2: "from-sky-500/15 to-sky-500/5 border-sky-500/25 text-sky-300",
-  3: "from-violet-500/15 to-violet-500/5 border-violet-500/25 text-violet-300",
+  1: "bg-muted border-emerald-500/25 text-emerald-300",
+  2: "bg-muted border-sky-500/25 text-sky-300",
+  3: "bg-muted border-violet-500/25 text-violet-300",
 };
 
 function fmtRub(v: number): string {
@@ -65,9 +65,9 @@ function ClientChip({ c }: { c: { telegramId: string | null; telegramUsername: s
 // Медаль топ-3
 const MEDAL = ["text-amber-300", "text-zinc-300", "text-orange-400"];
 const MEDAL_BG = [
-  "from-amber-500/20 to-amber-600/5 border-amber-500/30",
-  "from-zinc-400/15 to-zinc-500/5 border-zinc-400/25",
-  "from-orange-500/15 to-orange-600/5 border-orange-500/25",
+  "bg-muted border-amber-500/30",
+  "bg-muted border-zinc-400/25",
+  "bg-muted border-orange-500/25",
 ];
 
 export function AdminReferralsPage() {
@@ -168,13 +168,10 @@ export function AdminReferralsPage() {
       <div className="pointer-events-none fixed -z-10 right-0 top-1/3 h-72 w-72 rounded-full bg-teal-500/8 blur-[120px]" />
 
       {/* Header */}
-      <div className="flex flex-col gap-4 rounded-[2rem] border border-white/10 bg-gradient-to-br from-emerald-500/10 via-background/40 to-background/40 p-6 backdrop-blur-2xl shadow-2xl sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/30">
-            <Network className="h-7 w-7 text-white" />
-          </div>
+      <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-emerald-200 to-teal-300 bg-clip-text text-transparent">Реферальная программа</h1>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Реферальная программа</h1>
             <p className="mt-1 text-sm text-muted-foreground">Топ-рефереры, поиск, привязка реферера и заработок по уровням</p>
           </div>
         </div>
@@ -187,36 +184,36 @@ export function AdminReferralsPage() {
       {stats && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
-            { icon: Users, label: "Всего клиентов", value: stats.totalUsers.toLocaleString("ru-RU"), grad: "from-sky-500/20 to-sky-600/5 border-sky-500/25", ic: "text-sky-300" },
-            { icon: Award, label: "Активных рефереров", value: stats.totalReferrers.toLocaleString("ru-RU"), grad: "from-emerald-500/20 to-emerald-600/5 border-emerald-500/25", ic: "text-emerald-300" },
-            { icon: Wallet, label: "Реф. выплаты", value: fmtRub(stats.totalReferralIncome), grad: "from-amber-500/20 to-amber-600/5 border-amber-500/25", ic: "text-amber-300" },
-            { icon: TrendingUp, label: "Доход с подписок", value: fmtRub(stats.totalSubscriptionIncome), grad: "from-violet-500/20 to-violet-600/5 border-violet-500/25", ic: "text-violet-300" },
+            { icon: Users, label: "Всего клиентов", value: stats.totalUsers.toLocaleString("ru-RU"), grad: "bg-muted border-sky-500/25", ic: "text-sky-300" },
+            { icon: Award, label: "Активных рефереров", value: stats.totalReferrers.toLocaleString("ru-RU"), grad: "bg-muted border-emerald-500/25", ic: "text-emerald-300" },
+            { icon: Wallet, label: "Реф. выплаты", value: fmtRub(stats.totalReferralIncome), grad: "bg-muted border-amber-500/25", ic: "text-amber-300" },
+            { icon: TrendingUp, label: "Доход с подписок", value: fmtRub(stats.totalSubscriptionIncome), grad: "bg-muted border-violet-500/25", ic: "text-violet-300" },
           ].map((s, i) => (
-            <div key={i} className={cn("rounded-2xl border bg-gradient-to-br p-4 backdrop-blur-xl", s.grad)}>
+            <div key={i} className={cn("rounded-xl border  p-4", s.grad)}>
               <div className="flex items-center gap-2">
                 <s.icon className={cn("h-4 w-4", s.ic)} />
                 <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{s.label}</span>
               </div>
-              <div className="mt-2 text-2xl font-bold tracking-tight text-foreground">{s.value}</div>
+              <div className="mt-2 text-[13.5px] font-bold tracking-tight text-foreground">{s.value}</div>
             </div>
           ))}
         </div>
       )}
 
       {/* Поиск */}
-      <div className="rounded-2xl border border-white/10 bg-background/40 p-4 backdrop-blur-xl">
+      <div className="rounded-xl border border-border bg-card p-4">
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400/70" />
           <Input
             placeholder="Поиск: @username, Telegram ID, email, реф. код или ID клиента…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="h-12 rounded-xl border-white/10 bg-background/60 pl-11 text-sm focus-visible:ring-emerald-500/40"
+            className="h-12 rounded-xl border-border bg-card pl-11 text-sm focus-visible:ring-emerald-500/40"
           />
           {searching && <Loader2 className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-emerald-400" />}
         </div>
         {lookupResults.length > 0 && (
-          <div className="mt-3 max-h-72 divide-y divide-white/5 overflow-y-auto rounded-xl border border-white/10 bg-background/60">
+          <div className="mt-3 max-h-72 divide-y divide-border overflow-y-auto rounded-xl border border-border bg-card">
             {lookupResults.map((c) => (
               <button
                 key={c.id}
@@ -237,10 +234,10 @@ export function AdminReferralsPage() {
       </div>
 
       {error && (
-        <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">{error}</div>
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">{error}</div>
       )}
 
-      {/* ── ДЕТАЛЬ КЛИЕНТА ── */}
+      {/*  ДЕТАЛЬ КЛИЕНТА  */}
       {loadingDetail && (
         <div className="flex items-center justify-center py-16"><Loader2 className="h-7 w-7 animate-spin text-emerald-400" /></div>
       )}
@@ -252,10 +249,10 @@ export function AdminReferralsPage() {
           </button>
 
           {/* Клиент */}
-          <div className="overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/10 to-background/40 p-6 backdrop-blur-xl">
+          <div className="overflow-hidden rounded-xl border border-border bg-card p-4">
             <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/30 to-teal-600/20 text-xl font-bold text-emerald-200 ring-1 ring-emerald-500/30">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted text-xl font-bold text-emerald-200 ring-1 ring-emerald-500/30">
                   {clientHandle(detail.client).replace(/^@/, "").slice(0, 2).toUpperCase()}
                 </div>
                 <div>
@@ -274,7 +271,7 @@ export function AdminReferralsPage() {
           </div>
 
           {/* Реферер */}
-          <div className="rounded-2xl border border-white/10 bg-background/40 p-5 backdrop-blur-xl">
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold text-foreground"><Link2 className="h-4 w-4 text-emerald-400" /> Реферер (кто пригласил)</div>
               <div className="flex gap-2">
@@ -289,8 +286,7 @@ export function AdminReferralsPage() {
               </div>
             </div>
             {detail.referrer ? (
-              <button onClick={() => loadDetail(detail.referrer!.id)} className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-background/50 p-3 text-left transition-colors hover:bg-emerald-500/10">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-300"><UserPlus className="h-4 w-4" /></div>
+              <button onClick={() => loadDetail(detail.referrer!.id)} className="flex w-full items-center gap-3 rounded-xl border border-border bg-card p-3 text-left transition-colors hover:bg-emerald-500/10">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-foreground"><ClientChip c={detail.referrer} /></div>
                   {detail.referrer.referralCode && <div className="truncate text-xs text-muted-foreground">код: {detail.referrer.referralCode}</div>}
@@ -298,7 +294,7 @@ export function AdminReferralsPage() {
                 <ChevronRight className="h-4 w-4 text-emerald-400/60" />
               </button>
             ) : (
-              <div className="rounded-xl border border-dashed border-white/10 p-4 text-center text-sm text-muted-foreground">Реферер не привязан</div>
+              <div className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">Реферер не привязан</div>
             )}
 
             {editorOpen && (
@@ -307,7 +303,7 @@ export function AdminReferralsPage() {
                   <select
                     value={editLookupBy}
                     onChange={(e) => setEditLookupBy(e.target.value as typeof editLookupBy)}
-                    className="h-10 rounded-lg border border-white/10 bg-background/60 px-2 text-sm"
+                    className="h-10 rounded-lg border border-border bg-card px-2 text-sm"
                   >
                     <option value="username">по @username</option>
                     <option value="tgid">по Telegram ID</option>
@@ -324,20 +320,20 @@ export function AdminReferralsPage() {
           </div>
 
           {/* Заработок */}
-          <div className="rounded-2xl border border-white/10 bg-background/40 p-5 backdrop-blur-xl">
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><TrendingUp className="h-4 w-4 text-emerald-400" /> Заработок с рефералки</div>
             <div className="grid gap-3 sm:grid-cols-4">
-              <div className="rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/20 to-emerald-600/5 p-4">
+              <div className="rounded-xl border border-emerald-500/30 bg-muted p-4">
                 <div className="text-[11px] uppercase tracking-wider text-emerald-200/80">Всего</div>
-                <div className="mt-1 text-2xl font-bold text-emerald-100">{fmtRub(detail.earnings.totalAll)}</div>
+                <div className="mt-1 text-[13.5px] font-bold text-emerald-100">{fmtRub(detail.earnings.totalAll)}</div>
                 <div className="text-xs text-emerald-200/60">{detail.earnings.totalCount} начисл.</div>
               </div>
               {[1, 2, 3].map((lvl) => {
                 const v = detail.earnings.byLevel[lvl] ?? { amount: 0, count: 0 };
                 return (
-                  <div key={lvl} className={cn("rounded-xl border bg-gradient-to-br p-4", LEVEL_RING[lvl])}>
+                  <div key={lvl} className={cn("rounded-xl border  p-4", LEVEL_RING[lvl])}>
                     <div className="text-[11px] uppercase tracking-wider opacity-80">{LEVEL_LABELS[lvl]}</div>
-                    <div className="mt-1 text-2xl font-bold">{fmtRub(v.amount)}</div>
+                    <div className="mt-1 text-[13.5px] font-bold">{fmtRub(v.amount)}</div>
                     <div className="text-xs opacity-70">{v.count} начисл.</div>
                   </div>
                 );
@@ -346,14 +342,14 @@ export function AdminReferralsPage() {
           </div>
 
           {/* Приглашённые */}
-          <div className="rounded-2xl border border-white/10 bg-background/40 p-5 backdrop-blur-xl">
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><Award className="h-4 w-4 text-emerald-400" /> Приглашённые · {detail.referrals.length}</div>
             {detail.referrals.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-white/10 p-4 text-center text-sm text-muted-foreground">Пока никого не пригласил</div>
+              <div className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">Пока никого не пригласил</div>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
                 {detail.referrals.map((r) => (
-                  <button key={r.id} onClick={() => loadDetail(r.id)} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-background/50 px-3 py-2.5 text-left transition-colors hover:bg-emerald-500/10">
+                  <button key={r.id} onClick={() => loadDetail(r.id)} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-3 py-2.5 text-left transition-colors hover:bg-emerald-500/10">
                     <div className="min-w-0">
                       <div className="truncate text-sm text-foreground">{r.telegramUsername ? `@${r.telegramUsername}` : (r.email ?? `tg:${r.telegramId ?? "?"}`)}</div>
                       <div className="truncate text-xs text-muted-foreground">своих реф.: {r._count.referrals} · {fmtMskShort(new Date(r.createdAt).getTime())}</div>
@@ -366,14 +362,14 @@ export function AdminReferralsPage() {
           </div>
 
           {/* История начислений */}
-          <div className="rounded-2xl border border-white/10 bg-background/40 p-5 backdrop-blur-xl">
+          <div className="rounded-xl border border-border bg-card p-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><Copy className="h-4 w-4 text-emerald-400" /> Последние начисления · {detail.recentCredits.length}</div>
             {detail.recentCredits.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-white/10 p-4 text-center text-sm text-muted-foreground">Начислений ещё не было</div>
+              <div className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted-foreground">Начислений ещё не было</div>
             ) : (
-              <div className="max-h-96 overflow-y-auto rounded-xl border border-white/10">
+              <div className="max-h-96 overflow-y-auto rounded-xl border border-border">
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-background/80 text-xs uppercase text-muted-foreground backdrop-blur">
+                  <thead className="sticky top-0 bg-card text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2 text-left font-medium">Когда</th>
                       <th className="px-3 py-2 text-center font-medium">Ур.</th>
@@ -383,9 +379,9 @@ export function AdminReferralsPage() {
                   </thead>
                   <tbody>
                     {detail.recentCredits.map((cr) => (
-                      <tr key={cr.id} className="border-t border-white/5">
+                      <tr key={cr.id} className="border-t border-border">
                         <td className="px-3 py-2 text-muted-foreground">{fmtMskShort(new Date(cr.createdAt).getTime())}</td>
-                        <td className="px-3 py-2 text-center"><span className={cn("rounded-full border bg-gradient-to-br px-2 py-0.5 text-xs", LEVEL_RING[cr.level] ?? "")}>L{cr.level}</span></td>
+                        <td className="px-3 py-2 text-center"><span className={cn("rounded-full border  px-2 py-0.5 text-xs", LEVEL_RING[cr.level] ?? "")}>L{cr.level}</span></td>
                         <td className="px-3 py-2 text-right font-semibold text-emerald-300">{fmtRub(cr.amount)}</td>
                         <td className="px-3 py-2 text-foreground/80"><ClientChip c={cr.payment?.client ?? null} /></td>
                       </tr>
@@ -398,9 +394,9 @@ export function AdminReferralsPage() {
         </div>
       )}
 
-      {/* ── ОБЗОР: ТОП-РЕФЕРЕРЫ (когда деталь не открыта) ── */}
+      {/*  ОБЗОР: ТОП-РЕФЕРЕРЫ (когда деталь не открыта)  */}
       {!detail && !loadingDetail && (
-        <div className="rounded-2xl border border-white/10 bg-background/40 p-5 backdrop-blur-xl">
+        <div className="rounded-xl border border-border bg-card p-4">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
             <Crown className="h-4 w-4 text-amber-300" /> Топ-рефереры
           </div>
@@ -418,11 +414,11 @@ export function AdminReferralsPage() {
                   key={n.id}
                   onClick={() => loadDetail(n.id)}
                   className={cn(
-                    "group flex items-center gap-3 rounded-xl border bg-gradient-to-br p-3 text-left transition-all hover:scale-[1.01] hover:shadow-lg",
-                    i < 3 ? MEDAL_BG[i] : "border-white/10 from-white/[0.04] to-transparent",
+                    "group flex items-center gap-3 rounded-xl border  p-3 text-left transition-all hover:scale-[1.01]",
+                    i < 3 ? MEDAL_BG[i] : "border-border bg-transparent",
                   )}
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-background/50 font-bold">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-card font-bold">
                     {i < 3 ? <Medal className={cn("h-5 w-5", MEDAL[i])} /> : <span className="text-sm text-muted-foreground">{i + 1}</span>}
                   </div>
                   <div className="min-w-0 flex-1">

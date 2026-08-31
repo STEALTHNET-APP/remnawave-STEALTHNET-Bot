@@ -36,7 +36,7 @@ export function StatsStrip({ block }: { block: LandingApiBlock }) {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.4, delay: idx * 0.06 }}
-            className="rounded-3xl border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 p-6 text-center backdrop-blur-xl"
+            className="rounded-xl border border-slate-200/60 dark:border-border bg-card dark:bg-card p-6 text-center"
           >
             <div className="text-4xl font-black tracking-tight md:text-5xl" style={{ color: accentTheme.primary }}>
               {s.value}

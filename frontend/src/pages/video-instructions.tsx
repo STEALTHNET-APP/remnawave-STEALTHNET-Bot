@@ -149,24 +149,19 @@ export function VideoInstructionsPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Video className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Видео-инструкции
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">Кнопки с видео в разделе «Поддержка» бота</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Кнопки с видео в разделе «Поддержка» бота</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -180,21 +175,21 @@ export function VideoInstructionsPage() {
               {message}
             </motion.span>
           )}
-          <Button variant="ghost" size="icon" onClick={load} disabled={loading} className="rounded-full hover:bg-white/10">
+          <Button variant="ghost" size="icon" onClick={load} disabled={loading} className="rounded-full hover:bg-card">
             <RefreshCw className={cn("h-4 w-4 text-muted-foreground", loading && "animate-spin text-primary")} />
           </Button>
         </div>
       </motion.div>
 
       {/* Toggle card */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+      <Card className="bg-card border-border rounded-2xl p-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <div className={cn(
-              "h-12 w-12 shrink-0 rounded-2xl flex items-center justify-center shadow-inner border border-white/10 transition-colors",
+              "h-12 w-12 shrink-0 rounded-xl flex items-center justify-center border border-border transition-colors",
               enabled
-                ? "bg-gradient-to-br from-emerald-500/25 to-emerald-500/5 text-emerald-500 dark:text-emerald-400"
-                : "bg-gradient-to-br from-muted/40 to-muted/10 text-muted-foreground"
+                ? "bg-muted text-emerald-500 dark:text-emerald-400"
+                : "bg-muted text-muted-foreground"
             )}>
               <Video className="h-6 w-6" />
             </div>
@@ -203,7 +198,7 @@ export function VideoInstructionsPage() {
                 Видео-инструкции в боте
                 {enabled && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-medium">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 shadow-[0_0_4px_currentColor]" />
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
                     Активно
                   </span>
                 )}
@@ -222,7 +217,7 @@ export function VideoInstructionsPage() {
             )}
           >
             <span className={cn(
-              "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform",
+              "pointer-events-none inline-block h-5 w-5 rounded-full bg-white ring-0 transition-transform",
               enabled ? "translate-x-5" : "translate-x-0"
             )} />
           </button>
@@ -230,7 +225,7 @@ export function VideoInstructionsPage() {
       </Card>
 
       {/* Hint */}
-      <div className="flex items-start gap-3 rounded-2xl border border-blue-500/20 bg-blue-500/5 backdrop-blur-md p-4 text-sm">
+      <div className="flex items-start gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-sm">
         <Info className="h-5 w-5 text-blue-500 dark:text-blue-400 shrink-0 mt-0.5" />
         <div>
           <p className="font-medium text-blue-600 dark:text-blue-400">Как получить file_id видео?</p>
@@ -243,10 +238,7 @@ export function VideoInstructionsPage() {
       {/* List */}
       <div className="space-y-2">
         {items.length === 0 && !showForm && (
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-12 shadow-xl flex flex-col items-center text-center">
-            <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-3 border border-white/10">
-              <Video className="h-8 w-8 text-muted-foreground" />
-            </div>
+          <Card className="bg-card border-border rounded-2xl py-12 flex flex-col items-center text-center">
             <p className="text-muted-foreground">Инструкции ещё не добавлены</p>
           </Card>
         )}
@@ -259,7 +251,7 @@ export function VideoInstructionsPage() {
             transition={{ delay: idx * 0.03 }}
             whileHover={{ y: -1 }}
           >
-            <Card className="group flex items-center gap-3 bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-3 shadow-lg hover:shadow-xl hover:border-white/20 transition-all">
+            <Card className="group flex items-center gap-3 bg-card border-border rounded-xl p-3 hover:border-border transition-all">
               <div className="flex flex-col gap-0.5 shrink-0">
                 <button
                   onClick={() => move(item.id, "up")}
@@ -277,23 +269,19 @@ export function VideoInstructionsPage() {
                 </button>
               </div>
 
-              <div className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 border border-white/10 flex items-center justify-center">
-                <Video className="h-5 w-5 text-primary" />
-              </div>
-
               {editingId === item.id ? (
                 <div className="flex-1 min-w-0 space-y-2">
                   <Input
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
                     placeholder="Название кнопки"
-                    className="h-8 text-sm rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                    className="h-8 text-sm rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                   />
                   <Input
                     value={editFileId}
                     onChange={(e) => setEditFileId(e.target.value)}
                     placeholder="Telegram file_id"
-                    className="h-8 text-sm font-mono rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                    className="h-8 text-sm font-mono rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                   />
                   <div className="flex gap-1.5">
                     <Button size="sm" className="h-7 gap-1 text-xs rounded-lg" onClick={saveEdit} disabled={saving}>
@@ -331,11 +319,8 @@ export function VideoInstructionsPage() {
       {/* Add new */}
       {showForm ? (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl space-y-3">
+          <Card className="bg-card border-border rounded-2xl p-4 space-y-3">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <Plus className="h-5 w-5 text-primary" />
-              </div>
               <div>
                 <p className="text-sm font-bold tracking-tight">Новая инструкция</p>
                 <p className="text-xs text-muted-foreground">Название + Telegram file_id</p>
@@ -348,7 +333,7 @@ export function VideoInstructionsPage() {
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
                   placeholder="Инструкция по подключению"
-                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                 />
               </div>
               <div>
@@ -357,7 +342,7 @@ export function VideoInstructionsPage() {
                   value={newFileId}
                   onChange={(e) => setNewFileId(e.target.value)}
                   placeholder="BAACAgIAAxkBAAI..."
-                  className="font-mono text-sm rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                  className="font-mono text-sm rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                 />
               </div>
             </div>

@@ -17,20 +17,18 @@ import {
 import {
   Pencil,
   Loader2,
-  FileText,
   Braces,
   Copy,
   Check,
   Download,
   CheckCircle2,
   AlertCircle,
-  Smartphone,
   Settings2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-/** base64 ⇄ UTF-8 (для encodedTemplateYaml клиентских шаблонов). */
+/** base64  UTF-8 (для encodedTemplateYaml клиентских шаблонов). */
 function b64decode(b64: string): string {
   try { return decodeURIComponent(escape(atob(b64))); } catch { return ""; }
 }
@@ -173,7 +171,7 @@ export function RemnaSubTemplatesPage() {
   if (loading) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center justify-center gap-4">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center justify-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем шаблоны…</p>
         </Card>
@@ -183,28 +181,23 @@ export function RemnaSubTemplatesPage() {
   if (error) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-emerald-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-emerald-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <FileText className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">Шаблоны подписки</h1>
-            <p className="text-sm text-muted-foreground mt-1">Как приложения (Happ, Clash, sing-box…) видят конфиг подписки. Правьте прямо здесь — в ремну ходить не нужно.</p>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Шаблоны подписки</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Как приложения (Happ, Clash, sing-box…) видят конфиг подписки. Правьте прямо здесь — в ремну ходить не нужно.</p>
           </div>
         </div>
         <Button variant="outline" onClick={openSettings} className="gap-1.5 rounded-xl">
@@ -213,12 +206,9 @@ export function RemnaSubTemplatesPage() {
       </motion.div>
 
       <Dialog open={settingsOpen} onOpenChange={(open) => !open && setSettingsOpen(false)}>
-        <DialogContent className="max-w-lg max-h-[88vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <Settings2 className="h-5 w-5 text-primary" />
-              </div>
               <div>
                 <DialogTitle className="text-base font-bold tracking-tight">Настройки страницы подписки</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">Заголовок профиля, поддержка, интервал обновления</DialogDescription>
@@ -231,21 +221,21 @@ export function RemnaSubTemplatesPage() {
             <div className="space-y-4 py-3">
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Заголовок профиля</Label>
-                <Input value={String(subSettings.profileTitle ?? "")} onChange={(e) => setS("profileTitle", e.target.value)} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+                <Input value={String(subSettings.profileTitle ?? "")} onChange={(e) => setS("profileTitle", e.target.value)} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
               </div>
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Ссылка поддержки</Label>
-                <Input value={String(subSettings.supportLink ?? "")} onChange={(e) => setS("supportLink", e.target.value)} placeholder="https://t.me/…" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+                <Input value={String(subSettings.supportLink ?? "")} onChange={(e) => setS("supportLink", e.target.value)} placeholder="https://t.me/…" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
               </div>
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Интервал обновления профиля (часы)</Label>
-                <Input type="number" min={1} value={Number(subSettings.profileUpdateInterval ?? 12)} onChange={(e) => setS("profileUpdateInterval", Number(e.target.value) || 12)} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+                <Input type="number" min={1} value={Number(subSettings.profileUpdateInterval ?? 12)} onChange={(e) => setS("profileUpdateInterval", Number(e.target.value) || 12)} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
               </div>
-              <label className="flex items-center gap-2 cursor-pointer rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2.5">
+              <label className="flex items-center gap-2 cursor-pointer rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2.5">
                 <input type="checkbox" checked={!!subSettings.isProfileWebpageUrlEnabled} onChange={(e) => setS("isProfileWebpageUrlEnabled", e.target.checked)} className="rounded accent-primary" />
                 <span className="text-sm font-medium">Открывать веб-страницу профиля</span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2.5">
+              <label className="flex items-center gap-2 cursor-pointer rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2.5">
                 <input type="checkbox" checked={!!subSettings.serveJsonAtBaseSubscription} onChange={(e) => setS("serveJsonAtBaseSubscription", e.target.checked)} className="rounded accent-primary" />
                 <span className="text-sm font-medium">Отдавать JSON на базовом URL подписки</span>
               </label>
@@ -261,29 +251,23 @@ export function RemnaSubTemplatesPage() {
       </Dialog>
 
       {templates.length === 0 ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-12 shadow-xl">
+        <Card className="bg-card border-border rounded-2xl p-12">
           <div className="flex flex-col items-center justify-center text-center">
-            <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-              <FileText className="h-8 w-8 text-muted-foreground/60" />
-            </div>
-            <h3 className="text-lg font-semibold tracking-tight">Нет шаблонов</h3>
+            <h3 className="text-[13.5px] font-bold tracking-tight">Нет шаблонов</h3>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm">Шаблоны создаются в Remnawave. Здесь можно их редактировать.</p>
           </div>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {templates.map((t, idx) => {
-            const meta = TYPE_META[t.templateType] ?? { label: t.templateType, kind: "json" as const, cls: "bg-foreground/[0.04] text-muted-foreground border-white/10" };
+            const meta = TYPE_META[t.templateType] ?? { label: t.templateType, kind: "json" as const, cls: "bg-foreground/[0.04] text-muted-foreground border-border" };
             return (
               <motion.div key={t.uuid} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }} whileHover={{ y: -2 }}>
                 <Card
-                  className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl cursor-pointer flex items-center justify-between gap-4"
+                  className="bg-card border-border rounded-2xl p-4 cursor-pointer flex items-center justify-between gap-4"
                   onClick={() => openEdit(t)}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-10 w-10 rounded-xl bg-foreground/[0.04] dark:bg-white/[0.03] border border-white/10 flex items-center justify-center shrink-0">
-                      <Smartphone className="h-5 w-5 text-muted-foreground" />
-                    </div>
                     <div className="min-w-0">
                       <h3 className="font-semibold text-base tracking-tight truncate">{t.name}</h3>
                       <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium mt-1", meta.cls)}>
@@ -300,12 +284,9 @@ export function RemnaSubTemplatesPage() {
       )}
 
       <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <Pencil className="h-5 w-5 text-primary" />
-              </div>
               <div>
                 <DialogTitle className="text-base font-bold tracking-tight">Шаблон — {editing?.name}</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">
@@ -320,7 +301,7 @@ export function RemnaSubTemplatesPage() {
             <div className="space-y-4 py-3">
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Название</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+                <Input value={name} onChange={(e) => setName(e.target.value)} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
               </div>
               <div className="flex items-center justify-between gap-2">
                 <Label className="text-xs text-muted-foreground">{kind === "yaml" ? "YAML-шаблон" : "Xray JSON"}</Label>
@@ -345,7 +326,7 @@ export function RemnaSubTemplatesPage() {
                 rows={20}
                 className={cn(
                   "w-full rounded-xl border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-xs font-mono leading-relaxed focus-visible:outline-none focus-visible:ring-2",
-                  kind === "json" && !jsonValidation.valid ? "border-red-500/40 focus-visible:ring-red-500/40" : "border-white/10 focus-visible:ring-primary/50"
+                  kind === "json" && !jsonValidation.valid ? "border-red-500/40 focus-visible:ring-red-500/40" : "border-border focus-visible:ring-primary/50"
                 )}
               />
               {kind === "json" ? (

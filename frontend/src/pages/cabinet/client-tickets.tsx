@@ -5,6 +5,7 @@ import { api, type TicketAttachmentDto, type TicketMessageDto } from "@/lib/api"
 import { Button } from "@/components/ui/button";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthTickets } from "@/pages/cabinet/stealth/stealth-tickets";
+import { AuroraTickets } from "@/pages/cabinet/aurora/aurora-tickets";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,6 +46,7 @@ function AttachmentsGallery({ items, align }: { items: TicketAttachmentDto[]; al
 export function ClientTicketsPage() {
   const design = useCabinetDesign();
   if (design === "stealth") return <StealthTickets />;
+  if (design === "aurora") return <AuroraTickets />;
   return <ClassicTicketsPage />;
 }
 

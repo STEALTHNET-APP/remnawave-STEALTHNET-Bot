@@ -71,13 +71,13 @@ export function PayNowPanel({ url, provider, onBack, onPaid, compact }: PayNowPa
     <div className="space-y-4">
       <div
         className={cn(
-          "rounded-2xl border border-primary/30 bg-primary/5 overflow-hidden relative",
+          "rounded-xl border border-border bg-primary/5 overflow-hidden relative",
           compact ? "p-5" : "p-6",
         )}
       >
         <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
         <div className="relative z-10 flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+          <div className="flex h-9 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
             <CheckCircle2 className="h-6 w-6" />
           </div>
           <div className="min-w-0 flex-1">
@@ -98,8 +98,8 @@ export function PayNowPanel({ url, provider, onBack, onPaid, compact }: PayNowPa
         asChild
         size="lg"
         className={cn(
-          "w-full font-bold shadow-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 transition-all duration-200 active:scale-[0.98]",
-          compact ? "h-16 rounded-2xl text-base" : "h-14 rounded-xl text-base",
+          "w-full font-bold bg-primary transition-all duration-200 active:scale-[0.98]",
+          compact ? "h-16 rounded-xl text-base" : "h-14 rounded-xl text-base",
         )}
       >
         <a
@@ -121,7 +121,7 @@ export function PayNowPanel({ url, provider, onBack, onPaid, compact }: PayNowPa
         onClick={onBack}
         className={cn(
           "w-full font-medium border-border/60",
-          compact ? "h-14 rounded-2xl" : "h-12 rounded-xl",
+          compact ? "h-14 rounded-xl" : "h-12 rounded-xl",
         )}
       >
         <ArrowLeft className="h-4 w-4 mr-2" />

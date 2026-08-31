@@ -21,8 +21,7 @@ import {
   Target,
   ArrowUpRight,
   ArrowDownRight,
-  BarChart3,
-} from "lucide-react";
+  } from "lucide-react";
 import {
   AreaChart,
   Area,
@@ -117,17 +116,17 @@ interface AnalyticsData {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 const COLOR_MAP = {
-  emerald: { iconText: "text-emerald-500 dark:text-emerald-400", gradient: "from-emerald-500/20 to-emerald-500/5" },
-  blue: { iconText: "text-blue-500 dark:text-blue-400", gradient: "from-blue-500/20 to-blue-500/5" },
-  cyan: { iconText: "text-cyan-500 dark:text-cyan-400", gradient: "from-cyan-500/20 to-cyan-500/5" },
-  violet: { iconText: "text-violet-500 dark:text-violet-400", gradient: "from-violet-500/20 to-violet-500/5" },
-  amber: { iconText: "text-amber-500 dark:text-amber-400", gradient: "from-amber-500/20 to-amber-500/5" },
-  rose: { iconText: "text-rose-500 dark:text-rose-400", gradient: "from-rose-500/20 to-rose-500/5" },
-  pink: { iconText: "text-pink-500 dark:text-pink-400", gradient: "from-pink-500/20 to-pink-500/5" },
-  primary: { iconText: "text-primary", gradient: "from-primary/20 to-primary/5" },
-  yellow: { iconText: "text-yellow-500 dark:text-yellow-400", gradient: "from-yellow-500/20 to-yellow-500/5" },
-  orange: { iconText: "text-orange-500 dark:text-orange-400", gradient: "from-orange-500/20 to-orange-500/5" },
-  indigo: { iconText: "text-indigo-500 dark:text-indigo-400", gradient: "from-indigo-500/20 to-indigo-500/5" },
+  emerald: { iconText: "text-emerald-500 dark:text-emerald-400", gradient: "bg-muted" },
+  blue: { iconText: "text-blue-500 dark:text-blue-400", gradient: "bg-muted" },
+  cyan: { iconText: "text-cyan-500 dark:text-cyan-400", gradient: "bg-muted" },
+  violet: { iconText: "text-violet-500 dark:text-violet-400", gradient: "bg-muted" },
+  amber: { iconText: "text-amber-500 dark:text-amber-400", gradient: "bg-muted" },
+  rose: { iconText: "text-rose-500 dark:text-rose-400", gradient: "bg-muted" },
+  pink: { iconText: "text-pink-500 dark:text-pink-400", gradient: "bg-muted" },
+  primary: { iconText: "text-primary", gradient: "bg-muted" },
+  yellow: { iconText: "text-yellow-500 dark:text-yellow-400", gradient: "bg-muted" },
+  orange: { iconText: "text-orange-500 dark:text-orange-400", gradient: "bg-muted" },
+  indigo: { iconText: "text-indigo-500 dark:text-indigo-400", gradient: "bg-muted" },
 } as const;
 
 type AccentColor = keyof typeof COLOR_MAP;
@@ -155,7 +154,7 @@ export function AnalyticsPage() {
   if (!data) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-8 text-center">
+        <Card className="bg-card border-border rounded-2xl p-8 text-center">
           <p className="text-sm text-red-500 dark:text-red-400">Ошибка загрузки аналитики</p>
         </Card>
       </div>
@@ -176,25 +175,20 @@ export function AnalyticsPage() {
       animate="visible"
       className="w-full space-y-6 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative"
     >
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
 
       {/* Page header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <BarChart3 className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground via-primary/80 to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Аналитика
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">Полная статистика по всем направлениям</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Полная статистика по всем направлениям</p>
           </div>
         </div>
       </motion.div>
@@ -235,7 +229,7 @@ export function AnalyticsPage() {
           <MetricCard
             index={15}
             icon={s.trialConversionRate > 20 ? ArrowUpRight : ArrowDownRight}
-            label="Конверсия триал → покупка"
+            label="Конверсия триал  покупка"
             value={`${s.trialConversionRate}%`}
             sub={`${s.trialToPaid} из ${s.trialUsedCount}`}
             color={s.trialConversionRate > 20 ? "emerald" : "orange"}
@@ -396,15 +390,15 @@ export function AnalyticsPage() {
       <section>
         <SectionHeader icon={Target} title="Источники трафика (UTM)" subtitle="Статистика по рекламным кампаниям" />
         {!data.campaignsStats?.length ? (
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-10 text-center shadow-xl">
+          <Card className="bg-card border-border rounded-2xl py-10 text-center">
             <p className="text-sm text-muted-foreground">Нет данных по источникам</p>
           </Card>
         ) : (
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden">
+          <Card className="bg-card border-border rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/10 bg-foreground/[0.04] dark:bg-white/[0.03]">
+                  <tr className="border-b border-border bg-foreground/[0.04] dark:bg-white/[0.03]">
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Источник</th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Кампания</th>
                     <th className="text-right px-4 py-3 font-medium text-muted-foreground text-xs">Регистрации</th>
@@ -415,7 +409,7 @@ export function AnalyticsPage() {
                 </thead>
                 <tbody>
                   {data.campaignsStats.map((row, i) => (
-                    <tr key={i} className="border-b border-white/5 last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
+                    <tr key={i} className="border-b border-border last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 font-medium">{row.source}</td>
                       <td className="px-4 py-3 text-muted-foreground">{row.campaign ?? "—"}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{fmt(row.registrations)}</td>
@@ -435,15 +429,15 @@ export function AnalyticsPage() {
       <section>
         <SectionHeader icon={Award} title="Топ рефералов" subtitle="Самые активные партнёры" />
         {data.topReferrers.length === 0 ? (
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-10 text-center shadow-xl">
+          <Card className="bg-card border-border rounded-2xl py-10 text-center">
             <p className="text-sm text-muted-foreground">Нет данных по рефералам</p>
           </Card>
         ) : (
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden">
+          <Card className="bg-card border-border rounded-2xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/10 bg-foreground/[0.04] dark:bg-white/[0.03]">
+                  <tr className="border-b border-border bg-foreground/[0.04] dark:bg-white/[0.03]">
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">#</th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Реферер</th>
                     <th className="text-right px-4 py-3 font-medium text-muted-foreground text-xs">Рефералов</th>
@@ -456,7 +450,7 @@ export function AnalyticsPage() {
                 </thead>
                 <tbody>
                   {data.topReferrers.map((r, i) => (
-                    <tr key={r.id} className="border-b border-white/5 last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
+                    <tr key={r.id} className="border-b border-border last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 text-muted-foreground tabular-nums">{i + 1}</td>
                       <td className="px-4 py-3 font-medium">{r.name}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{r.referrals}</td>
@@ -490,7 +484,7 @@ export function AnalyticsPage() {
             ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/10 bg-foreground/[0.04] dark:bg-white/[0.03]">
+                  <tr className="border-b border-border bg-foreground/[0.04] dark:bg-white/[0.03]">
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Название</th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Код</th>
                     <th className="text-right px-4 py-3 font-medium text-muted-foreground text-xs">Активаций</th>
@@ -499,7 +493,7 @@ export function AnalyticsPage() {
                 </thead>
                 <tbody>
                   {data.promoGroupStats.map((g) => (
-                    <tr key={g.code} className="border-b border-white/5 last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
+                    <tr key={g.code} className="border-b border-border last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 font-medium">{g.name}</td>
                       <td className="px-4 py-3 text-xs font-mono text-primary">{g.code}</td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold">{g.activations}</td>
@@ -517,7 +511,7 @@ export function AnalyticsPage() {
             ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/10 bg-foreground/[0.04] dark:bg-white/[0.03]">
+                  <tr className="border-b border-border bg-foreground/[0.04] dark:bg-white/[0.03]">
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Код</th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Тип</th>
                     <th className="text-right px-4 py-3 font-medium text-muted-foreground text-xs">Использований</th>
@@ -526,11 +520,11 @@ export function AnalyticsPage() {
                 </thead>
                 <tbody>
                   {data.promoCodeStats.map((c) => (
-                    <tr key={c.code} className="border-b border-white/5 last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
+                    <tr key={c.code} className="border-b border-border last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 text-xs font-mono text-primary">{c.code}</td>
                       <td className="px-4 py-3">
                         <span className={cn(
-                          "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium backdrop-blur-md",
+                          "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium",
                           c.type === "DISCOUNT"
                             ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
                             : "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/20"
@@ -552,10 +546,9 @@ export function AnalyticsPage() {
   );
 }
 
-/* ── Components ── */
+/*  Components  */
 
 function SectionHeader({
-  icon: Icon,
   title,
   subtitle,
 }: {
@@ -570,11 +563,8 @@ function SectionHeader({
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
     >
-      <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-        <Icon className="h-5 w-5 text-primary" />
-      </div>
       <div>
-        <h2 className="text-lg font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
+        <h2 className="text-[13.5px] font-bold tracking-tight text-foreground">
           {title}
         </h2>
         <p className="text-xs text-muted-foreground">{subtitle}</p>
@@ -585,11 +575,9 @@ function SectionHeader({
 
 function MetricCard({
   index = 0,
-  icon: Icon,
   label,
   value,
   sub,
-  color = "primary",
 }: {
   index?: number;
   icon: React.ElementType;
@@ -598,7 +586,6 @@ function MetricCard({
   sub?: string;
   color?: AccentColor;
 }) {
-  const accent = COLOR_MAP[color];
   const renderValue = () => {
     if (typeof value === "string" && value.includes(" / ")) {
       const parts = value.split(" / ");
@@ -606,14 +593,14 @@ function MetricCard({
         <div className="flex flex-wrap items-baseline gap-1">
           {parts.map((part, i) => (
             <Fragment key={i}>
-              <span className="text-xl sm:text-2xl font-bold tabular-nums tracking-tight">{part}</span>
+              <span className="text-[20px] font-extrabold tabular-nums tracking-[-0.4px]">{part}</span>
               {i < parts.length - 1 && <span className="text-muted-foreground text-sm">/</span>}
             </Fragment>
           ))}
         </div>
       );
     }
-    return <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums">{value}</div>;
+    return <div className="text-[23px] font-extrabold tracking-[-0.4px] tabular-nums">{value}</div>;
   };
 
   return (
@@ -626,36 +613,27 @@ function MetricCard({
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
       className="h-full"
     >
-      <Card className="group relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[1.5rem] p-4 sm:p-5 shadow-lg hover:shadow-xl hover:border-white/20 transition-all duration-300 h-full flex flex-col">
+      <Card className="group relative overflow-hidden bg-card border-border rounded-xl px-[15px] py-[13px] hover:border-border transition-all duration-300 h-full flex flex-col">
         <div className="flex justify-between items-start gap-2 mb-3">
-          <p className="text-xs font-medium text-muted-foreground line-clamp-2 mt-1">{label}</p>
-          <div className={cn(
-            "h-9 w-9 shrink-0 rounded-2xl bg-gradient-to-br border border-white/10 flex items-center justify-center shadow-inner transition-transform group-hover:scale-110 group-hover:rotate-3",
-            accent.gradient
-          )}>
-            <Icon className={cn("h-4 w-4", accent.iconText)} />
-          </div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground line-clamp-2">{label}</p>
         </div>
         <div className="mt-auto">
           {renderValue()}
-          {sub && <p className="text-[11px] text-muted-foreground/80 mt-1">{sub}</p>}
+          {sub && <p className="text-[11.5px] text-muted-foreground mt-[3px]">{sub}</p>}
         </div>
       </Card>
     </motion.div>
   );
 }
 
-function ChartCard({ title, icon: Icon, children, index = 0 }: { title: string; icon: React.ElementType; children: React.ReactNode; index?: number }) {
+function ChartCard({ title, children, index = 0 }: { title: string; icon: React.ElementType; children: React.ReactNode; index?: number }) {
   return (
     <motion.div custom={index} variants={cardVariants} initial="hidden" animate="visible" className="h-full">
-      <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl flex flex-col h-full">
-        <div className="px-5 pt-5 pb-3 flex items-center gap-3 border-b border-white/5">
-          <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-            <Icon className="h-4 w-4 text-primary" />
-          </div>
-          <h3 className="text-sm font-bold tracking-tight">{title}</h3>
+      <Card className="relative overflow-hidden bg-card border-border rounded-2xl flex flex-col h-full">
+        <div className="px-[17px] pt-[15px] pb-3 flex items-center gap-2 border-b border-border">
+          <h3 className="text-[13.5px] font-bold tracking-tight">{title}</h3>
         </div>
-        <div className="px-5 py-4 flex-1 min-h-[280px] h-72">
+        <div className="px-[17px] py-4 flex-1 min-h-[280px] h-72">
           {children}
         </div>
       </Card>
@@ -663,15 +641,12 @@ function ChartCard({ title, icon: Icon, children, index = 0 }: { title: string; 
   );
 }
 
-function SubTableCard({ title, icon: Icon, children, index = 0 }: { title: string; icon: React.ElementType; children: React.ReactNode; index?: number }) {
+function SubTableCard({ title, children, index = 0 }: { title: string; icon: React.ElementType; children: React.ReactNode; index?: number }) {
   return (
     <motion.div custom={index} variants={cardVariants} initial="hidden" animate="visible" className="h-full">
-      <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl">
-        <div className="px-5 pt-5 pb-3 flex items-center gap-3 border-b border-white/5">
-          <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-            <Icon className="h-4 w-4 text-primary" />
-          </div>
-          <h3 className="text-sm font-bold tracking-tight">{title}</h3>
+      <Card className="relative overflow-hidden bg-card border-border rounded-2xl">
+        <div className="px-[17px] pt-[15px] pb-3 flex items-center gap-2 border-b border-border">
+          <h3 className="text-[13.5px] font-bold tracking-tight">{title}</h3>
         </div>
         <div className="overflow-x-auto">{children}</div>
       </Card>
@@ -691,8 +666,8 @@ function NoData() {
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-background/90 backdrop-blur-xl border border-white/10 rounded-xl px-3 py-2 shadow-2xl text-xs">
-        {label && <p className="font-semibold mb-1.5 text-muted-foreground border-b border-white/10 pb-1">{label}</p>}
+      <div className="bg-card border border-border rounded-xl px-3 py-2 text-xs">
+        {label && <p className="font-semibold mb-1.5 text-muted-foreground border-b border-border pb-1">{label}</p>}
         {payload.map((entry: any, index: number) => (
           <div key={index} className="flex items-center justify-between gap-4 py-0.5">
             <div className="flex items-center gap-1.5">
@@ -709,7 +684,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-/* ── Utils ── */
+/*  Utils  */
 
 function aggregateByWeek(series: { date: string; value: number }[]): { label: string; value: number }[] {
   const weeks: { label: string; value: number }[] = [];

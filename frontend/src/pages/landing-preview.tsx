@@ -90,7 +90,7 @@ export function LandingPreviewPage() {
 
   return (
     <div
-      className="min-h-screen bg-gradient-to-b from-white via-slate-50/50 to-white text-slate-900 dark:from-slate-950 dark:via-slate-950 dark:to-slate-950 dark:text-slate-100"
+      className="min-h-screen bg-primary text-slate-900 dark:text-slate-100"
       style={themeStyle}
     >
       {data.theme.customCss ? <style dangerouslySetInnerHTML={{ __html: data.theme.customCss }} /> : null}
@@ -137,7 +137,7 @@ function EditableBlock({ block, serviceName }: { block: LandingApiBlock; service
       data-block-id={block.id}
       className="group relative cursor-pointer transition-all hover:ring-2 hover:ring-emerald-500 hover:ring-offset-2 hover:ring-offset-transparent"
     >
-      <div className="pointer-events-none absolute right-3 top-3 z-50 flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+      <div className="pointer-events-none absolute right-3 top-3 z-50 flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-xs font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
         <Pencil className="h-3 w-3" />
         Редактировать
       </div>

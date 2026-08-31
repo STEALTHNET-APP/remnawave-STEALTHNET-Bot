@@ -49,7 +49,7 @@ export function DevicesStrip({ block }: { block: LandingApiBlock }) {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.35, delay: idx * 0.05 }}
-              className="flex items-center gap-2.5 rounded-full border border-slate-200/70 dark:border-white/10 bg-white/80 dark:bg-white/5 px-5 py-3 backdrop-blur-xl"
+              className="flex items-center gap-2.5 rounded-full border border-slate-200/70 dark:border-border bg-card dark:bg-card px-5 py-3"
             >
               <Icon className="h-4 w-4" style={{ color: accentTheme.primary }} />
               <span className="text-sm font-medium text-slate-900 dark:text-white">{it.name}</span>

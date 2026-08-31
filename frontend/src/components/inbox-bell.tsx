@@ -82,7 +82,7 @@ export function InboxBell() {
       <Button
         variant="ghost"
         size="sm"
-        className="gap-1.5 text-xs h-9 px-2.5 rounded-xl border border-transparent hover:border-white/10 bg-background/20 hover:bg-background/40 relative"
+        className="gap-1.5 text-xs h-9 px-2.5 rounded-xl border border-transparent hover:border-border bg-card hover:bg-card relative"
         onClick={() => setOpen((v) => !v)}
         title="Inbox"
       >
@@ -101,7 +101,7 @@ export function InboxBell() {
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className={cn(
-            "absolute right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[360px] max-w-[360px] rounded-[1.5rem] border border-white/40 dark:border-white/10 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-[32px] shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)]",
+            "absolute right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[360px] max-w-[360px] rounded-[1.5rem] border border-border dark:border-border bg-slate-200/60 dark:bg-slate-900/60",
             "p-3"
           )}>
             <div className="flex items-center justify-between px-2 pb-2">

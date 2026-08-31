@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { Plug, RefreshCw, Save, ShoppingBag, ExternalLink } from "lucide-react";
+import { Plug, RefreshCw, Save, ExternalLink } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
 import { api, type MarketplaceStatusDto } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
@@ -89,7 +89,7 @@ export function MarketplaceSettingsCard() {
     try {
       const r = await api.marketplaceConnect(state.accessToken);
       if (r.ok) {
-        setMessage(`✓ ${r.status}${r.installationId ? ` (${r.installationId})` : ""}`);
+        setMessage(` ${r.status}${r.installationId ? ` (${r.installationId})` : ""}`);
       } else {
         setError(r.message ?? "Connect failed");
       }
@@ -102,26 +102,23 @@ export function MarketplaceSettingsCard() {
   };
 
   return (
-    <Card id="marketplace" className="overflow-hidden border-white/10 mt-6">
-      <div className="relative bg-gradient-to-br from-indigo-500/10 via-violet-500/10 to-fuchsia-500/10 p-6 sm:p-8 border-b border-white/10">
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-fuchsia-500/5 pointer-events-none" />
+    <Card id="marketplace" className="overflow-hidden border-border mt-6">
+      <div className="relative bg-muted p-4 border-b border-border">
+        <div className="absolute inset-0 bg-transparent pointer-events-none" />
         <div className="relative flex items-start gap-5">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500/30 via-violet-500/20 to-fuchsia-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-            <ShoppingBag className="h-7 w-7 text-foreground" />
-          </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500">
+            <h2 className="text-xl font-bold tracking-tight text-foreground">
               {t("admin.marketplace.settings.title")}
             </h2>
-            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.marketplace.settings.subtitle")}</p>
+            <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.marketplace.settings.subtitle")}</p>
           </div>
           <Button asChild variant="outline" size="sm">
             <Link to="/admin/marketplace"><ExternalLink className="h-3.5 w-3.5" /> {t("admin.marketplace.title")}</Link>
           </Button>
         </div>
       </div>
-      <CardContent className="space-y-5 p-4 sm:p-6">
-        <div className="flex items-center justify-between rounded-xl border border-white/10 p-4 bg-card/40">
+      <CardContent className="space-y-5 p-4 sm:p-4">
+        <div className="flex items-center justify-between rounded-xl border border-border p-4 bg-card/40">
           <div className="space-y-0.5">
             <Label className="text-base font-medium">{t("admin.marketplace.settings.enabled")}</Label>
             <p className="text-xs text-muted-foreground">{t("admin.marketplace.settings.enabled_hint")}</p>
@@ -162,7 +159,7 @@ export function MarketplaceSettingsCard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
             <KeyValue label={t("admin.marketplace.settings.hub_url")} value={status?.hubUrl ?? "—"} />
             <KeyValue label={t("admin.marketplace.settings.installation_id")} value={status?.installationId ?? "—"} />
-            <KeyValue label="API key" value={status?.apiKeyConnected ? "✓ connected" : "— not connected"} />
+            <KeyValue label="API key" value={status?.apiKeyConnected ? " connected" : "— not connected"} />
             <KeyValue label={t("admin.marketplace.settings.last_connect")} value={status?.lastConnectAt ? `${fmtMsk(status.lastConnectAt)} (${status.lastConnectStatus ?? ""})` : "—"} />
           </div>
         </Card>
@@ -200,7 +197,7 @@ function RoleCard({ active, title, onClick }: { active: boolean; title: string; 
 
 function KeyValue({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-card/40 border border-white/5 px-3 py-2">
+    <div className="rounded-lg bg-card/40 border border-border px-3 py-2">
       <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
       <div className="font-medium text-sm break-all">{value}</div>
     </div>

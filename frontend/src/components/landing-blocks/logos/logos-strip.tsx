@@ -21,7 +21,7 @@ export function LogosStrip({ block }: { block: LandingApiBlock }) {
   if (items.length === 0) {
     return (
       <section className={`container mx-auto px-4 py-8 md:py-12 ${SECTION_SCROLL_OFFSET}`}>
-        <div className="rounded-3xl border border-dashed border-slate-300 dark:border-white/10 bg-white/40 dark:bg-white/5 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+        <div className="rounded-xl border border-dashed border-slate-300 dark:border-border bg-card dark:bg-card p-8 text-center text-sm text-slate-500 dark:text-slate-400">
           Добавь логотипы в props.items. Каждый — картинка через загрузчик.
         </div>
       </section>

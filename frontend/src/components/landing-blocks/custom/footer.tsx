@@ -12,7 +12,7 @@ export function CustomFooter({ block, serviceName }: { block: LandingApiBlock; s
   const footerText = txt(block.text, "footerText", `© ${new Date().getFullYear()} ${serviceName}. Все права защищены.`);
 
   return (
-    <footer className="border-t border-slate-200/60 dark:border-white/10 bg-white/60 dark:bg-slate-950/40 backdrop-blur-xl">
+    <footer className="border-t border-slate-200/60 dark:border-border bg-card dark:bg-slate-950/40">
       <div className="container mx-auto flex flex-col items-center justify-between gap-4 px-4 py-8 text-sm text-slate-600 dark:text-slate-300 md:flex-row">
         <div>{footerText}</div>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">

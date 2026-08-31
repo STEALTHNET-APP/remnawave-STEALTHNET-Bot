@@ -99,9 +99,9 @@ export function AdminPermissionsDialog({ open, adminId, adminEmail, onClose }: P
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
             <Shield className="h-5 w-5 text-primary" />
             Granular permissions
           </DialogTitle>
@@ -168,7 +168,7 @@ export function AdminPermissionsDialog({ open, adminId, adminEmail, onClose }: P
           </div>
         )}
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-white/10">
+        <div className="flex justify-end gap-2 pt-3 border-t border-border">
           <Button variant="outline" onClick={onClose}>Закрыть</Button>
           <Button onClick={save} disabled={busy || loading} className="gap-2">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}

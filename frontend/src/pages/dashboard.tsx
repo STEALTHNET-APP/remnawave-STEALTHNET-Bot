@@ -40,7 +40,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
-/* ── Animation variants ── */
+/*  Animation variants  */
 
 const cardVariants = {
   hidden: { opacity: 0, y: 16, scale: 0.98 },
@@ -61,7 +61,7 @@ const staggerContainer = {
   visible: { transition: { staggerChildren: 0.06 } },
 };
 
-/* ── Utilities ── */
+/*  Utilities  */
 
 function formatMoney(amount: number, currency = "USD") {
   return new Intl.NumberFormat(undefined, {
@@ -106,7 +106,7 @@ function canAccessRemnaNodes(role: string, allowedSections: string[] | undefined
   return Array.isArray(allowedSections) && allowedSections.includes("remna-nodes");
 }
 
-/* ── CountUp Hook & Components ── */
+/*  CountUp Hook & Components  */
 
 function useCountUp(target: number, duration = 1200): number {
   const [value, setValue] = useState(0);
@@ -146,7 +146,7 @@ function CountUpNumber({ value, className }: { value: number; className?: string
   return <span className={className}>{animated.toLocaleString()}</span>;
 }
 
-/* ── Sparkline ── */
+/*  Sparkline  */
 
 function Sparkline({
   data,
@@ -184,7 +184,7 @@ function Sparkline({
   );
 }
 
-/* ── Section Header (glass) ── */
+/*  Section Header (glass)  */
 
 function SectionHeader({
   icon: Icon,
@@ -197,16 +197,14 @@ function SectionHeader({
 }) {
   return (
     <motion.div
-      className="flex items-center gap-3 mb-5"
+      className="flex items-center gap-2 mb-3"
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.3 }}
     >
-      <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-        <Icon className="h-5 w-5 text-primary" />
-      </div>
+      <Icon className="h-4 w-4 text-primary shrink-0" />
       <div>
-        <h2 className="text-lg font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
+        <h2 className="text-[13.5px] font-bold tracking-tight text-foreground">
           {title}
         </h2>
         <p className="text-xs text-muted-foreground">{subtitle}</p>
@@ -215,15 +213,15 @@ function SectionHeader({
   );
 }
 
-/* ── Stat Card (glass) ── */
+/*  Stat Card (glass)  */
 
 const ACCENT_MAP = {
-  primary: { iconText: "text-primary", spark: "hsl(var(--primary))", glow: "hsl(var(--primary)/0.35)", iconBg: "from-primary/25 to-primary/5", bar: "from-primary to-primary/40" },
-  emerald: { iconText: "text-emerald-500 dark:text-emerald-400", spark: "#10b981", glow: "rgba(16,185,129,0.35)", iconBg: "from-emerald-500/25 to-emerald-500/5", bar: "from-emerald-500 to-emerald-500/40" },
-  amber: { iconText: "text-amber-500 dark:text-amber-400", spark: "#f59e0b", glow: "rgba(245,158,11,0.35)", iconBg: "from-amber-500/25 to-amber-500/5", bar: "from-amber-500 to-amber-500/40" },
-  red: { iconText: "text-red-500 dark:text-red-400", spark: "#ef4444", glow: "rgba(239,68,68,0.35)", iconBg: "from-red-500/25 to-red-500/5", bar: "from-red-500 to-red-500/40" },
-  violet: { iconText: "text-violet-500 dark:text-violet-400", spark: "#a78bfa", glow: "rgba(167,139,250,0.35)", iconBg: "from-violet-500/25 to-violet-500/5", bar: "from-violet-500 to-violet-500/40" },
-  cyan: { iconText: "text-cyan-500 dark:text-cyan-400", spark: "#22d3ee", glow: "rgba(34,211,238,0.35)", iconBg: "from-cyan-500/25 to-cyan-500/5", bar: "from-cyan-500 to-cyan-500/40" },
+  primary: { iconText: "text-primary", spark: "hsl(var(--primary))", glow: "hsl(var(--primary)/0.35)", iconBg: "bg-muted", bar: "bg-primary" },
+  emerald: { iconText: "text-muted-foreground dark:text-muted-foreground", spark: "#10b981", glow: "rgba(16,185,129,0.35)", iconBg: "bg-muted", bar: "bg-primary" },
+  amber: { iconText: "text-muted-foreground dark:text-muted-foreground", spark: "#f59e0b", glow: "rgba(245,158,11,0.35)", iconBg: "bg-muted", bar: "bg-primary" },
+  red: { iconText: "text-muted-foreground dark:text-muted-foreground", spark: "#ef4444", glow: "rgba(239,68,68,0.35)", iconBg: "bg-muted", bar: "bg-primary" },
+  violet: { iconText: "text-muted-foreground dark:text-muted-foreground", spark: "#a78bfa", glow: "rgba(167,139,250,0.35)", iconBg: "bg-muted", bar: "bg-primary" },
+  cyan: { iconText: "text-muted-foreground dark:text-muted-foreground", spark: "#22d3ee", glow: "rgba(34,211,238,0.35)", iconBg: "bg-muted", bar: "bg-primary" },
 } as const;
 
 function StatCard({
@@ -250,11 +248,10 @@ function StatCard({
       variants={cardVariants}
       initial="hidden"
       animate="visible"
-      whileHover={{ y: -2 }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      transition={{ duration: 0.25 }}
     >
       <Card
-        className="group relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl hover:shadow-2xl hover:border-white/20 transition-all duration-300"
+        className="group relative overflow-hidden bg-card border-border rounded-xl px-[15px] py-[13px] transition-colors"
         style={{ ["--card-glow" as string]: accent.glow }}
       >
         {/* Accent gradient orb in top-right */}
@@ -263,17 +260,17 @@ function StatCard({
           style={{ background: `radial-gradient(circle, ${accent.glow}, transparent 70%)` }}
         />
         {/* Left accent bar */}
-        <div className={cn("absolute left-0 top-1/4 h-1/2 w-[3px] rounded-r-full bg-gradient-to-b opacity-70", accent.bar)} />
+        
         <div className="relative flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-muted-foreground">{title}</p>
-            <div className="mt-2 text-2xl font-bold tracking-tight tabular-nums text-foreground">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">{title}</p>
+            <div className="mt-2 text-[13.5px] font-bold tracking-tight tabular-nums text-foreground">
               {value}
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground/80">{subtitle}</p>
           </div>
           <div className={cn(
-            "h-10 w-10 rounded-2xl bg-gradient-to-br border border-white/10 flex items-center justify-center shadow-inner shrink-0 transition-transform group-hover:scale-110 group-hover:rotate-3",
+            "h-10 w-10 rounded-xl  border border-border flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 group-hover:rotate-3",
             accent.iconBg,
           )}>
             <Icon className={cn("h-5 w-5", accent.iconText)} />
@@ -289,7 +286,7 @@ function StatCard({
   );
 }
 
-/* ── Smooth Progress Bar ── */
+/*  Smooth Progress Bar  */
 
 function ProgressBar({
   percent,
@@ -303,11 +300,11 @@ function ProgressBar({
   tone?: "primary" | "emerald" | "amber" | "red" | "violet";
 }) {
   const toneClass = {
-    primary: "from-primary/80 to-primary",
-    emerald: "from-emerald-500/80 to-emerald-400",
-    amber: "from-amber-500/80 to-amber-400",
-    red: "from-red-500/80 to-red-400",
-    violet: "from-violet-500/80 to-violet-400",
+    primary: "bg-primary",
+    emerald: "bg-primary",
+    amber: "bg-primary",
+    red: "bg-primary",
+    violet: "bg-primary",
   }[tone];
 
   return (
@@ -319,9 +316,9 @@ function ProgressBar({
           <span className="ml-2 text-[10px] text-muted-foreground/70">{percent.toFixed(1)}%</span>
         </span>
       </div>
-      <div className="h-2 bg-foreground/[0.06] dark:bg-white/5 border border-white/5 rounded-full overflow-hidden">
+      <div className="h-2 bg-foreground/[0.06] dark:bg-card border border-border rounded-full overflow-hidden">
         <motion.div
-          className={cn("h-full bg-gradient-to-r rounded-full", toneClass)}
+          className={cn("h-full  rounded-full", toneClass)}
           initial={{ width: 0 }}
           animate={{ width: `${Math.min(percent, 100)}%` }}
           transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
@@ -331,14 +328,14 @@ function ProgressBar({
   );
 }
 
-/* ── Server Stats Card ── */
+/*  Server Stats Card  */
 
 function ServerStatsCard({ serverStats }: { serverStats: ServerStats }) {
   const pickTone = (p: number): "primary" | "emerald" | "amber" | "red" | "violet" =>
     p > 80 ? "red" : p > 60 ? "amber" : "primary";
 
   return (
-    <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-6 shadow-xl">
+    <Card className="relative overflow-hidden bg-card border-border rounded-xl px-[17px] py-[15px]">
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Resources */}
         <div className="xl:col-span-2 space-y-4">
@@ -363,15 +360,15 @@ function ServerStatsCard({ serverStats }: { serverStats: ServerStats }) {
             />
           )}
           <div className="grid grid-cols-2 gap-3 pt-1">
-            <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-3">
+            <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Hostname</p>
               <p className="mt-1 font-semibold text-sm truncate">{serverStats.hostname}</p>
             </div>
-            <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-3">
+            <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Платформа</p>
               <p className="mt-1 font-semibold text-sm truncate">{serverStats.platform} · {serverStats.arch}</p>
             </div>
-            <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-3 col-span-2">
+            <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3 col-span-2">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Load average</p>
               <p className="mt-1 font-semibold text-sm tabular-nums">
                 {serverStats.loadAvg.map((l) => l.toFixed(2)).join(" / ")}
@@ -382,22 +379,22 @@ function ServerStatsCard({ serverStats }: { serverStats: ServerStats }) {
 
         {/* Uptime */}
         <div className="flex flex-col gap-3">
-          <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-gradient-to-br from-primary/10 via-purple-500/5 to-transparent p-5 flex flex-col items-center justify-center text-center shadow-inner h-full min-h-[180px]">
+          <div className="relative overflow-hidden rounded-xl border border-border bg-transparent p-5 flex flex-col items-center justify-center text-center h-full min-h-[180px]">
             <motion.div
               animate={{ opacity: [0.25, 0.5, 0.25] }}
               transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
               className="absolute inset-0 bg-[radial-gradient(circle_at_center,hsl(var(--primary)/0.2)_0%,transparent_60%)] pointer-events-none"
             />
             <p className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">Аптайм</p>
-            <p className="text-2xl sm:text-3xl font-extrabold tabular-nums tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
+            <p className="text-2xl sm:text-3xl font-extrabold tabular-nums tracking-tight text-foreground">
               {formatUptime(serverStats.uptimeSeconds)}
             </p>
             <div className="mt-4 flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 dark:text-emerald-400 px-3 py-1 text-[10px] font-medium">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]" />
+              <span className="inline-flex items-center gap-1.5 rounded-full border-border border border-border text-muted-foreground dark:text-muted-foreground px-3 py-1 text-[10px] font-medium">
+                <span className="h-1.5 w-1.5 rounded-full border-border" />
                 Online
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/5 border border-white/10 text-muted-foreground px-2.5 py-1 text-[10px]">
+              <span className="inline-flex items-center gap-1 rounded-full bg-card border border-border text-muted-foreground px-2.5 py-1 text-[10px]">
                 <Zap className="h-3 w-3" /> сеть
               </span>
             </div>
@@ -408,7 +405,7 @@ function ServerStatsCard({ serverStats }: { serverStats: ServerStats }) {
   );
 }
 
-/* ── Node Card ── */
+/*  Node Card  */
 
 function NodeCard({
   index,
@@ -434,18 +431,18 @@ function NodeCard({
   const statusBadge = node.isDisabled
     ? "bg-gray-500/10 text-gray-400 border-gray-500/20"
     : node.isConnecting
-      ? "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20"
+      ? "border-border text-muted-foreground dark:text-muted-foreground border-border"
       : node.isConnected
-        ? "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20"
-        : "bg-red-500/10 text-red-500 dark:text-red-400 border-red-500/20";
+        ? "border-border text-muted-foreground dark:text-muted-foreground border-border"
+        : "border-border text-muted-foreground dark:text-muted-foreground border-border";
 
   const dotColor = node.isDisabled
     ? "bg-gray-400"
     : node.isConnecting
-      ? "bg-amber-400 shadow-[0_0_6px_#fbbf24]"
+      ? "border-border"
       : node.isConnected
-        ? "bg-emerald-400 shadow-[0_0_6px_#10b981]"
-        : "bg-red-400 shadow-[0_0_6px_#f87171]";
+        ? "border-border"
+        : "border-border";
 
   const limit = node.trafficLimitBytes ?? 0;
   const usedVal = node.trafficUsedBytes ?? 0;
@@ -455,13 +452,10 @@ function NodeCard({
 
   return (
     <motion.div custom={index} variants={cardVariants}>
-      <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl hover:border-white/20 transition-all">
+      <Card className="relative overflow-hidden bg-card border-border rounded-2xl p-5 hover:border-border transition-all">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/15 to-purple-500/10 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-              <Server className="h-5 w-5 text-primary" />
-            </div>
             <div className="min-w-0">
               <p className="font-semibold truncate">{node.name || node.uuid.substring(0, 8)}</p>
               <p className="text-xs text-muted-foreground truncate">
@@ -470,7 +464,7 @@ function NodeCard({
               </p>
             </div>
           </div>
-          <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium backdrop-blur-md shrink-0", statusBadge)}>
+          <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shrink-0", statusBadge)}>
             <span className={cn("h-1.5 w-1.5 rounded-full", dotColor)} />
             {statusLabel}
           </span>
@@ -483,20 +477,20 @@ function NodeCard({
 
         {/* Stats grid */}
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-3">
+          <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <Cpu className="h-3 w-3" /> CPU / RAM
             </span>
             <p className="mt-1 font-semibold text-sm tabular-nums">{formatNodeCpuRam(node)}</p>
           </div>
-          <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-3">
+          <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <Wifi className="h-3 w-3" /> Подключено
             </span>
             <p className="mt-1 font-semibold text-sm flex items-center gap-2 tabular-nums">
               {node.usersOnline != null ? (
                 <>
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]" />
+                  <span className="h-2 w-2 rounded-full border-border" />
                   {node.usersOnline} онлайн
                 </>
               ) : (
@@ -515,7 +509,7 @@ function NodeCard({
             <Button
               size="sm"
               variant="outline"
-              className="flex-1 gap-2 border-emerald-500/30 text-emerald-500 dark:text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/50 bg-white/[0.02]"
+              className="flex-1 gap-2 border-border text-muted-foreground dark:text-muted-foreground hover:border-border hover:border-border bg-white/[0.02]"
               disabled={isBusy}
               onClick={() => onAction(node.uuid, "enable")}
             >
@@ -526,7 +520,7 @@ function NodeCard({
             <Button
               size="sm"
               variant="outline"
-              className="flex-1 gap-2 border-red-500/30 text-red-500 dark:text-red-400 hover:bg-red-500/10 hover:border-red-500/50 bg-white/[0.02]"
+              className="flex-1 gap-2 border-border text-muted-foreground dark:text-muted-foreground hover:border-border hover:border-border bg-white/[0.02]"
               disabled={isBusy}
               onClick={() => onAction(node.uuid, "disable")}
             >
@@ -537,7 +531,7 @@ function NodeCard({
           <Button
             size="sm"
             variant="outline"
-            className="flex-1 gap-2 border-primary/30 text-primary hover:bg-primary/10 hover:border-primary/50 bg-white/[0.02]"
+            className="flex-1 gap-2 border-border text-primary hover:bg-primary/10 hover:border-border bg-white/[0.02]"
             disabled={isBusy}
             onClick={() => onAction(node.uuid, "restart")}
           >
@@ -550,9 +544,9 @@ function NodeCard({
   );
 }
 
-/* ══════════════════════════════════════════════════════════════════ */
+/*  */
 /*                       MAIN COMPONENT                              */
-/* ══════════════════════════════════════════════════════════════════ */
+/*  */
 
 export function DashboardPage() {
   const { t } = useTranslation();
@@ -680,7 +674,7 @@ export function DashboardPage() {
   const sales90d = analyticsData?.revenueSeries?.reduce((acc: any, curr: any) => acc + curr.value, 0) || 0;
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
-  /* ── Loading ── */
+  /*  Loading  */
   if (loading && !stats) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -690,39 +684,36 @@ export function DashboardPage() {
     );
   }
 
-  /* ── Nodes online/total ── */
+  /*  Nodes online/total  */
   const nodesOnline = nodes.filter((n) => n.isConnected && !n.isDisabled).length;
   const nodesTotal = nodes.length;
 
   return (
-    <div className="w-full space-y-6 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
+    <div className="w-full flex flex-col gap-3.5 relative">
       {/* Background ambient orbs */}
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+      
+      
 
       {/* Page header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Activity className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground via-primary/80 to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               {t("admin.dashboard.title")}
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">{t("admin.dashboard.subtitle")}</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">{t("admin.dashboard.subtitle")}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 dark:text-emerald-400 px-3 py-1 text-[11px] font-medium backdrop-blur-md">
+          <span className="inline-flex items-center gap-1.5 rounded-full border-border border border-border text-muted-foreground dark:text-muted-foreground px-3 py-1 text-[11px] font-medium">
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full border-border opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full border-border" />
             </span>
             Live
           </span>
@@ -731,7 +722,7 @@ export function DashboardPage() {
             size="icon"
             onClick={() => loadAll(true)}
             disabled={loading || refreshing}
-            className="h-9 w-9 rounded-full hover:bg-white/10"
+            className="h-9 w-9 rounded-full hover:bg-card"
             title="Обновить"
           >
             <RefreshCw className={cn("h-4 w-4 text-muted-foreground", refreshing && "animate-spin text-primary")} />
@@ -742,7 +733,7 @@ export function DashboardPage() {
       {/* Manager warning */}
       {admin?.role === "MANAGER" && (!admin.allowedSections || admin.allowedSections.length === 0) && (
         <motion.div
-          className="rounded-2xl border border-amber-500/30 bg-amber-500/10 backdrop-blur-md px-4 py-3 text-sm text-amber-500 dark:text-amber-400"
+          className="rounded-xl border border-border border-border px-4 py-3 text-sm text-muted-foreground dark:text-muted-foreground"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
         >
@@ -753,7 +744,7 @@ export function DashboardPage() {
       {/* Error display */}
       {error && (
         <motion.div
-          className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400"
+          className="rounded-xl border border-border border-border px-4 py-3 text-sm text-muted-foreground dark:text-muted-foreground"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
         >
@@ -762,9 +753,9 @@ export function DashboardPage() {
       )}
 
       {/* Users Section */}
-      <section>
+      <section className="flex flex-col">
         <SectionHeader icon={Users} title={t("admin.dashboard.users_title")} subtitle={t("admin.dashboard.users_subtitle")} />
-        <motion.div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3" variants={staggerContainer} initial="hidden" animate="visible">
+        <motion.div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3" variants={staggerContainer} initial="hidden" animate="visible">
           <StatCard
             index={0}
             icon={Users}
@@ -793,23 +784,23 @@ export function DashboardPage() {
       </section>
 
       {/* Analytics Section */}
-      <section>
+      <section className="flex flex-col">
         <SectionHeader icon={Activity} title={t("admin.dashboard.micro_analytics")} subtitle={t("admin.dashboard.key_metrics")} />
         <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={0}>
-          <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-6 shadow-xl">
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+          <Card className="relative overflow-hidden bg-card border-border rounded-xl px-[17px] py-[15px]">
+            <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
               {[
-                { label: t("admin.dashboard.total"), amount: stats?.sales.totalAmount ?? 0, count: stats?.sales.totalCount ?? 0, gradient: "from-primary/15 to-primary/5", textColor: "text-primary" },
-                { label: t("admin.dashboard.today"), amount: stats?.sales.todayAmount ?? 0, count: stats?.sales.todayCount ?? 0, gradient: "from-emerald-500/15 to-emerald-500/5", textColor: "text-emerald-500 dark:text-emerald-400" },
-                { label: t("admin.dashboard.7_days"), amount: stats?.sales.last7DaysAmount ?? 0, count: stats?.sales.last7DaysCount ?? 0, gradient: "from-cyan-500/15 to-cyan-500/5", textColor: "text-cyan-500 dark:text-cyan-400" },
-                { label: t("admin.dashboard.30_days"), amount: stats?.sales.last30DaysAmount ?? 0, count: stats?.sales.last30DaysCount ?? 0, gradient: "from-violet-500/15 to-violet-500/5", textColor: "text-violet-500 dark:text-violet-400" },
-                { label: t("admin.dashboard.90_days"), amount: sales90d as number, count: 0, isLast90: true, gradient: "from-amber-500/15 to-amber-500/5", textColor: "text-amber-500 dark:text-amber-400" },
+                { label: t("admin.dashboard.total"), amount: stats?.sales.totalAmount ?? 0, count: stats?.sales.totalCount ?? 0, gradient: "bg-muted", textColor: "text-primary" },
+                { label: t("admin.dashboard.today"), amount: stats?.sales.todayAmount ?? 0, count: stats?.sales.todayCount ?? 0, gradient: "bg-muted", textColor: "text-muted-foreground dark:text-muted-foreground" },
+                { label: t("admin.dashboard.7_days"), amount: stats?.sales.last7DaysAmount ?? 0, count: stats?.sales.last7DaysCount ?? 0, gradient: "bg-muted", textColor: "text-muted-foreground dark:text-muted-foreground" },
+                { label: t("admin.dashboard.30_days"), amount: stats?.sales.last30DaysAmount ?? 0, count: stats?.sales.last30DaysCount ?? 0, gradient: "bg-muted", textColor: "text-muted-foreground dark:text-muted-foreground" },
+                { label: t("admin.dashboard.90_days"), amount: sales90d as number, count: 0, isLast90: true, gradient: "bg-muted", textColor: "text-muted-foreground dark:text-muted-foreground" },
               ].map((item, i) => (
                 <motion.div
                   key={i}
                   whileHover={{ y: -2, scale: 1.02 }}
                   transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                  className={cn("relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br p-3 shadow-sm", item.gradient)}
+                  className={cn("relative overflow-hidden rounded-xl border border-border  p-3 shadow-sm", item.gradient)}
                 >
                   <p className={cn("text-[11px] font-medium", item.textColor)}>{item.label}</p>
                   <p className="mt-1.5 text-lg font-extrabold tabular-nums tracking-tight text-foreground">
@@ -827,7 +818,7 @@ export function DashboardPage() {
                 <p className="text-xs text-muted-foreground">{t("admin.dashboard.analytics_period")}</p>
                 <h3 className="text-base font-bold tracking-tight">Доход / новые пользователи</h3>
               </div>
-              <div className="flex items-center gap-1 bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-white/5">
+              <div className="flex items-center gap-1 bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-border">
                 {[7, 30, 90].map((period) => {
                   const isActive = chartPeriod === period;
                   return (
@@ -837,8 +828,8 @@ export function DashboardPage() {
                       className={cn(
                         "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
                         isActive
-                          ? "bg-primary text-primary-foreground shadow-md"
-                          : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground hover:bg-card"
                       )}
                     >
                       {period}d
@@ -848,7 +839,7 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div className="mt-4 h-[320px] w-full rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 backdrop-blur-md">
+            <div className="mt-4 h-[320px] w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>
@@ -912,7 +903,7 @@ export function DashboardPage() {
 
       {/* Gift Analytics */}
       {giftAnalytics && (giftAnalytics.totalSubscriptions > 0 || giftAnalytics.pendingCodes > 0) && (
-        <section>
+        <section className="flex flex-col">
           <SectionHeader icon={Gift} title="Подарки" subtitle="Аналитика подарков" />
           <motion.div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" variants={staggerContainer} initial="hidden" animate="visible">
             <StatCard
@@ -953,7 +944,7 @@ export function DashboardPage() {
 
       {/* Server Stats */}
       {serverStats && (
-        <section>
+        <section className="flex flex-col">
           <SectionHeader icon={Server} title={t("admin.dashboard.command_center")} subtitle={t("admin.dashboard.server_monitoring")} />
           <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={0}>
             <ServerStatsCard serverStats={serverStats} />
@@ -962,7 +953,7 @@ export function DashboardPage() {
       )}
 
       {/* Remna Nodes */}
-      <section>
+      <section className="flex flex-col">
         <SectionHeader
           icon={Globe}
           title={t("admin.dashboard.remna_nodes")}
@@ -973,11 +964,11 @@ export function DashboardPage() {
           }
         />
         {!hasRemnaNodesAccess ? (
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-10 text-center shadow-xl">
+          <Card className="bg-card border-border rounded-2xl py-10 text-center">
             <p className="text-sm text-muted-foreground">{t("admin.dashboard.no_node_access")}</p>
           </Card>
         ) : nodes.length === 0 ? (
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-10 text-center shadow-xl">
+          <Card className="bg-card border-border rounded-2xl py-10 text-center">
             <p className="text-sm text-muted-foreground">{t("admin.dashboard.nodes_not_loaded")}</p>
           </Card>
         ) : (

@@ -158,6 +158,19 @@ export interface QuickSearchResult {
   score: number;
 }
 
+export interface ConsoleAccess {
+  user: string;
+  password: string;
+  port: number;
+  ip: string | null;
+  sshCommand: string;
+  ufwHint: string;
+}
+export const consoleApi = {
+  get: (token: string) => req<ConsoleAccess>(token, `/console`),
+  regenerate: (token: string) => req<ConsoleAccess>(token, `/console/regenerate`, { method: "POST" }),
+};
+
 export const quickSearchApi = {
   search: (token: string, q: string) =>
     req<{ items: QuickSearchResult[] }>(token, `/quick-search?q=${encodeURIComponent(q)}`),

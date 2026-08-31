@@ -41,10 +41,10 @@ export function FeaturesStrip({ block }: { block: LandingApiBlock }) {
               viewport={{ once: true }}
               transition={{ duration: 0.4, delay: idx * 0.05 }}
             >
-              <Card className="h-full border-slate-200/70 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur-xl transition-shadow hover:shadow-lg">
+              <Card className="h-full border-slate-200/70 dark:border-border bg-card dark:bg-card transition-shadow">
                 <CardContent className="p-5">
                   <div
-                    className="flex h-10 w-10 items-center justify-center rounded-2xl"
+                    className="flex h-10 w-10 items-center justify-center rounded-xl"
                     style={{ background: `${accentTheme.primary}15`, color: accentTheme.primary }}
                   >
                     <Icon className="h-5 w-5" />

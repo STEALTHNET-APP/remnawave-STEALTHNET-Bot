@@ -143,14 +143,14 @@ export function MarketplaceBrowsePage() {
 
       {loading && <SkeletonGrid />}
       {!loading && error && (
-        <Card className="p-6 text-sm text-red-600 dark:text-red-300 border-red-500/30 bg-red-500/5">
+        <Card className="p-4 text-sm text-red-600 dark:text-red-300 border-red-500/30 bg-red-500/5">
           {t("admin.marketplace.browse.load_error")}: {error}
         </Card>
       )}
       {!loading && !error && items.length === 0 && (
         <Card className="p-12 text-center space-y-2">
           <ShoppingBag className="h-12 w-12 mx-auto text-muted-foreground/40" />
-          <h3 className="text-lg font-semibold">{t("admin.marketplace.browse.empty_title")}</h3>
+          <h3 className="text-[13.5px] font-bold">{t("admin.marketplace.browse.empty_title")}</h3>
           <p className="text-sm text-muted-foreground">{t("admin.marketplace.browse.empty_subtitle")}</p>
         </Card>
       )}
@@ -164,13 +164,13 @@ export function MarketplaceBrowsePage() {
           {total > 20 && (
             <div className="flex items-center justify-center gap-2 pt-2">
               <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                ←
+                
               </Button>
               <span className="text-sm text-muted-foreground">
                 {page} / {Math.max(1, Math.ceil(total / 20))}
               </span>
               <Button size="sm" variant="outline" disabled={page >= Math.ceil(total / 20)} onClick={() => setPage((p) => p + 1)}>
-                →
+                
               </Button>
             </div>
           )}
@@ -206,23 +206,23 @@ function ListingCard({ item, lang, onClick }: { item: MarketplaceListingDto; lan
   const catLabel = lang === "ru" ? item.category.labelRu : item.category.labelEn;
   return (
     <Card
-      className="overflow-hidden flex flex-col hover:shadow-xl hover:scale-[1.01] transition-all cursor-pointer"
+      className="overflow-hidden flex flex-col hover:scale-[1.01] transition-all cursor-pointer"
       onClick={onClick}
     >
-      <div className="relative h-40 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent overflow-hidden">
+      <div className="relative h-40 bg-transparent overflow-hidden">
         {cover ? (
           <img src={cover} alt={item.title} className="h-full w-full object-cover" />
         ) : (
           <div className="h-full w-full flex items-center justify-center text-primary/40">
-            <ShoppingBag className="h-14 w-14" />
+            <ShoppingBag className="h-9 w-9" />
           </div>
         )}
         <div className="absolute top-3 left-3 flex flex-wrap gap-1">
-          <span className="rounded-full bg-background/80 backdrop-blur px-2.5 py-1 text-[11px] font-medium border">
+          <span className="rounded-full bg-card px-2.5 py-1 text-[11px] font-medium border">
             {catLabel}
           </span>
           {country && (
-            <span className="rounded-full bg-background/80 backdrop-blur px-2.5 py-1 text-[11px] font-medium border">
+            <span className="rounded-full bg-card px-2.5 py-1 text-[11px] font-medium border">
               {country} {item.country}
             </span>
           )}
@@ -234,7 +234,7 @@ function ListingCard({ item, lang, onClick }: { item: MarketplaceListingDto; lan
         <div className="flex items-end justify-between gap-2 pt-1">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{t("admin.marketplace.card.from")}</div>
-            <div className="text-lg font-bold leading-tight">
+            <div className="text-[13.5px] font-bold leading-tight">
               {formatPrice(item.priceCents, item.currency)}
               <span className="text-xs text-muted-foreground ml-1">{t(priceUnitKey(item.priceUnit))}</span>
             </div>
@@ -307,14 +307,14 @@ function ListingDialog({ open, item, lang, onClose }: { open: boolean; item: Mar
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-5xl">
         <DialogHeader>
           <DialogTitle>{item.title}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="md:col-span-3">
             <div className="rounded-xl overflow-hidden border bg-muted/30 aspect-[16/9] flex items-center justify-center">
-              {cover ? <img src={cover} alt="" className="h-full w-full object-cover" /> : <ShoppingBag className="h-14 w-14 text-muted-foreground/40" />}
+              {cover ? <img src={cover} alt="" className="h-full w-full object-cover" /> : <ShoppingBag className="h-9 w-9 text-muted-foreground/40" />}
             </div>
             {item.gallery.length > 0 && (
               <div className="grid grid-cols-4 gap-2 mt-3">
@@ -336,7 +336,7 @@ function ListingDialog({ open, item, lang, onClose }: { open: boolean; item: Mar
           <div className="md:col-span-2 space-y-3">
             <Card className="p-4">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{t("admin.marketplace.card.from")}</div>
-              <div className="text-2xl font-bold">
+              <div className="text-[13.5px] font-bold">
                 {formatPrice(item.priceCents, item.currency)}
                 <span className="text-sm text-muted-foreground ml-1">{t(priceUnitKey(item.priceUnit))}</span>
               </div>
@@ -365,7 +365,7 @@ function ListingDialog({ open, item, lang, onClose }: { open: boolean; item: Mar
               </Button>
               <Button size="sm" variant="outline" className="w-full" disabled={reportSent} onClick={submitReport}>
                 <Flag className="h-3.5 w-3.5" />
-                {reportSent ? "✓" : t("admin.marketplace.browse.report")}
+                {reportSent ? "" : t("admin.marketplace.browse.report")}
               </Button>
             </Card>
           </div>

@@ -92,7 +92,7 @@ export function ClientsPage() {
   const [searchApplied, setSearchApplied] = useState("");
   const [filterBlocked, setFilterBlocked] = useState<"all" | "blocked" | "active">("all");
 
-  // ─── Bulk-actions state ───────────────────────────────────────────────
+  //  Bulk-actions state 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState<BulkClientAction | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
@@ -120,11 +120,11 @@ export function ClientsPage() {
     }).catch(() => setLoading(false));
   };
 
-  // ─── Bulk-actions helpers ─────────────────────────────────────────────
+  //  Bulk-actions helpers 
   const allRowIds = (data?.items ?? []).map((c) => c.id);
   const allSelected = allRowIds.length > 0 && allRowIds.every((id) => selectedIds.has(id));
 
-  // Массовые операции напрямую в Remnawave (API 2.8 /users/bulk/*): маппим выбранных клиентов → remnawaveUuid.
+  // Массовые операции напрямую в Remnawave (API 2.8 /users/bulk/*): маппим выбранных клиентов  remnawaveUuid.
   const runRemnaBulk = async (action: "reset-traffic" | "revoke") => {
     const uuids = (data?.items ?? []).filter((c) => selectedIds.has(c.id) && c.remnawaveUuid).map((c) => c.remnawaveUuid as string);
     if (uuids.length === 0) { setBulkError("У выбранных клиентов нет VPN-подписки (remnawaveUuid)."); setBulkResult(null); return; }
@@ -315,42 +315,28 @@ export function ClientsPage() {
   return (
     <div className="space-y-6 relative min-h-screen">
       {/* Ambient Glows */}
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
 
       {/* HEADER */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="relative overflow-hidden flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        {/* Decorative gradient orb in corner */}
-        <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-gradient-to-br from-primary/20 via-purple-500/15 to-transparent blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-12 -left-12 h-32 w-32 rounded-full bg-gradient-to-tr from-cyan-500/15 to-transparent blur-2xl pointer-events-none" />
 
-        <div className="relative flex items-center gap-4">
-          <motion.div
-            whileHover={{ scale: 1.05, rotate: 4 }}
-            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="relative h-14 w-14 rounded-2xl bg-gradient-to-br from-primary/30 via-purple-500/20 to-cyan-500/15 flex items-center justify-center shadow-inner border border-white/10 shrink-0"
-          >
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/10 to-transparent" />
-            <Users className="relative h-7 w-7 text-primary" />
-          </motion.div>
+        <div className="relative flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground via-primary to-foreground/70 dark:from-foreground dark:via-primary dark:to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               {t("admin.clients.title")}
             </h1>
-            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary border border-primary/20 backdrop-blur-md">
+            <div className="flex items-center gap-2 mt-[3px] flex-wrap text-[12.5px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary border border-border">
                 <Users className="h-3 w-3" />
                 Всего: <span className="tabular-nums">{data?.total ?? 0}</span>
               </span>
               {data && data.items.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 backdrop-blur-md">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 border border-emerald-500/20">
                   <span className="relative flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px_#10b981]" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   </span>
                   Live
                 </span>
@@ -358,13 +344,13 @@ export function ClientsPage() {
             </div>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={loadClients} disabled={loading} className="relative h-9 w-9 rounded-full hover:bg-foreground/[0.06] dark:hover:bg-white/10">
+        <Button variant="ghost" size="icon" onClick={loadClients} disabled={loading} className="relative h-9 w-9 rounded-full hover:bg-foreground/[0.06] dark:hover:bg-card">
           <RefreshCw className={cn("h-4 w-4 text-muted-foreground transition-all", loading && "animate-[spin_1.5s_linear_infinite] text-primary")} />
         </Button>
       </motion.div>
 
       {/* FILTERS */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 p-4 rounded-[2rem] shadow-xl">
+      <Card className="bg-card border-border p-4 rounded-2xl">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -373,17 +359,17 @@ export function ClientsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && applySearch()}
-              className="pl-9 pr-20 bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50 rounded-xl"
+              className="pl-9 pr-20 bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50 rounded-xl"
             />
             <Button
               variant="secondary" size="sm"
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 px-3 text-xs bg-primary/15 hover:bg-primary/25 text-primary border border-primary/20 rounded-lg"
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 px-3 text-xs bg-primary/15 hover:bg-primary/25 text-primary border border-border rounded-lg"
               onClick={applySearch}
             >
               {t("admin.clients.find")}
             </Button>
           </div>
-          <div className="flex items-center gap-1 bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-white/5">
+          <div className="flex items-center gap-1 bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-border">
             {(["all", "active", "blocked"] as const).map((f) => (
               <button
                 key={f}
@@ -391,8 +377,8 @@ export function ClientsPage() {
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
                   filterBlocked === f
-                    ? "bg-primary text-primary-foreground shadow-md"
-                    : "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] dark:hover:bg-white/5"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] dark:hover:bg-card"
                 )}
               >
                 {f === "all" ? t("admin.clients.all") : f === "active" ? t("admin.clients.active") : t("admin.clients.blocked")}
@@ -404,7 +390,7 @@ export function ClientsPage() {
 
       {/* BULK ACTIONS BAR */}
       {selectedIds.size > 0 && (
-        <Card className="bg-primary/10 backdrop-blur-3xl border-primary/30 p-4 rounded-2xl shadow-xl">
+        <Card className="bg-primary/10 border-border p-4 rounded-xl">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
             <div className="flex items-center gap-3 shrink-0">
               <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full bg-primary text-primary-foreground text-xs font-bold">
@@ -425,13 +411,13 @@ export function ClientsPage() {
                 type="number"
                 value={bulkAmount}
                 onChange={(e) => setBulkAmount(e.target.value)}
-                className="h-8 w-[100px] text-xs rounded-lg bg-background/40 border-white/10"
+                className="h-8 w-[100px] text-xs rounded-lg bg-card border-border"
               />
               <Input
                 placeholder="причина (для блокировки)"
                 value={bulkReason}
                 onChange={(e) => setBulkReason(e.target.value)}
-                className="h-8 w-[180px] text-xs rounded-lg bg-background/40 border-white/10"
+                className="h-8 w-[180px] text-xs rounded-lg bg-card border-border"
               />
 
               <Button
@@ -486,7 +472,7 @@ export function ClientsPage() {
                 className="h-8 rounded-lg gap-1.5 text-xs"
               >
                 {bulkBusy === "mark_unreachable" ? <Loader2 className="h-3 w-3 animate-spin" /> : <MailX className="h-3 w-3" />}
-                TG ✗
+                TG 
               </Button>
               <Button
                 size="sm" variant="outline"
@@ -495,9 +481,9 @@ export function ClientsPage() {
                 className="h-8 rounded-lg gap-1.5 text-xs"
               >
                 {bulkBusy === "mark_reachable" ? <Loader2 className="h-3 w-3 animate-spin" /> : <MailCheck className="h-3 w-3" />}
-                TG ✓
+                TG 
               </Button>
-              <div className="w-px h-5 bg-white/10 mx-0.5 self-center" />
+              <div className="w-px h-5 bg-card mx-0.5 self-center" />
               <Button
                 size="sm" variant="outline"
                 onClick={() => runRemnaBulk("reset-traffic")}
@@ -522,7 +508,7 @@ export function ClientsPage() {
           </div>
 
           {(bulkError || bulkResult) && (
-            <div className="mt-3 pt-3 border-t border-white/10 flex items-center gap-3 text-xs">
+            <div className="mt-3 pt-3 border-t border-border flex items-center gap-3 text-xs">
               {bulkError && <span className="text-rose-500">{bulkError}</span>}
               {bulkResult && (
                 <span className={cn("font-medium", bulkResult.failed === 0 ? "text-emerald-500" : "text-amber-500")}>
@@ -536,17 +522,14 @@ export function ClientsPage() {
       )}
 
       {/* TABLE */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden relative min-h-[400px]">
+      <Card className="bg-card border-border rounded-2xl overflow-hidden relative min-h-[400px]">
         {loading && !data ? (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/40 backdrop-blur-sm">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-card">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
             <span className="text-sm font-medium text-muted-foreground">{t("admin.clients.loading")}</span>
           </div>
         ) : !data || data.items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-4 border border-white/10">
-              <Users className="h-8 w-8 text-muted-foreground" />
-            </div>
             <p className="text-muted-foreground font-medium">{t("admin.clients.loading_error")}</p>
             {searchApplied && (
               <Button variant="link" size="sm" className="mt-2 text-primary" onClick={() => { setSearch(""); setSearchApplied(""); }}>
@@ -557,26 +540,28 @@ export function ClientsPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left whitespace-nowrap">
-              <thead className="text-xs uppercase bg-foreground/[0.04] dark:bg-white/[0.04] text-muted-foreground border-b border-white/10">
+              <thead className="text-[10.5px] uppercase tracking-[0.7px] text-muted-foreground border-b border-border">
                 <tr>
-                  <th className="px-6 py-4 rounded-tl-[2rem]">
+                  <th className="px-3 pb-2 pt-1">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 rounded border-white/30 bg-background cursor-pointer accent-primary"
+                      className="h-4 w-4 rounded border-border bg-background cursor-pointer accent-primary"
                       checked={allSelected}
                       onChange={toggleAll}
                       onClick={(e) => e.stopPropagation()}
                       aria-label="Выбрать всех"
                     />
                   </th>
-                  <th className="px-6 py-4 font-semibold tracking-wider">Пользователь</th>
-                  <th className="px-6 py-4 font-semibold tracking-wider">Контакты</th>
-                  <th className="px-6 py-4 font-semibold tracking-wider">Баланс & Дата</th>
-                  <th className="px-6 py-4 font-semibold tracking-wider">Статус</th>
-                  <th className="px-6 py-4 rounded-tr-[2rem] text-right">Действия</th>
+                  <th className="px-3 pb-2 pt-1 font-bold">Клиент</th>
+                  <th className="px-3 pb-2 pt-1 font-bold">Контакты</th>
+                  <th className="px-3 pb-2 pt-1 font-bold">Язык</th>
+                  <th className="px-3 pb-2 pt-1 font-bold text-right">Баланс</th>
+                  <th className="px-3 pb-2 pt-1 font-bold">Регистрация</th>
+                  <th className="px-3 pb-2 pt-1 font-bold">Статус</th>
+                  <th className="px-3 pb-2 pt-1 text-right font-bold">Действия</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody>
                 {data.items.map((c, idx) => {
                   const onlineAt = onlineStatuses[c.remnawaveUuid ?? ""]?.onlineAt ?? c.onlineAt ?? null;
                   const status = getOnlineStatus(onlineAt);
@@ -589,75 +574,70 @@ export function ClientsPage() {
                       transition={{ delay: idx * 0.02 }}
                       onClick={() => openEdit(c)}
                       className={cn(
-                        "group cursor-pointer transition-all duration-200 border-l-[3px] border-l-transparent hover:bg-white/5 hover:border-l-primary/50",
-                        c.isBlocked && "bg-red-500/5 hover:bg-red-500/10 border-l-red-500/50"
+                        "group cursor-pointer transition-colors border-t border-border hover:bg-muted/60",
+                        c.isBlocked && "bg-destructive/5"
                       )}
                     >
-                      <td className="px-6 py-4 w-10" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-3 py-2 w-9" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-white/30 bg-background cursor-pointer accent-primary"
+                          className="h-4 w-4 rounded border-border bg-background cursor-pointer accent-primary"
                           checked={selectedIds.has(c.id)}
                           onChange={() => toggleId(c.id)}
                           aria-label={`Выбрать клиента ${c.id}`}
                         />
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 py-2">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-purple-500/20 text-primary border border-white/10">
-                            <User className="h-5 w-5" />
-                          </div>
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
-                              <span className="font-semibold text-foreground">
+                              <span className="font-semibold text-foreground text-[12.7px]">
                                 {c.telegramUsername ? `@${c.telegramUsername}` : c.email || `ID: ${c.telegramId ?? c.id.slice(0, 8)}`}
                               </span>
                             </div>
-                            <div className="flex items-center gap-1.5 mt-1">
-                              <span className={cn("inline-flex h-2 w-2 rounded-full", status.isOnline ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]" : "bg-gray-500/50")} />
-                              <span className="text-[10px] text-muted-foreground">{status.label}</span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className={cn("inline-flex h-[6px] w-[6px] rounded-full", status.isOnline ? "bg-emerald-500" : "bg-muted-foreground/40")} />
+                              <span className="text-[10.5px] text-muted-foreground">{status.label}</span>
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col gap-0.5 text-[12px] text-muted-foreground">
                           {c.email && c.telegramUsername && <div className="flex items-center gap-1"><span className="text-foreground/80">{c.email}</span></div>}
                           {c.telegramId && <div className="flex items-center gap-1">TG: <span className="text-foreground/80">{c.telegramId}</span></div>}
-                          <div className="uppercase text-[10px] bg-white/5 px-1.5 py-0.5 rounded max-w-fit border border-white/5 mt-0.5">{c.preferredLang}</div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1.5">
-                          <span className="inline-flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 font-medium text-xs border border-white/5 max-w-fit">
-                            {c.balance.toFixed(2)} {c.preferredCurrency.toUpperCase()}
-                          </span>
-                          <span className="text-[11px] text-muted-foreground">{fmtMskDate(c.createdAt)}</span>
-                        </div>
+                      <td className="px-3 py-2 text-[12px] uppercase text-muted-foreground">{c.preferredLang}</td>
+                      <td className="px-3 py-2 text-right">
+                        <span className={cn("tabular-nums text-[12.7px]", c.balance > 0 ? "text-foreground font-semibold" : "text-muted-foreground")}>
+                          {c.balance.toFixed(2)} {c.preferredCurrency.toUpperCase()}
+                        </span>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1.5">
+                      <td className="px-3 py-2 text-[12px] text-muted-foreground tabular-nums">{fmtMskDate(c.createdAt)}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col gap-1">
                           {c.isBlocked && (
-                            <span className="inline-flex items-center rounded-full bg-red-500/15 text-red-400 px-2.5 py-0.5 text-[11px] font-medium border border-red-500/20 backdrop-blur-md max-w-fit shadow-sm">
+                            <span className="inline-flex items-center rounded-full bg-red-500/15 text-red-400 px-2.5 py-0.5 text-[11px] font-medium border border-red-500/20 max-w-fit shadow-sm">
                               <Ban className="h-3 w-3 mr-1" /> {t("admin.clients.block")}
                             </span>
                           )}
                           {c.activeNode && (
-                            <span className="inline-flex items-center rounded-full bg-emerald-500/15 text-emerald-400 px-2.5 py-0.5 text-[11px] font-medium border border-emerald-500/20 backdrop-blur-md max-w-fit shadow-sm">
+                            <span className="inline-flex items-center rounded-full bg-emerald-500/15 text-emerald-400 px-2.5 py-0.5 text-[11px] font-medium border border-emerald-500/20 max-w-fit shadow-sm">
                               <Activity className="h-3 w-3 mr-1" /> {c.activeNode}
                             </span>
                           )}
                           {!c.isBlocked && !c.activeNode && (
-                            <span className="text-muted-foreground text-xs">—</span>
+                            <span className="text-[10.5px] font-bold px-2 py-[2px] rounded-full bg-muted text-muted-foreground max-w-fit">НЕТ ПОДПИСКИ</span>
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-foreground/[0.06] dark:hover:bg-white/10 hover:text-foreground" onClick={(e) => { e.stopPropagation(); openEdit(c); }} title="Редактировать">
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted hover:text-foreground" onClick={(e) => { e.stopPropagation(); openEdit(c); }} title="Редактировать">
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-red-500/20 text-destructive" onClick={(e) => { e.stopPropagation(); deleteClient(c); }} title="Удалить">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/15 text-destructive" onClick={(e) => { e.stopPropagation(); deleteClient(c); }} title="Удалить">
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -672,22 +652,20 @@ export function ClientsPage() {
       </Card>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-3 rounded-[1.5rem]">
+        <div className="flex items-center justify-between bg-card border border-border px-3 py-2 rounded-xl">
           <span className="text-sm font-medium text-muted-foreground px-3">
             {page} / {totalPages}
           </span>
           <div className="flex items-center gap-1.5">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(1)} className="h-8 w-8 p-0 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-white/10 rounded-lg">
-              «
-            </Button>
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="h-8 px-3 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-white/10 rounded-lg">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(1)} className="h-8 w-8 p-0 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-border rounded-lg">
+              «</Button>
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="h-8 px-3 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-border rounded-lg">
               {t("admin.common.back")}
             </Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="h-8 px-3 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-white/10 rounded-lg">
+            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="h-8 px-3 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-border rounded-lg">
               {t("admin.sales.next")}
             </Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="h-8 w-8 p-0 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-white/10 rounded-lg">
-              »
+            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="h-8 w-8 p-0 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-border rounded-lg">»
             </Button>
           </div>
         </div>
@@ -784,9 +762,9 @@ function ClientEditModal({
   // Выбранная опция длительности из priceOptions выбранного тарифа
   const [selectedGrantOptionId, setSelectedGrantOptionId] = useState<string>("");
   // кастомный лимит трафика в GB (override тарифа).
-  // Пустая строка → используется лимит тарифа. Поле показывается только для НЕ-безлимитных тарифов.
+  // Пустая строка  используется лимит тарифа. Поле показывается только для НЕ-безлимитных тарифов.
   const [grantTrafficGb, setGrantTrafficGb] = useState<string>("");
-  // override длительности в днях. Пустая строка → используется
+  // override длительности в днях. Пустая строка  используется
   // длительность выбранной опции / тарифа по умолчанию.
   const [grantCustomDays, setGrantCustomDays] = useState<string>("");
   const [grantNote, setGrantNote] = useState<string>("");
@@ -839,7 +817,7 @@ function ClientEditModal({
       const res = await api.setReferralReferrer(token, editing.id, referrerInput.trim(), referrerLookupBy);
       loadReferrer();
       setReferrerInput("");
-      setReferrerMessage(res.referrerId ? "✅ Реферер привязан" : "Реферер убран");
+      setReferrerMessage(res.referrerId ? " Реферер привязан" : "Реферер убран");
     } catch (e) {
       setReferrerMessage(e instanceof Error ? e.message : "Ошибка привязки");
     } finally {
@@ -884,8 +862,8 @@ function ClientEditModal({
     setGrantLoading(true);
     setGrantMessage(null);
     try {
-      // парсим override трафика — GB → bytes.
-      // Пустая строка / некорректное число → null (используется лимит тарифа).
+      // парсим override трафика — GB  bytes.
+      // Пустая строка / некорректное число  null (используется лимит тарифа).
       let trafficLimitBytesOverride: number | null | undefined;
       const trimmed = grantTrafficGb.trim();
       if (trimmed !== "") {
@@ -894,7 +872,7 @@ function ClientEditModal({
           trafficLimitBytesOverride = Math.round(gb * 1024 ** 3);
         }
       }
-      // парсим override длительности. Пустая строка / не-число → не шлём.
+      // парсим override длительности. Пустая строка / не-число  не шлём.
       let customDurationDaysOverride: number | undefined;
       const daysTrimmed = grantCustomDays.trim();
       if (daysTrimmed !== "") {
@@ -953,18 +931,18 @@ function ClientEditModal({
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0 bg-background/80 backdrop-blur-3xl border-white/10 shadow-2xl sm:rounded-[2rem] [&>button]:z-50">
-        <div className="absolute top-0 right-0 w-[500px] h-[300px] bg-primary/10 blur-[100px] pointer-events-none rounded-full" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[300px] bg-purple-500/10 blur-[100px] pointer-events-none rounded-full" />
-        <div className="p-6 border-b border-white/10 relative z-10 bg-white/5">
+      <DialogContent className="max-w-[1180px] w-[96vw] max-h-[92vh] overflow-y-auto p-0 gap-0 bg-card border border-border sm:rounded-2xl [&>button]:z-50">
+        
+        
+        <div className="px-5 py-[17px] border-b border-border relative z-10 bg-card">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <User className="h-6 w-6 text-primary" />
+            <DialogTitle className="flex items-center gap-3 text-[15px] font-bold">
+              <div className="h-9 w-11 shrink-0 rounded-xl bg-primary/12 text-primary grid place-items-center text-[15px] font-extrabold uppercase">
+                {(editing.telegramUsername || editing.email || String(editing.telegramId ?? "К")).replace(/^@/, "").slice(0, 2)}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="truncate">{editing.email || editing.telegramUsername ? `@${editing.telegramUsername}` : editing.telegramId || "Клиент"}</span>
+                  <span className="truncate text-[17px] font-extrabold">{editing.email || editing.telegramUsername ? `@${editing.telegramUsername}` : editing.telegramId || "Клиент"}</span>
                   {editing.remnawaveUuid && (
                     <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium", statusInfo.color)}>
                       {statusInfo.label}
@@ -976,7 +954,7 @@ function ClientEditModal({
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-muted-foreground font-normal mt-0.5">
+                <div className="text-[12.3px] text-muted-foreground font-normal mt-[3px]">
                   {t("admin.clients.created")} {fmtMsk(editing.createdAt)}
                   {remnaUser?.shortUuid && <> &middot; <code className="text-[10px]">{remnaUser.shortUuid}</code></>}
                 </div>
@@ -986,12 +964,33 @@ function ClientEditModal({
           </DialogHeader>
         </div>
 
+        <div className="px-5 pt-4 relative z-10">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-[10px] bg-background border border-border px-3 py-2.5">
+              <div className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Баланс</div>
+              <div className="text-[17px] font-extrabold tabular-nums mt-0.5">{editing.balance.toFixed(2)} {editing.preferredCurrency.toUpperCase()}</div>
+            </div>
+            <div className="rounded-[10px] bg-background border border-border px-3 py-2.5">
+              <div className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Подписок</div>
+              <div className="text-[17px] font-extrabold tabular-nums mt-0.5">{secondarySubs.length}</div>
+            </div>
+            <div className="rounded-[10px] bg-background border border-border px-3 py-2.5">
+              <div className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Рефералов</div>
+              <div className="text-[17px] font-extrabold tabular-nums mt-0.5">{editing._count?.referrals ?? 0}</div>
+            </div>
+            <div className="rounded-[10px] bg-background border border-border px-3 py-2.5">
+              <div className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">Регистрация</div>
+              <div className="text-[15px] font-bold tabular-nums mt-0.5">{fmtMskDate(editing.createdAt)}</div>
+            </div>
+          </div>
+        </div>
+
         {editing.remnawaveUuid && remnaUser && (
-          <div className="px-6 pt-4 relative z-10">
+          <div className="px-5 pt-3 relative z-10">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="rounded-[1.5rem] bg-gradient-to-br from-foreground/[0.03] to-foreground/[0.05] dark:from-white/5 dark:to-white/10 border border-white/10 p-5 space-y-1.5 hover:from-foreground/[0.05] hover:to-foreground/[0.07] dark:hover:from-white/[0.08] dark:hover:to-white/[0.12] transition-colors">
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider">{t("admin.clients.traffic")}</div>
-                <div className="text-lg font-bold">{formatTrafficBytes(trafficUsed)}</div>
+              <div className="rounded-[10px] bg-background border border-border px-3 py-2.5 space-y-1 transition-colors">
+                <div className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">{t("admin.clients.traffic")}</div>
+                <div className="text-[17px] font-extrabold tabular-nums">{formatTrafficBytes(trafficUsed)}</div>
                 {trafficLimit > 0 && (
                   <>
                     <div className="text-[11px] text-muted-foreground">из {formatTrafficBytes(trafficLimit)}</div>
@@ -1007,20 +1006,20 @@ function ClientEditModal({
                 )}
                 {trafficLimit === 0 && <div className="text-[11px] text-muted-foreground">{t("admin.clients.unlimited")}</div>}
               </div>
-              <div className="rounded-[1.5rem] bg-gradient-to-br from-foreground/[0.03] to-foreground/[0.05] dark:from-white/5 dark:to-white/10 border border-white/10 p-5 space-y-1.5 hover:from-foreground/[0.05] hover:to-foreground/[0.07] dark:hover:from-white/[0.08] dark:hover:to-white/[0.12] transition-colors">
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider">{t("admin.clients.traffic_30d")}</div>
-                <div className="text-lg font-bold">{formatTrafficBytes(totalUsageLast30)}</div>
+              <div className="rounded-[10px] bg-background border border-border px-3 py-2.5 space-y-1 transition-colors">
+                <div className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">{t("admin.clients.traffic_30d")}</div>
+                <div className="text-[17px] font-extrabold tabular-nums">{formatTrafficBytes(totalUsageLast30)}</div>
                 <div className="text-[11px] text-muted-foreground">{t("admin.clients.total_traffic")} {formatTrafficBytes(trafficLifetime)}</div>
               </div>
-              <div className="rounded-[1.5rem] bg-gradient-to-br from-foreground/[0.03] to-foreground/[0.05] dark:from-white/5 dark:to-white/10 border border-white/10 p-5 space-y-1.5 hover:from-foreground/[0.05] hover:to-foreground/[0.07] dark:hover:from-white/[0.08] dark:hover:to-white/[0.12] transition-colors">
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider">{t("admin.clients.devices")}</div>
-                <div className="text-lg font-bold">{devicesTotal}</div>
+              <div className="rounded-[10px] bg-background border border-border px-3 py-2.5 space-y-1 transition-colors">
+                <div className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">{t("admin.clients.devices")}</div>
+                <div className="text-[17px] font-extrabold tabular-nums">{devicesTotal}</div>
                 <div className="text-[11px] text-muted-foreground">
                   {t("admin.clients.device_limit")} {remnaUser.hwidDeviceLimit != null ? remnaUser.hwidDeviceLimit : "—"}
                 </div>
               </div>
-              <div className="rounded-[1.5rem] bg-gradient-to-br from-foreground/[0.03] to-foreground/[0.05] dark:from-white/5 dark:to-white/10 border border-white/10 p-5 space-y-1.5 hover:from-foreground/[0.05] hover:to-foreground/[0.07] dark:hover:from-white/[0.08] dark:hover:to-white/[0.12] transition-colors">
-                <div className="text-[11px] text-muted-foreground uppercase tracking-wider">{t("admin.clients.status")}</div>
+              <div className="rounded-[10px] bg-background border border-border px-3 py-2.5 space-y-1 transition-colors">
+                <div className="text-[10.5px] font-semibold text-muted-foreground uppercase tracking-[0.5px]">{t("admin.clients.status")}</div>
                 <div className="flex items-center gap-1.5">
                   <span className={cn("h-2 w-2 rounded-full", isOnline ? "bg-green-500 animate-pulse" : "bg-gray-400")} />
                   <span className="text-sm font-medium">{isOnline ? t("admin.clients.status_online") : t("admin.clients.status_offline")}</span>
@@ -1034,9 +1033,9 @@ function ClientEditModal({
           </div>
         )}
 
-        <div className="px-6 pt-4 pb-6 relative z-10">
+        <div className="px-5 pt-3.5 pb-5 relative z-10">
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="w-full flex flex-wrap bg-foreground/[0.04] dark:bg-white/[0.04] border border-white/5 rounded-xl p-1">
+            <TabsList className="flex flex-wrap gap-1.5 bg-muted border border-border rounded-xl p-1.5 justify-start">
               <TabsTrigger value="profile" className="gap-1.5 text-xs rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md transition-all">
                 <User className="h-3.5 w-3.5" /> {t("admin.clients.info")}
               </TabsTrigger>
@@ -1071,14 +1070,17 @@ function ClientEditModal({
               )}
             </TabsList>
 
-            {/* ────── Профиль ────── */}
+            {/*  Профиль  */}
             <TabsContent value="profile">
               <div className="space-y-5">
-                <div className="rounded-[1.5rem] bg-gradient-to-br from-primary/10 to-purple-500/10 border border-primary/20 p-5 space-y-3 text-sm">
-                  <div className="flex items-center gap-2 font-semibold text-sm">
+                <details className="rounded-xl bg-muted border border-border px-4 py-3 text-sm [&_summary]:list-none group">
+                  <summary className="flex items-center gap-2 font-semibold text-[13px] cursor-pointer select-none">
                     <Gift className="h-4 w-4 text-primary" />
                     {t("admin.clients.grant_tariff_title", "Выдать тариф")}
-                  </div>
+                    <span className="ml-auto text-[11.5px] font-normal text-muted-foreground group-open:hidden">развернуть</span>
+                    <span className="ml-auto text-[11.5px] font-normal text-muted-foreground hidden group-open:inline">свернуть</span>
+                  </summary>
+                  <div className="space-y-3 mt-3">
                   <p className="text-xs text-muted-foreground">
                     {t("admin.clients.grant_tariff_hint", "Активирует выбранный тариф для клиента без оплаты. Будет создана запись платежа со статусом PAID и суммой 0. Реферальные бонусы не начисляются.")}
                   </p>
@@ -1089,7 +1091,7 @@ function ClientEditModal({
                       1. {t("admin.clients.grant_tariff_select", "Тариф")}
                     </Label>
                     <select
-                      className="w-full rounded-xl border border-input bg-background/70 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      className="w-full rounded-xl border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                       value={selectedGrantTariffId}
                       onChange={(e) => {
                         const newId = e.target.value;
@@ -1153,13 +1155,13 @@ function ClientEditModal({
                                 className={cn(
                                   "relative rounded-xl border p-3 text-left transition-all hover:scale-[1.02]",
                                   isSelected
-                                    ? "bg-primary/15 border-primary shadow-md ring-1 ring-primary/30"
-                                    : "bg-background/40 border-white/10 hover:border-white/20",
+                                    ? "bg-primary/15 border-primary ring-1 ring-primary/30"
+                                    : "bg-card border-border hover:border-border",
                                   grantLoading && "opacity-50 cursor-not-allowed"
                                 )}
                               >
                                 {isBest && (
-                                  <span className="absolute -top-1.5 -right-1.5 inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-1.5 py-0.5 text-[9px] font-bold backdrop-blur-md">
+                                  <span className="absolute -top-1.5 -right-1.5 inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-1.5 py-0.5 text-[9px] font-bold">
                                     <Check className="h-2.5 w-2.5" />
                                     Best
                                   </span>
@@ -1180,8 +1182,8 @@ function ClientEditModal({
                   })()}
 
                   {/* 3. Лимит трафика — ТОЛЬКО для НЕ-безлимитных тарифов.
-                      Если у тарифа trafficLimitBytes == 0 / null → блок скрыт (нечего переопределять).
-                      Пустое поле → используется лимит тарифа. */}
+                      Если у тарифа trafficLimitBytes == 0 / null  блок скрыт (нечего переопределять).
+                      Пустое поле  используется лимит тарифа. */}
                   {(() => {
                     const selectedTariff = flatTariffs.find((tr) => tr.id === selectedGrantTariffId);
                     const tariffLimitBytes = selectedTariff?.trafficLimitBytes != null ? Number(selectedTariff.trafficLimitBytes) : 0;
@@ -1212,7 +1214,7 @@ function ClientEditModal({
                   })()}
 
                   {/* override длительности подписки в днях.
-                      Подсказка показывает дефолт из выбранной опции / тарифа. Пусто → дефолт. */}
+                      Подсказка показывает дефолт из выбранной опции / тарифа. Пусто  дефолт. */}
                   {(() => {
                     const selectedTariff = flatTariffs.find((tr) => tr.id === selectedGrantTariffId);
                     if (!selectedTariff) return null;
@@ -1279,10 +1281,12 @@ function ClientEditModal({
                       {grantMessage.text}
                     </div>
                   )}
-                </div>
+                  </div>
+                </details>
 
-                <div className="rounded-[1.5rem] bg-gradient-to-br from-background/80 to-background/40 border border-white/10 p-5 space-y-3 text-sm hover:bg-white/5 transition-colors">
-                  <div className="font-medium text-xs uppercase tracking-wider text-muted-foreground mb-2">{t("admin.clients.info")}</div>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                <div className="rounded-xl bg-card border border-border px-[17px] py-[15px] space-y-3 text-sm">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.9px] text-muted-foreground mb-2">{t("admin.clients.info")}</div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Email</span>
@@ -1318,7 +1322,7 @@ function ClientEditModal({
                       <span>{editing._count?.referrals ?? 0}</span>
                     </div>
                     {/* привязка реферера прямо в карточке клиента. */}
-                    <div className="sm:col-span-2 mt-1 p-3 rounded-xl border border-white/10 bg-card/40 space-y-2">
+                    <div className="sm:col-span-2 mt-1 p-3 rounded-xl border border-border bg-card/40 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">Реферер (кто привёл)</span>
                         {referrerInfo ? (
@@ -1382,8 +1386,8 @@ function ClientEditModal({
                   </div>
                 </div>
 
-                <div className="rounded-[1.5rem] bg-gradient-to-br from-background/80 to-background/40 border border-white/10 p-5 space-y-3 text-sm hover:bg-white/5 transition-colors">
-                  <div className="font-medium text-xs uppercase tracking-wider text-muted-foreground mb-2">
+                <div className="rounded-xl bg-card border border-border px-[17px] py-[15px] space-y-3 text-sm">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.9px] text-muted-foreground mb-2">
                     Подписки клиента
                   </div>
                   {secondarySubsLoading ? (
@@ -1410,7 +1414,7 @@ function ClientEditModal({
                             "flex items-center justify-between rounded-xl border px-4 py-3 gap-3 transition-colors",
                             isGiftPurchase
                               ? "border-pink-500/30 bg-pink-500/[0.04] hover:bg-pink-500/[0.08]"
-                              : "border-white/10 bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]"
+                              : "border-border bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]"
                           )}>
                             <div className="min-w-0">
                               <div className="text-xs font-medium flex items-center gap-1.5 flex-wrap">
@@ -1452,6 +1456,7 @@ function ClientEditModal({
                       })}
                     </div>
                   )}
+                </div>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -1545,44 +1550,53 @@ function ClientEditModal({
                         onChange={(e) =>
                           setEditForm((f) => ({ ...f, personalDiscountIsOneTime: e.target.checked }))
                         }
-                        className="mt-0.5 h-3.5 w-3.5 rounded border-white/20 bg-background/60 accent-primary"
+                        className="mt-0.5 h-3.5 w-3.5 rounded border-border bg-card accent-primary"
                       />
                       <span>
-                        🎁 Одноразовая — сгорит после первой продуктовой покупки
+                         Одноразовая — сгорит после первой продуктовой покупки
                         {editing.personalDiscountIsOneTime ? <span className="ml-1 text-amber-400">(сейчас активна)</span> : null}
                       </span>
                     </label>
                   </div>
-                  <div className="space-y-2 flex items-end gap-2">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={editForm.isBlocked ?? false}
-                        onChange={(e) => setEditForm((f) => ({ ...f, isBlocked: e.target.checked }))}
-                      />
-                      <span>{t("admin.clients.is_blocked")}</span>
-                    </label>
-                  </div>
-                  {(editForm.isBlocked ?? editing.isBlocked) && (
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label>{t("admin.clients.block_reason")}</Label>
-                      <Input
-                        value={editForm.blockReason ?? ""}
-                        onChange={(e) => setEditForm((f) => ({ ...f, blockReason: e.target.value || undefined }))}
-                        placeholder="Причина"
-                      />
-                    </div>
-                  )}
                 </div>
 
                 {actionMessage && <p className="text-sm text-muted-foreground">{actionMessage}</p>}
                 <Button 
                   onClick={onSave} 
                   disabled={saving} 
-                  className="rounded-xl bg-primary hover:bg-primary/90 shadow-md shadow-primary/20 border border-primary/30 transition-all"
+                  className="h-9 px-4 rounded-lg bg-primary hover:bg-primary/90 text-[12.5px] font-semibold w-full sm:w-auto"
                 >
                   {saving ? t("admin.clients.saving") : t("admin.clients.save_profile")}
                 </Button>
+
+                <div className="rounded-xl border border-destructive/35 bg-destructive/[0.04] px-[17px] py-[15px] mt-1">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.9px] text-destructive mb-2.5">Опасная зона</div>
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 accent-red-500"
+                      checked={editForm.isBlocked ?? false}
+                      onChange={(e) => setEditForm((f) => ({ ...f, isBlocked: e.target.checked }))}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-semibold">{t("admin.clients.is_blocked")}</span>
+                      <span className="block text-[11.5px] text-muted-foreground mt-0.5">
+                        Клиент не сможет войти в кабинет и пользоваться ботом. Подписка в Remnawave не отключается автоматически.
+                      </span>
+                    </span>
+                  </label>
+                  {(editForm.isBlocked ?? editing.isBlocked) && (
+                    <div className="space-y-1.5 mt-3">
+                      <Label className="text-[12px] font-semibold text-muted-foreground">{t("admin.clients.block_reason")}</Label>
+                      <Input
+                        value={editForm.blockReason ?? ""}
+                        onChange={(e) => setEditForm((f) => ({ ...f, blockReason: e.target.value || undefined }))}
+                        placeholder="Причина — видна только админам"
+                      />
+                    </div>
+                  )}
+                  <p className="text-[11.5px] text-muted-foreground mt-3">Изменение применится после нажатия «Сохранить профиль».</p>
+                </div>
 
                 <hr />
                 <div>
@@ -1611,7 +1625,7 @@ function ClientEditModal({
                     </p>
                   )}
                   <Button
-                    variant="outline" size="sm" className="mt-2 rounded-xl border-white/10 bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] shadow-sm transition-all"
+                    variant="outline" size="sm" className="mt-2 rounded-xl border-border bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] shadow-sm transition-all"
                     onClick={onSetPassword}
                     disabled={savingPassword || !passwordForm.newPassword || passwordForm.newPassword.length < 8}
                   >
@@ -1624,7 +1638,7 @@ function ClientEditModal({
               </div>
             </TabsContent>
 
-            {/* ────── Подписки (T-subscription-remna, 14.05.2026) ──────
+            {/*  Подписки (T-subscription-remna, 14.05.2026) 
                 Заменили старую вкладку «Remna» (client-scoped). Теперь для каждой
                 подписки клиента (primary + secondary) свой блок с собственными
                 Данными Remna, Лимитами, Сквадами и Быстрыми действиями. */}
@@ -1645,21 +1659,21 @@ function ClientEditModal({
               </TabsContent>
             )}
 
-            {/* ────── Устройства (T-tabs-rework, 13.05.2026): со ВСЕХ подписок ────── */}
+            {/*  Устройства (T-tabs-rework, 13.05.2026): со ВСЕХ подписок  */}
             {(editing.remnawaveUuid || secondarySubs.some((s) => s.remnawaveUuid)) && (
               <TabsContent value="devices">
                 <ClientAllDevicesTab clientId={editing.id} token={token} />
               </TabsContent>
             )}
 
-            {/* ────── Услуги (T-admin-services, портировано из WolfVPN) ────── */}
+            {/*  Услуги (T-admin-services, портировано из WolfVPN)  */}
             {canManageServices && (
               <TabsContent value="services">
                 <ClientServicesTab clientId={editing.id} token={token} />
               </TabsContent>
             )}
 
-            {/* ────── Действия ────── */}
+            {/*  Действия  */}
             {(editing.remnawaveUuid || secondarySubs.some((s) => s.remnawaveUuid)) && (
               <TabsContent value="actions">
                 <div className="space-y-5">
@@ -1683,7 +1697,7 @@ function ClientEditModal({
                   {usageData && usageData.sparklineData && usageData.sparklineData.some((v) => v > 0) && (
                     <div className="mt-4">
                       <h3 className="font-semibold text-sm mb-3">{t("admin.clients.traffic_30d_chart")}</h3>
-                      <div className="flex items-end gap-px h-24 rounded-[1.5rem] bg-gradient-to-br from-white/5 to-transparent border border-white/10 p-3 overflow-hidden">
+                      <div className="flex items-end gap-px h-24 rounded-[1.5rem] bg-transparent border border-border p-3 overflow-hidden">
                         {(() => {
                           const data = usageData.sparklineData;
                           const max = Math.max(...data, 1);
@@ -1724,7 +1738,7 @@ function Select({
 }) {
   return (
     <select
-      className="flex h-9 w-full rounded-xl border border-white/10 bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-black/30 transition-colors px-3 py-1 text-sm shadow-sm"
+      className="flex h-9 w-full rounded-xl border border-border bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-black/30 transition-colors px-3 py-1 text-sm shadow-sm"
       value={value}
       onChange={(e) => onChange(e.target.value)}
     >
@@ -1735,11 +1749,11 @@ function Select({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// 
 // Плашка массовых операций над клиентом.
 // Живёт в шапке диалога клиента. Делает: disable/enable, sync push/pull,
 // reset-traffic-all, revoke-all, wipe-subscriptions, audit.
-// ─────────────────────────────────────────────────────────────────────────────
+// 
 function ClientBulkActionsPanel({
   client,
   token,
@@ -1788,7 +1802,7 @@ function ClientBulkActionsPanel({
   const isBlocked = client.isBlocked;
 
   return (
-    <div className="rounded-[1.5rem] border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.03] p-4 mb-4 space-y-3">
+    <div className="rounded-[1.5rem] border border-border bg-foreground/[0.03] dark:bg-white/[0.03] p-4 mb-4 space-y-3">
       {/* Шапка: статус + основные кнопки */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
@@ -1836,12 +1850,12 @@ function ClientBulkActionsPanel({
       {/* Группы массовых операций */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 text-[11px]">
         <Button variant="outline" size="sm" className="gap-1 rounded-lg justify-start" disabled={busy != null}
-          onClick={() => run("syncPush", t("admin.clients.bulk_sync_push", "Push БД → Remna"),
+          onClick={() => run("syncPush", t("admin.clients.bulk_sync_push", "Push БД  Remna"),
             () => api.clientBulkSyncPush(token, client.id))}>
           <RotateCw className="h-3 w-3" /> {t("admin.clients.bulk_sync_push_btn", "Push в Remna")}
         </Button>
         <Button variant="outline" size="sm" className="gap-1 rounded-lg justify-start" disabled={busy != null}
-          onClick={() => run("syncPull", t("admin.clients.bulk_sync_pull", "Pull Remna → БД"),
+          onClick={() => run("syncPull", t("admin.clients.bulk_sync_pull", "Pull Remna  БД"),
             () => api.clientBulkSyncPull(token, client.id))}>
           <RefreshCw className="h-3 w-3" /> {t("admin.clients.bulk_sync_pull_btn", "Pull из Remna")}
         </Button>
@@ -1869,27 +1883,27 @@ function ClientBulkActionsPanel({
         </Button>
         <Button variant="outline" size="sm" className="gap-1 rounded-lg justify-start" disabled={busy != null}
           onClick={runAudit}>
-          <Search className="h-3 w-3" /> {t("admin.clients.bulk_audit_btn", "Аудит БД↔Remna")}
+          <Search className="h-3 w-3" /> {t("admin.clients.bulk_audit_btn", "Аудит БДRemna")}
         </Button>
         <Button variant="outline" size="sm" className="gap-1 rounded-lg justify-start text-amber-700 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10" disabled={busy != null}
           onClick={() => run("wipe", t("admin.clients.bulk_wipe", "Удаление подписок"),
             () => api.clientBulkWipe(token, client.id),
-            { confirm: t("admin.clients.bulk_wipe_confirm", "⚠ Удалить ВСЕ подписки клиента из БД и Remnawave?\nКлиент останется (баланс, история).") })}>
+            { confirm: t("admin.clients.bulk_wipe_confirm", " Удалить ВСЕ подписки клиента из БД и Remnawave?\nКлиент останется (баланс, история).") })}>
           <Trash2 className="h-3 w-3" /> {t("admin.clients.bulk_wipe_btn", "Удалить все подписки")}
         </Button>
       </div>
 
       {/* Последний отчёт */}
       {lastReport && lastReport.report && (
-        <div className="rounded-xl border border-white/10 bg-foreground/[0.04] dark:bg-white/[0.04] p-3 text-[11px] space-y-1.5">
+        <div className="rounded-xl border border-border bg-foreground/[0.04] dark:bg-white/[0.04] p-3 text-[11px] space-y-1.5">
           <div className="flex items-center justify-between font-medium">
             <span>{lastReport.title}</span>
             <button onClick={() => setLastReport(null)} className="text-muted-foreground hover:text-foreground">×</button>
           </div>
           <div className="flex gap-3">
-            <span className="text-green-500">✓ ok: {lastReport.report.ok}</span>
-            <span className="text-muted-foreground">↷ skipped: {lastReport.report.skipped}</span>
-            <span className="text-red-400">✗ failed: {lastReport.report.failed}</span>
+            <span className="text-green-500"> ok: {lastReport.report.ok}</span>
+            <span className="text-muted-foreground"> skipped: {lastReport.report.skipped}</span>
+            <span className="text-red-400"> failed: {lastReport.report.failed}</span>
           </div>
           {lastReport.report.items.length > 0 && lastReport.report.failed > 0 && (
             <ul className="text-[10px] text-muted-foreground space-y-0.5 max-h-20 overflow-y-auto">
@@ -1906,9 +1920,9 @@ function ClientBulkActionsPanel({
       {/* Audit-модалка */}
       {auditOpen && lastReport?.audit && (
         <Dialog open={auditOpen} onOpenChange={setAuditOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-3xl">
             <DialogHeader>
-              <DialogTitle>{t("admin.clients.audit_title", "Аудит БД ↔ Remnawave")}</DialogTitle>
+              <DialogTitle>{t("admin.clients.audit_title", "Аудит БД  Remnawave")}</DialogTitle>
               <DialogDescription>
                 {t("admin.clients.audit_description", { defaultValue: "Проверено: {{checked}} из {{total}} подписок. Расхождений: {{issues}}", checked: lastReport.audit.checked, total: lastReport.audit.total, issues: lastReport.audit.issues.length })}
               </DialogDescription>
@@ -1921,7 +1935,7 @@ function ClientBulkActionsPanel({
             ) : (
               <ul className="space-y-2 max-h-96 overflow-y-auto">
                 {lastReport.audit.issues.map((issue, idx) => (
-                  <li key={idx} className="rounded-xl border border-white/10 p-3 text-xs">
+                  <li key={idx} className="rounded-xl border border-border p-3 text-xs">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-semibold text-amber-400">{issue.type}</span>
                       {issue.subscriptionIndex >= 0 && (
@@ -1940,10 +1954,10 @@ function ClientBulkActionsPanel({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// 
 // вкладка «Устройства» — со ВСЕХ подписок.
 // Каждое устройство показывается с бейджем подписки (#index + tariff name).
-// ─────────────────────────────────────────────────────────────────────────────
+// 
 // T-tariff-restriction (портировано из WolfVPN): секция запрета тарифов клиенту в карточке.
 function TariffRestrictionsSection({ clientId, editing, token }: { clientId: string; editing: ClientRecord; token: string }) {
   const [tariffs, setTariffs] = useState<{ id: string; name: string }[]>([]);
@@ -1968,14 +1982,14 @@ function TariffRestrictionsSection({ clientId, editing, token }: { clientId: str
     setSaving(true); setMsg(null);
     try {
       await api.setClientTariffRestrictions(token, clientId, [...selected], reason.trim() || null);
-      setMsg("Сохранено ✓");
+      setMsg("Сохранено ");
       setTimeout(() => setMsg(null), 2500);
     } catch (e) { setMsg(e instanceof Error ? e.message : "Ошибка"); }
     finally { setSaving(false); }
   }
 
   return (
-    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
       <div className="flex items-center gap-2">
         <Ban className="h-4 w-4 text-amber-500" />
         <h4 className="font-semibold text-sm">Ограничение тарифов</h4>
@@ -1992,24 +2006,24 @@ function TariffRestrictionsSection({ clientId, editing, token }: { clientId: str
               onClick={() => toggle(t.id)}
               className={cn(
                 "px-2.5 py-1.5 rounded-xl text-xs border transition-all",
-                selected.has(t.id) ? "bg-red-500 text-white border-red-500 shadow" : "bg-background/40 border-white/10 hover:border-white/30"
+                selected.has(t.id) ? "bg-red-500 text-white border-red-500 shadow" : "bg-card border-border hover:border-border"
               )}
             >
-              {selected.has(t.id) ? "🚫 " : ""}{t.name}
+              {selected.has(t.id) ? " " : ""}{t.name}
             </button>
           ))}
           {tariffs.length === 0 && <span className="text-xs text-muted-foreground">Тарифы не найдены</span>}
         </div>
       )}
       <div className="space-y-1.5">
-        <Label className="text-xs text-muted-foreground">Причина (текст в окне у клиента; пусто → общий шаблон)</Label>
+        <Label className="text-xs text-muted-foreground">Причина (текст в окне у клиента; пусто  общий шаблон)</Label>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={2}
           maxLength={2000}
           placeholder="Напр.: Покупка ограничена в связи с нарушением п. 5.3 оферты."
-          className="flex w-full rounded-xl border border-white/10 bg-background/60 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 resize-y"
+          className="flex w-full rounded-xl border border-border bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 resize-y"
         />
       </div>
       <div className="flex items-center gap-2">
@@ -2088,14 +2102,14 @@ function ClientServicesTab({ clientId, token }: { clientId: string; token: strin
 
       {/* Форма выдачи */}
       {grantOpen && (
-        <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+        <div className="rounded-xl border border-border bg-primary/5 p-4 space-y-3">
           <p className="text-sm font-semibold flex items-center gap-2"><Smartphone className="h-4 w-4" /> Выдать доп. устройства</p>
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">На какую подписку</Label>
             <select
               value={grantSubId}
               onChange={(e) => setGrantSubId(e.target.value)}
-              className="w-full h-10 rounded-xl border border-white/10 bg-background/60 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full h-10 rounded-xl border border-border bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
             >
               {linkedSubs.length === 0 && <option value="">Нет подписок с VPN</option>}
               {linkedSubs.map((s) => (
@@ -2116,7 +2130,7 @@ function ClientServicesTab({ clientId, token }: { clientId: string; token: strin
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            💡 Цена/мес войдёт в стоимость продления подписки (как при покупке клиентом). Поставьте 0 — устройства выдадутся бесплатно и не добавят к цене продления.
+             Цена/мес войдёт в стоимость продления подписки (как при покупке клиентом). Поставьте 0 — устройства выдадутся бесплатно и не добавят к цене продления.
           </p>
           <div className="flex gap-2">
             <Button size="sm" onClick={grant} disabled={busy === "grant" || !grantSubId} className="gap-1.5">
@@ -2133,9 +2147,9 @@ function ClientServicesTab({ clientId, token }: { clientId: string; token: strin
           const totalMax = s.includedDevices + s.extraDevices;
           const hasExtras = s.extraDevices > 0;
           return (
-            <div key={s.subscriptionId} className="rounded-[1.5rem] border border-white/10 bg-foreground/[0.02] p-4 space-y-2">
+            <div key={s.subscriptionId} className="rounded-[1.5rem] border border-border bg-foreground/[0.02] p-4 space-y-2">
               <div className="flex items-center gap-2 text-xs">
-                <span className={cn("inline-flex items-center gap-1.5 rounded-lg px-2 py-1 font-semibold border", s.subscriptionIndex === 0 ? "bg-primary/10 text-primary border-primary/30" : "bg-muted text-muted-foreground border-white/10")}>
+                <span className={cn("inline-flex items-center gap-1.5 rounded-lg px-2 py-1 font-semibold border", s.subscriptionIndex === 0 ? "bg-primary/10 text-primary border-border" : "bg-muted text-muted-foreground border-border")}>
                   {s.tariffEmoji && <span>{s.tariffEmoji}</span>}
                   {s.subscriptionIndex === 0 ? "Главная" : `#${s.subscriptionIndex}`}
                 </span>
@@ -2247,14 +2261,14 @@ function ClientAllDevicesTab({ clientId, token }: { clientId: string; token: str
           const isPrimary = g.subscriptionIndex === 0;
           const subBadgeLabel = isPrimary ? t("admin.clients.sub_primary", "Главная") : `#${g.subscriptionIndex}`;
           return (
-            <div key={g.subscriptionId} className="rounded-[1.5rem] border border-white/10 bg-foreground/[0.02] p-4 space-y-2.5">
+            <div key={g.subscriptionId} className="rounded-[1.5rem] border border-border bg-foreground/[0.02] p-4 space-y-2.5">
               {/* Заголовок группы подписки */}
               <div className="flex items-center gap-2 text-xs">
                 <span className={cn(
                   "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 font-semibold border",
                   isPrimary
-                    ? "bg-primary/10 text-primary border-primary/30"
-                    : "bg-muted text-muted-foreground border-white/10"
+                    ? "bg-primary/10 text-primary border-border"
+                    : "bg-muted text-muted-foreground border-border"
                 )}>
                   {g.tariffEmoji && <span>{g.tariffEmoji}</span>}
                   {subBadgeLabel}
@@ -2272,7 +2286,7 @@ function ClientAllDevicesTab({ clientId, token }: { clientId: string; token: str
               ) : (
                 <div className="space-y-2">
                   {g.devices.map((d) => (
-                    <div key={d.id || d.hwid} className="flex items-center justify-between rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.03] p-3 gap-3 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors">
+                    <div key={d.id || d.hwid} className="flex items-center justify-between rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.03] p-3 gap-3 hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] transition-colors">
                       <div className="min-w-0 space-y-0.5 flex-1">
                         <div className="flex items-center gap-2">
                           <HardDrive className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -2306,10 +2320,10 @@ function ClientAllDevicesTab({ clientId, token }: { clientId: string; token: str
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// 
 // сводка по всем подпискам клиента.
 // Показывает компактную таблицу — для каждой подписки строка с remna-метриками.
-// ─────────────────────────────────────────────────────────────────────────────
+// 
 function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token: string }) {
   const { t } = useTranslation();
   const [data, setData] = useState<import("@/lib/api").ClientSubsOverviewResponse | null>(null);
@@ -2384,7 +2398,7 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
   const activeCount = data.items.filter((it) => it.remna?.status === "ACTIVE").length;
 
   return (
-    <div className="rounded-[1.5rem] border border-white/10 bg-gradient-to-br from-background/80 to-background/40 p-5 space-y-4">
+    <div className="rounded-[1.5rem] border border-border bg-card p-5 space-y-4">
       {/* Шапка со сводными цифрами */}
       <div className="flex flex-wrap items-center gap-4">
         <h3 className="font-semibold text-sm flex items-center gap-2">
@@ -2392,9 +2406,9 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
           {t("admin.clients.subs_overview", "Подписки клиента")} ({data.items.length})
         </h3>
         <div className="ml-auto flex flex-wrap items-center gap-3 text-[11px]">
-          <span className="text-green-500">✓ ACTIVE: {activeCount}</span>
-          <span className="text-muted-foreground">📱 Devices: {totalDevices}</span>
-          <span className="text-muted-foreground">📊 Traffic: {formatTrafficBytes(totalTrafficUsed)}</span>
+          <span className="text-green-500"> ACTIVE: {activeCount}</span>
+          <span className="text-muted-foreground"> Devices: {totalDevices}</span>
+          <span className="text-muted-foreground"> Traffic: {formatTrafficBytes(totalTrafficUsed)}</span>
           <Button
             variant="ghost"
             size="sm"
@@ -2414,7 +2428,7 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
       {/* Таблица подписок */}
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="text-[10px] uppercase text-muted-foreground border-b border-white/10">
+          <thead className="text-[10px] uppercase text-muted-foreground border-b border-border">
             <tr>
               <th className="text-left py-2 pr-2 font-medium">#</th>
               <th className="text-left py-2 pr-2 font-medium">{t("admin.clients.tariff", "Тариф")}</th>
@@ -2436,11 +2450,11 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
                 ? new Date(it.remna.expireAt).getTime() <= Date.now()
                 : false;
               return (
-                <tr key={it.subscriptionId} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
+                <tr key={it.subscriptionId} className="border-b border-border hover:bg-white/[0.03] transition-colors">
                   <td className="py-2 pr-2">
                     <span className={cn(
                       "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold border",
-                      isPrimary ? "bg-primary/10 text-primary border-primary/30" : "bg-muted text-muted-foreground border-white/10"
+                      isPrimary ? "bg-primary/10 text-primary border-border" : "bg-muted text-muted-foreground border-border"
                     )}>
                       {isPrimary ? t("admin.clients.sub_primary", "Главная") : `#${it.subscriptionIndex}`}
                     </span>
@@ -2523,7 +2537,7 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
 
       {extendDone && (
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-500 font-medium">
-          ✓ {extendDone}
+           {extendDone}
         </div>
       )}
 
@@ -2533,12 +2547,9 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
 
       {/* привязка существующего Remna-юзера */}
       <Dialog open={attachOpen} onOpenChange={(o) => { if (!o && !attachBusy) setAttachOpen(false); }}>
-        <DialogContent className="bg-background/85 backdrop-blur-3xl border-white/10 rounded-[2rem] max-w-sm">
+        <DialogContent className="bg-card border-border rounded-2xl max-w-sm">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-emerald-500/25 to-emerald-500/5 border border-white/10 flex items-center justify-center shadow-inner">
-                <Link className="h-4 w-4 text-emerald-500" />
-              </div>
+            <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
               Привязать Remna-юзера
             </DialogTitle>
             <DialogDescription className="text-xs">
@@ -2577,12 +2588,9 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
 
       {/* мини-диалог ручного продления подписки */}
       <Dialog open={!!extendFor} onOpenChange={(o) => { if (!o && !extendBusy) setExtendFor(null); }}>
-        <DialogContent className="bg-background/85 backdrop-blur-3xl border-white/10 rounded-[2rem] max-w-sm">
+        <DialogContent className="bg-card border-border rounded-2xl max-w-sm">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-primary/25 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner">
-                <Zap className="h-4 w-4 text-primary" />
-              </div>
+            <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
               Продлить подписку
             </DialogTitle>
             <DialogDescription className="text-xs">{extendFor?.label}</DialogDescription>
@@ -2599,8 +2607,8 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
                     className={cn(
                       "flex-1 rounded-xl border px-2 py-2 text-xs font-bold transition-all",
                       extendDays === d
-                        ? "border-primary/50 bg-primary/10 text-primary"
-                        : "border-white/10 bg-white/[0.03] text-muted-foreground hover:border-white/25",
+                        ? "border-border bg-primary/10 text-primary"
+                        : "border-border bg-white/[0.03] text-muted-foreground hover:border-border",
                     )}
                   >
                     {d}

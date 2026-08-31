@@ -122,9 +122,9 @@ export function MassPromoDialog({ open, onClose, onCreated, squads = [] }: Props
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) { reset(); onClose(); } }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
             <Wand2 className="h-5 w-5 text-primary" />
             Массовая генерация промокодов
           </DialogTitle>
@@ -167,14 +167,14 @@ export function MassPromoDialog({ open, onClose, onCreated, squads = [] }: Props
                   onClick={() => setType("DISCOUNT")}
                   className={cn(
                     "flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition",
-                    type === "DISCOUNT" ? "bg-primary text-primary-foreground border-primary" : "bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 hover:bg-foreground/[0.06]",
+                    type === "DISCOUNT" ? "bg-primary text-primary-foreground border-primary" : "bg-foreground/[0.03] dark:bg-white/[0.02] border-border hover:bg-foreground/[0.06]",
                   )}
                 >Скидка</button>
                 <button
                   onClick={() => setType("FREE_DAYS")}
                   className={cn(
                     "flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition",
-                    type === "FREE_DAYS" ? "bg-primary text-primary-foreground border-primary" : "bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 hover:bg-foreground/[0.06]",
+                    type === "FREE_DAYS" ? "bg-primary text-primary-foreground border-primary" : "bg-foreground/[0.03] dark:bg-white/[0.02] border-border hover:bg-foreground/[0.06]",
                   )}
                 >Бесплатные дни</button>
               </div>
@@ -213,7 +213,7 @@ export function MassPromoDialog({ open, onClose, onCreated, squads = [] }: Props
             )}
 
             {/* Общие */}
-            <div className="grid grid-cols-3 gap-3 pt-2 border-t border-white/10">
+            <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border">
               <div>
                 <Label className="text-xs">Активаций на код (0 = ∞)</Label>
                 <Input type="number" min={0} value={maxUses} onChange={(e) => setMaxUses(e.target.value)} />
@@ -255,7 +255,7 @@ export function MassPromoDialog({ open, onClose, onCreated, squads = [] }: Props
               </div>
             </div>
 
-            <div className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/10 max-h-[280px] overflow-y-auto p-3 font-mono text-xs space-y-0.5">
+            <div className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-border max-h-[280px] overflow-y-auto p-3 font-mono text-xs space-y-0.5">
               {result.generated.map((c) => <div key={c} className="select-all">{c}</div>)}
             </div>
 
@@ -268,7 +268,7 @@ export function MassPromoDialog({ open, onClose, onCreated, squads = [] }: Props
               </details>
             )}
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
               <Button variant="outline" onClick={copyAll} className="gap-2">
                 <X className="h-4 w-4" />
                 Скопировать все

@@ -1026,6 +1026,23 @@ model Subscription {
   /// Синхронизируется при каждом upsert/extend через extractCurrentExpireAt из Remna-ответа.
   /// null = подписка ещё не привязана к Remna user или дата неизвестна.
   expireAt                 DateTime? @map("expire_at")
+  /// ── T-remna-mirror (9.08.2026): зеркало состояния подписки из Remnawave ──
+  /// Чтобы даты/трафик/статус жили и в НАШЕЙ базе, а не только в панели Remna:
+  /// переживают недоступность Remna, дают историю и позволяют считать отчёты
+  /// без похода в API. Обновляются синхронизацией и при активации/продлении.
+  /// shortUuid — хвост ссылки-подписки (в Remnawave 3.x это единственный
+  /// строковый идентификатор, сам uuid у юзера удалён).
+  shortUuid                String?   @map("short_uuid")
+  /// Статус в Remnawave: ACTIVE | DISABLED | LIMITED | EXPIRED.
+  remnaStatus              String?   @map("remna_status")
+  /// Трафик в байтах. Float (не BigInt) — BigInt ломает res.json() в Express.
+  trafficUsedBytes         Float?    @map("traffic_used_bytes")
+  trafficLimitBytes        Float?    @map("traffic_limit_bytes")
+  /// Даты из Remnawave: последний сброс трафика и отзыв подписки.
+  lastTrafficResetAt       DateTime? @map("last_traffic_reset_at")
+  subRevokedAt             DateTime? @map("sub_revoked_at")
+  /// Когда последний раз успешно синхронизировали с Remna.
+  remnaSyncedAt            DateTime? @map("remna_synced_at")
   createdAt                DateTime  @default(now()) @map("created_at")
   updatedAt                DateTime  @updatedAt @map("updated_at")
 

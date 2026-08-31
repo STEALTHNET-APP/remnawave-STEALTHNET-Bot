@@ -33,7 +33,7 @@ export function VideoEmbed({ block }: { block: LandingApiBlock }) {
   if (!url) {
     return (
       <section className={`container mx-auto px-4 py-12 ${SECTION_SCROLL_OFFSET}`}>
-        <div className="rounded-3xl border border-dashed border-slate-300 dark:border-white/10 bg-white/40 dark:bg-white/5 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+        <div className="rounded-xl border border-dashed border-slate-300 dark:border-border bg-card dark:bg-card p-8 text-center text-sm text-slate-500 dark:text-slate-400">
           Укажите URL видео в props.url (YouTube, Vimeo или прямой mp4).
         </div>
       </section>
@@ -50,7 +50,7 @@ export function VideoEmbed({ block }: { block: LandingApiBlock }) {
         </h2>
       ) : null}
 
-      <div className="mx-auto max-w-4xl overflow-hidden rounded-3xl border border-slate-200/70 dark:border-white/10 bg-black shadow-2xl">
+      <div className="mx-auto max-w-4xl overflow-hidden rounded-xl border border-slate-200/70 dark:border-border bg-black">
         <div className="relative aspect-video">
           {isExternal ? (
             <iframe

@@ -23,7 +23,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Loader2, Download, Smartphone, Sparkles, RefreshCw, Upload, BookOpen, ChevronDown, Copy, Check as CheckIcon } from "lucide-react";
+import { GripVertical, Loader2, Download, Smartphone, RefreshCw, Upload, ChevronDown, Copy, Check as CheckIcon } from "lucide-react";
 import type { SubscriptionPageConfig } from "@/lib/api";
 
 const PLATFORM_ORDER = ["ios", "android", "macos", "windows", "linux", "other"] as const;
@@ -251,11 +251,8 @@ function HowToAddAppGuide() {
   };
 
   return (
-    <details className="group rounded-2xl border border-blue-500/20 bg-blue-500/[0.04] overflow-hidden">
+    <details className="group rounded-xl border border-blue-500/20 bg-blue-500/[0.04] overflow-hidden">
       <summary className="flex items-center gap-3 p-4 cursor-pointer list-none hover:bg-blue-500/[0.08] transition-colors">
-        <div className="h-8 w-8 rounded-xl bg-blue-500/15 flex items-center justify-center shrink-0">
-          <BookOpen className="h-4 w-4 text-blue-500 dark:text-blue-400" />
-        </div>
         <div className="flex-1 min-w-0">
           <h4 className="text-sm font-semibold">Как добавить новое приложение</h4>
           <p className="text-xs text-muted-foreground">
@@ -290,16 +287,16 @@ function HowToAddAppGuide() {
                 </div>
                 <div>
                   <b className="text-foreground">Шаг 3.</b> Появится плашка{" "}
-                  <span className="text-emerald-500">«Найдено N новых приложений в файле»</span> →
+                  <span className="text-emerald-500">«Найдено N новых приложений в файле»</span> 
                   жми <b>«Подмёрж новые»</b>
                 </div>
                 <div>
-                  <b className="text-foreground">Шаг 4.</b> При желании перетащи мышью на нужное место →{" "}
+                  <b className="text-foreground">Шаг 4.</b> При желании перетащи мышью на нужное место {" "}
                   <b>«Сохранить»</b>
                 </div>
               </div>
               <p className="mt-2 text-[11px] text-amber-500/90">
-                ⚠ Если файл редактируется в редакторе IDE на ПК — копируй его на сервер через scp/sftp{" "}
+                 Если файл редактируется в редакторе IDE на ПК — копируй его на сервер через scp/sftp{" "}
                 в ту же директорию <code className="text-xs">/opt/remnawave-STEALTHNET-Bot/backend/</code>.
               </p>
             </li>
@@ -430,7 +427,7 @@ function HowToAddAppGuide() {
             <button
               type="button"
               onClick={copyExample}
-              className="inline-flex items-center gap-1.5 text-[11px] rounded-lg border border-white/10 px-2 py-1 hover:bg-muted/30 transition"
+              className="inline-flex items-center gap-1.5 text-[11px] rounded-lg border border-border px-2 py-1 hover:bg-muted/30 transition"
             >
               {copied ? (
                 <>
@@ -458,11 +455,11 @@ function HowToAddAppGuide() {
         <section>
           <h5 className="font-semibold mb-2">Чек-лист</h5>
           <ul className="space-y-1 text-[13px] text-muted-foreground">
-            <li>✓ Уникальное <code className="text-xs">name</code> (без него подмёрж не сработает)</li>
-            <li>✓ Минимум один блок с <code className="text-xs">title</code> и <code className="text-xs">description</code></li>
-            <li>✓ Хотя бы одна кнопка типа <code className="text-xs">subscriptionLink</code> со ссылкой <code className="text-xs">{`...{{SUBSCRIPTION_LINK}}...`}</code></li>
-            <li>✓ Иконки и цвета — только из списков выше</li>
-            <li>✓ Все языки переведены (или хотя бы <code className="text-xs">en</code> + <code className="text-xs">ru</code>)</li>
+            <li> Уникальное <code className="text-xs">name</code> (без него подмёрж не сработает)</li>
+            <li> Минимум один блок с <code className="text-xs">title</code> и <code className="text-xs">description</code></li>
+            <li> Хотя бы одна кнопка типа <code className="text-xs">subscriptionLink</code> со ссылкой <code className="text-xs">{`...{{SUBSCRIPTION_LINK}}...`}</code></li>
+            <li> Иконки и цвета — только из списков выше</li>
+            <li> Все языки переведены (или хотя бы <code className="text-xs">en</code> + <code className="text-xs">ru</code>)</li>
           </ul>
         </section>
       </div>
@@ -489,7 +486,7 @@ function SortableAppRow({
     <li
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 rounded-lg border bg-card px-3 py-2 ${isDragging ? "opacity-80 shadow-md z-10" : ""}`}
+      className={`flex items-center gap-3 rounded-lg border bg-card px-3 py-2 ${isDragging ? "opacity-80 z-10" : ""}`}
     >
       <span
         className="flex h-8 w-8 shrink-0 cursor-grab active:cursor-grabbing items-center justify-center rounded-lg bg-muted/80 text-muted-foreground hover:bg-muted"
@@ -544,13 +541,13 @@ export function SubscriptionPageEditor({
     const parsed = parseConfigJson(currentConfigJson);
     const hasAny = Object.keys(parsed).some((k) => (parsed[k]?.apps?.length ?? 0) > 0);
     if (hasAny && latestDefault) {
-      // В БД что-то есть + есть дефолт → mergeFirstLoad: порядок из дефолта, кастомные добавлены в конец
+      // В БД что-то есть + есть дефолт  mergeFirstLoad: порядок из дефолта, кастомные добавлены в конец
       setEditorState(mergeWithDefault(parsed, latestDefault, false));
     } else if (hasAny) {
-      // В БД что-то есть, но дефолта нет (ещё не подгружен) → используем то что в БД
+      // В БД что-то есть, но дефолта нет (ещё не подгружен)  используем то что в БД
       setEditorState(parsed);
     } else if (latestDefault) {
-      // В БД пусто + есть дефолт → берём дефолт целиком
+      // В БД пусто + есть дефолт  берём дефолт целиком
       setEditorState(mergeWithDefault({}, latestDefault, false));
     }
   }, [currentConfigJson, latestDefault]);
@@ -736,11 +733,8 @@ export function SubscriptionPageEditor({
 
       {/* Плашка с найденными новыми приложениями в файле */}
       {totalMissing > 0 && (
-        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
           <div className="flex items-start gap-3">
-            <div className="h-8 w-8 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
-              <Sparkles className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
-            </div>
             <div className="flex-1 min-w-0">
               <h4 className="text-sm font-semibold mb-1">
                 В файле {totalMissing} {totalMissing === 1 ? "новое приложение" : totalMissing < 5 ? "новых приложения" : "новых приложений"}

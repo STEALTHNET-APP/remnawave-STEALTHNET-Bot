@@ -22,7 +22,7 @@ interface TourStepWithRoute extends Step {
   route?: string | null;
 }
 
-// ── Disabled-tab detection ─────────────────────────────────────────
+//  Disabled-tab detection 
 // Maps data-tour attribute values AND cabinet routes to config checks.
 // Returns true when the corresponding tab is DISABLED (hidden from user).
 
@@ -44,7 +44,7 @@ const DISABLED_BY_ROUTE: Record<string, ConfigCheck> = {
   "/cabinet/gifts": (c) => !c.giftSubscriptionsEnabled,
 };
 
-/** Reverse map: route → data-tour attribute for nav buttons */
+/** Reverse map: route  data-tour attribute for nav buttons */
 const ROUTE_TO_NAV_ATTR: Record<string, string> = {
   "/cabinet/dashboard": "dashboard",
   "/cabinet/tariffs": "tariffs",
@@ -115,7 +115,7 @@ function ensureFloatingChatOpen(step: TourStepWithRoute): number {
   return 400;
 }
 
-// ── OverflowHint component ─────────────────────────────────────────
+//  OverflowHint component 
 // Mini-tooltip "Нажми сюда" shown over a nav item inside the overflow menu.
 
 interface OverflowHintProps {
@@ -156,7 +156,7 @@ function OverflowHint({ navAttr, onNavigated }: OverflowHintProps) {
     };
   }, [selector]);
 
-  // Listen for click on the element → navigation will happen via Link
+  // Listen for click on the element  navigation will happen via Link
   useEffect(() => {
     const dialog = document.querySelector("[role='dialog']");
     const el = dialog?.querySelector(selector) ?? document.querySelector(selector);
@@ -187,8 +187,8 @@ function OverflowHint({ navAttr, onNavigated }: OverflowHintProps) {
         className="fixed z-[60] pointer-events-none"
         style={{ top: pos.top - 44, left: pos.left, transform: "translateX(-50%)" }}
       >
-        <div className="bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-xl shadow-xl whitespace-nowrap animate-bounce">
-          Нажми сюда ☝️
+        <div className="bg-primary text-primary-foreground text-sm font-semibold px-4 py-2 rounded-xl whitespace-nowrap animate-bounce">
+          Нажми сюда 
           <div className="absolute left-1/2 -bottom-1.5 -translate-x-1/2 w-3 h-3 bg-primary rotate-45 rounded-sm" />
         </div>
       </div>
@@ -196,7 +196,7 @@ function OverflowHint({ navAttr, onNavigated }: OverflowHintProps) {
   );
 }
 
-// ── Inject global CSS for overflow highlight ───────────────────────
+//  Inject global CSS for overflow highlight 
 const OVERFLOW_STYLE_ID = "tour-overflow-highlight-style";
 function ensureOverflowStyles() {
   if (document.getElementById(OVERFLOW_STYLE_ID)) return;
@@ -218,9 +218,9 @@ function ensureOverflowStyles() {
   document.head.appendChild(style);
 }
 
-// ═══════════════════════════════════════════════════════════════════
+// 
 // Main component
-// ═══════════════════════════════════════════════════════════════════
+// 
 
 export function DashboardTour({ run, onComplete }: DashboardTourProps) {
   const navigate = useNavigate();
@@ -250,7 +250,7 @@ export function DashboardTour({ run, onComplete }: DashboardTourProps) {
   // Inject overflow highlight CSS once
   useEffect(() => { ensureOverflowStyles(); }, []);
 
-  // ── Filter out steps targeting disabled tabs ─────────────────────
+  //  Filter out steps targeting disabled tabs 
   const { steps, tourSteps } = useMemo(() => {
     if (!config) return { steps: allSteps, tourSteps: allTourSteps };
 
@@ -265,7 +265,7 @@ export function DashboardTour({ run, onComplete }: DashboardTourProps) {
     };
   }, [allSteps, allTourSteps, config]);
 
-  // ── Load steps from API ──────────────────────────────────────────
+  //  Load steps from API 
   useEffect(() => {
     let cancelled = false;
     api
@@ -295,7 +295,7 @@ export function DashboardTour({ run, onComplete }: DashboardTourProps) {
     };
   }, []);
 
-  // ── Start tour when run=true and steps are loaded ────────────────
+  //  Start tour when run=true and steps are loaded 
   useEffect(() => {
     if (!run || loading || steps.length === 0) return;
 
@@ -310,7 +310,7 @@ export function DashboardTour({ run, onComplete }: DashboardTourProps) {
     }
   }, [run, loading, steps.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── After navigation completes, wait for route to settle then resume ──
+  //  After navigation completes, wait for route to settle then resume 
   useEffect(() => {
     if (!navigatingRef.current || pendingStepRef.current === null) return;
     navigatingRef.current = false;
@@ -336,7 +336,7 @@ export function DashboardTour({ run, onComplete }: DashboardTourProps) {
     });
   }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Handle overflow hint navigation ──────────────────────────────
+  //  Handle overflow hint navigation 
   // When user clicks a nav item in overflow menu, the route changes.
   // We detect that here and resume the tour.
   const handleOverflowNavigated = useCallback(() => {
@@ -386,7 +386,7 @@ export function DashboardTour({ run, onComplete }: DashboardTourProps) {
     [location.pathname],
   );
 
-  // ── Joyride event handler (controlled mode, v3 API) ──────────────
+  //  Joyride event handler (controlled mode, v3 API) 
   const handleEvent = useCallback(
     (data: EventData, controls: Controls) => {
       const { action, index, status, type } = data;

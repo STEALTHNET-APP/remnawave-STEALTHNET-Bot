@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, XCircle, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ── Лёгкий toast-store (без провайдера). Императивный API как у sonner:
+//  Лёгкий toast-store (без провайдера). Императивный API как у sonner:
 //    toast.success("Готово"), toast.error("Ошибка", "детали"), toast.info(...)
 //    Рендерится один раз через <Toaster /> в App.tsx.
 
@@ -89,7 +89,7 @@ function useToasts(): ToastItem[] {
 const VARIANT_STYLE: Record<ToastVariant, { icon: typeof CheckCircle2; ring: string; iconColor: string; glow: string }> = {
   success: { icon: CheckCircle2, ring: "border-emerald-500/40", iconColor: "text-emerald-400", glow: "shadow-emerald-500/20" },
   error: { icon: XCircle, ring: "border-rose-500/40", iconColor: "text-rose-400", glow: "shadow-rose-500/20" },
-  info: { icon: Info, ring: "border-primary/40", iconColor: "text-primary", glow: "shadow-primary/20" },
+  info: { icon: Info, ring: "border-border", iconColor: "text-primary", glow: "shadow-primary/20" },
 };
 
 function ToastCard({ item }: { item: ToastItem }) {
@@ -103,7 +103,7 @@ function ToastCard({ item }: { item: ToastItem }) {
       exit={{ opacity: 0, y: -16, scale: 0.92, transition: { duration: 0.18 } }}
       transition={{ type: "spring", stiffness: 380, damping: 30 }}
       className={cn(
-        "pointer-events-auto relative flex w-[calc(100vw-2rem)] max-w-sm items-start gap-3 overflow-hidden rounded-2xl border bg-card/90 px-4 py-3.5 shadow-xl backdrop-blur-xl",
+        "pointer-events-auto relative flex w-[calc(100vw-2rem)] max-w-sm items-start gap-3 overflow-hidden rounded-xl border bg-card/90 px-4 py-3.5",
         style.ring,
         style.glow,
       )}

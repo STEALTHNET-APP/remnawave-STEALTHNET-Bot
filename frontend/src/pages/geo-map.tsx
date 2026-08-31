@@ -63,7 +63,7 @@ function createNodeIcon(node: GeoMapNode): L.DivIcon {
       box-shadow:0 0 12px ${color}66;
       font-size:20px;position:relative;
     ">
-      <span>${flag || "🖥"}</span>
+      <span>${flag || ""}</span>
       ${node.usersOnline > 0 ? `<span style="
         position:absolute;top:-4px;right:-4px;
         background:#3b82f6;color:white;
@@ -200,40 +200,32 @@ export function GeoMapPage() {
   if (error && !data) {
     const isDisabled = /disabled|выключ|отключ/i.test(error);
     return (
-      <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-        <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-        <div className="fixed -z-10 bg-violet-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
-        <div className="flex items-center gap-4 bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Server className="h-6 w-6 text-primary" />
-          </div>
+      <div className="flex flex-col gap-3.5 relative">
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">Карта нод</h1>
-            <p className="text-sm text-muted-foreground mt-1">Живая география нод и подключений клиентов.</p>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Карта нод</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Живая география нод и подключений клиентов.</p>
           </div>
         </div>
-        <div className="bg-background/60 backdrop-blur-3xl border border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center justify-center text-center px-6">
-          <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-            <WifiOff className="h-8 w-8 text-muted-foreground/60" />
-          </div>
+        <div className="bg-card border border-border rounded-2xl py-16 flex flex-col items-center justify-center text-center px-6">
           {isDisabled ? (
             <>
-              <h3 className="text-lg font-semibold tracking-tight">Карта отключена</h3>
+              <h3 className="text-[13.5px] font-bold tracking-tight">Карта отключена</h3>
               <p className="text-sm text-muted-foreground mt-1 max-w-md">
                 Гео-карта выключена в настройках панели. Включите её в разделе{" "}
                 <a href="/admin/settings" className="text-primary hover:underline font-medium">Настройки</a>{" "}
-                → вкладка «Карта» — и здесь появятся ноды и подключения клиентов.
+                 вкладка «Карта» — и здесь появятся ноды и подключения клиентов.
               </p>
             </>
           ) : (
             <>
-              <h3 className="text-lg font-semibold tracking-tight">Не удалось загрузить карту</h3>
+              <h3 className="text-[13.5px] font-bold tracking-tight">Не удалось загрузить карту</h3>
               <p className="text-sm text-red-500 dark:text-red-400 mt-1 max-w-md break-all">{error}</p>
             </>
           )}
           <button
             onClick={() => fetchData()}
-            className="mt-5 inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-foreground/5 hover:bg-foreground/10 px-4 py-2 text-sm font-medium transition-colors"
+            className="mt-5 inline-flex items-center gap-1.5 rounded-xl border border-border bg-foreground/5 hover:bg-foreground/10 px-4 py-2 text-sm font-medium transition-colors"
           >
             <RefreshCw className="h-4 w-4" />
             Проверить снова
@@ -244,7 +236,7 @@ export function GeoMapPage() {
   }
 
   return (
-    <div className="relative h-[calc(100vh-8rem)] rounded-xl overflow-hidden border border-white/10">
+    <div className="relative h-[calc(100vh-8rem)] rounded-xl overflow-hidden border border-border">
       <style>{`
         .geo-map-node-icon, .geo-map-user-icon { background: none !important; border: none !important; }
         .leaflet-popup-content-wrapper {
@@ -291,11 +283,11 @@ export function GeoMapPage() {
                     <span>{node.usersOnline}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Speed ↓</span>
+                    <span>Speed </span>
                     <span>{formatSpeed(node.rxBytesPerSec)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Speed ↑</span>
+                    <span>Speed </span>
                     <span>{formatSpeed(node.txBytesPerSec)}</span>
                   </div>
                   <div className="flex justify-between">
@@ -371,10 +363,10 @@ export function GeoMapPage() {
 
       {/* Control panel overlay */}
       <div className="absolute top-3 right-3 z-[1000] w-72">
-        <div className="rounded-xl border border-white/10 bg-card/90 backdrop-blur-xl shadow-2xl overflow-hidden">
+        <div className="rounded-xl border border-border bg-card/90 overflow-hidden">
           <button
             onClick={() => setPanelOpen(!panelOpen)}
-            className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors"
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-card transition-colors"
           >
             <span className="text-xs font-mono font-bold tracking-wider uppercase text-primary">
               Node Map Control
@@ -383,7 +375,7 @@ export function GeoMapPage() {
           </button>
 
           {panelOpen && (
-            <div className="border-t border-white/10 p-4 space-y-4">
+            <div className="border-t border-border p-4 space-y-4">
               {/* Stats */}
               <div className="grid grid-cols-3 gap-2">
                 <div className="text-center">
@@ -410,7 +402,7 @@ export function GeoMapPage() {
                   disabled={refreshing}
                   className={cn(
                     "flex-1 flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-mono font-bold transition-all",
-                    "bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20",
+                    "bg-primary/10 hover:bg-primary/20 text-primary border border-border",
                     refreshing && "opacity-50 pointer-events-none",
                   )}
                 >
@@ -423,7 +415,7 @@ export function GeoMapPage() {
                     "flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-mono transition-all border",
                     autoPolling
                       ? "bg-green-500/10 border-green-500/20 text-green-500"
-                      : "bg-muted/30 border-white/10 text-muted-foreground",
+                      : "bg-muted/30 border-border text-muted-foreground",
                   )}
                 >
                   {autoPolling ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
@@ -446,7 +438,7 @@ export function GeoMapPage() {
                   <div className="text-[11px] font-mono font-bold text-muted-foreground uppercase tracking-wider mb-2">
                     Filter by node
                   </div>
-                  <div className="space-y-1 max-h-48 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full">
+                  <div className="space-y-1 max-h-48 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-card [&::-webkit-scrollbar-thumb]:rounded-full">
                     {data.nodes.map((node) => {
                       const isSelected = selectedNodes.size === 0 || selectedNodes.has(node.uuid);
                       const color = nodeColorMap.get(node.uuid) ?? "#3b82f6";
@@ -456,7 +448,7 @@ export function GeoMapPage() {
                           onClick={() => toggleNode(node.uuid)}
                           className={cn(
                             "w-full flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-all text-xs",
-                            isSelected ? "bg-white/5" : "opacity-40 hover:opacity-70",
+                            isSelected ? "bg-card" : "opacity-40 hover:opacity-70",
                           )}
                         >
                           <span

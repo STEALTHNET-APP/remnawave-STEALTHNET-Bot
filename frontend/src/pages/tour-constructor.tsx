@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, GripVertical, Trash2, Sparkles, Save, X, Upload, Film, ImagePlus, Eye, Map, Layers, Zap, ArrowRight, PlayCircle, LayoutTemplate, Navigation, EyeOff, BookOpen, ArrowLeft, Pencil } from "lucide-react";
+import { Loader2, GripVertical, Trash2, Sparkles, Save, X, Upload, Film, ImagePlus, Eye, Map, Layers, Zap, ArrowRight, PlayCircle, Navigation, EyeOff, BookOpen, ArrowLeft, Pencil } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -27,33 +27,33 @@ const CABINET_ROUTES = [
 ];
 
 const TOUR_TARGETS = [
-  { id: "welcome", target: "body", label: "Приветствие", icon: "👋", defaultPlacement: "center", description: "Приветственное сообщение", previewImage: null, defaultRoute: null },
-  { id: "subscription", target: '[data-tour="subscription"]', label: "Подписка", icon: "🔑", defaultPlacement: "bottom", description: "Карточка подписки", previewImage: "/tour-targets/subscription.png", defaultRoute: "/cabinet/dashboard" },
-  { id: "balance", target: '[data-tour="balance"]', label: "Баланс", icon: "💰", defaultPlacement: "left", description: "Карточка баланса", previewImage: "/tour-targets/balance.png", defaultRoute: "/cabinet/dashboard" },
-  { id: "tariffs-nav", target: '[data-tour="tariffs"]', label: "Тарифы (навигация)", icon: "📦", defaultPlacement: "right", description: "Кнопка тарифов в навигации", previewImage: "/tour-targets/tariffs.png", defaultRoute: null },
-  { id: "tariff-list", target: '[data-tour="tariff-list"]', label: "Список тарифов", icon: "🏷️", defaultPlacement: "top", description: "Список тарифов на странице", previewImage: "/tour-targets/tariff-list.png", defaultRoute: "/cabinet/tariffs" },
-  { id: "referrals-nav", target: '[data-tour="referrals"]', label: "Рефералы (навигация)", icon: "👥", defaultPlacement: "right", description: "Кнопка рефералов в навигации", previewImage: "/tour-targets/referrals.png", defaultRoute: null },
-  { id: "referral-stats", target: '[data-tour="referral-stats"]', label: "Статистика рефералов", icon: "📊", defaultPlacement: "bottom", description: "Блок статистики на странице рефералов", previewImage: "/tour-targets/referral-stats.png", defaultRoute: "/cabinet/referral" },
-  { id: "referral-link", target: '[data-tour="referral-link"]', label: "Реферальная ссылка", icon: "🔗", defaultPlacement: "top", description: "Блок ссылок на странице рефералов", previewImage: "/tour-targets/referral-link.png", defaultRoute: "/cabinet/referral" },
-  { id: "profile-nav", target: '[data-tour="profile"]', label: "Профиль (навигация)", icon: "👤", defaultPlacement: "right", description: "Кнопка профиля в навигации", previewImage: "/tour-targets/profile.png", defaultRoute: null },
-  { id: "profile-settings", target: '[data-tour="profile-settings"]', label: "Данные профиля", icon: "⚙️", defaultPlacement: "top", description: "Карточка личных данных", previewImage: "/tour-targets/profile-settings.png", defaultRoute: "/cabinet/profile" },
-  { id: "language-currency", target: '[data-tour="language-currency"]', label: "Язык и валюта", icon: "🌐", defaultPlacement: "top", description: "Настройки языка и валюты", previewImage: "/tour-targets/language-currency.png", defaultRoute: "/cabinet/profile" },
-  { id: "password-change", target: '[data-tour="password-change"]', label: "Смена пароля", icon: "🔐", defaultPlacement: "top", description: "Карточка безопасности", previewImage: "/tour-targets/password-change.png", defaultRoute: "/cabinet/profile" },
-  { id: "custom-build", target: '[data-tour="custom-build"]', label: "Кастомная сборка", icon: "🛠️", defaultPlacement: "right", description: "Кастомная конфигурация VPN", previewImage: "/tour-targets/custom-build.png", defaultRoute: null },
-  { id: "extra-options", target: '[data-tour="extra-options"]', label: "Дополнительные опции", icon: "⚡", defaultPlacement: "right", description: "Прокси, доп. устройства и др.", previewImage: "/tour-targets/extra-options.png", defaultRoute: null },
-  { id: "proxy", target: '[data-tour="proxy"]', label: "Прокси", icon: "🌐", defaultPlacement: "right", description: "Прокси-доступ", previewImage: "/tour-targets/proxy.png", defaultRoute: null },
-  { id: "singbox", target: '[data-tour="singbox"]', label: "SingBox", icon: "🔐", defaultPlacement: "right", description: "Доступ через SingBox", previewImage: "/tour-targets/singbox.png", defaultRoute: null },
-  { id: "messages", target: '[data-tour="floating-chat"]', label: "Сообщения", icon: "💬", defaultPlacement: "left", description: "Плавающий чат (AI + поддержка)", previewImage: null, defaultRoute: null },
-  { id: "gifts", target: '[data-tour="gifts"]', label: "Подарки", icon: "🎁", defaultPlacement: "right", description: "Подарочные коды", previewImage: "/tour-targets/gifts.png", defaultRoute: null },
-  { id: "gifts-buy-button", target: '[data-tour="gifts-buy-button"]', label: "Купить подарок", icon: "🛒", defaultPlacement: "bottom", description: "Кнопка покупки подписки в подарок", previewImage: null, defaultRoute: "/cabinet/gifts" },
-  { id: "gifts-redeem", target: '[data-tour="gifts-redeem"]', label: "Активировать код", icon: "🎫", defaultPlacement: "bottom", description: "Форма активации подарочного кода", previewImage: null, defaultRoute: "/cabinet/gifts" },
-  { id: "gifts-subscriptions", target: '[data-tour="gifts-subscriptions"]', label: "Мои подписки", icon: "📋", defaultPlacement: "top", description: "Список дополнительных подписок", previewImage: null, defaultRoute: "/cabinet/gifts" },
-  { id: "gifts-history", target: '[data-tour="gifts-history"]', label: "История подарков", icon: "📜", defaultPlacement: "top", description: "История действий с подарками", previewImage: null, defaultRoute: "/cabinet/gifts" },
-  { id: "dashboard-nav", target: '[data-tour="dashboard"]', label: "Дашборд (навигация)", icon: "📊", defaultPlacement: "bottom", description: "Кнопка дашборда", previewImage: "/tour-targets/dashboard.png", defaultRoute: null },
-  { id: "farewell", target: "body", label: "Завершение", icon: "✨", defaultPlacement: "center", description: "Прощальное сообщение", previewImage: null, defaultRoute: null },
+  { id: "welcome", target: "body", label: "Приветствие", icon: "", defaultPlacement: "center", description: "Приветственное сообщение", previewImage: null, defaultRoute: null },
+  { id: "subscription", target: '[data-tour="subscription"]', label: "Подписка", icon: "", defaultPlacement: "bottom", description: "Карточка подписки", previewImage: "/tour-targets/subscription.png", defaultRoute: "/cabinet/dashboard" },
+  { id: "balance", target: '[data-tour="balance"]', label: "Баланс", icon: "", defaultPlacement: "left", description: "Карточка баланса", previewImage: "/tour-targets/balance.png", defaultRoute: "/cabinet/dashboard" },
+  { id: "tariffs-nav", target: '[data-tour="tariffs"]', label: "Тарифы (навигация)", icon: "", defaultPlacement: "right", description: "Кнопка тарифов в навигации", previewImage: "/tour-targets/tariffs.png", defaultRoute: null },
+  { id: "tariff-list", target: '[data-tour="tariff-list"]', label: "Список тарифов", icon: "", defaultPlacement: "top", description: "Список тарифов на странице", previewImage: "/tour-targets/tariff-list.png", defaultRoute: "/cabinet/tariffs" },
+  { id: "referrals-nav", target: '[data-tour="referrals"]', label: "Рефералы (навигация)", icon: "", defaultPlacement: "right", description: "Кнопка рефералов в навигации", previewImage: "/tour-targets/referrals.png", defaultRoute: null },
+  { id: "referral-stats", target: '[data-tour="referral-stats"]', label: "Статистика рефералов", icon: "", defaultPlacement: "bottom", description: "Блок статистики на странице рефералов", previewImage: "/tour-targets/referral-stats.png", defaultRoute: "/cabinet/referral" },
+  { id: "referral-link", target: '[data-tour="referral-link"]', label: "Реферальная ссылка", icon: "", defaultPlacement: "top", description: "Блок ссылок на странице рефералов", previewImage: "/tour-targets/referral-link.png", defaultRoute: "/cabinet/referral" },
+  { id: "profile-nav", target: '[data-tour="profile"]', label: "Профиль (навигация)", icon: "", defaultPlacement: "right", description: "Кнопка профиля в навигации", previewImage: "/tour-targets/profile.png", defaultRoute: null },
+  { id: "profile-settings", target: '[data-tour="profile-settings"]', label: "Данные профиля", icon: "", defaultPlacement: "top", description: "Карточка личных данных", previewImage: "/tour-targets/profile-settings.png", defaultRoute: "/cabinet/profile" },
+  { id: "language-currency", target: '[data-tour="language-currency"]', label: "Язык и валюта", icon: "", defaultPlacement: "top", description: "Настройки языка и валюты", previewImage: "/tour-targets/language-currency.png", defaultRoute: "/cabinet/profile" },
+  { id: "password-change", target: '[data-tour="password-change"]', label: "Смена пароля", icon: "", defaultPlacement: "top", description: "Карточка безопасности", previewImage: "/tour-targets/password-change.png", defaultRoute: "/cabinet/profile" },
+  { id: "custom-build", target: '[data-tour="custom-build"]', label: "Кастомная сборка", icon: "", defaultPlacement: "right", description: "Кастомная конфигурация VPN", previewImage: "/tour-targets/custom-build.png", defaultRoute: null },
+  { id: "extra-options", target: '[data-tour="extra-options"]', label: "Дополнительные опции", icon: "", defaultPlacement: "right", description: "Прокси, доп. устройства и др.", previewImage: "/tour-targets/extra-options.png", defaultRoute: null },
+  { id: "proxy", target: '[data-tour="proxy"]', label: "Прокси", icon: "", defaultPlacement: "right", description: "Прокси-доступ", previewImage: "/tour-targets/proxy.png", defaultRoute: null },
+  { id: "singbox", target: '[data-tour="singbox"]', label: "SingBox", icon: "", defaultPlacement: "right", description: "Доступ через SingBox", previewImage: "/tour-targets/singbox.png", defaultRoute: null },
+  { id: "messages", target: '[data-tour="floating-chat"]', label: "Сообщения", icon: "", defaultPlacement: "left", description: "Плавающий чат (AI + поддержка)", previewImage: null, defaultRoute: null },
+  { id: "gifts", target: '[data-tour="gifts"]', label: "Подарки", icon: "", defaultPlacement: "right", description: "Подарочные коды", previewImage: "/tour-targets/gifts.png", defaultRoute: null },
+  { id: "gifts-buy-button", target: '[data-tour="gifts-buy-button"]', label: "Купить подарок", icon: "", defaultPlacement: "bottom", description: "Кнопка покупки подписки в подарок", previewImage: null, defaultRoute: "/cabinet/gifts" },
+  { id: "gifts-redeem", target: '[data-tour="gifts-redeem"]', label: "Активировать код", icon: "", defaultPlacement: "bottom", description: "Форма активации подарочного кода", previewImage: null, defaultRoute: "/cabinet/gifts" },
+  { id: "gifts-subscriptions", target: '[data-tour="gifts-subscriptions"]', label: "Мои подписки", icon: "", defaultPlacement: "top", description: "Список дополнительных подписок", previewImage: null, defaultRoute: "/cabinet/gifts" },
+  { id: "gifts-history", target: '[data-tour="gifts-history"]', label: "История подарков", icon: "", defaultPlacement: "top", description: "История действий с подарками", previewImage: null, defaultRoute: "/cabinet/gifts" },
+  { id: "dashboard-nav", target: '[data-tour="dashboard"]', label: "Дашборд (навигация)", icon: "", defaultPlacement: "bottom", description: "Кнопка дашборда", previewImage: "/tour-targets/dashboard.png", defaultRoute: null },
+  { id: "farewell", target: "body", label: "Завершение", icon: "", defaultPlacement: "center", description: "Прощальное сообщение", previewImage: null, defaultRoute: null },
 ];
 
-// ── Disabled-tab detection for admin constructor ───────────────────
+//  Disabled-tab detection for admin constructor 
 // Maps TOUR_TARGETS.id to a function that returns true when the tab is DISABLED.
 type ConfigCheck = (c: PublicConfig) => boolean;
 
@@ -108,7 +108,7 @@ function SortableStepRow({
     <div className="relative group/step">
       {/* Connection line */}
       {!isLast && (
-        <div className="absolute left-[22px] top-[44px] bottom-[-20px] w-0.5 bg-gradient-to-b from-primary/40 via-primary/10 to-transparent z-0 transition-opacity opacity-60 group-hover/step:opacity-100" />
+        <div className="absolute left-[22px] top-[44px] bottom-[-20px] w-0.5 bg-transparent z-0 transition-opacity opacity-60 group-hover/step:opacity-100" />
       )}
       
       <div
@@ -116,15 +116,15 @@ function SortableStepRow({
         style={style}
         onClick={onSelect}
         className={`relative z-10 flex items-center gap-3.5 rounded-[1.25rem] border p-3.5 cursor-pointer transition-all duration-300 ${
-          isDragging ? "opacity-90 shadow-2xl z-50 scale-[1.02] border-primary/40 bg-background/95 backdrop-blur-2xl ring-2 ring-primary/20" : ""
+          isDragging ? "opacity-90 z-50 scale-[1.02] border-border bg-card ring-2 ring-primary/20" : ""
         } ${
           isSelected 
-            ? "ring-1 ring-primary/60 bg-gradient-to-r from-primary/10 to-transparent border-primary/40 shadow-[0_4px_30px_rgba(var(--primary),0.15)]" 
-            : "bg-card/30 border-white/10 hover:bg-card/50 hover:border-white/20 hover:shadow-lg"
+            ? "ring-1 ring-primary/60 bg-transparent border-border" 
+            : "bg-card/30 border-border hover:bg-card/50 hover:border-border"
         }`}
       >
         <div
-          className="flex h-8 w-8 shrink-0 cursor-grab active:cursor-grabbing items-center justify-center rounded-xl bg-background/40 border border-white/5 text-muted-foreground hover:text-foreground hover:bg-background/80 transition-colors"
+          className="flex h-8 w-8 shrink-0 cursor-grab active:cursor-grabbing items-center justify-center rounded-xl bg-card border border-border text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
           {...attributes}
           {...listeners}
         >
@@ -132,13 +132,13 @@ function SortableStepRow({
         </div>
 
         {/* Step Number Badge */}
-        <div className={`absolute -left-2.5 -top-2.5 flex h-6 w-6 items-center justify-center rounded-full border shadow-md text-[11px] font-bold z-20 transition-all duration-300 ${
-          isSelected ? "bg-primary text-primary-foreground border-primary shadow-primary/30 scale-110" : "bg-background text-muted-foreground border-white/20"
+        <div className={`absolute -left-2.5 -top-2.5 flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-bold z-20 transition-all duration-300 ${
+          isSelected ? "bg-primary text-primary-foreground border-primary shadow-primary/30 scale-110" : "bg-background text-muted-foreground border-border"
         }`}>
           {index + 1}
         </div>
         
-        <div className="flex h-11 w-11 items-center justify-center rounded-[1rem] bg-gradient-to-br from-background to-muted/50 border border-white/10 text-xl shrink-0 shadow-inner relative overflow-hidden group-hover/step:shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] transition-all">
+        <div className="flex h-9 w-11 items-center justify-center rounded-[1rem] bg-card border border-border text-xl shrink-0 relative overflow-hidden group-hover/step:shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] transition-all">
           {targetDef.icon}
           {isSelected && (
             <div className="absolute inset-0 bg-primary/15 animate-pulse" />
@@ -168,14 +168,14 @@ function SortableStepRow({
         </div>
         
         {step.mascot && (
-          <div className="shrink-0 p-0.5 rounded-full bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/20 shadow-sm relative">
+          <div className="shrink-0 p-0.5 rounded-full bg-muted border border-border shadow-sm relative">
             <img src={step.mascot.emotions?.find(e => e.mood === step.mood)?.imageUrl || step.mascot.imageUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-background/50" />
-            <div className="absolute -bottom-0.5 -right-0.5 text-[10px] bg-background rounded-full p-0.5 border border-white/10">✨</div>
+            <div className="absolute -bottom-0.5 -right-0.5 text-[10px] bg-background rounded-full p-0.5 border border-border"></div>
           </div>
         )}
         
-        <div className="ml-1 flex items-center justify-center shrink-0 w-8 h-8 rounded-full hover:bg-white/5 transition-colors">
-          <div className={`w-3 h-3 rounded-full transition-all duration-300 ${step.isActive ? "bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.6)]" : "bg-muted border border-white/10"}`} title={step.isActive ? "Активен" : "Неактивен"} />
+        <div className="ml-1 flex items-center justify-center shrink-0 w-8 h-8 rounded-full hover:bg-card transition-colors">
+          <div className={`w-3 h-3 rounded-full transition-all duration-300 ${step.isActive ? "bg-emerald-400" : "bg-muted border border-border"}`} title={step.isActive ? "Активен" : "Неактивен"} />
         </div>
       </div>
     </div>
@@ -222,14 +222,14 @@ function PaletteItem({
         onClick={onClick}
         onMouseEnter={() => setShowPreview(true)}
         onMouseLeave={() => setShowPreview(false)}
-        className={`backdrop-blur-md border rounded-xl p-3 cursor-pointer transition-all flex items-center gap-3 group relative overflow-hidden ${
+        className={` border rounded-xl p-3 cursor-pointer transition-all flex items-center gap-3 group relative overflow-hidden ${
           isDisabled
             ? "bg-card/20 border-amber-500/20 hover:border-amber-500/40 opacity-70 hover:opacity-90"
-            : "bg-card/40 hover:bg-card/80 border-white/10 hover:border-primary/50 hover:shadow-[0_0_15px_rgba(var(--primary),0.2)]"
+            : "bg-card/40 hover:bg-card/80 border-border hover:border-border hover:shadow-[0_0_15px_rgba(var(--primary),0.2)]"
         }`}
       >
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-background/50 border border-white/5 text-xl shadow-inner group-hover:scale-110 group-hover:rotate-3 transition-transform relative z-10">
+        <div className="absolute inset-0 bg-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-card border border-border text-xl group-hover:scale-110 group-hover:rotate-3 transition-transform relative z-10">
           {target.icon}
         </div>
         <div className="flex flex-col flex-1 min-w-0 relative z-10">
@@ -258,14 +258,14 @@ function PaletteItem({
             style={{ top: tooltipPos.top, left: tooltipPos.left }}
             className="fixed z-[9999] pointer-events-none"
           >
-            <div className="w-[280px] rounded-2xl overflow-hidden border border-white/10 bg-background/95 backdrop-blur-xl shadow-2xl">
+            <div className="w-[280px] rounded-xl overflow-hidden border border-border bg-card">
               <img
                 src={target.previewImage}
                 alt={target.label}
-                className="w-full h-auto border-b border-white/5"
+                className="w-full h-auto border-b border-border"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
               />
-              <div className="px-4 py-3 bg-gradient-to-b from-transparent to-background/50">
+              <div className="px-4 py-3 bg-transparent">
                 <div className="font-medium text-sm text-foreground mb-1">{target.label}</div>
                 <div className="text-xs text-muted-foreground leading-relaxed">
                   {target.description}
@@ -597,28 +597,25 @@ export function TourConstructorPage() {
       <div className="absolute top-[30%] -right-[10%] w-[30%] h-[50%] rounded-full bg-purple-500/10 blur-[100px] pointer-events-none -z-10" />
       
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 shrink-0 relative p-6 rounded-[2rem] border border-white/10 bg-background/40 backdrop-blur-3xl overflow-hidden shadow-2xl">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 shrink-0 relative p-4 rounded-2xl border border-border bg-card overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 mix-blend-overlay pointer-events-none" />
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-transparent to-purple-500/5 pointer-events-none" />
+        <div className="absolute inset-0 bg-transparent pointer-events-none" />
         
         <div className="relative z-10 flex items-center gap-5">
-          <div className="flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/20 shadow-[inset_0_0_20px_rgba(var(--primary),0.2)]">
-            <LayoutTemplate className="h-8 w-8 text-primary drop-shadow-[0_0_10px_rgba(var(--primary),0.8)]" />
-          </div>
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70 drop-shadow-sm">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Конструктор тура
             </h1>
             <div className="flex flex-wrap items-center gap-3 mt-2 text-sm font-medium">
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-foreground/80 shadow-sm backdrop-blur-md transition-colors hover:bg-white/10">
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-card border border-border text-foreground/80 shadow-sm transition-colors hover:bg-card">
                 <Layers className="h-3.5 w-3.5 text-primary/80" />
                 {steps.length} шагов
               </span>
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shadow-sm backdrop-blur-md transition-colors hover:bg-emerald-500/20">
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shadow-sm transition-colors hover:bg-emerald-500/20">
                 <PlayCircle className="h-3.5 w-3.5" />
                 {activeStepsCount} активных
               </span>
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 shadow-sm backdrop-blur-md transition-colors hover:bg-purple-500/20">
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 shadow-sm transition-colors hover:bg-purple-500/20">
                 <ImagePlus className="h-3.5 w-3.5" />
                 {mascots.length} персонажей
               </span>
@@ -630,7 +627,7 @@ export function TourConstructorPage() {
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Button
               onClick={() => setView("library")}
-              className="rounded-2xl shrink-0 h-12 px-6 shadow-[0_0_20px_rgba(var(--primary),0.2)] hover:shadow-[0_0_30px_rgba(var(--primary),0.4)] transition-all duration-300 border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary font-bold backdrop-blur-xl overflow-hidden relative group"
+              className="rounded-xl shrink-0 h-12 px-6 hover:shadow-[0_0_30px_rgba(var(--primary),0.4)] transition-all duration-300 border border-border bg-primary/10 hover:bg-primary/20 text-primary font-bold overflow-hidden relative group"
             >
               <BookOpen className="h-5 w-5 mr-2 group-hover:scale-110 transition-transform" />
               Библиотека персонажей
@@ -640,7 +637,7 @@ export function TourConstructorPage() {
             <Button 
               onClick={handleClearAll} 
               disabled={saving || steps.length === 0}
-              className="rounded-2xl shrink-0 h-12 px-6 transition-all duration-300 border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive font-bold backdrop-blur-xl overflow-hidden relative group hover:shadow-[0_0_20px_rgba(239,68,68,0.2)]"
+              className="rounded-xl shrink-0 h-12 px-6 transition-all duration-300 border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive font-bold overflow-hidden relative group hover:shadow-[0_0_20px_rgba(239,68,68,0.2)]"
             >
               <Trash2 className="h-5 w-5 mr-2 group-hover:rotate-12 transition-transform" />
               Очистить всё
@@ -649,9 +646,9 @@ export function TourConstructorPage() {
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Button 
               onClick={handleSeedDefaults} 
-              className="rounded-2xl shrink-0 h-12 px-6 shadow-[0_0_20px_rgba(var(--primary),0.2)] hover:shadow-[0_0_30px_rgba(var(--primary),0.4)] transition-all duration-300 border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary font-bold backdrop-blur-xl overflow-hidden relative group"
+              className="rounded-xl shrink-0 h-12 px-6 hover:shadow-[0_0_30px_rgba(var(--primary),0.4)] transition-all duration-300 border border-border bg-primary/10 hover:bg-primary/20 text-primary font-bold overflow-hidden relative group"
             >
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-[200%] group-hover:translate-x-[200%] transition-transform duration-1000 ease-in-out" />
+              <div className="absolute inset-0 bg-transparent -translate-x-[200%] group-hover:translate-x-[200%] transition-transform duration-1000 ease-in-out" />
               <Sparkles className="h-5 w-5 mr-2 group-hover:animate-spin" />
               Заполнить по умолчанию
             </Button>
@@ -673,22 +670,22 @@ export function TourConstructorPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
-          className="flex-1 flex flex-col bg-background/50 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-6 shadow-2xl relative overflow-hidden"
+          className="flex-1 flex flex-col bg-card border border-border rounded-2xl p-4 relative overflow-hidden"
         >
-          <div className="flex items-center justify-between mb-6 relative z-10 pb-4 border-b border-white/5 shrink-0">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" className="rounded-xl hover:bg-white/5" onClick={() => { setView("constructor"); setSelectedLibraryCharacterId(null); }}>
+          <div className="flex items-center justify-between mb-6 relative z-10 pb-4 border-b border-border shrink-0">
+            <div className="flex items-start gap-3">
+              <Button variant="ghost" className="rounded-xl hover:bg-card" onClick={() => { setView("constructor"); setSelectedLibraryCharacterId(null); }}>
                 <ArrowLeft className="w-5 h-5 mr-2" />
                 Назад в конструктор
               </Button>
               <h2 className="text-xl font-bold text-foreground flex items-center gap-3">
                 Библиотека персонажей
-                <span className="text-xs bg-primary/20 text-primary px-2.5 py-1 rounded-full border border-primary/20 font-bold">
+                <span className="text-xs bg-primary/20 text-primary px-2.5 py-1 rounded-full border border-border font-bold">
                   {mascots.length}
                 </span>
               </h2>
             </div>
-            <Button onClick={handleCreateMascot} disabled={saving} className="rounded-xl h-10 px-4 bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-[0_0_15px_rgba(var(--primary),0.3)] transition-all hover:scale-105 hover:shadow-[0_0_25px_rgba(var(--primary),0.5)]">
+            <Button onClick={handleCreateMascot} disabled={saving} className="rounded-xl h-9 px-[13px] bg-primary hover:bg-primary/90 text-primary-foreground font-bold transition-all hover:scale-105 hover:shadow-[0_0_25px_rgba(var(--primary),0.5)]">
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ImagePlus className="w-4 h-4 mr-2" />}
               Новый персонаж
             </Button>
@@ -702,9 +699,9 @@ export function TourConstructorPage() {
                   <div 
                     key={m.id} 
                     onClick={() => { setSelectedLibraryCharacterId(m.id); setEditCharacterName(m.name); }}
-                    className={`cursor-pointer rounded-[1.5rem] p-4 flex flex-col items-center justify-center gap-3 border transition-all duration-300 hover:scale-105 ${selectedLibraryCharacterId === m.id ? "bg-primary/10 border-primary shadow-[0_0_20px_rgba(var(--primary),0.2)]" : "bg-card/40 border-white/10 hover:bg-card/80 hover:border-white/20"}`}
+                    className={`cursor-pointer rounded-[1.5rem] p-4 flex flex-col items-center justify-center gap-3 border transition-all duration-300 hover:scale-105 ${selectedLibraryCharacterId === m.id ? "bg-primary/10 border-primary" : "bg-card/40 border-border hover:bg-card/80 hover:border-border"}`}
                   >
-                    <div className="w-16 h-16 rounded-2xl bg-background/50 flex items-center justify-center border border-white/5 shadow-inner overflow-hidden relative">
+                    <div className="w-16 h-16 rounded-xl bg-card flex items-center justify-center border border-border overflow-hidden relative">
                       {m.emotions?.[0]?.imageUrl ? (
                         <img src={m.emotions[0].imageUrl} alt={m.name} className="w-12 h-12 object-contain" />
                       ) : (
@@ -715,16 +712,13 @@ export function TourConstructorPage() {
                     </div>
                     <div className="text-center w-full">
                       <p className="text-sm font-bold text-foreground/90 truncate w-full px-1">{m.name}</p>
-                      <p className="text-[10px] font-medium text-muted-foreground mt-0.5 bg-background/50 inline-block px-2 py-0.5 rounded-full border border-white/5">{m.emotions?.length || 0} эмоций</p>
+                      <p className="text-[10px] font-medium text-muted-foreground mt-0.5 bg-card inline-block px-2 py-0.5 rounded-full border border-border">{m.emotions?.length || 0} эмоций</p>
                     </div>
                   </div>
                 ))}
                 
                 {mascots.length === 0 && (
                   <div className="col-span-full flex flex-col items-center justify-center text-center text-muted-foreground py-20">
-                    <div className="w-20 h-20 rounded-full bg-muted/20 border border-white/5 flex items-center justify-center mb-4">
-                      <BookOpen className="w-10 h-10 text-muted-foreground/40" />
-                    </div>
                     <p className="font-semibold text-foreground/70 mb-1">Библиотека пуста</p>
                     <p className="text-xs text-muted-foreground/50">Добавьте своего первого персонажа</p>
                   </div>
@@ -737,7 +731,7 @@ export function TourConstructorPage() {
               <motion.div 
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="w-[380px] shrink-0 bg-background/40 rounded-[1.5rem] border border-white/5 p-6 flex flex-col shadow-inner overflow-y-auto custom-scrollbar"
+                className="w-[380px] shrink-0 bg-card rounded-[1.5rem] border border-border p-4 flex flex-col overflow-y-auto custom-scrollbar"
               >
                 {(() => {
                   const selectedChar = mascots.find(m => m.id === selectedLibraryCharacterId);
@@ -745,14 +739,14 @@ export function TourConstructorPage() {
                   
                   return (
                     <>
-                      <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/5 shrink-0">
+                      <div className="flex items-center justify-between mb-8 pb-4 border-b border-border shrink-0">
                         <div className="relative group/name flex-1 mr-4">
                           <Input 
                             value={editCharacterName} 
                             onChange={e => setEditCharacterName(e.target.value)}
                             onBlur={() => handleRenameMascot(selectedChar.id, editCharacterName)}
                             onKeyDown={e => e.key === "Enter" && handleRenameMascot(selectedChar.id, editCharacterName)}
-                            className="text-lg font-bold bg-transparent border-transparent hover:bg-white/5 focus:bg-background/80 pr-8 shadow-none h-10 focus-visible:ring-1 focus-visible:ring-primary/50"
+                            className="text-[13.5px] font-bold bg-transparent border-transparent hover:bg-card focus:bg-card pr-8 shadow-none h-10 focus-visible:ring-1 focus-visible:ring-primary/50"
                             placeholder="Имя персонажа"
                           />
                           <Pencil className="w-4 h-4 text-muted-foreground/50 absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover/name:opacity-100 pointer-events-none transition-opacity" />
@@ -768,21 +762,21 @@ export function TourConstructorPage() {
                         <Label className="text-[10px] font-bold text-foreground/70 uppercase tracking-[0.15em] ml-1">Эмоции персонажа</Label>
                         <div className="grid grid-cols-2 gap-4">
                           {[
-                            { id: "wave", icon: "👋", label: "Привет" },
-                            { id: "point", icon: "👉", label: "Указывает" },
-                            { id: "happy", icon: "😄", label: "Радость" },
-                            { id: "think", icon: "🤔", label: "Думает" }
+                            { id: "wave", icon: "", label: "Привет" },
+                            { id: "point", icon: "", label: "Указывает" },
+                            { id: "happy", icon: "", label: "Радость" },
+                            { id: "think", icon: "", label: "Думает" }
                           ].map(mood => {
                             const emotion: MascotEmotionRecord | undefined = selectedChar.emotions?.find(e => e.mood === mood.id);
                             return (
-                              <div key={mood.id} className="relative group/emotion rounded-[1.25rem] border border-white/10 bg-background/30 p-4 flex flex-col items-center justify-center aspect-square hover:bg-background/50 hover:border-white/20 transition-all hover:shadow-lg">
+                              <div key={mood.id} className="relative group/emotion rounded-[1.25rem] border border-border bg-card p-4 flex flex-col items-center justify-center aspect-square hover:bg-card hover:border-border transition-all">
                                 <div className="absolute top-2.5 left-2.5 text-lg" title={mood.label}>{mood.icon}</div>
                                 {emotion ? (
                                   <>
                                     <img src={emotion.imageUrl} alt={mood.id} className="w-[60px] h-[60px] object-contain mt-3 drop-shadow-md group-hover/emotion:scale-110 transition-transform" />
                                     <button 
                                       onClick={() => handleDeleteEmotion(selectedChar.id, emotion.id)}
-                                      className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover/emotion:opacity-100 transition-all hover:scale-110 shadow-lg z-10 hover:bg-destructive/90"
+                                      className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-destructive text-white flex items-center justify-center opacity-0 group-hover/emotion:opacity-100 transition-all hover:scale-110 z-10 hover:bg-destructive/90"
                                       title="Удалить эмоцию"
                                     >
                                       <X className="w-4 h-4" />
@@ -790,9 +784,6 @@ export function TourConstructorPage() {
                                   </>
                                 ) : (
                                   <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full mt-3 group/uploadbox">
-                                    <div className="w-10 h-10 rounded-full bg-muted/30 flex items-center justify-center mb-2 group-hover/uploadbox:bg-primary/10 group-hover/uploadbox:text-primary transition-colors border border-white/5">
-                                      <Upload className="w-4 h-4 text-muted-foreground/60 group-hover/uploadbox:text-primary transition-colors" />
-                                    </div>
                                     <span className="text-[10px] text-muted-foreground font-medium group-hover/uploadbox:text-primary transition-colors text-center leading-tight">Загрузить<br/>PNG</span>
                                     <input 
                                       type="file" 
@@ -821,8 +812,8 @@ export function TourConstructorPage() {
       ) : (
       <div className="flex flex-1 gap-6 overflow-hidden min-h-0">
         {/* Left Panel - Palette */}
-        <div className="w-[340px] shrink-0 flex flex-col bg-background/60 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-6 overflow-y-auto shadow-2xl relative group/panel">
-          <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-background/20 to-transparent pointer-events-none rounded-[2rem] opacity-50 group-hover/panel:opacity-100 transition-opacity duration-700" />
+        <div className="w-[340px] shrink-0 flex flex-col bg-card border border-border rounded-2xl p-4 overflow-y-auto relative group/panel">
+          <div className="absolute inset-0 bg-transparent pointer-events-none rounded-2xl opacity-50 group-hover/panel:opacity-100 transition-opacity duration-700" />
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-[50px] rounded-full pointer-events-none" />
           
           <h2 className="text-[11px] font-bold mb-6 text-foreground/80 uppercase tracking-[0.25em] flex items-center gap-2.5 relative z-10">
@@ -846,17 +837,17 @@ export function TourConstructorPage() {
         </div>
 
         {/* Center Panel - Step Chain */}
-        <div className="flex-1 flex flex-col bg-background/50 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-6 overflow-y-auto shadow-2xl relative group/center">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_var(--tw-gradient-stops))] from-primary/5 via-transparent to-transparent pointer-events-none rounded-[2rem]" />
+        <div className="flex-1 flex flex-col bg-card border border-border rounded-2xl p-4 overflow-y-auto relative group/center">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_var(--tw-gradient-stops))] bg-transparent pointer-events-none rounded-2xl" />
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-64 h-32 bg-purple-500/10 blur-[60px] pointer-events-none rounded-full" />
           
-          <div className="flex items-center justify-between mb-6 relative z-10 pb-4 border-b border-white/5">
+          <div className="flex items-center justify-between mb-6 relative z-10 pb-4 border-b border-border">
             <h2 className="text-[11px] font-bold text-foreground/80 uppercase tracking-[0.25em] flex items-center gap-2.5">
               <Map className="w-4 h-4 text-blue-400" />
               Путь пользователя
             </h2>
             {steps.length > 0 && (
-              <span className="text-xs text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.2)] font-medium">
+              <span className="text-xs text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 font-medium">
                 Всего: {steps.length}
               </span>
             )}
@@ -870,13 +861,10 @@ export function TourConstructorPage() {
             >
               <div className="relative w-32 h-32 mb-8 flex items-center justify-center">
                 <div className="absolute inset-0 bg-primary/20 blur-[40px] rounded-full animate-pulse" />
-                <div className="absolute inset-0 rounded-[2rem] border border-dashed border-primary/30 animate-[spin_10s_linear_infinite]" />
+                <div className="absolute inset-0 rounded-2xl border border-dashed border-border animate-[spin_10s_linear_infinite]" />
                 <div className="absolute inset-4 rounded-full border border-dashed border-purple-500/30 animate-[spin_15s_linear_infinite_reverse]" />
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-purple-500/20 backdrop-blur-xl border border-white/20 flex items-center justify-center shadow-2xl relative z-10">
-                  <Map className="w-8 h-8 text-primary drop-shadow-[0_0_8px_rgba(var(--primary),0.8)]" />
                 </div>
-              </div>
-              <h3 className="text-xl font-bold text-foreground mb-3 bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-400">Путешествие не начато</h3>
+              <h3 className="text-xl font-bold text-foreground mb-3 text-foreground">Путешествие не начато</h3>
               <p className="text-sm max-w-[280px] leading-relaxed text-muted-foreground/80">Перетащите элемент из палитры слева, чтобы создать первый шаг для ваших пользователей</p>
             </motion.div>
           ) : (
@@ -917,36 +905,36 @@ export function TourConstructorPage() {
         </div>
 
         {/* Settings Panel */}
-        <div className="flex-1 bg-background/60 backdrop-blur-3xl border border-white/10 rounded-[2rem] overflow-y-auto flex flex-col shadow-2xl relative group/editor">
-          <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/10 via-background/20 to-primary/5 pointer-events-none rounded-[2rem] opacity-50 group-hover/editor:opacity-100 transition-opacity duration-700" />
+        <div className="flex-1 bg-card border border-border rounded-2xl overflow-y-auto flex flex-col relative group/editor">
+          <div className="absolute inset-0 bg-card pointer-events-none rounded-2xl opacity-50 group-hover/editor:opacity-100 transition-opacity duration-700" />
           <div className="absolute top-[20%] right-[-10%] w-48 h-48 bg-purple-500/10 blur-[60px] pointer-events-none rounded-full" />
 
           {selectedStep ? (
             <div className="p-7 max-w-4xl mx-auto w-full flex flex-col gap-7 relative z-10">
-              <div className="flex items-center justify-between pb-5 border-b border-white/5">
+              <div className="flex items-center justify-between pb-5 border-b border-border">
                 <div className="flex flex-col gap-1.5">
-                  <h2 className="font-bold text-2xl tracking-tight text-foreground bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70 drop-shadow-sm flex items-center gap-2.5">
-                    <div className="w-2 h-6 rounded-full bg-gradient-to-b from-primary to-purple-500" />
+                  <h2 className="font-bold text-2xl tracking-tight text-foreground text-foreground drop-shadow-sm flex items-center gap-2.5">
+                    <div className="w-2 h-6 rounded-full bg-primary" />
                     Настройки
                   </h2>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-bold shadow-[0_0_10px_rgba(var(--primary),0.1)]">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary border border-border text-xs font-bold">
                       <Sparkles className="w-3.5 h-3.5" />
                       {selectedStep.targetLabel}
                     </span>
                   </div>
                 </div>
                 
-                <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-background to-muted/50 border border-white/10 flex items-center justify-center text-2xl shadow-inner">
+                <div className="h-9 w-9 rounded-lg bg-card border border-border flex items-center justify-center text-2xl">
                   {TOUR_TARGETS.find(t => t.target === selectedStep.target)?.icon}
                 </div>
               </div>
 
               {/* Live Preview Mascot — PNG image */}
               <div className="relative group/preview mt-2">
-                <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-purple-500/20 rounded-[2rem] blur-[30px] opacity-50 group-hover/preview:opacity-100 transition-opacity duration-700 pointer-events-none" />
-                <div className="relative bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-2xl rounded-[2rem] border border-white/10 p-6 flex flex-col justify-center items-center h-[220px] overflow-hidden shadow-[inset_0_0_40px_rgba(255,255,255,0.02)] transition-all duration-500 hover:border-primary/30 group-hover/preview:shadow-[0_10px_40px_rgba(var(--primary),0.15)]">
-                  <div className="absolute top-0 w-full h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                <div className="absolute inset-0 bg-transparent rounded-2xl blur-[30px] opacity-50 group-hover/preview:opacity-100 transition-opacity duration-700 pointer-events-none" />
+                <div className="relative bg-card rounded-2xl border border-border p-4 flex flex-col justify-center items-center h-[220px] overflow-hidden transition-all duration-500 hover:border-border group-hover/preview:shadow-[0_10px_40px_rgba(var(--primary),0.15)]">
+                  <div className="absolute top-0 w-full h-[1px] bg-transparent" />
                   {selectedMascot ? (
                     <>
                       <div className="absolute w-32 h-32 bg-primary/10 rounded-full blur-[40px] animate-pulse pointer-events-none" />
@@ -967,7 +955,7 @@ export function TourConstructorPage() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 }}
-                        className="absolute bottom-4 px-4 py-1.5 rounded-full bg-background/80 backdrop-blur-md border border-white/10 text-xs font-bold text-foreground/80 shadow-lg z-20 flex items-center gap-2"
+                        className="absolute bottom-4 px-4 py-1.5 rounded-full bg-card border border-border text-xs font-bold text-foreground/80 z-20 flex items-center gap-2"
                       >
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         {selectedMascot.name}
@@ -979,8 +967,8 @@ export function TourConstructorPage() {
                       animate={{ opacity: 1 }}
                       className="flex flex-col items-center gap-4 text-muted-foreground/40 z-10"
                     >
-                      <div className="w-16 h-16 rounded-3xl bg-muted/30 border border-white/5 flex items-center justify-center relative overflow-hidden group-hover/preview:border-primary/20 transition-colors">
-                        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent" />
+                      <div className="w-16 h-16 rounded-xl bg-muted/30 border border-border flex items-center justify-center relative overflow-hidden group-hover/preview:border-border transition-colors">
+                        <div className="absolute inset-0 bg-transparent" />
                         <ImagePlus className="w-8 h-8 opacity-50 group-hover/preview:text-primary group-hover/preview:opacity-80 transition-colors relative z-10" />
                       </div>
                       <span className="text-sm font-semibold tracking-wide uppercase">Персонаж не выбран</span>
@@ -997,7 +985,7 @@ export function TourConstructorPage() {
                     <Input 
                       value={editTitle} 
                       onChange={e => setEditTitle(e.target.value)} 
-                      className="relative bg-background/60 backdrop-blur-sm border-white/10 hover:border-primary/30 focus:border-primary/50 focus:bg-background h-12 text-base transition-all rounded-xl shadow-sm"
+                      className="relative bg-card border-border hover:border-border focus:border-border focus:bg-background h-12 text-base transition-all rounded-xl shadow-sm"
                       placeholder="Введите заголовок шага"
                     />
                   </div>
@@ -1010,18 +998,18 @@ export function TourConstructorPage() {
                     <textarea 
                       value={editContent}
                       onChange={e => setEditContent(e.target.value)}
-                      className="relative flex min-h-[120px] w-full rounded-xl border border-white/10 bg-background/60 backdrop-blur-sm px-4 py-3 text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary/50 hover:border-primary/30 focus:bg-background transition-all resize-none leading-relaxed shadow-sm"
+                      className="relative flex min-h-[120px] w-full rounded-xl border border-border bg-card px-4 py-3 text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-border hover:border-border focus:bg-background transition-all resize-none leading-relaxed shadow-sm"
                       placeholder="Опишите, что пользователь должен сделать на этом шаге..."
                     />
                   </div>
                 </div>
 
                 {/* Video Upload Section */}
-                <div className="space-y-4 pt-6 border-t border-white/5 relative">
+                <div className="space-y-4 pt-6 border-t border-border relative">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 blur-[40px] pointer-events-none rounded-full" />
                   
                   <Label className="text-xs font-bold text-foreground/70 uppercase tracking-[0.15em] flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20">
+                    <div className="p-1.5 rounded-lg bg-primary/10 text-primary border border-border">
                       <Film className="w-3.5 h-3.5" />
                     </div>
                     Медиа-контент
@@ -1029,8 +1017,8 @@ export function TourConstructorPage() {
                   
                   {editVideoUrl ? (
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-                      <div className="relative rounded-[1.5rem] border border-white/10 bg-black/60 overflow-hidden shadow-inner group/video ring-1 ring-white/5 ring-inset">
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/video:opacity-100 transition-opacity z-10 pointer-events-none" />
+                      <div className="relative rounded-[1.5rem] border border-border bg-black/60 overflow-hidden group/video ring-1 ring-white/5 ring-inset">
+                        <div className="absolute inset-0 bg-transparent opacity-0 group-hover/video:opacity-100 transition-opacity z-10 pointer-events-none" />
                         {isUploadedVideo ? (
                           <video
                             src={editVideoUrl}
@@ -1054,14 +1042,14 @@ export function TourConstructorPage() {
                             value={editVideoUrl}
                             onChange={e => setEditVideoUrl(e.target.value)}
                             placeholder="URL или загрузите файл"
-                            className="relative bg-background/60 backdrop-blur-sm border-white/10 h-11 pr-10 text-xs font-mono text-muted-foreground truncate hover:border-primary/30 focus:border-primary/50 transition-colors rounded-xl"
+                            className="relative bg-card border-border h-9 pr-10 text-xs font-mono text-muted-foreground truncate hover:border-border focus:border-border transition-colors rounded-xl"
                             readOnly={isUploadedVideo}
                           />
                         </div>
                         <Button
                           variant="outline"
                           size="icon"
-                          className="shrink-0 h-11 w-11 rounded-xl border-white/10 hover:border-destructive/30 hover:bg-destructive/10 text-destructive hover:text-destructive shadow-sm transition-all hover:shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                          className="shrink-0 h-9 w-11 rounded-xl border-border hover:border-destructive/30 hover:bg-destructive/10 text-destructive hover:text-destructive shadow-sm transition-all hover:shadow-[0_0_15px_rgba(239,68,68,0.2)]"
                           onClick={handleDeleteVideo}
                           disabled={uploadingVideo}
                         >
@@ -1073,12 +1061,12 @@ export function TourConstructorPage() {
                     <motion.div 
                       initial={{ opacity: 0 }} 
                       animate={{ opacity: 1 }} 
-                      className="relative overflow-hidden rounded-[1.5rem] border border-dashed border-white/20 bg-background/30 hover:bg-primary/5 hover:border-primary/40 transition-all group/upload cursor-pointer"
+                      className="relative overflow-hidden rounded-[1.5rem] border border-dashed border-border bg-card hover:bg-primary/5 hover:border-border transition-all group/upload cursor-pointer"
                       onClick={() => videoInputRef.current?.click()}
                     >
-                      <div className="absolute inset-0 bg-gradient-to-b from-transparent to-primary/5 opacity-0 group-hover/upload:opacity-100 transition-opacity" />
+                      <div className="absolute inset-0 bg-transparent opacity-0 group-hover/upload:opacity-100 transition-opacity" />
                       <div className="p-8 flex flex-col items-center justify-center gap-3 text-center relative z-10">
-                        <div className="w-14 h-14 rounded-full bg-background border border-white/10 flex items-center justify-center shadow-lg group-hover/upload:scale-110 group-hover:upload:border-primary/30 transition-transform duration-300 group-hover/upload:shadow-primary/20">
+                        <div className="w-14 h-14 rounded-full bg-background border border-border flex items-center justify-center group-hover/upload:scale-110 group-hover:upload:border-border transition-transform duration-300 group-hover/upload:shadow-primary/20">
                           {uploadingVideo ? (
                             <Loader2 className="w-6 h-6 animate-spin text-primary" />
                           ) : (
@@ -1096,7 +1084,7 @@ export function TourConstructorPage() {
                       </div>
                       
                       {/* URL input area inside the dropzone */}
-                      <div className="p-3 border-t border-white/5 bg-background/50 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="p-3 border-t border-border bg-card flex gap-2" onClick={(e) => e.stopPropagation()}>
                         <Input
                           value={editVideoUrl}
                           onChange={e => setEditVideoUrl(e.target.value)}
@@ -1120,7 +1108,7 @@ export function TourConstructorPage() {
                   />
                 </div>
 
-                <div className="space-y-4 pt-6 border-t border-white/5 relative group/select">
+                <div className="space-y-4 pt-6 border-t border-border relative group/select">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 blur-[40px] pointer-events-none rounded-full" />
                   <Label className="text-[10px] font-bold text-foreground/70 uppercase tracking-[0.15em] ml-1 flex items-center gap-2">
                     <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
@@ -1133,7 +1121,7 @@ export function TourConstructorPage() {
                     <select 
                       value={editPlacement}
                       onChange={e => setEditPlacement(e.target.value)}
-                      className="relative flex h-12 w-full rounded-xl border border-white/10 bg-background/60 backdrop-blur-sm px-4 py-2 text-sm hover:border-blue-500/30 focus:border-blue-500/50 focus:bg-background focus:outline-none transition-all appearance-none font-medium cursor-pointer shadow-sm"
+                      className="relative flex h-12 w-full rounded-xl border border-border bg-card px-4 py-2 text-sm hover:border-blue-500/30 focus:border-blue-500/50 focus:bg-background focus:outline-none transition-all appearance-none font-medium cursor-pointer shadow-sm"
                     >
                       <option value="top">Сверху от цели</option>
                       <option value="bottom">Снизу от цели</option>
@@ -1145,7 +1133,7 @@ export function TourConstructorPage() {
                 </div>
 
                 {/* Route Navigation */}
-                <div className="space-y-4 pt-6 border-t border-white/5 relative group/select">
+                <div className="space-y-4 pt-6 border-t border-border relative group/select">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 blur-[40px] pointer-events-none rounded-full" />
                   <Label className="text-[10px] font-bold text-foreground/70 uppercase tracking-[0.15em] ml-1 flex items-center gap-2">
                     <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -1158,7 +1146,7 @@ export function TourConstructorPage() {
                     <select
                       value={editRoute}
                       onChange={e => setEditRoute(e.target.value)}
-                      className="relative flex h-12 w-full rounded-xl border border-white/10 bg-background/60 backdrop-blur-sm px-4 py-2 text-sm hover:border-emerald-500/30 focus:border-emerald-500/50 focus:bg-background focus:outline-none transition-all appearance-none font-medium cursor-pointer shadow-sm"
+                      className="relative flex h-12 w-full rounded-xl border border-border bg-card px-4 py-2 text-sm hover:border-emerald-500/30 focus:border-emerald-500/50 focus:bg-background focus:outline-none transition-all appearance-none font-medium cursor-pointer shadow-sm"
                     >
                       {CABINET_ROUTES.map(r => (
                         <option key={r.value} value={r.value}>{r.label}</option>
@@ -1171,7 +1159,7 @@ export function TourConstructorPage() {
                 </div>
 
                 {/* Mascot Selection */}
-                <div className="space-y-4 pt-6 border-t border-white/5 relative">
+                <div className="space-y-4 pt-6 border-t border-border relative">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 blur-[40px] pointer-events-none rounded-full" />
                   <div className="flex items-center justify-between">
                     <Label className="text-[10px] font-bold text-foreground/70 uppercase tracking-[0.15em] ml-1 flex items-center gap-2">
@@ -1183,7 +1171,7 @@ export function TourConstructorPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 px-3 rounded-lg text-xs font-bold bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 shadow-sm transition-all hover:shadow-[0_0_10px_rgba(var(--primary),0.2)]"
+                      className="h-8 px-3 rounded-lg text-xs font-bold bg-primary/10 hover:bg-primary/20 text-primary border border-border shadow-sm transition-all hover:shadow-[0_0_10px_rgba(var(--primary),0.2)]"
                       onClick={() => setView("library")}
                     >
                       <BookOpen className="h-3.5 w-3.5 mr-1.5" />
@@ -1197,12 +1185,12 @@ export function TourConstructorPage() {
                       onClick={() => setEditMascotId(null)}
                       className={`h-[4.5rem] flex flex-col items-center justify-center rounded-xl border text-xs transition-all relative overflow-hidden group ${
                         editMascotId === null 
-                          ? "ring-2 ring-primary/50 border-primary bg-primary/10 shadow-[0_0_15px_rgba(var(--primary),0.1)]" 
-                          : "bg-background/40 border-white/5 hover:bg-background/80 hover:border-white/10"
+                          ? "ring-2 ring-primary/50 border-primary bg-primary/10" 
+                          : "bg-card border-border hover:bg-card hover:border-border"
                       }`}
                       title="Без персонажа"
                     >
-                      <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="absolute inset-0 bg-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                       <X className={`w-5 h-5 mb-1 ${editMascotId === null ? "text-primary" : "text-muted-foreground/50 group-hover:text-muted-foreground"}`} />
                       <span className={`text-[9px] font-medium tracking-wide uppercase ${editMascotId === null ? "text-primary/80" : "text-muted-foreground/50"}`}>Скрыть</span>
                     </button>
@@ -1216,12 +1204,12 @@ export function TourConstructorPage() {
                         }}
                         className={`h-[4.5rem] w-full flex flex-col items-center justify-center rounded-xl border transition-all overflow-hidden relative ${
                           editMascotId === m.id 
-                            ? "ring-2 ring-primary/50 border-primary bg-primary/10 shadow-[0_0_15px_rgba(var(--primary),0.1)]" 
-                            : "bg-background/40 border-white/5 hover:bg-background/80 hover:border-white/10"
+                            ? "ring-2 ring-primary/50 border-primary bg-primary/10" 
+                            : "bg-card border-border hover:bg-card hover:border-border"
                         }`}
                         title={m.name}
                       >
-                        <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent z-0" />
+                        <div className="absolute inset-0 bg-transparent z-0" />
                         <img
                           src={m.emotions?.[0]?.imageUrl}
                           alt={m.name}
@@ -1236,7 +1224,7 @@ export function TourConstructorPage() {
                 </div>
 
                 {editMascotId && (
-                  <div className="space-y-4 pt-6 border-t border-white/5 relative group/mood">
+                  <div className="space-y-4 pt-6 border-t border-border relative group/mood">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 blur-[40px] pointer-events-none rounded-full" />
                     <Label className="text-[10px] font-bold text-foreground/70 uppercase tracking-[0.15em] ml-1 flex items-center gap-2">
                       <div className="p-1.5 rounded-lg bg-orange-500/10 text-orange-400 border border-orange-500/20">
@@ -1247,10 +1235,10 @@ export function TourConstructorPage() {
                     <div className="grid grid-cols-4 gap-3 relative z-10">
                       {selectedMascot?.emotions?.map(emotion => {
                         const moodDef = [
-                          { id: "wave", icon: "👋", label: "Привет", color: "from-blue-500/20" },
-                          { id: "point", icon: "👉", label: "Указывает", color: "from-emerald-500/20" },
-                          { id: "happy", icon: "😄", label: "Радость", color: "from-orange-500/20" },
-                          { id: "think", icon: "🤔", label: "Думает", color: "from-purple-500/20" }
+                          { id: "wave", icon: "", label: "Привет", color: "bg-muted" },
+                          { id: "point", icon: "", label: "Указывает", color: "bg-muted" },
+                          { id: "happy", icon: "", label: "Радость", color: "bg-muted" },
+                          { id: "think", icon: "", label: "Думает", color: "bg-muted" }
                         ].find(m => m.id === emotion.mood);
 
                         if (!moodDef) return null;
@@ -1259,14 +1247,14 @@ export function TourConstructorPage() {
                           <button
                             key={emotion.id}
                             onClick={() => setEditMood(emotion.mood)}
-                            className={`h-16 flex flex-col items-center justify-center rounded-2xl border transition-all duration-300 relative overflow-hidden group/btn ${
+                            className={`h-16 flex flex-col items-center justify-center rounded-xl border transition-all duration-300 relative overflow-hidden group/btn ${
                               editMood === emotion.mood 
-                                ? "ring-2 ring-primary/60 border-primary bg-primary/10 shadow-[0_0_20px_rgba(var(--primary),0.2)] scale-[1.02]" 
-                                : "bg-background/40 border-white/10 hover:bg-background/80 hover:border-white/20 hover:scale-105 hover:shadow-lg"
+                                ? "ring-2 ring-primary/60 border-primary bg-primary/10 scale-[1.02]" 
+                                : "bg-card border-border hover:bg-card hover:border-border hover:scale-105"
                             }`}
                             title={moodDef.label}
                           >
-                            <div className={`absolute inset-0 bg-gradient-to-b ${moodDef.color} to-transparent opacity-0 group-hover/btn:opacity-100 transition-opacity`} />
+                            <div className={`absolute inset-0  ${moodDef.color}  opacity-0 group-hover/btn:opacity-100 transition-opacity`} />
                             <img src={emotion.imageUrl} alt={emotion.mood} className="w-10 h-10 object-contain relative z-10 drop-shadow-md group-hover/btn:scale-110 transition-transform duration-300" />
                             <div className="absolute top-1.5 right-1.5 text-[12px] z-10 opacity-70 group-hover/btn:opacity-100 transition-opacity">{moodDef.icon}</div>
                           </button>
@@ -1276,9 +1264,9 @@ export function TourConstructorPage() {
                   </div>
                 )}
 
-                <div className="flex items-center justify-between p-5 mt-4 rounded-2xl bg-gradient-to-r from-background/60 to-background/20 backdrop-blur-md border border-white/10 shadow-inner group/switch hover:border-white/20 transition-all hover:shadow-[inset_0_0_20px_rgba(255,255,255,0.02)]">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-colors ${editIsActive ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_15px_rgba(52,211,153,0.2)]" : "bg-muted text-muted-foreground border-white/10"}`}>
+                <div className="flex items-center justify-between p-4 mt-4 rounded-xl bg-card border border-border group/switch hover:border-border transition-all hover:shadow-[inset_0_0_20px_rgba(255,255,255,0.02)]">
+                  <div className="flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-colors ${editIsActive ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-muted text-muted-foreground border-border"}`}>
                       <Zap className={`w-5 h-5 ${editIsActive ? "animate-pulse" : ""}`} />
                     </div>
                     <div className="flex flex-col gap-0.5">
@@ -1290,17 +1278,17 @@ export function TourConstructorPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 mt-auto pt-8 border-t border-white/5 relative">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-[1px] bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+              <div className="flex flex-col gap-3 mt-auto pt-8 border-t border-border relative">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-[1px] bg-transparent" />
                 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Button onClick={handleSaveStep} disabled={saving} className="w-full h-12 rounded-[1rem] font-bold text-[15px] shadow-[0_0_20px_rgba(var(--primary),0.25)] transition-all hover:shadow-[0_0_35px_rgba(var(--primary),0.4)] border border-primary/20 bg-gradient-to-r from-primary to-primary/80 group">
-                    <div className="absolute inset-0 rounded-[1rem] bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-[200%] group-hover:translate-x-[200%] transition-transform duration-1000 ease-in-out" />
+                  <Button onClick={handleSaveStep} disabled={saving} className="w-full h-12 rounded-[1rem] font-bold text-[15px] transition-all hover:shadow-[0_0_35px_rgba(var(--primary),0.4)] border border-border bg-primary group">
+                    <div className="absolute inset-0 rounded-[1rem] bg-transparent -translate-x-[200%] group-hover:translate-x-[200%] transition-transform duration-1000 ease-in-out" />
                     {saving ? <Loader2 className="h-5 w-5 mr-2.5 animate-spin" /> : <Save className="h-5 w-5 mr-2.5 group-hover:scale-110 transition-transform" />}
                     Сохранить изменения
                   </Button>
                 </motion.div>
                 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                  <Button onClick={handleDeleteStep} disabled={saving} variant="outline" className="w-full h-12 rounded-[1rem] border-white/10 text-destructive/80 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all font-semibold shadow-sm hover:shadow-[0_0_15px_rgba(239,68,68,0.15)] group">
+                  <Button onClick={handleDeleteStep} disabled={saving} variant="outline" className="w-full h-12 rounded-[1rem] border-border text-destructive/80 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all font-semibold shadow-sm hover:shadow-[0_0_15px_rgba(239,68,68,0.15)] group">
                     <Trash2 className="h-4 w-4 mr-2 group-hover:rotate-12 transition-transform" />
                     Удалить шаг
                   </Button>
@@ -1316,11 +1304,8 @@ export function TourConstructorPage() {
               <div className="relative w-32 h-32 mb-8 flex items-center justify-center group/empty cursor-default">
                 <div className="absolute inset-0 bg-purple-500/20 blur-[40px] rounded-full animate-pulse group-hover/empty:bg-purple-500/30 transition-colors" />
                 <div className="absolute inset-2 rounded-full border border-dashed border-purple-500/30 animate-[spin_12s_linear_infinite]" />
-                <div className="w-20 h-20 rounded-[2rem] bg-gradient-to-br from-background/80 to-purple-500/10 backdrop-blur-xl border border-white/20 flex items-center justify-center shadow-2xl relative z-10 transition-transform duration-500 group-hover/empty:scale-110 group-hover/empty:rotate-6">
-                  <LayoutTemplate className="w-10 h-10 text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.6)]" />
                 </div>
-              </div>
-              <h3 className="text-xl font-bold text-foreground mb-3 bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-primary">Настройки шага</h3>
+              <h3 className="text-xl font-bold text-foreground mb-3 text-foreground">Настройки шага</h3>
               <p className="text-sm max-w-[260px] leading-relaxed text-muted-foreground/80">Выберите любой шаг в цепочке слева, чтобы настроить его параметры и внешний вид</p>
             </motion.div>
           )}

@@ -36,7 +36,7 @@ export function CtaBanner({ block }: { block: LandingApiBlock }) {
           <div className="text-xs font-semibold uppercase tracking-[0.32em] text-white/80">{eyebrow}</div>
           <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] text-white md:text-5xl">{title}</h2>
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-white/90 md:text-lg">{desc}</p>
-          <Button asChild size="lg" className="group mt-8 h-14 rounded-full bg-white px-8 text-base font-semibold text-slate-950 shadow-lg hover:bg-white/95">
+          <Button asChild size="lg" className="group mt-8 h-14 rounded-full bg-white px-8 text-base font-semibold text-slate-950 hover:bg-card">
             <Link to={buildLink(ctaUrl)} className="flex items-center gap-2">
               {ctaText}
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />

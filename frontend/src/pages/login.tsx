@@ -77,7 +77,7 @@ export function LoginPage() {
         transition={{ duration: 0.3 }}
         className="w-full max-w-md relative z-10"
       >
-        <Card className="border-border/50 shadow-2xl">
+        <Card className="border-border/50">
           <CardHeader className="space-y-1 text-center">
             <div className="flex justify-center mb-2">
               {brand.logo ? (
@@ -115,7 +115,7 @@ export function LoginPage() {
                     className="bg-transparent text-center text-lg tracking-[0.3em] font-mono"
                   />
                 </div>
-                <Button type="submit" className="w-full shadow-lg" disabled={loading || code.length !== 6}>
+                <Button type="submit" className="w-full" disabled={loading || code.length !== 6}>
                   {loading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Войти"}
                 </Button>
                 <Button type="button" variant="ghost" className="w-full" onClick={clearPending2FA}>
@@ -154,7 +154,7 @@ export function LoginPage() {
                     className="bg-transparent"
                   />
                 </div>
-                <Button type="submit" className="w-full shadow-lg" disabled={loading}>
+                <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Вход…" : "Войти"}
                 </Button>
               </form>

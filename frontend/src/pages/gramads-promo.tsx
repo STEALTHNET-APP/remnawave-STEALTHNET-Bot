@@ -254,18 +254,13 @@ export function GramadsPromoPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-violet-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
       {/* Заголовок */}
-      <div className="flex items-center justify-between flex-wrap gap-3 bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Megaphone className="h-6 w-6 text-primary" />
-          </div>
+      <div className="flex items-center justify-between flex-wrap gap-3 bg-card border border-border p-4 rounded-2xl">
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">{t("admin.gramads.title")}</h1>
-            <p className="text-sm text-muted-foreground mt-1">{t("admin.gramads.subtitle")}</p>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">{t("admin.gramads.title")}</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">{t("admin.gramads.subtitle")}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -374,14 +369,14 @@ export function GramadsPromoPage() {
                 <Card>
                   <CardHeader><CardTitle className="text-sm text-muted-foreground">{t("admin.gramads.balance")}</CardTitle></CardHeader>
                   <CardContent>
-                    <p className="text-3xl font-bold text-primary">{balance?.balance != null ? Math.round(balance.balance).toLocaleString() : "—"}</p>
+                    <p className="text-xl font-bold text-primary">{balance?.balance != null ? Math.round(balance.balance).toLocaleString() : "—"}</p>
                     <p className="text-xs text-muted-foreground mt-1">{t("admin.gramads.impressions_unit")}</p>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardHeader><CardTitle className="text-sm text-muted-foreground">{t("admin.gramads.spent_30d")}</CardTitle></CardHeader>
                   <CardContent>
-                    <p className="text-2xl font-bold text-orange-400">
+                    <p className="text-[13.5px] font-bold text-orange-400">
                       {scalePaidReward((incomes?.expenses ?? []).reduce((s, c) => s + (c.paidReward || 0), 0)).toLocaleString()}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">{t("admin.gramads.impressions_unit")}</p>
@@ -390,7 +385,7 @@ export function GramadsPromoPage() {
                 <Card>
                   <CardHeader><CardTitle className="text-sm text-muted-foreground">{t("admin.gramads.topups_30d")}</CardTitle></CardHeader>
                   <CardContent>
-                    <p className="text-2xl font-bold text-green-400">
+                    <p className="text-[13.5px] font-bold text-green-400">
                       {scalePaidReward((incomes?.incomes ?? []).reduce((s, c) => s + (c.paidReward || 0), 0)).toLocaleString()}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">{t("admin.gramads.impressions_unit")}</p>
@@ -469,8 +464,8 @@ export function GramadsPromoPage() {
                       : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
                   }`}>
                     {status?.valid
-                      ? "✓ Ключ сохранён и валиден"
-                      : `✕ Ключ сохранён, но Gramads его отклоняет${status?.error ? ` (${status.error})` : ""}`}
+                      ? " Ключ сохранён и валиден"
+                      : ` Ключ сохранён, но Gramads его отклоняет${status?.error ? ` (${status.error})` : ""}`}
                   </div>
 
                   <div className="space-y-2">
@@ -547,7 +542,7 @@ export function GramadsPromoPage() {
   );
 }
 
-// ────────── Карточка кампании ──────────
+//  Карточка кампании 
 function CampaignCard({ post, onOpen, onAction }: {
   post: GramadsPostDto;
   onOpen: () => void;
@@ -600,11 +595,11 @@ function CampaignCard({ post, onOpen, onAction }: {
   );
 }
 
-// ────────── Диалог создания кампании ──────────
+//  Диалог создания кампании 
 function CreateCampaignDialog({ open, onOpenChange, onCreated, token }: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void; token: string }) {
   const { t } = useTranslation();
-  const [text, setText] = useState("Привет! 🚀 Попробуй наш VPN — быстро, безопасно, без логов. Жми кнопку и получай скидку!");
-  const [buttonText, setButtonText] = useState("🔒 Попробовать VPN");
+  const [text, setText] = useState("Привет!  Попробуй наш VPN — быстро, безопасно, без логов. Жми кнопку и получай скидку!");
+  const [buttonText, setButtonText] = useState(" Попробовать VPN");
   const [link, setLink] = useState("");
   const [limit, setLimit] = useState(1000);
   const [extraRate, setExtraRate] = useState(0);
@@ -650,7 +645,7 @@ function CreateCampaignDialog({ open, onOpenChange, onCreated, token }: { open: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{t("admin.gramads.new_campaign")}</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
@@ -751,7 +746,7 @@ function CreateCampaignDialog({ open, onOpenChange, onCreated, token }: { open: 
   );
 }
 
-// ────────── Диалог деталей кампании ──────────
+//  Диалог деталей кампании 
 function CampaignDetailDialog({ post, onClose, onAction, onRefresh, token }: {
   post: GramadsPostDto;
   onClose: () => void;
@@ -811,9 +806,9 @@ function CampaignDetailDialog({ post, onClose, onAction, onRefresh, token }: {
 
   return (
     <Dialog open={true} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
             <span className="font-mono text-sm text-muted-foreground">#{post.id}</span>
             <span>{t("admin.gramads.campaign_detail")}</span>
             <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${MODERATION_COLOR[post.moderationStatus]}`}>
@@ -850,7 +845,7 @@ function CampaignDetailDialog({ post, onClose, onAction, onRefresh, token }: {
               <div className="mt-2 flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">{t("admin.gramads.button")}:</span>
                 <a href={post.link} target="_blank" rel="noopener noreferrer" className="text-xs px-2 py-1 rounded-md bg-primary/10 text-primary hover:underline inline-flex items-center gap-1">
-                  {post.buttonText || "→"} <ExternalLink className="h-3 w-3" />
+                  {post.buttonText || ""} <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
             )}
@@ -958,7 +953,7 @@ function CampaignDetailDialog({ post, onClose, onAction, onRefresh, token }: {
   );
 }
 
-// ────────── Статистика по кампании ──────────
+//  Статистика по кампании 
 function PostStats({ token, postId, createdAt }: { token: string; postId: number; createdAt?: string }) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -1016,11 +1011,11 @@ function PostStats({ token, postId, createdAt }: { token: string; postId: number
             <div className="grid grid-cols-2 gap-3">
               <div className="p-2 rounded-lg border bg-muted/20">
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("admin.gramads.shows")}</p>
-                <p className="text-lg font-bold">{totals.count.toLocaleString()}</p>
+                <p className="text-[13.5px] font-bold">{totals.count.toLocaleString()}</p>
               </div>
               <div className="p-2 rounded-lg border bg-muted/20">
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{t("admin.gramads.paid_label")}</p>
-                <p className="text-lg font-bold text-orange-400">{totals.paid.toLocaleString()}</p>
+                <p className="text-[13.5px] font-bold text-orange-400">{totals.paid.toLocaleString()}</p>
               </div>
             </div>
             <div className="overflow-x-auto">

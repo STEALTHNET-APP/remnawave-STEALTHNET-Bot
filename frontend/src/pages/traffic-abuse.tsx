@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  ShieldAlert, Loader2, RefreshCw, AlertTriangle, Activity,
-  Users, Server, TrendingUp, ChevronDown, ChevronUp, Search, ShieldCheck,
-  Copy, Check,
+  Loader2, RefreshCw, AlertTriangle, Activity,
+  Users, Server, TrendingUp, ChevronDown, ChevronUp, Search, Copy, Check,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
 import { api, type TrafficAbuseResponse, type TrafficAbuser } from "@/lib/api";
@@ -51,10 +50,10 @@ function severityColor(score: number): string {
 }
 
 function severityBg(score: number): string {
-  if (score >= 200) return "from-red-500 to-red-500/40";
-  if (score >= 100) return "from-orange-500 to-orange-500/40";
-  if (score >= 80) return "from-yellow-500 to-yellow-500/40";
-  return "from-muted-foreground to-muted-foreground/40";
+  if (score >= 200) return "bg-primary";
+  if (score >= 100) return "bg-primary";
+  if (score >= 80) return "bg-primary";
+  return "bg-primary";
 }
 
 function severityLabel(score: number): string {
@@ -73,16 +72,13 @@ function AbuserRow({ user, index }: { user: TrafficAbuser; index: number }) {
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index * 0.02, 0.3) }}
-      className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] overflow-hidden hover:border-white/20 transition-all"
+      className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] overflow-hidden hover:border-border transition-all"
     >
       <button
         type="button"
         className="w-full text-left p-4 flex items-center gap-4 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors"
         onClick={() => setOpen(!open)}
       >
-        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-red-500/15 to-red-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-          <ShieldAlert className="h-5 w-5 text-red-500 dark:text-red-400" />
-        </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold truncate">{user.username}</span>
@@ -90,7 +86,7 @@ function AbuserRow({ user, index }: { user: TrafficAbuser; index: number }) {
               "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
               user.status === "ACTIVE" && "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20",
               user.status === "EXPIRED" && "bg-red-500/10 text-red-500 dark:text-red-400 border-red-500/20",
-              user.status !== "ACTIVE" && user.status !== "EXPIRED" && "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-white/10",
+              user.status !== "ACTIVE" && user.status !== "EXPIRED" && "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-border",
             )}>
               {user.status}
             </span>
@@ -110,7 +106,7 @@ function AbuserRow({ user, index }: { user: TrafficAbuser; index: number }) {
         </div>
 
         <div className="hidden md:flex flex-col items-center gap-0.5 min-w-[90px]">
-          <span className={cn("text-lg font-bold tabular-nums", severityColor(user.abuseScore))}>
+          <span className={cn("text-[13.5px] font-bold tabular-nums", severityColor(user.abuseScore))}>
             {user.abuseScore.toFixed(0)}%
           </span>
           <span className={cn("text-[10px] font-semibold uppercase tracking-wider", severityColor(user.abuseScore))}>
@@ -125,7 +121,7 @@ function AbuserRow({ user, index }: { user: TrafficAbuser; index: number }) {
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
-          className="border-t border-white/5 px-4 py-3 bg-foreground/[0.02] dark:bg-white/[0.01] space-y-3"
+          className="border-t border-border px-4 py-3 bg-foreground/[0.02] dark:bg-white/[0.01] space-y-3"
         >
           <div className="sm:hidden flex items-center justify-between text-sm">
             <span>Период: <strong>{formatBytes(user.periodUsageBytes)}</strong></span>
@@ -138,9 +134,9 @@ function AbuserRow({ user, index }: { user: TrafficAbuser; index: number }) {
                 <span className="text-muted-foreground">Использование лимита</span>
                 <span className="font-medium tabular-nums">{user.usagePercent.toFixed(1)}%</span>
               </div>
-              <div className="h-2 rounded-full bg-foreground/[0.06] dark:bg-white/5 border border-white/5 overflow-hidden">
+              <div className="h-2 rounded-full bg-foreground/[0.06] dark:bg-card border border-border overflow-hidden">
                 <motion.div
-                  className={cn("h-full rounded-full bg-gradient-to-r", severityBg(user.abuseScore))}
+                  className={cn("h-full rounded-full ", severityBg(user.abuseScore))}
                   initial={{ width: 0 }}
                   animate={{ width: `${Math.min(barWidth, 100)}%` }}
                   transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
@@ -178,8 +174,8 @@ function AbuserRow({ user, index }: { user: TrafficAbuser; index: number }) {
                   return (
                     <div key={i} className="flex items-center gap-3 text-xs">
                       <span className="w-32 truncate text-muted-foreground">{n.nodeName}</span>
-                      <div className="flex-1 h-1.5 rounded-full bg-foreground/[0.06] dark:bg-white/5 overflow-hidden">
-                        <div className="h-full rounded-full bg-gradient-to-r from-primary to-primary/40" style={{ width: `${pct}%` }} />
+                      <div className="flex-1 h-1.5 rounded-full bg-foreground/[0.06] dark:bg-card overflow-hidden">
+                        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
                       </div>
                       <span className="w-20 text-right font-medium tabular-nums">{formatBytes(n.bytes)}</span>
                     </div>
@@ -248,28 +244,23 @@ export function TrafficAbusePage() {
   };
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-red-500/10 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-orange-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <ShieldAlert className="h-6 w-6 text-red-500 dark:text-red-400" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Анализ трафика
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">Поиск пользователей с аномально высоким потреблением</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Поиск пользователей с аномально высоким потреблением</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/10 px-3 py-1.5 text-sm">
+          <div className="flex items-center gap-1.5 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-border px-3 py-1.5 text-sm">
             <span className="text-muted-foreground text-xs">Период:</span>
             <Input
               className="w-12 h-7 text-center text-sm border-0 bg-transparent p-0 focus-visible:ring-0"
@@ -289,7 +280,7 @@ export function TrafficAbusePage() {
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 flex items-start gap-3"
+          className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 flex items-start gap-3"
         >
           <AlertTriangle className="h-5 w-5 text-red-500 dark:text-red-400 shrink-0 mt-0.5" />
           <div>
@@ -300,7 +291,7 @@ export function TrafficAbusePage() {
       )}
 
       {loading && !data ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center gap-3">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Анализ данных с нод...</p>
         </Card>
@@ -308,10 +299,10 @@ export function TrafficAbusePage() {
         <>
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
             {[
-              { icon: Users, label: "Всего пользователей", value: String(data.stats.totalUsers), gradient: "from-blue-500/15 to-blue-500/5", iconColor: "text-blue-500 dark:text-blue-400" },
-              { icon: AlertTriangle, label: "Нарушителей", value: String(data.stats.abusersCount), extra: data.stats.abuserTrafficPercent > 0 ? `${data.stats.abuserTrafficPercent}% трафика` : null, gradient: "from-red-500/15 to-red-500/5", iconColor: "text-red-500 dark:text-red-400" },
-              { icon: TrendingUp, label: "Трафик нарушителей", value: formatBytes(data.stats.abuserTrafficTotal), extra: `из ${formatBytes(data.stats.totalTrafficPeriod)}`, gradient: "from-orange-500/15 to-orange-500/5", iconColor: "text-orange-500 dark:text-orange-400" },
-              { icon: Server, label: "Активные ноды", value: String(data.stats.activeNodes), extra: data.stats.nodesWithData != null ? `${data.stats.nodesWithData} с данными` : null, gradient: "from-emerald-500/15 to-emerald-500/5", iconColor: "text-emerald-500 dark:text-emerald-400" },
+              { icon: Users, label: "Всего пользователей", value: String(data.stats.totalUsers), gradient: "bg-muted", iconColor: "text-blue-500 dark:text-blue-400" },
+              { icon: AlertTriangle, label: "Нарушителей", value: String(data.stats.abusersCount), extra: data.stats.abuserTrafficPercent > 0 ? `${data.stats.abuserTrafficPercent}% трафика` : null, gradient: "bg-muted", iconColor: "text-red-500 dark:text-red-400" },
+              { icon: TrendingUp, label: "Трафик нарушителей", value: formatBytes(data.stats.abuserTrafficTotal), extra: `из ${formatBytes(data.stats.totalTrafficPeriod)}`, gradient: "bg-muted", iconColor: "text-orange-500 dark:text-orange-400" },
+              { icon: Server, label: "Активные ноды", value: String(data.stats.activeNodes), extra: data.stats.nodesWithData != null ? `${data.stats.nodesWithData} с данными` : null, gradient: "bg-muted", iconColor: "text-emerald-500 dark:text-emerald-400" },
             ].map((c, i) => (
               <motion.div
                 key={i}
@@ -320,13 +311,10 @@ export function TrafficAbusePage() {
                 transition={{ delay: i * 0.05 }}
                 whileHover={{ y: -2 }}
               >
-                <Card className={cn("relative overflow-hidden bg-gradient-to-br border border-white/10 rounded-2xl p-4 shadow-lg h-full", c.gradient)}>
+                <Card className={cn("relative overflow-hidden  border border-border rounded-xl p-4 h-full", c.gradient)}>
                   <div className="flex items-start gap-3">
-                    <div className="h-10 w-10 shrink-0 rounded-xl bg-background/40 backdrop-blur-md border border-white/10 flex items-center justify-center">
-                      <c.icon className={cn("h-5 w-5", c.iconColor)} />
-                    </div>
                     <div className="min-w-0">
-                      <p className="text-[11px] text-muted-foreground">{c.label}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">{c.label}</p>
                       <p className="text-2xl font-extrabold tabular-nums tracking-tight mt-0.5">{c.value}</p>
                       {c.extra && <p className="text-[10px] text-muted-foreground/80 mt-0.5">{c.extra}</p>}
                     </div>
@@ -336,17 +324,14 @@ export function TrafficAbusePage() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/5 px-3 py-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-border px-3 py-2">
             <Activity className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">Период: {data.stats.periodStart} — {data.stats.periodEnd} ({data.stats.periodDays} дн.) · Порог: {(data.stats.threshold * 100).toFixed(0)}% · Мин. трафик: {formatBytes(data.stats.minBytes)}</span>
           </div>
 
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between gap-2 flex-wrap">
+          <Card className="bg-card border-border rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-red-500/20 to-red-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                  <ShieldAlert className="h-4 w-4 text-red-500 dark:text-red-400" />
-                </div>
                 <div>
                   <h3 className="text-sm font-bold tracking-tight">
                     Список нарушителей
@@ -359,7 +344,7 @@ export function TrafficAbusePage() {
                 <div className="relative">
                   <Search className="h-4 w-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    className="h-9 w-48 pl-9 text-sm rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                    className="h-9 w-48 pl-9 text-sm rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                     placeholder="Поиск..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -368,15 +353,15 @@ export function TrafficAbusePage() {
               )}
             </div>
             {allSquads.length > 0 && (
-              <div className="px-4 py-2.5 border-t border-white/5 bg-foreground/[0.015] flex flex-wrap items-center gap-1.5">
+              <div className="px-4 py-2.5 border-t border-border bg-foreground/[0.015] flex flex-wrap items-center gap-1.5">
                 <span className="text-xs text-muted-foreground mr-1">Squad:</span>
                 <button
                   type="button"
                   onClick={() => setSelectedSquads(new Set())}
                   className={`rounded-lg px-2.5 py-1 text-xs border transition-colors ${
                     selectedSquads.size === 0
-                      ? "bg-primary/15 text-primary border-primary/40"
-                      : "bg-foreground/[0.02] text-muted-foreground border-white/10 hover:border-white/20"
+                      ? "bg-primary/15 text-primary border-border"
+                      : "bg-foreground/[0.02] text-muted-foreground border-border hover:border-border"
                   }`}
                 >
                   Все
@@ -391,7 +376,7 @@ export function TrafficAbusePage() {
                       className={`rounded-lg px-2.5 py-1 text-xs border transition-colors ${
                         active
                           ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
-                          : "bg-foreground/[0.02] text-muted-foreground border-white/10 hover:border-white/20"
+                          : "bg-foreground/[0.02] text-muted-foreground border-border hover:border-border"
                       }`}
                     >
                       {sq}
@@ -416,9 +401,6 @@ export function TrafficAbusePage() {
                 <div className="text-sm text-muted-foreground py-6 text-center">Нет совпадений по запросу «{search}»</div>
               ) : (
                 <div className="py-12 flex flex-col items-center text-center gap-3 text-muted-foreground">
-                  <div className="h-14 w-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                    <ShieldCheck className="h-7 w-7 text-emerald-500 dark:text-emerald-400" />
-                  </div>
                   <p className="text-sm font-medium">Нарушители не обнаружены</p>
                   <p className="text-xs">Все пользователи в рамках допустимого потребления</p>
                 </div>

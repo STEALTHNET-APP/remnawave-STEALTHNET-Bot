@@ -6,6 +6,7 @@ import { Package, Calendar, Wifi, Smartphone, CreditCard, Loader2, Gift, Tag, Ch
 import { useClientAuth } from "@/contexts/client-auth";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthTariffs } from "@/pages/cabinet/stealth/stealth-tariffs";
+import { AuroraTariffs } from "@/pages/cabinet/aurora/aurora-tariffs";
 import { api } from "@/lib/api";
 import type { PublicTariffCategory, TariffConversionPreview } from "@/lib/api";
 import { formatRuDays } from "@/lib/i18n";
@@ -96,6 +97,7 @@ function hasExtras(t: TariffForPay): boolean {
 export function ClientTariffsPage() {
   const design = useCabinetDesign();
   if (design === "stealth") return <StealthTariffs />;
+  if (design === "aurora") return <AuroraTariffs />;
   return <ClassicTariffsPage />;
 }
 

@@ -8,7 +8,6 @@ import {
   Globe,
   Loader2,
   Search,
-  Shield,
   ShieldCheck,
   Trash2,
   Users,
@@ -133,24 +132,19 @@ export function AntibotPage() {
   );
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-red-500/10 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-amber-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-red-500/20 to-amber-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Shield className="h-6 w-6 text-red-500 dark:text-red-400" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Антибот
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
               Поиск и массовое удаление подозрительных регистраций
             </p>
           </div>
@@ -161,7 +155,7 @@ export function AntibotPage() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 flex items-center gap-2"
+          className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 flex items-center gap-2"
         >
           <AlertTriangle className="h-4 w-4 shrink-0" />
           {error}
@@ -172,7 +166,7 @@ export function AntibotPage() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-500 flex items-center gap-2"
+          className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-500 flex items-center gap-2"
         >
           <Check className="h-4 w-4 shrink-0" />
           {purgeMsg}
@@ -180,7 +174,7 @@ export function AntibotPage() {
       )}
 
       {/* Пресеты */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+      <Card className="bg-card border-border rounded-2xl p-4">
         <div className="flex items-center gap-3 mb-4">
           <Bot className="h-5 w-5 text-primary" />
           <div>
@@ -197,7 +191,7 @@ export function AntibotPage() {
       </Card>
 
       {/* Фильтры */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+      <Card className="bg-card border-border rounded-2xl p-4">
         <div className="flex items-center gap-3 mb-4">
           <Search className="h-5 w-5 text-primary" />
           <div>
@@ -241,7 +235,7 @@ export function AntibotPage() {
               placeholder="например: example.com"
               value={filters.emailDomain ?? ""}
               onChange={(e) => setFilters((f) => ({ ...f, emailDomain: e.target.value || undefined }))}
-              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10"
+              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border"
             />
           </div>
           <div>
@@ -253,7 +247,7 @@ export function AntibotPage() {
               placeholder="203.0.113.5"
               value={filters.registrationIp ?? ""}
               onChange={(e) => setFilters((f) => ({ ...f, registrationIp: e.target.value || undefined }))}
-              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10"
+              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border"
             />
           </div>
           <div>
@@ -271,7 +265,7 @@ export function AntibotPage() {
                   createdSinceMinutes: e.target.value ? Number(e.target.value) : undefined,
                 }))
               }
-              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10"
+              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border"
             />
           </div>
           <div>
@@ -289,7 +283,7 @@ export function AntibotPage() {
                   sameIpThreshold: e.target.value ? Number(e.target.value) : undefined,
                 }))
               }
-              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10"
+              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border"
             />
           </div>
           <div>
@@ -299,7 +293,7 @@ export function AntibotPage() {
               onChange={(e) =>
                 setFilters((f) => ({ ...f, registrationSource: e.target.value || undefined }))
               }
-              className="w-full h-10 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/10 px-3 text-sm"
+              className="w-full h-10 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-border px-3 text-sm"
             >
               <option value="">Любой</option>
               <option value="web">Веб</option>
@@ -318,7 +312,7 @@ export function AntibotPage() {
               max={2000}
               value={filters.limit ?? 500}
               onChange={(e) => setFilters((f) => ({ ...f, limit: Number(e.target.value) || 500 }))}
-              className="ml-1 inline-block w-20 h-7 rounded-md bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/10 px-2 text-sm"
+              className="ml-1 inline-block w-20 h-7 rounded-md bg-foreground/[0.03] dark:bg-white/[0.02] border border-border px-2 text-sm"
             />
           </div>
           <Button onClick={find} disabled={loading} className="gap-2">
@@ -332,7 +326,7 @@ export function AntibotPage() {
       {result && (
         <>
           {result.ipGroups.length > 0 && (
-            <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+            <Card className="bg-card border-border rounded-2xl p-4">
               <div className="flex items-center gap-3 mb-3">
                 <Globe className="h-5 w-5 text-amber-500" />
                 <h3 className="text-sm font-bold tracking-tight">IP с массовыми регистрациями</h3>
@@ -354,7 +348,7 @@ export function AntibotPage() {
             </Card>
           )}
 
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+          <Card className="bg-card border-border rounded-2xl p-4">
             <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
               <div className="flex items-center gap-3">
                 <Users className="h-5 w-5 text-primary" />
@@ -424,10 +418,10 @@ function PresetButton({
     <button
       onClick={onClick}
       className={cn(
-        "rounded-2xl border px-4 py-3 text-left transition-all",
+        "rounded-xl border px-4 py-3 text-left transition-all",
         active
-          ? "bg-primary/15 border-primary/40 text-primary"
-          : "bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 hover:border-white/20"
+          ? "bg-primary/15 border-border text-primary"
+          : "bg-foreground/[0.03] dark:bg-white/[0.02] border-border hover:border-border"
       )}
     >
       <div className="text-sm font-semibold">{label}</div>
@@ -452,8 +446,8 @@ function FilterCheckbox({
       className={cn(
         "rounded-xl border px-3 py-2.5 cursor-pointer transition-all flex items-start gap-2",
         checked
-          ? "bg-primary/10 border-primary/30"
-          : "bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 hover:border-white/20"
+          ? "bg-primary/10 border-border"
+          : "bg-foreground/[0.03] dark:bg-white/[0.02] border-border hover:border-border"
       )}
     >
       <input
@@ -485,7 +479,7 @@ function CandidateRow({
         "flex items-center gap-3 px-3 py-2 rounded-xl border cursor-pointer transition",
         selected
           ? "bg-red-500/[0.07] border-red-500/30"
-          : "bg-foreground/[0.02] dark:bg-white/[0.02] border-white/5 hover:border-white/10"
+          : "bg-foreground/[0.02] dark:bg-white/[0.02] border-border hover:border-border"
       )}
     >
       <input type="checkbox" checked={selected} onChange={onToggle} className="accent-red-500" />

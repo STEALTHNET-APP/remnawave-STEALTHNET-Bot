@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Mail, Loader2, RefreshCw, Save, Eye, Send, AlertCircle, Check } from "lucide-react";
+import { Loader2, RefreshCw, Save, Eye, Send, AlertCircle, Check } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -117,14 +117,11 @@ export function AdminEmailTemplatesPage() {
 
   return (
     <div className="w-full space-y-4 px-4 sm:px-6 md:px-8 pt-6 pb-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Mail className="h-6 w-6 text-emerald-500" />
-          </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between !bg-transparent !border-0 ! !shadow-none">
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Email-шаблоны</h1>
-            <p className="text-sm text-muted-foreground mt-1">Системные транзакционные письма (приветствие, оплата, истечение и т.п.)</p>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Email-шаблоны</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Системные транзакционные письма (приветствие, оплата, истечение и т.п.)</p>
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading} className="rounded-xl gap-2">
@@ -142,7 +139,7 @@ export function AdminEmailTemplatesPage() {
 
       <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
         {/* LEFT: list */}
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-2 lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] overflow-y-auto">
+        <Card className="bg-card border-border rounded-xl p-2 lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] overflow-y-auto">
           {loading && items.length === 0 ? (
             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
           ) : (
@@ -154,7 +151,7 @@ export function AdminEmailTemplatesPage() {
                   className={cn(
                     "w-full text-left rounded-xl px-3 py-2 text-sm transition",
                     t.key === activeKey
-                      ? "bg-primary/15 text-foreground font-medium border border-primary/30"
+                      ? "bg-primary/15 text-foreground font-medium border border-border"
                       : "hover:bg-foreground/[0.04] text-muted-foreground border border-transparent",
                   )}
                 >
@@ -180,14 +177,14 @@ export function AdminEmailTemplatesPage() {
         {active ? (
           <div className="space-y-4">
             {active.wired === false && (
-              <Card className="p-3 bg-amber-500/[0.07] border-amber-500/20 flex items-center gap-2 rounded-2xl backdrop-blur-3xl">
+              <Card className="p-3 bg-amber-500/[0.07] border-amber-500/20 flex items-center gap-2 rounded-xl">
                 <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
                 <p className="text-xs text-amber-500/90">
                   Этот шаблон пока не отправляется автоматически — правки сохранятся и применятся, когда соответствующая рассылка появится. «Send test» работает уже сейчас.
                 </p>
               </Card>
             )}
-            <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-5 space-y-3">
+            <Card className="bg-card border-border rounded-xl p-4 space-y-3">
               <div>
                 <Label className="text-xs">Тема (subject)</Label>
                 <Input value={subject} onChange={(e) => { setSubject(e.target.value); setSaved(false); }} className="mt-1" />
@@ -197,7 +194,7 @@ export function AdminEmailTemplatesPage() {
                 <textarea
                   value={body}
                   onChange={(e) => { setBody(e.target.value); setSaved(false); }}
-                  className="w-full min-h-[280px] mt-1 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/10 p-3 font-mono text-xs"
+                  className="w-full min-h-[280px] mt-1 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-border p-3 font-mono text-xs"
                   spellCheck={false}
                 />
               </div>
@@ -221,7 +218,7 @@ export function AdminEmailTemplatesPage() {
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/10">
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
                 <Button onClick={save} disabled={busy !== null} className="gap-2">
                   {busy === "save" ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
                   {saved ? "Сохранено" : "Сохранить"}
@@ -247,19 +244,19 @@ export function AdminEmailTemplatesPage() {
             </Card>
 
             {showPreview && (
-              <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-5">
+              <Card className="bg-card border-border rounded-xl p-4">
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Subject preview</div>
-                <div className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/10 p-3 font-medium mb-4">{previewSubject}</div>
+                <div className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-border p-3 font-medium mb-4">{previewSubject}</div>
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Body preview (rendered)</div>
                 <div
-                  className="rounded-lg bg-white text-black border border-white/10 p-4 prose prose-sm max-w-none"
+                  className="rounded-lg bg-white text-black border border-border p-4 prose prose-sm max-w-none"
                   dangerouslySetInnerHTML={{ __html: previewBody }}
                 />
               </Card>
             )}
           </div>
         ) : (
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-8 text-center text-sm text-muted-foreground">
+          <Card className="bg-card border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
             Выберите шаблон слева
           </Card>
         )}

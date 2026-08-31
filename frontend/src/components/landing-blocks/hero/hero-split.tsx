@@ -51,7 +51,7 @@ export function HeroSplit({ block, serviceName }: HeroSplitProps) {
     <section id="home" className={`container mx-auto px-4 pb-12 pt-12 md:pb-20 md:pt-16 ${SECTION_SCROLL_OFFSET}`}>
       <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <motion.div {...fadeUp} className="max-w-3xl">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-slate-200/60 dark:border-white/10 bg-white/90 dark:bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.32em] text-slate-600 backdrop-blur-xl dark:text-slate-300">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-slate-200/60 dark:border-border bg-card dark:bg-card px-4 py-2 text-xs font-semibold uppercase tracking-[0.32em] text-slate-600 dark:text-slate-300">
             <Sparkles className="h-4 w-4" style={{ color: accentTheme.primary }} />
             {badge}
           </div>
@@ -70,13 +70,13 @@ export function HeroSplit({ block, serviceName }: HeroSplitProps) {
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button asChild size="lg" className="group h-14 rounded-full border px-7 text-base font-semibold text-white shadow-lg" style={{ background: accentBg, borderColor: "transparent" }}>
+            <Button asChild size="lg" className="group h-14 rounded-full border px-7 text-base font-semibold text-white" style={{ background: accentBg, borderColor: "transparent" }}>
               <Link to={buildLink(ctaUrl)} className="flex items-center justify-center gap-2">
                 {ctaText}
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="h-14 rounded-full border-slate-200/80 dark:border-white/12 bg-white/70 dark:bg-white/8 px-7 text-base text-slate-900 dark:text-white backdrop-blur-xl">
+            <Button asChild size="lg" variant="outline" className="h-14 rounded-full border-slate-200/80 dark:border-border bg-card dark:bg-card px-7 text-base text-slate-900 dark:text-white">
               <Link to={buildLink(secondaryCtaUrl)}>{secondaryCtaText}</Link>
             </Button>
           </div>
@@ -88,7 +88,7 @@ export function HeroSplit({ block, serviceName }: HeroSplitProps) {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6, delay: 0.1 }}
-          className="rounded-[28px] border border-slate-200/60 dark:border-white/10 bg-gradient-to-br from-white via-white to-slate-50/50 dark:from-slate-900/40 dark:via-slate-900/20 dark:to-slate-950/0 p-6 shadow-[0_25px_80px_-30px_rgba(15,23,42,0.25)] backdrop-blur-xl"
+          className="rounded-[28px] border border-slate-200/60 dark:border-border bg-primary p-6"
         >
           <div className="text-[11px] font-semibold uppercase tracking-[0.32em]" style={{ color: accentTheme.primary }}>
             {txt(block.text, "rightCardEyebrow", "Premium Access")}
@@ -101,7 +101,7 @@ export function HeroSplit({ block, serviceName }: HeroSplitProps) {
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
             {(["AES-256", "Zero-Log", "Карта · СБП", "USDT"] as const).map((tag) => (
-              <span key={tag} className="rounded-full border border-slate-200/70 dark:border-white/10 bg-white/70 dark:bg-white/8 px-3 py-1 text-xs font-medium text-slate-700 dark:text-slate-200">
+              <span key={tag} className="rounded-full border border-slate-200/70 dark:border-border bg-card dark:bg-card px-3 py-1 text-xs font-medium text-slate-700 dark:text-slate-200">
                 {tag}
               </span>
             ))}

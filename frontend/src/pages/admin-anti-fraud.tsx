@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { ShieldAlert, AlertCircle, AlertTriangle, Info, Loader2, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { AlertCircle, AlertTriangle, Info, Loader2, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -63,16 +63,13 @@ export function AdminAntiFraudPage() {
 
   return (
     <div className="w-full space-y-6 px-4 sm:px-6 md:px-8 pt-6 pb-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-rose-500/20 to-amber-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <ShieldAlert className="h-6 w-6 text-rose-500" />
-          </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between !bg-transparent !border-0 ! !shadow-none">
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground via-rose-500/80 to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Антифрод-сигналы
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">Подозрительные паттерны в данных. Только просмотр — ничего не блокирует автоматически.</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Подозрительные паттерны в данных. Только просмотр — ничего не блокирует автоматически.</p>
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading} className="rounded-xl gap-2">
@@ -98,7 +95,7 @@ export function AdminAntiFraudPage() {
             const expanded = expandedKey === s.key;
             const items = expandedItems[s.key];
             return (
-              <Card key={s.key} className={cn("border", c.ring, c.bg, "rounded-2xl overflow-hidden transition")}>
+              <Card key={s.key} className={cn("border", c.ring, c.bg, "rounded-xl overflow-hidden transition")}>
                 <button
                   onClick={() => expand(s.key)}
                   className="w-full p-4 flex items-center gap-4 text-left hover:bg-foreground/[0.03] transition"
@@ -117,7 +114,7 @@ export function AdminAntiFraudPage() {
                 </button>
 
                 {expanded && s.count > 0 && (
-                  <div className="border-t border-white/10 p-3 bg-background/40">
+                  <div className="border-t border-border p-3 bg-card">
                     {items === undefined ? (
                       <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
                     ) : items.length === 0 ? (
@@ -125,14 +122,14 @@ export function AdminAntiFraudPage() {
                     ) : (
                       <div className="overflow-x-auto -mx-2">
                         <table className="w-full text-xs">
-                          <thead className="text-[10px] uppercase text-muted-foreground border-b border-white/5">
+                          <thead className="text-[10px] uppercase text-muted-foreground border-b border-border">
                             <tr>
                               {Object.keys(items[0]).map((k) => (
                                 <th key={k} className="px-2 py-1.5 text-left font-semibold">{k}</th>
                               ))}
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-white/5">
+                          <tbody className="divide-y divide-border">
                             {items.map((it, i) => (
                               <tr key={i} className="hover:bg-foreground/[0.02]">
                                 {Object.entries(it).map(([k, v]) => (

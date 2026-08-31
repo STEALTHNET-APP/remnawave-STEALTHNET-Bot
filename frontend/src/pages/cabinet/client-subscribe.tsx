@@ -491,7 +491,7 @@ function ClassicSubscribePage() {
         <div className="relative z-10">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
             <div>
-              <h1 className="text-xl font-bold flex items-center gap-2.5 mb-1.5 text-slate-900 dark:text-white">
+              <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground flex items-center gap-2.5 mb-1.5 text-slate-900 dark:text-white">
                 <div className="p-1.5 rounded-md bg-primary/20 text-primary">
                   <Zap className="h-5 w-5" />
                 </div>

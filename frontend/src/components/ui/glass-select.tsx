@@ -36,7 +36,7 @@ export function GlassSelect({ value, onChange, options, className }: GlassSelect
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex h-9 w-full items-center justify-between rounded-lg border border-white/15 bg-card/40 backdrop-blur-xl px-3 py-1.5 text-sm transition-all duration-200 hover:bg-card/60 focus:outline-none focus:ring-2 focus:ring-primary/50"
+        className="flex h-9 w-full items-center justify-between rounded-lg border border-border bg-card/40 px-3 py-1.5 text-sm transition-all duration-200 hover:bg-card/60 focus:outline-none focus:ring-2 focus:ring-primary/50"
       >
         <span>{selectedOption?.label ?? value}</span>
         <ChevronDown
@@ -48,7 +48,7 @@ export function GlassSelect({ value, onChange, options, className }: GlassSelect
       </button>
       <div
         className={cn(
-          "absolute left-0 top-full z-50 mt-1 w-full rounded-lg border border-white/15 bg-card/50 backdrop-blur-2xl shadow-2xl transition-all duration-200 origin-top overflow-hidden",
+          "absolute left-0 top-full z-50 mt-1 w-full rounded-lg border border-border bg-card/50 transition-all duration-200 origin-top overflow-hidden",
           open
             ? "opacity-100 scale-100 pointer-events-auto"
             : "opacity-0 scale-95 pointer-events-none"
@@ -66,7 +66,7 @@ export function GlassSelect({ value, onChange, options, className }: GlassSelect
               "flex w-full items-center px-3 py-2 text-sm transition-all duration-150",
               opt.value === value
                 ? "bg-primary/20 text-primary font-medium"
-                : "hover:bg-white/10 text-foreground"
+                : "hover:bg-card text-foreground"
             )}
           >
             {opt.label}

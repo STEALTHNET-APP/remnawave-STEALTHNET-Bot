@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, RefreshCw, Activity, Clock, FileText, ShieldOff, Play, CheckCircle2, AlertTriangle, XCircle, MinusCircle } from "lucide-react";
 import { diagnosticsApi, adminSecurityApi, type HealthResponse, type CronEntry } from "@/lib/admin-extras-api";
+import { ConsoleAccessCard } from "@/components/console-access-card";
 import { fmtMsk } from "@/lib/datetime";
 
 const STATUS_META = {
@@ -107,17 +108,12 @@ export function AdminDiagnosticsPage() {
   };
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-violet-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Activity className="h-6 w-6 text-primary" />
-          </div>
+    <div className="flex flex-col gap-3.5 relative">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between !bg-transparent !border-0 ! !shadow-none">
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">Диагностика</h1>
-            <p className="text-sm text-muted-foreground mt-1">Health-проверки, cron-монитор и логи API-контейнера.</p>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Диагностика</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Health-проверки, cron-монитор и логи API-контейнера.</p>
           </div>
         </div>
         <Button onClick={handleLogoutAll} variant="outline" size="sm" className="gap-1.5 rounded-xl text-red-600 dark:text-red-400 border-red-500/30 hover:bg-red-500/10">
@@ -126,10 +122,12 @@ export function AdminDiagnosticsPage() {
         </Button>
       </div>
 
-      {error ? <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div> : null}
+      <ConsoleAccessCard token={token} />
+
+      {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div> : null}
 
       {/* Health */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl">
+      <Card className="bg-card border-border rounded-2xl">
         <CardContent className="p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -170,7 +168,7 @@ export function AdminDiagnosticsPage() {
       </Card>
 
       {/* Cron monitor */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl">
+      <Card className="bg-card border-border rounded-2xl">
         <CardContent className="p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -227,7 +225,7 @@ export function AdminDiagnosticsPage() {
       </Card>
 
       {/* Logs viewer */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl">
+      <Card className="bg-card border-border rounded-2xl">
         <CardContent className="p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">

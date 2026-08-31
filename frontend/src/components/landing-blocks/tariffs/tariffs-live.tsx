@@ -46,7 +46,7 @@ export function TariffsLive({ block }: TariffsLiveProps) {
       {loading ? (
         <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-64 animate-pulse rounded-3xl border border-slate-200/70 dark:border-white/10 bg-white/40 dark:bg-white/5" />
+            <div key={i} className="h-64 animate-pulse rounded-xl border border-slate-200/70 dark:border-border bg-card dark:bg-card" />
           ))}
         </div>
       ) : categories && categories.length > 0 ? (
@@ -63,7 +63,7 @@ export function TariffsLive({ block }: TariffsLiveProps) {
                     viewport={{ once: true }}
                     transition={{ duration: 0.35, delay: idx * 0.04 }}
                   >
-                    <Card className="h-full border-slate-200/70 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur-xl">
+                    <Card className="h-full border-slate-200/70 dark:border-border bg-card dark:bg-card">
                       <CardContent className="flex h-full flex-col p-6">
                         <h4 className="text-lg font-bold text-slate-950 dark:text-white">{t.name}</h4>
                         {t.description ? (
@@ -103,7 +103,7 @@ export function TariffsLive({ block }: TariffsLiveProps) {
                           )}
                         </ul>
 
-                        <Button asChild className="group mt-6 h-11 rounded-full font-semibold text-white" style={{ background: accentBg }}>
+                        <Button asChild className="group mt-6 h-9 rounded-full font-semibold text-white" style={{ background: accentBg }}>
                           <Link to={buildLink("/cabinet/register")} className="flex items-center justify-center gap-2">
                             {buttonChooseTariff}
                             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -118,7 +118,7 @@ export function TariffsLive({ block }: TariffsLiveProps) {
           ))}
         </div>
       ) : (
-        <div className="mt-10 rounded-3xl border border-dashed border-slate-300 dark:border-white/10 bg-white/60 dark:bg-white/5 px-8 py-16 text-center">
+        <div className="mt-10 rounded-xl border border-dashed border-slate-300 dark:border-border bg-card dark:bg-card px-8 py-16 text-center">
           <p className="text-base text-slate-600 dark:text-slate-300">{noTariffsMessage}</p>
         </div>
       )}

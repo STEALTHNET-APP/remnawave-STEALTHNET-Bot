@@ -20,13 +20,11 @@ import {
 } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
 import {
-  CalendarClock,
   Plus,
   Play,
   Trash2,
   Pencil,
   Loader2,
-  Clock,
   MousePointerClick,
   Send,
   Users,
@@ -36,22 +34,22 @@ import { cn } from "@/lib/utils";
 
 const BUTTON_ACTIONS = [
   { value: "", label: "Без кнопки" },
-  { value: "menu:my_subs", label: "📋 Мои подписки" },
-  { value: "menu:tariffs", label: "📦 Тарифы" },
-  { value: "menu:topup", label: "💳 Пополнить баланс" },
-  { value: "menu:profile", label: "👤 Профиль" },
-  { value: "menu:trial", label: "🎁 Бесплатный триал" },
-  { value: "menu:referral", label: "🔗 Реферальная программа" },
-  { value: "menu:promocode", label: "🎟️ Промокод" },
-  { value: "menu:support", label: "🆘 Поддержка" },
-  { value: "menu:vpn", label: "📋 VPN подключение" },
-  { value: "menu:devices", label: "📱 Устройства" },
-  { value: "menu:extra_options", label: "➕ Доп. опции" },
-  { value: "menu:main", label: "📋 Главное меню" },
-  { value: "webapp:/cabinet", label: "🌐 Web кабинет" },
-  { value: "webapp:/cabinet/subscribe", label: "🌐 Страница подключения" },
-  { value: "webapp:/cabinet/tickets", label: "🌐 Тикеты" },
-  { value: "__custom_url__", label: "🔗 Своя ссылка (URL)" },
+  { value: "menu:my_subs", label: " Мои подписки" },
+  { value: "menu:tariffs", label: " Тарифы" },
+  { value: "menu:topup", label: " Пополнить баланс" },
+  { value: "menu:profile", label: " Профиль" },
+  { value: "menu:trial", label: " Бесплатный триал" },
+  { value: "menu:referral", label: " Реферальная программа" },
+  { value: "menu:promocode", label: " Промокод" },
+  { value: "menu:support", label: " Поддержка" },
+  { value: "menu:vpn", label: " VPN подключение" },
+  { value: "menu:devices", label: " Устройства" },
+  { value: "menu:extra_options", label: " Доп. опции" },
+  { value: "menu:main", label: " Главное меню" },
+  { value: "webapp:/cabinet", label: " Web кабинет" },
+  { value: "webapp:/cabinet/subscribe", label: " Страница подключения" },
+  { value: "webapp:/cabinet/tickets", label: " Тикеты" },
+  { value: "__custom_url__", label: " Своя ссылка (URL)" },
 ];
 
 const TRIGGER_LABELS: Record<AutoBroadcastTriggerType, string> = {
@@ -288,9 +286,9 @@ export function AutoBroadcastPage() {
 
   function formatRunResult(r: { sent: number; skipped: number; errors: string[] }): string {
     const parts: string[] = [];
-    if (r.sent > 0) parts.push(`✅ Отправлено: ${r.sent}`);
-    if (r.skipped > 0) parts.push(`⏭ Пропущено (бот заблокирован): ${r.skipped}`);
-    if (r.errors.length > 0) parts.push(`❌ Ошибки: ${r.errors.join("; ")}`);
+    if (r.sent > 0) parts.push(` Отправлено: ${r.sent}`);
+    if (r.skipped > 0) parts.push(` Пропущено (бот заблокирован): ${r.skipped}`);
+    if (r.errors.length > 0) parts.push(` Ошибки: ${r.errors.join("; ")}`);
     if (parts.length === 0) parts.push("Нет подходящих получателей");
     return parts.join("\n");
   }
@@ -325,24 +323,19 @@ export function AutoBroadcastPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <CalendarClock className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Авто-рассылка
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
               Настраиваемые правила: после регистрации, неактивность, без платежа — чтобы не терять клиентов
             </p>
           </div>
@@ -365,16 +358,13 @@ export function AutoBroadcastPage() {
       </motion.div>
 
       {/* Schedule card */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+      <Card className="bg-card border-border rounded-2xl p-4">
         <div className="flex items-center gap-3 mb-4">
-          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-            <Clock className="h-5 w-5 text-cyan-500 dark:text-cyan-400" />
-          </div>
           <div>
             <h3 className="text-sm font-bold tracking-tight">Расписание</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               Cron: минута час день месяц день_недели. Например{" "}
-              <code className="rounded-md bg-foreground/[0.05] dark:bg-white/[0.05] border border-white/10 px-1.5 py-0.5 text-[11px]">
+              <code className="rounded-md bg-foreground/[0.05] dark:bg-white/[0.05] border border-border px-1.5 py-0.5 text-[11px]">
                 0 9 * * *
               </code>{" "}
               — каждый день в 9:00. Пусто = по умолчанию 9:00.
@@ -391,7 +381,7 @@ export function AutoBroadcastPage() {
               value={scheduleCron}
               onChange={(e) => setScheduleCron(e.target.value)}
               placeholder="0 9 * * *"
-              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
             />
           </div>
           <Button type="submit" disabled={scheduleSaving} className="gap-2 rounded-xl">
@@ -402,11 +392,8 @@ export function AutoBroadcastPage() {
       </Card>
 
       {/* Rules card */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+      <Card className="bg-card border-border rounded-2xl p-4">
         <div className="flex items-center gap-3 mb-4">
-          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-            <Send className="h-5 w-5 text-primary" />
-          </div>
           <div>
             <h3 className="text-sm font-bold tracking-tight">Правила</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -422,9 +409,6 @@ export function AutoBroadcastPage() {
           </div>
         ) : rules.length === 0 ? (
           <div className="flex flex-col items-center text-center py-12">
-            <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-3 border border-white/10">
-              <CalendarClock className="h-8 w-8 text-muted-foreground" />
-            </div>
             <p className="text-muted-foreground">Правил пока нет</p>
             <p className="text-xs text-muted-foreground/70 mt-1">Добавьте первое правило, чтобы начать</p>
           </div>
@@ -437,18 +421,18 @@ export function AutoBroadcastPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.03 }}
                 whileHover={{ y: -2 }}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 transition-all hover:border-white/20 hover:shadow-lg"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 transition-all hover:border-border"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-sm">{rule.name}</span>
                     {rule.enabled ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px_#10b981]" />
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-medium">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                         Активно
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/40 text-muted-foreground border border-white/10 px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/40 text-muted-foreground border border-border px-2.5 py-0.5 text-[11px] font-medium">
                         Выключено
                       </span>
                     )}
@@ -456,7 +440,7 @@ export function AutoBroadcastPage() {
                   <p className="text-xs text-muted-foreground mt-1.5">
                     <span className="text-foreground/80">{TRIGGER_LABELS[rule.triggerType]}</span>
                     {rule.eventDriven
-                      ? " · ⚡ event-driven"
+                      ? " ·  event-driven"
                       : rule.triggerType === "subscription_ending_soon"
                         ? ` · за ${rule.delayDays} дн. до окончания`
                         : ` · через ${rule.delayDays} дн.`}{" "}
@@ -515,19 +499,16 @@ export function AutoBroadcastPage() {
       </Card>
 
       <Dialog open={showForm} onOpenChange={(open) => !open && closeForm()}>
-        <DialogContent className="bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem] max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-card border-border rounded-2xl max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg font-bold tracking-tight">
-              <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner">
-                {editingId ? <Pencil className="h-4 w-4 text-primary" /> : <Plus className="h-4 w-4 text-primary" />}
-              </div>
+            <DialogTitle className="flex items-center gap-2 text-[13.5px] font-bold tracking-tight">
               {editingId ? "Редактировать правило" : "Новое правило"}
             </DialogTitle>
             <DialogDescription className="sr-only">Форма правила авторассылки</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4 pt-2">
             {formError && (
-              <div className="flex items-start gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">
+              <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">
                 <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                 <p>{formError}</p>
               </div>
@@ -539,13 +520,13 @@ export function AutoBroadcastPage() {
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   placeholder="Например: Напоминание через 3 дня"
-                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Триггер</Label>
                 <select
-                  className="flex h-10 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  className="flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   value={form.triggerType}
                   onChange={(e) => {
                     const t = e.target.value as AutoBroadcastTriggerType;
@@ -573,16 +554,16 @@ export function AutoBroadcastPage() {
                 триггеров которые поддерживают event-driven (см. TRIGGERS_SUPPORTING_EVENT_MODE).
                 Если включено — правило срабатывает мгновенно из бота (без крона). */}
             {TRIGGERS_SUPPORTING_EVENT_MODE.has(form.triggerType) && (
-              <div className="rounded-xl border border-white/10 bg-foreground/[0.02] dark:bg-white/[0.02] px-4 py-3">
+              <div className="rounded-xl border border-border bg-foreground/[0.02] dark:bg-white/[0.02] px-4 py-3">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={form.eventDriven ?? false}
                     onChange={(e) => setForm((f) => ({ ...f, eventDriven: e.target.checked }))}
-                    className="mt-0.5 h-4 w-4 rounded border-white/20 bg-foreground/[0.05] dark:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-primary/50 cursor-pointer"
+                    className="mt-0.5 h-4 w-4 rounded border-border bg-foreground/[0.05] dark:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-primary/50 cursor-pointer"
                   />
                   <span className="space-y-0.5">
-                    <span className="block text-sm font-medium text-foreground/90">⚡ Event-driven (мгновенно при /start в боте)</span>
+                    <span className="block text-sm font-medium text-foreground/90"> Event-driven (мгновенно при /start в боте)</span>
                     <span className="block text-[11px] text-muted-foreground">
                       Если включено — правило срабатывает <strong>сразу</strong> при регистрации нового клиента
                       (бот вызывает event-endpoint). Поля «через сколько дней» и «расписание» игнорируются.
@@ -600,7 +581,7 @@ export function AutoBroadcastPage() {
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Когда отправляется</Label>
                   <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2.5 text-sm text-emerald-200">
-                    ⚡ Мгновенно при событии (например, при /start в боте). Поля «через сколько дней» и «расписание» не применяются.
+                     Мгновенно при событии (например, при /start в боте). Поля «через сколько дней» и «расписание» не применяются.
                   </div>
                 </div>
               ) : (
@@ -621,7 +602,7 @@ export function AutoBroadcastPage() {
                       const max = form.triggerType === "subscription_ending_soon" ? 30 : 365;
                       setForm((f) => ({ ...f, delayDays: Math.max(min, Math.min(max, v)) }));
                     }}
-                    className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                    className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                   />
                   {form.triggerType === "subscription_ending_soon" && (
                     <p className="text-[11px] text-muted-foreground">
@@ -633,7 +614,7 @@ export function AutoBroadcastPage() {
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Канал</Label>
                 <select
-                  className="flex h-10 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  className="flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                   value={form.channel}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, channel: e.target.value as "telegram" | "email" | "both" }))
@@ -652,14 +633,14 @@ export function AutoBroadcastPage() {
                   value={form.subject ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
                   placeholder="Тема письма"
-                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                 />
               </div>
             )}
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Текст сообщения</Label>
               <textarea
-                className="flex min-h-[140px] w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 resize-y"
+                className="flex min-h-[140px] w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 resize-y"
                 value={form.message}
                 onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
                 placeholder="Текст для Telegram / email (до 4096 символов)"
@@ -668,7 +649,7 @@ export function AutoBroadcastPage() {
               <p className="text-[11px] text-muted-foreground">{form.message.length} / 4096</p>
             </div>
             {(form.channel === "telegram" || form.channel === "both") && (
-              <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
+              <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-semibold">
                   <MousePointerClick className="h-4 w-4 text-primary" />
                   Кнопка под сообщением (только Telegram)
@@ -677,7 +658,7 @@ export function AutoBroadcastPage() {
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Действие кнопки</Label>
                     <select
-                      className="flex h-10 w-full rounded-xl border border-white/10 bg-background/60 px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      className="flex h-10 w-full rounded-xl border border-border bg-card px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                       value={buttonAction}
                       onChange={(e) => setButtonAction(e.target.value)}
                     >
@@ -696,7 +677,7 @@ export function AutoBroadcastPage() {
                         onChange={(e) => setForm((f) => ({ ...f, buttonText: e.target.value }))}
                         placeholder="Открыть тарифы"
                         maxLength={64}
-                        className="h-10 rounded-xl bg-background/60 border-white/10 focus-visible:ring-primary/50"
+                        className="h-10 rounded-xl bg-card border-border focus-visible:ring-primary/50"
                       />
                     </div>
                   )}
@@ -709,7 +690,7 @@ export function AutoBroadcastPage() {
                       onChange={(e) => setButtonCustomUrl(e.target.value)}
                       placeholder="https://example.com/tariffs"
                       maxLength={500}
-                      className="h-10 rounded-xl bg-background/60 border-white/10 focus-visible:ring-primary/50"
+                      className="h-10 rounded-xl bg-card border-border focus-visible:ring-primary/50"
                     />
                   </div>
                 )}
@@ -718,15 +699,15 @@ export function AutoBroadcastPage() {
                 </p>
 
                 {/* вторая кнопка */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-white/5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-border">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">Кнопка #2 — текст</Label>
                     <Input
                       value={form.button2Text ?? ""}
                       onChange={(e) => setForm((f) => ({ ...f, button2Text: e.target.value }))}
-                      placeholder="🏠 Главное меню"
+                      placeholder=" Главное меню"
                       maxLength={64}
-                      className="h-10 rounded-xl bg-background/60 border-white/10"
+                      className="h-10 rounded-xl bg-card border-border"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -736,14 +717,14 @@ export function AutoBroadcastPage() {
                       onChange={(e) => setForm((f) => ({ ...f, button2Url: e.target.value }))}
                       placeholder="menu:main или https://..."
                       maxLength={500}
-                      className="h-10 rounded-xl bg-background/60 border-white/10"
+                      className="h-10 rounded-xl bg-card border-border"
                     />
                   </div>
                 </div>
 
                 {/* T-promo: индивидуальная скидка / промокод / лимит получателей */}
-                <div className="space-y-3 pt-3 border-t border-white/5">
-                  <h4 className="text-xs uppercase tracking-wider text-muted-foreground">🎟 Промо / скидка</h4>
+                <div className="space-y-3 pt-3 border-t border-border">
+                  <h4 className="text-xs uppercase tracking-wider text-muted-foreground"> Промо / скидка</h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">ID промокода (если шлёшь код)</Label>
@@ -751,7 +732,7 @@ export function AutoBroadcastPage() {
                         value={form.promoCodeId ?? ""}
                         onChange={(e) => setForm((f) => ({ ...f, promoCodeId: e.target.value.trim() || null }))}
                         placeholder="cuid из /admin/promo-codes"
-                        className="h-10 rounded-xl bg-background/60 border-white/10 font-mono text-xs"
+                        className="h-10 rounded-xl bg-card border-border font-mono text-xs"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -766,7 +747,7 @@ export function AutoBroadcastPage() {
                           setForm((f) => ({ ...f, personalDiscountPercent: v ? parseFloat(v) : null }));
                         }}
                         placeholder="например 20"
-                        className="h-10 rounded-xl bg-background/60 border-white/10"
+                        className="h-10 rounded-xl bg-card border-border"
                       />
                     </div>
                   </div>
@@ -776,10 +757,10 @@ export function AutoBroadcastPage() {
                       type="checkbox"
                       checked={form.personalDiscountIsOneTime ?? true}
                       onChange={(e) => setForm((f) => ({ ...f, personalDiscountIsOneTime: e.target.checked }))}
-                      className="mt-0.5 h-4 w-4 rounded border-white/20 bg-background/60 accent-primary"
+                      className="mt-0.5 h-4 w-4 rounded border-border bg-card accent-primary"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">🎁 Скидка одноразовая</div>
+                      <div className="text-sm font-medium"> Скидка одноразовая</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         Сгорает после первой продуктовой покупки клиента. Если выключено — действует
                         бессрочно (пока админ не уберёт вручную в карточке клиента).
@@ -797,7 +778,7 @@ export function AutoBroadcastPage() {
                         setForm((f) => ({ ...f, maxRecipients: v ? parseInt(v, 10) : null }));
                       }}
                       placeholder="нет лимита"
-                      className="h-10 rounded-xl bg-background/60 border-white/10"
+                      className="h-10 rounded-xl bg-card border-border"
                     />
                   </div>
 
@@ -807,7 +788,7 @@ export function AutoBroadcastPage() {
                   {!form.eventDriven && (
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">
-                        ⏱ Расписание (cron) <span className="text-[10px] opacity-60">— пусто = дефолт по типу триггера</span>
+                         Расписание (cron) <span className="text-[10px] opacity-60">— пусто = дефолт по типу триггера</span>
                       </Label>
                       <Input
                         value={form.cronExpression ?? ""}
@@ -817,14 +798,14 @@ export function AutoBroadcastPage() {
                           form.triggerType === "subscription_expired" ? "0 * * * *  (каждый час)" :
                           "0 9 * * *  (раз в день в 9:00)"
                         }
-                        className="h-10 rounded-xl bg-background/60 border-white/10 font-mono text-sm"
+                        className="h-10 rounded-xl bg-card border-border font-mono text-sm"
                       />
                       <div className="flex flex-wrap gap-1.5 pt-1">
-                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: "* * * * *" }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-white/10 text-[10px] transition">⚡ Каждую минуту</button>
-                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: "*/5 * * * *" }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-white/10 text-[10px] transition">⏱ Каждые 5 мин</button>
-                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: "0 * * * *" }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-white/10 text-[10px] transition">🕐 Каждый час</button>
-                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: "0 9 * * *" }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-white/10 text-[10px] transition">☀️ Раз в день 9:00</button>
-                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: null }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-white/10 text-[10px] transition">↩️ Сбросить</button>
+                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: "* * * * *" }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-border text-[10px] transition"> Каждую минуту</button>
+                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: "*/5 * * * *" }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-border text-[10px] transition"> Каждые 5 мин</button>
+                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: "0 * * * *" }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-border text-[10px] transition"> Каждый час</button>
+                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: "0 9 * * *" }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-border text-[10px] transition"> Раз в день 9:00</button>
+                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: null }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-border text-[10px] transition"> Сбросить</button>
                       </div>
                       <p className="text-[10px] text-muted-foreground mt-0.5">
                         Формат: <code className="text-foreground/70">minute hour day month weekday</code>.
@@ -833,7 +814,7 @@ export function AutoBroadcastPage() {
                     </div>
                   )}
 
-                  <div className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/5 px-3 py-2.5 space-y-1">
+                  <div className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-border px-3 py-2.5 space-y-1">
                     <p className="text-[11px] font-bold text-foreground/80">Плейсхолдеры в тексте/URL кнопки:</p>
                     <p className="text-[11px] text-muted-foreground"><code className="text-foreground/70">{`{{TARIFF}}`}</code> — название тарифа клиента</p>
                     <p className="text-[11px] text-muted-foreground"><code className="text-foreground/70">{`{{SUBSCRIPTION_ID}}`}</code> — id подписки (для кнопки «Продлить»)</p>
@@ -844,7 +825,7 @@ export function AutoBroadcastPage() {
                 </div>
               </div>
             )}
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3">
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3">
               <div>
                 <Label htmlFor="form-enabled" className="text-sm font-semibold cursor-pointer">
                   Включено
@@ -863,7 +844,7 @@ export function AutoBroadcastPage() {
               >
                 <span
                   className={cn(
-                    "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform",
+                    "pointer-events-none inline-block h-5 w-5 rounded-full bg-white ring-0 transition-transform",
                     form.enabled ? "translate-x-5" : "translate-x-0"
                   )}
                 />

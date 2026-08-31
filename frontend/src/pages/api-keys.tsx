@@ -150,24 +150,19 @@ export function ApiKeysPage() {
   };
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Key className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               API ключи
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">Управление ключами для внешней интеграции</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Управление ключами для внешней интеграции</p>
           </div>
         </div>
         <Link to="/admin/api-docs">
@@ -182,18 +177,15 @@ export function ApiKeysPage() {
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400 flex items-center gap-2"
+          className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400 flex items-center gap-2"
         >
           <AlertTriangle className="h-4 w-4 shrink-0" />
           {error}
         </motion.div>
       )}
 
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+      <Card className="bg-card border-border rounded-2xl p-4">
         <div className="flex items-center gap-3 mb-4">
-          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-            <Plus className="h-5 w-5 text-primary" />
-          </div>
           <div>
             <h3 className="text-sm font-bold tracking-tight">Создать ключ</h3>
             <p className="text-xs text-muted-foreground">Имя — для идентификации интеграции; срок и IP-белый список — опциональны</p>
@@ -204,13 +196,13 @@ export function ApiKeysPage() {
             placeholder="Название (mobile-app)"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+            className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
           />
           <Input
             placeholder="Описание (опционально)"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+            className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
           />
         </div>
         <div className="grid gap-3 sm:grid-cols-2 mt-3">
@@ -227,8 +219,8 @@ export function ApiKeysPage() {
                   className={cn(
                     "rounded-xl border px-3 py-1.5 text-xs transition-all",
                     expiryPreset === p
-                      ? "bg-primary/15 border-primary/40 text-primary"
-                      : "bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 text-muted-foreground hover:border-white/20"
+                      ? "bg-primary/15 border-border text-primary"
+                      : "bg-foreground/[0.03] dark:bg-white/[0.02] border-border text-muted-foreground hover:border-border"
                   )}
                 >
                   {p === "30d" && "30 дней"}
@@ -249,7 +241,7 @@ export function ApiKeysPage() {
               placeholder="например: 203.0.113.5, 192.0.2.0/24"
               value={allowedIpsRaw}
               onChange={(e) => setAllowedIpsRaw(e.target.value)}
-              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
             />
           </div>
         </div>
@@ -263,17 +255,14 @@ export function ApiKeysPage() {
 
       {newKey && (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-          <Card className="bg-emerald-500/[0.04] backdrop-blur-3xl border border-emerald-500/30 rounded-[2rem] p-5 shadow-xl">
+          <Card className="bg-emerald-500/[0.04] border border-emerald-500/30 rounded-2xl p-4">
             <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-emerald-500/25 to-emerald-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <Check className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
-              </div>
               <div>
                 <h3 className="text-sm font-bold tracking-tight">Новый ключ создан</h3>
                 <p className="text-xs text-muted-foreground">Показывается один раз — скопируйте сейчас</p>
               </div>
             </div>
-            <code className="block rounded-xl border border-white/10 bg-foreground/[0.05] dark:bg-black/40 px-4 py-3 break-all font-mono text-xs">
+            <code className="block rounded-xl border border-border bg-foreground/[0.05] dark:bg-black/40 px-4 py-3 break-all font-mono text-xs">
               {newKey}
             </code>
             <Button variant="outline" size="sm" onClick={copyNewKey} className="mt-3 gap-1.5 rounded-xl">
@@ -285,14 +274,11 @@ export function ApiKeysPage() {
       )}
 
       {loading ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-12 shadow-xl flex items-center justify-center">
+        <Card className="bg-card border-border rounded-2xl py-12 flex items-center justify-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </Card>
       ) : !items.length ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-12 shadow-xl flex flex-col items-center text-center">
-          <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-3 border border-white/10">
-            <Key className="h-8 w-8 text-muted-foreground" />
-          </div>
+        <Card className="bg-card border-border rounded-2xl py-12 flex flex-col items-center text-center">
           <p className="text-muted-foreground">Пока нет ключей</p>
         </Card>
       ) : (
@@ -379,15 +365,15 @@ function ApiKeyRow({
       transition={{ delay: i * 0.03 }}
       whileHover={{ y: -1 }}
     >
-      <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-4 shadow-lg hover:shadow-xl hover:border-white/20 transition-all duration-300">
+      <Card className="relative overflow-hidden bg-card border-border rounded-xl p-4 hover:border-border transition-all duration-300">
         <div
           className={cn(
-            "absolute left-0 top-0 bottom-0 w-1 rounded-r-full bg-gradient-to-b",
+            "absolute left-0 top-0 bottom-0 w-1 rounded-r-full ",
             expired
-              ? "from-red-500 to-red-500/30"
+              ? "bg-primary"
               : k.isActive
-              ? "from-emerald-500 to-emerald-500/30"
-              : "from-muted-foreground/40 to-transparent"
+              ? "bg-primary"
+              : "bg-transparent"
           )}
         />
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -399,7 +385,7 @@ function ApiKeyRow({
                   ? "bg-red-500/10 text-red-500 border-red-500/20"
                   : k.isActive
                   ? "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20"
-                  : "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-white/10"
+                  : "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-border"
               )}
             >
               <Key className="h-4 w-4" />
@@ -416,7 +402,7 @@ function ApiKeyRow({
                       ? "bg-red-500/10 text-red-500 border-red-500/20"
                       : k.isActive
                       ? "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20"
-                      : "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-white/10"
+                      : "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-border"
                   )}
                 >
                   {expired ? "Истёк" : k.isActive ? "Активен" : "Отключён"}
@@ -510,7 +496,7 @@ function EditRow({
         .filter((s) => s.length > 0);
       let expiresAt: string | null = null;
       if (expiresAtRaw) {
-        // YYYY-MM-DD → end of day UTC
+        // YYYY-MM-DD  end of day UTC
         const d = new Date(expiresAtRaw + "T23:59:59.000Z");
         if (!isNaN(d.getTime())) expiresAt = d.toISOString();
       }
@@ -529,7 +515,7 @@ function EditRow({
   };
 
   return (
-    <Card className="bg-background/60 backdrop-blur-3xl border-primary/30 rounded-2xl p-4 shadow-lg">
+    <Card className="bg-card border-border rounded-xl p-4">
       <div className="flex items-center gap-3 mb-3">
         <Pencil className="h-4 w-4 text-primary" />
         <h4 className="font-semibold text-sm">Редактирование ключа</h4>
@@ -539,13 +525,13 @@ function EditRow({
           placeholder="Название"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10"
+          className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border"
         />
         <Input
           placeholder="Описание"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10"
+          className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border"
         />
       </div>
       <div className="grid gap-3 sm:grid-cols-2 mt-3">
@@ -558,7 +544,7 @@ function EditRow({
             type="date"
             value={expiresAtRaw}
             onChange={(e) => setExpiresAtRaw(e.target.value)}
-            className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10"
+            className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border"
           />
         </div>
         <div>
@@ -570,7 +556,7 @@ function EditRow({
             placeholder="203.0.113.5, 192.0.2.0/24"
             value={allowedIpsRaw}
             onChange={(e) => setAllowedIpsRaw(e.target.value)}
-            className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10"
+            className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border"
           />
         </div>
       </div>
@@ -612,17 +598,17 @@ function UsageModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-2 sm:p-6"
+      className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-2 sm:p-4"
       onClick={onClose}
     >
       <motion.div
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 30, opacity: 0 }}
-        className="w-full max-w-3xl bg-background/95 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-2xl max-h-[85vh] flex flex-col"
+        className="w-full max-w-3xl bg-card border border-border rounded-xl max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
+        <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex items-center gap-3">
             <History className="h-5 w-5 text-primary" />
             <div>
@@ -646,7 +632,7 @@ function UsageModal({
               {items.map((u) => (
                 <div
                   key={u.id}
-                  className="flex items-center gap-3 text-xs px-3 py-2 rounded-xl bg-foreground/[0.02] dark:bg-white/[0.02] border border-white/5 hover:border-white/10 transition-colors"
+                  className="flex items-center gap-3 text-xs px-3 py-2 rounded-xl bg-foreground/[0.02] dark:bg-white/[0.02] border border-border hover:border-border transition-colors"
                 >
                   <span
                     className={cn(

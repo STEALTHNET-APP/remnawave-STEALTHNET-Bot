@@ -2,8 +2,8 @@
  * админ-страница «Автосписание».
  *
  * Две секции:
- *   1. ⚙️ Настройки списания (расписание + ЮKassa-recurring) — про деньги, не про текст.
- *   2. 📨 Конструктор уведомлений — список карточек шаблонов с типами событий и переменными.
+ *   1.  Настройки списания (расписание + ЮKassa-recurring) — про деньги, не про текст.
+ *   2.  Конструктор уведомлений — список карточек шаблонов с типами событий и переменными.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -16,9 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
-  Loader2, Plus, Pencil, Trash2, Save, X, RefreshCw, Bell, Sparkles,
+  Loader2, Plus, Pencil, Trash2, Save, X, Sparkles,
   Clock, CheckCircle2, XCircle, RotateCw, Ban, Layers, Wand2, ArrowRight,
-  Sliders, CreditCard, Wallet, Info, Eye,
+  CreditCard, Wallet, Info, Eye,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -34,46 +34,46 @@ const TRIGGER_INFO: Record<AutoRenewTriggerType, {
     label: "До списания",
     Icon: Clock,
     iconColor: "text-amber-300",
-    tabGradient: "from-amber-500/30 via-yellow-500/20 to-orange-500/30",
-    cardGradient: "from-amber-500/10 via-yellow-500/5 to-orange-500/10 border-amber-500/30",
+    tabGradient: "bg-muted",
+    cardGradient: "bg-muted border-amber-500/30",
     description: "Напоминание ДО автосписания. Можно создать несколько (за 3 дня, за 1 день, за 15 минут).",
   },
   SUCCESS: {
     label: "Успешно",
     Icon: CheckCircle2,
     iconColor: "text-emerald-300",
-    tabGradient: "from-emerald-500/30 via-green-500/20 to-teal-500/30",
-    cardGradient: "from-emerald-500/10 via-green-500/5 to-teal-500/10 border-emerald-500/30",
+    tabGradient: "bg-muted",
+    cardGradient: "bg-muted border-emerald-500/30",
     description: "Подтверждение после успешного списания.",
   },
   FAILED: {
     label: "Ошибка",
     Icon: XCircle,
     iconColor: "text-rose-300",
-    tabGradient: "from-rose-500/30 via-red-500/20 to-pink-500/30",
-    cardGradient: "from-rose-500/10 via-red-500/5 to-pink-500/10 border-rose-500/30",
+    tabGradient: "bg-muted",
+    cardGradient: "bg-muted border-rose-500/30",
     description: "Если автосписание не удалось (нет баланса, ошибка ЮKassa).",
   },
   RETRY: {
     label: "Повтор",
     Icon: RotateCw,
     iconColor: "text-violet-300",
-    tabGradient: "from-violet-500/30 via-purple-500/20 to-fuchsia-500/30",
-    cardGradient: "from-violet-500/10 via-purple-500/5 to-fuchsia-500/10 border-violet-500/30",
+    tabGradient: "bg-muted",
+    cardGradient: "bg-muted border-violet-500/30",
     description: "Между попытками в грейс-периоде.",
   },
   EXPIRED: {
     label: "Истёк грейс",
     Icon: Ban,
     iconColor: "text-slate-300",
-    tabGradient: "from-slate-500/30 via-gray-500/20 to-zinc-500/30",
-    cardGradient: "from-slate-500/10 via-gray-500/5 to-zinc-500/10 border-slate-500/30",
+    tabGradient: "bg-muted",
+    cardGradient: "bg-muted border-slate-500/30",
     description: "После всех неудач — автосписание выключается.",
   },
 };
 
 const VARIABLES_INFO = [
-  { key: "{tariff_name}", desc: "Имя тарифа", example: "🌐 Стандартная" },
+  { key: "{tariff_name}", desc: "Имя тарифа", example: " Стандартная" },
   { key: "{amount}", desc: "Сумма списания", example: "249" },
   { key: "{currency}", desc: "Валюта", example: "₽" },
   { key: "{days_left}", desc: "Дней до истечения", example: "3" },
@@ -86,7 +86,7 @@ const VARIABLES_INFO = [
 ];
 
 const SAMPLE_CONTEXT = {
-  tariff_name: "🌐 Стандартная",
+  tariff_name: " Стандартная",
   amount: "249",
   currency: "₽",
   days_left: "3",
@@ -210,21 +210,16 @@ export function AutoRenewPage() {
   }, [grouped, notifs.length]);
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-violet-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
-      {/* ── HERO ── */}
+      {/*  HERO  */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-start gap-4 bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex items-start gap-4 bg-card border border-border p-4 rounded-2xl"
       >
-        <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shadow-inner border border-white/10 shrink-0">
-          <RefreshCw className="h-6 w-6 text-primary" />
-        </div>
         <div className="flex-1 min-w-0">
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Автосписание
             </h1>
             <p className="text-sm text-muted-foreground mt-1 max-w-2xl leading-relaxed">
@@ -239,7 +234,7 @@ export function AutoRenewPage() {
       </motion.div>
 
       {error && (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
       )}
 
       {loading || !settings ? (
@@ -248,12 +243,12 @@ export function AutoRenewPage() {
         </div>
       ) : (
         <>
-          {/* ── TIMELINE визуализация ── */}
+          {/*  TIMELINE визуализация  */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="rounded-[2rem] border border-white/10 bg-background/60 backdrop-blur-3xl shadow-xl p-5 sm:p-6"
+            className="rounded-2xl border border-border bg-card p-4 sm:p-4"
           >
             <div className="flex items-center gap-2 mb-4">
               <Layers className="h-5 w-5 text-primary" />
@@ -264,21 +259,21 @@ export function AutoRenewPage() {
                 icon={Clock} title="UPCOMING"
                 desc="Напоминания клиенту перед списанием"
                 count={grouped.UPCOMING.length}
-                color="from-amber-500/20 to-orange-500/10 border-amber-500/30"
+                color="bg-muted border-amber-500/30"
               />
               <TimelineArrow />
               <TimelineStep
                 icon={CreditCard} title="Списание"
                 desc={`За ${settings.autoRenewDaysBeforeExpiry ?? 1} дн до истечения`}
                 badge="cron"
-                color="from-primary/20 to-violet-500/10 border-primary/30"
+                color="bg-muted border-border"
               />
               <TimelineArrow />
               <TimelineStep
                 icon={CheckCircle2} title="SUCCESS / FAILED"
                 desc="Уведомление о результате"
                 count={grouped.SUCCESS.length + grouped.FAILED.length}
-                color="from-emerald-500/20 to-rose-500/10 border-emerald-500/30"
+                color="bg-muted border-emerald-500/30"
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
@@ -286,15 +281,15 @@ export function AutoRenewPage() {
                 icon={RotateCw} title="RETRY (в грейсе)"
                 desc={`Грейс ${settings.autoRenewGracePeriodDays ?? 2} дн · до ${settings.autoRenewMaxRetries ?? 3} попыток`}
                 count={grouped.RETRY.length}
-                color="from-violet-500/20 to-fuchsia-500/10 border-violet-500/30"
+                color="bg-muted border-violet-500/30"
               />
               <TimelineStep
                 icon={Ban} title="EXPIRED"
-                desc="Все попытки исчерпаны → автосписание выкл."
+                desc="Все попытки исчерпаны  автосписание выкл."
                 count={grouped.EXPIRED.length}
-                color="from-slate-500/20 to-gray-500/10 border-slate-500/30"
+                color="bg-muted border-slate-500/30"
               />
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3 flex flex-col justify-center">
+              <div className="rounded-xl border border-border bg-white/[0.03] p-3 flex flex-col justify-center">
                 <div className="flex items-center gap-2 text-sm">
                   <Info className="h-4 w-4 text-primary shrink-0" />
                   <p className="text-muted-foreground">
@@ -305,25 +300,22 @@ export function AutoRenewPage() {
             </div>
           </motion.div>
 
-          {/* ── Секция: Поведение списания ── */}
+          {/*  Секция: Поведение списания  */}
           <motion.section
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
-            className="rounded-[2rem] border border-white/10 bg-background/60 backdrop-blur-3xl shadow-xl overflow-hidden"
+            className="rounded-2xl border border-border bg-card overflow-hidden"
           >
-            <div className="bg-gradient-to-br from-primary/15 via-violet-500/10 to-transparent p-5 border-b border-white/10">
+            <div className="bg-transparent p-4 border-b border-border">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner">
-                  <Sliders className="h-5 w-5 text-primary" />
-                </div>
                 <div>
-                  <h2 className="text-lg font-semibold">Поведение списания</h2>
+                  <h2 className="text-[13.5px] font-bold">Поведение списания</h2>
                   <p className="text-xs text-muted-foreground">Когда и сколько раз cron пытается списать. <span className="text-primary">Текстовые уведомления — в конструкторе ниже.</span></p>
                 </div>
               </div>
             </div>
-            <CardContent className="space-y-3 p-5">
+            <CardContent className="space-y-3 p-4">
               {/* Toggles */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <ToggleRow
@@ -385,21 +377,18 @@ export function AutoRenewPage() {
             </CardContent>
           </motion.section>
 
-          {/* ── Секция: Конструктор уведомлений ── */}
+          {/*  Секция: Конструктор уведомлений  */}
           <motion.section
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="rounded-[2rem] border border-white/10 bg-background/60 backdrop-blur-3xl shadow-xl overflow-hidden"
+            className="rounded-2xl border border-border bg-card overflow-hidden"
           >
-            <div className="relative bg-gradient-to-br from-primary/15 via-violet-500/10 to-transparent p-5 border-b border-white/10">
+            <div className="relative bg-transparent p-4 border-b border-border">
               <div className="relative flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner">
-                    <Wand2 className="h-5 w-5 text-primary" />
-                  </div>
                   <div>
-                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <h2 className="text-[13.5px] font-bold flex items-center gap-2">
                       Конструктор уведомлений
                       <Sparkles className="h-4 w-4 text-primary animate-pulse" />
                     </h2>
@@ -414,7 +403,7 @@ export function AutoRenewPage() {
             </div>
 
             {/* Tabs */}
-            <div className="px-5 pt-4 pb-2 border-b border-white/10 flex flex-wrap gap-2">
+            <div className="px-5 pt-4 pb-2 border-b border-border flex flex-wrap gap-2">
               <TabButton active={tab === "ALL"} count={counts.ALL ?? 0} onClick={() => setTab("ALL")}>
                 <Layers className="h-3.5 w-3.5 mr-1.5" />
                 Все
@@ -431,14 +420,11 @@ export function AutoRenewPage() {
               })}
             </div>
 
-            <CardContent className="p-5">
+            <CardContent className="p-4">
               {filteredNotifs.length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-center py-12">
-                  <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-                    <Bell className="h-8 w-8 text-muted-foreground/60" />
-                  </div>
-                  <h3 className="text-lg font-semibold tracking-tight">Шаблонов нет</h3>
-                  <p className="text-sm text-muted-foreground mt-1">В этой категории пока пусто.</p>
+                  <h3 className="text-[13.5px] font-bold tracking-tight">Шаблонов нет</h3>
+                  <p className="text-[12.5px] text-muted-foreground mt-[3px]">В этой категории пока пусто.</p>
                   <Button variant="outline" className="mt-4 gap-1.5 rounded-xl" onClick={() => setEditor("create")}>
                     <Plus className="h-4 w-4" /> Создать первый
                   </Button>
@@ -457,11 +443,11 @@ export function AutoRenewPage() {
                         exit={{ opacity: 0, scale: 0.96 }}
                         whileHover={{ y: -2 }}
                         transition={{ type: "spring", damping: 20 }}
-                        className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${info.cardGradient} p-4 ${!n.enabled ? "opacity-50" : ""} backdrop-blur`}
+                        className={`relative overflow-hidden rounded-xl border  ${info.cardGradient} p-4 ${!n.enabled ? "opacity-50" : ""}`}
                       >
                         <div className="flex items-start justify-between gap-3 mb-2">
                           <div className="flex items-center gap-3 flex-wrap min-w-0">
-                            <div className={`h-9 w-9 rounded-xl bg-background/40 flex items-center justify-center shrink-0 backdrop-blur`}>
+                            <div className={`h-9 w-9 rounded-xl bg-card flex items-center justify-center shrink-0`}>
                               <Icon className={`h-4 w-4 ${info.iconColor}`} />
                             </div>
                             <div className="min-w-0">
@@ -473,11 +459,11 @@ export function AutoRenewPage() {
                           </div>
                           <Switch checked={n.enabled} onCheckedChange={() => handleToggle(n)} />
                         </div>
-                        <div className="text-xs whitespace-pre-wrap line-clamp-5 text-foreground/80 bg-background/40 rounded-lg p-3 mt-2 border border-white/5 font-mono">
+                        <div className="text-xs whitespace-pre-wrap line-clamp-5 text-foreground/80 bg-card rounded-lg p-3 mt-2 border border-border font-mono">
                           {n.messageText}
                         </div>
                         <div className="flex gap-2 mt-3">
-                          <Button size="sm" variant="outline" className="bg-background/40 backdrop-blur" onClick={() => setEditor({ edit: n })}>
+                          <Button size="sm" variant="outline" className="bg-card" onClick={() => setEditor({ edit: n })}>
                             <Pencil className="h-3.5 w-3.5 mr-1.5" /> Изменить
                           </Button>
                           <Button size="sm" variant="ghost" className="text-rose-400 hover:text-rose-300" onClick={() => handleDelete(n)}>
@@ -497,10 +483,10 @@ export function AutoRenewPage() {
                   Переменные в тексте сообщения <span className="text-xs text-muted-foreground font-normal">(нажмите чтобы развернуть)</span>
                   <ArrowRight className="h-3.5 w-3.5 ml-auto transition-transform group-open:rotate-90" />
                 </summary>
-                <div className="mt-3 p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-2">
+                <div className="mt-3 p-4 rounded-xl border border-border bg-primary/5 space-y-2">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     {VARIABLES_INFO.map((v) => (
-                      <div key={v.key} className="flex items-start gap-2 p-2 rounded bg-background/30">
+                      <div key={v.key} className="flex items-start gap-2 p-2 rounded bg-card">
                         <code className="text-primary bg-primary/10 rounded px-1.5 py-0.5 font-mono shrink-0">{v.key}</code>
                         <div className="flex-1 min-w-0">
                           <p className="text-foreground">{v.desc}</p>
@@ -536,14 +522,14 @@ export function AutoRenewPage() {
   );
 }
 
-// ── Sub-components ──────────────────────────────────────────────
+//  Sub-components 
 
 function Badge({ label, icon: Icon, variant = "neutral" }: { label: string; icon: typeof Clock; variant?: "neutral" | "ok" | "muted" }) {
   const c = variant === "ok" ? "bg-emerald-500/20 text-emerald-200 border-emerald-500/30"
-    : variant === "muted" ? "bg-white/[0.06] text-muted-foreground border-white/10"
-    : "bg-primary/15 text-primary border-primary/30";
+    : variant === "muted" ? "bg-white/[0.06] text-muted-foreground border-border"
+    : "bg-primary/15 text-primary border-border";
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border backdrop-blur ${c}`}>
+    <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${c}`}>
       <Icon className="h-3 w-3" /> {label}
     </span>
   );
@@ -553,17 +539,17 @@ function TimelineStep({ icon: Icon, title, desc, count, badge, color }: {
   icon: typeof Clock; title: string; desc: string; count?: number; badge?: string; color: string;
 }) {
   return (
-    <div className={`rounded-2xl border bg-gradient-to-br ${color} p-3 relative overflow-hidden`}>
+    <div className={`rounded-xl border  ${color} p-3 relative overflow-hidden`}>
       <div className="flex items-center gap-2">
-        <span className="h-8 w-8 rounded-xl bg-background/50 border border-white/10 flex items-center justify-center shrink-0"><Icon className="h-4 w-4 text-foreground/80" /></span>
+        <span className="h-8 w-8 rounded-xl bg-card border border-border flex items-center justify-center shrink-0"><Icon className="h-4 w-4 text-foreground/80" /></span>
         <p className="font-semibold text-sm">{title}</p>
         {count != null && (
-          <span className="ml-auto text-[10px] bg-background/60 rounded-full px-2 py-0.5 border border-white/10">
+          <span className="ml-auto text-[10px] bg-card rounded-full px-2 py-0.5 border border-border">
             {count}
           </span>
         )}
         {badge && (
-          <span className="ml-auto text-[10px] bg-primary/20 text-primary rounded-full px-2 py-0.5 border border-primary/30">
+          <span className="ml-auto text-[10px] bg-primary/20 text-primary rounded-full px-2 py-0.5 border border-border">
             {badge}
           </span>
         )}
@@ -599,9 +585,9 @@ function NumberCard({ label, value, min, max, hint, icon: Icon, onChange }: {
   label: string; value: number; min: number; max: number; hint: string; icon: typeof Clock; onChange: (v: number) => void;
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-foreground/[0.02] p-4 space-y-1.5 hover:bg-foreground/[0.04] transition-colors">
+    <div className="rounded-xl border border-border bg-foreground/[0.02] p-4 space-y-1.5 hover:bg-foreground/[0.04] transition-colors">
       <div className="flex items-center gap-2">
-        <span className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0"><Icon className="h-3.5 w-3.5 text-primary" /></span>
+        <span className="h-7 w-7 rounded-lg bg-primary/10 border border-border flex items-center justify-center shrink-0"><Icon className="h-3.5 w-3.5 text-primary" /></span>
         <Label className="font-medium">{label}</Label>
       </div>
       <Input
@@ -623,17 +609,17 @@ function TabButton({ active, count, children, onClick }: { active: boolean; coun
       onClick={onClick}
       className={`inline-flex items-center text-xs sm:text-sm px-3 py-1.5 rounded-full border transition-all ${
         active
-          ? "bg-primary/20 border-primary/50 text-foreground"
-          : "bg-white/[0.03] border-white/10 text-muted-foreground hover:bg-white/[0.06]"
+          ? "bg-primary/20 border-border text-foreground"
+          : "bg-white/[0.03] border-border text-muted-foreground hover:bg-white/[0.06]"
       }`}
     >
       {children}
-      <span className="ml-1.5 bg-background/60 rounded-full px-1.5 text-[10px] border border-white/10">{count}</span>
+      <span className="ml-1.5 bg-card rounded-full px-1.5 text-[10px] border border-border">{count}</span>
     </button>
   );
 }
 
-// ── Editor Modal ────────────────────────────────────────────────
+//  Editor Modal 
 
 function NotifEditor({
   initial, onClose, onSaved, token,
@@ -702,7 +688,7 @@ function NotifEditor({
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <motion.div
@@ -710,10 +696,10 @@ function NotifEditor({
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.94, opacity: 0, y: 20 }}
         transition={{ type: "spring", damping: 24 }}
-        className="bg-background/90 backdrop-blur-3xl border border-white/10 rounded-[2rem] max-w-4xl w-full max-h-[92vh] overflow-y-auto shadow-2xl"
+        className="bg-card border border-border rounded-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 bg-gradient-to-br from-primary/15 via-violet-500/10 to-transparent px-6 py-4 border-b border-white/10 backdrop-blur-xl">
+        <div className="sticky top-0 z-10 bg-transparent px-3 py-2 border-b border-border">
           <div className="flex items-center justify-between gap-3">
             <h3 className="font-semibold text-lg flex items-center gap-2">
               <Wand2 className="h-5 w-5 text-primary" />
@@ -722,7 +708,7 @@ function NotifEditor({
             <Button size="icon" variant="ghost" onClick={onClose}><X className="h-5 w-5" /></Button>
           </div>
         </div>
-        <div className="p-6 space-y-5 grid grid-cols-1 lg:grid-cols-2 lg:gap-6">
+        <div className="p-4 space-y-5 grid grid-cols-1 lg:grid-cols-2 lg:gap-6">
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label>Название (для админки)</Label>
@@ -740,7 +726,7 @@ function NotifEditor({
                     <button
                       key={t} type="button"
                       onClick={() => setTriggerType(t)}
-                      className={`text-left p-3 rounded-xl border transition-all ${active ? `bg-gradient-to-br ${info.tabGradient} ring-2 ring-primary/40` : "bg-white/[0.03] hover:bg-white/[0.06]"}`}
+                      className={`text-left p-3 rounded-xl border transition-all ${active ? `${info.tabGradient} ring-2 ring-primary/40` : "bg-white/[0.03] hover:bg-white/[0.06]"}`}
                     >
                       <div className="flex items-center gap-2">
                         <Icon className={`h-4 w-4 ${info.iconColor}`} />
@@ -766,7 +752,7 @@ function NotifEditor({
                   <select
                     value={offsetUnit}
                     onChange={(e) => setOffsetUnit(e.target.value as "minutes" | "hours" | "days")}
-                    className="rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                   >
                     <option value="minutes">минут</option>
                     <option value="hours">часов</option>
@@ -783,8 +769,8 @@ function NotifEditor({
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
                 rows={9}
-                className="w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
-                placeholder={`⚠️ <b>Скоро автосписание</b>\n\nЧерез {days_left} {days_unit} с подписки «{tariff_name}» спишется {amount} {currency}.`}
+                className="w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
+                placeholder={` <b>Скоро автосписание</b>\n\nЧерез {days_left} {days_unit} с подписки «{tariff_name}» спишется {amount} {currency}.`}
               />
             </div>
 
@@ -799,9 +785,9 @@ function NotifEditor({
             <Label className="flex items-center gap-2 text-sm">
               <Eye className="h-4 w-4 text-primary" /> Live preview (с подстановкой)
             </Label>
-            <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 to-violet-500/10 p-5 min-h-[200px] backdrop-blur">
+            <div className="rounded-xl border border-border bg-muted p-4 min-h-[200px]">
               <div className="text-xs text-primary mb-2 font-mono">Telegram</div>
-              <div className="bg-background/60 rounded-xl p-4 border border-white/5 text-sm whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: previewText || "<span class='text-muted-foreground italic'>Введите текст сообщения слева — здесь будет preview...</span>" }} />
+              <div className="bg-card rounded-xl p-4 border border-border text-sm whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: previewText || "<span class='text-muted-foreground italic'>Введите текст сообщения слева — здесь будет preview...</span>" }} />
             </div>
 
             <details className="group">

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthReferral } from "@/pages/cabinet/stealth/stealth-referral";
+import { AuroraReferral } from "@/pages/cabinet/aurora/aurora-referral";
 function formatMoney(amount: number, currency: string = "usd") {
   return new Intl.NumberFormat("ru-RU", {
     style: "currency",
@@ -22,6 +23,7 @@ function formatMoney(amount: number, currency: string = "usd") {
 export function ClientReferralPage() {
   const design = useCabinetDesign();
   if (design === "stealth") return <StealthReferral />;
+  if (design === "aurora") return <AuroraReferral />;
   return <ClassicReferralPage />;
 }
 

@@ -72,7 +72,7 @@ const SLIDES: Slide[] = [
       "Привязка существующего Remna-юзера как подписки",
       "Заявки на вывод: вкл/выкл и мин. сумма",
       "Email-шаблоны теперь реально применяются к письмам",
-      "Онбординг What's New при первом входе (вы на нём 😉)",
+      "Онбординг What's New при первом входе (вы на нём )",
       "Больше уведомлений в TG-группу админов: триалы, конвертации, выводы, промокоды, подарки",
       "Расширенные права менеджеров",
     ],
@@ -151,7 +151,7 @@ export function WhatsNew510() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md"
+        className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70"
       >
         {/* ambient-орбы под карточкой */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
@@ -171,10 +171,10 @@ export function WhatsNew510() {
           initial={{ y: 32, scale: 0.95, opacity: 0 }}
           animate={{ y: 0, scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 220, damping: 22 }}
-          className="relative w-full max-w-lg overflow-hidden rounded-[2rem] border border-white/15 bg-background/70 backdrop-blur-2xl shadow-[0_24px_80px_-20px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.08)]"
+          className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card"
         >
           {/* верхний блик */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-transparent" />
 
           {/* конфетти на финале */}
           {step === lastStep && (
@@ -185,7 +185,7 @@ export function WhatsNew510() {
 
           <button
             onClick={close}
-            className="absolute right-4 top-4 z-10 rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+            className="absolute right-4 top-4 z-10 rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
             aria-label="Закрыть"
           >
             <X className="h-4 w-4" />
@@ -206,11 +206,11 @@ export function WhatsNew510() {
                     initial={{ scale: 0, rotate: -20 }}
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0.15 }}
-                    className="relative flex h-24 w-24 items-center justify-center rounded-[1.75rem] bg-gradient-to-br from-primary via-fuchsia-500 to-purple-500 shadow-[0_0_60px_-10px] shadow-primary/60"
+                    className="relative flex h-24 w-24 items-center justify-center rounded-[1.75rem] bg-primary shadow-primary/60"
                   >
                     <Sparkles className="h-12 w-12 text-white" />
                     <motion.span
-                      className="absolute inset-0 rounded-[1.75rem] border-2 border-primary/50"
+                      className="absolute inset-0 rounded-[1.75rem] border-2 border-border"
                       animate={{ scale: [1, 1.25, 1.45], opacity: [0.7, 0.3, 0] }}
                       transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
                     />
@@ -228,7 +228,7 @@ export function WhatsNew510() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.4 }}
-                      className="text-4xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary via-fuchsia-400 to-purple-400"
+                      className="text-4xl font-black tracking-tight text-foreground"
                     >
                       STEALTHNET 5.1.0
                     </motion.h2>
@@ -259,7 +259,7 @@ export function WhatsNew510() {
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                       transition={{ type: "spring", stiffness: 300, damping: 16 }}
-                      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/[0.06] shadow-inner"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-white/[0.06]"
                     >
                       <slide.icon className={cn("h-7 w-7", slide.accent)} />
                     </motion.div>
@@ -272,7 +272,7 @@ export function WhatsNew510() {
                         initial={{ opacity: 0, x: 24 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.15 + i * 0.1 }}
-                        className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 backdrop-blur-xl"
+                        className="flex items-start gap-3 rounded-xl border border-border bg-white/[0.04] px-4 py-3"
                       >
                         <span className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", slide.accent.replace("text-", "bg-"))} />
                         <span className="text-sm leading-relaxed text-foreground/90">{item}</span>
@@ -295,7 +295,7 @@ export function WhatsNew510() {
                     initial={{ scale: 0 }}
                     animate={{ scale: 1, rotate: [0, -8, 8, 0] }}
                     transition={{ type: "spring", stiffness: 240, damping: 12 }}
-                    className="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 shadow-[0_0_60px_-10px] shadow-emerald-500/60"
+                    className="flex h-24 w-24 items-center justify-center rounded-full bg-primary shadow-emerald-500/60"
                   >
                     <PartyPopper className="h-12 w-12 text-white" />
                   </motion.div>
@@ -303,7 +303,7 @@ export function WhatsNew510() {
                     <h2 className="text-3xl font-black tracking-tight">Всё готово!</h2>
                     <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">
                       Загляните в «Тарифы» (режим одной подписки), «Триалы» (новые тогглы)
-                      и «Настройки → Рефералка» (заявки на вывод). Хорошего релиза! 🚀
+                      и «Настройки  Рефералка» (заявки на вывод). Хорошего релиза! 
                     </p>
                   </div>
                 </motion.div>
@@ -319,7 +319,7 @@ export function WhatsNew510() {
                     layout
                     className={cn(
                       "h-1.5 rounded-full transition-colors duration-300",
-                      i === step ? "w-6 bg-primary" : "w-1.5 bg-white/20",
+                      i === step ? "w-6 bg-primary" : "w-1.5 bg-card",
                     )}
                   />
                 ))}
@@ -334,7 +334,7 @@ export function WhatsNew510() {
                   <Button
                     size="sm"
                     onClick={() => setStep((s) => s + 1)}
-                    className="rounded-xl gap-1 bg-gradient-to-r from-primary via-fuchsia-500 to-purple-500 text-white border-0 shadow-lg shadow-primary/30 hover:opacity-90"
+                    className="rounded-xl gap-1 bg-primary text-white border-0 shadow-primary/30 hover:opacity-90"
                   >
                     {step === 0 ? "Показать новое" : "Далее"} <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -342,7 +342,7 @@ export function WhatsNew510() {
                   <Button
                     size="sm"
                     onClick={close}
-                    className="rounded-xl gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white border-0 shadow-lg shadow-emerald-500/30 hover:opacity-90"
+                    className="rounded-xl gap-2 bg-primary text-white border-0 shadow-emerald-500/30 hover:opacity-90"
                   >
                     <Rocket className="h-4 w-4" /> Поехали!
                   </Button>

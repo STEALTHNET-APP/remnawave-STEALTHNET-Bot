@@ -58,7 +58,7 @@ export function MarketplaceLayout() {
             <ShoppingBag className="h-3.5 w-3.5" />
             {t("admin.marketplace.title")}
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight mt-1">{t("admin.marketplace.title")}</h1>
+          <h1 className="text-xl font-extrabold tracking-[-0.3px]">{t("admin.marketplace.title")}</h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">{t("admin.marketplace.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">

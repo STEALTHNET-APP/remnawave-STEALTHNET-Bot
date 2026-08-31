@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Globe, Plus, Copy, Check, Loader2, Server, Pencil, Trash2, Layers, Download, BarChart3, Users, Ban, KeyRound, Tag } from "lucide-react";
+import { Plus, Copy, Check, Loader2, Server, Pencil, Trash2, Layers, Download, Users, Ban, KeyRound } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -55,17 +55,17 @@ function formatDate(iso: string | null): string {
 function statusBadge(status: string) {
   const map: Record<string, string> = {
     ONLINE: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20",
-    OFFLINE: "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-white/10",
+    OFFLINE: "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-border",
     DISABLED: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20",
   };
   const dotColor: Record<string, string> = {
-    ONLINE: "bg-emerald-400 shadow-[0_0_4px_#10b981]",
+    ONLINE: "bg-emerald-400",
     OFFLINE: "bg-muted-foreground/40",
-    DISABLED: "bg-amber-400 shadow-[0_0_4px_#fbbf24]",
+    DISABLED: "bg-amber-400",
   };
   const label = status === "ONLINE" ? "Онлайн" : status === "DISABLED" ? "Отключена" : "Офлайн";
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md", map[status] ?? map.OFFLINE)}>
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium", map[status] ?? map.OFFLINE)}>
       <span className={cn("h-1.5 w-1.5 rounded-full", dotColor[status] ?? dotColor.OFFLINE)} />
       {label}
     </span>
@@ -345,30 +345,25 @@ cd /opt/proxy-node && docker compose up -d --build`
     : "";
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Globe className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Прокси
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">Ноды, категории и тарифы для продажи прокси</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Ноды, категории и тарифы для продажи прокси</p>
           </div>
         </div>
       </motion.div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full max-w-lg grid-cols-3 bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/5 rounded-xl p-1">
+        <TabsList className="flex flex-wrap w-full max-w-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-border rounded-xl p-1">
           <TabsTrigger value="nodes" className="gap-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
             <Server className="h-4 w-4" /> Ноды
           </TabsTrigger>
@@ -382,18 +377,15 @@ cd /opt/proxy-node && docker compose up -d --build`
 
       <TabsContent value="nodes" className="mt-4 space-y-5">
       {nodes.length > 0 && (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 sm:p-6 shadow-xl">
+        <Card className="bg-card border-border rounded-2xl p-5 sm:p-4">
           <div className="flex items-center gap-3 mb-4">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-              <BarChart3 className="h-5 w-5 text-primary" />
-            </div>
             <div>
               <h3 className="text-sm font-bold tracking-tight">Нагрузка и трафик по нодам</h3>
               <p className="text-xs text-muted-foreground">Текущее состояние: трафик, подключения, слотов</p>
             </div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
+            <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
               <p className="text-xs font-medium text-muted-foreground mb-2">Трафик (МБ)</p>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
@@ -410,7 +402,7 @@ cd /opt/proxy-node && docker compose up -d --build`
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
+            <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
               <p className="text-xs font-medium text-muted-foreground mb-2">Подключения и слотов</p>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
@@ -429,12 +421,9 @@ cd /opt/proxy-node && docker compose up -d --build`
           </div>
         </Card>
       )}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+      <Card className="bg-card border-border rounded-2xl p-5">
         <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-              <Server className="h-5 w-5 text-primary" />
-            </div>
             <div>
               <h3 className="text-sm font-bold tracking-tight">Ноды</h3>
               <p className="text-xs text-muted-foreground">Статус «Онлайн» — нода шлёт heartbeat за последние 5 минут</p>
@@ -463,9 +452,6 @@ cd /opt/proxy-node && docker compose up -d --build`
             </div>
           ) : nodes.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center py-10">
-              <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-                <Server className="h-8 w-8 text-muted-foreground/60" />
-              </div>
               <h3 className="text-base font-semibold tracking-tight">Нод пока нет</h3>
               <p className="text-sm text-muted-foreground mt-1 max-w-md">Нажмите «Добавить прокси», скопируйте docker-compose на сервер и запустите контейнер.</p>
               <Button className="mt-4 gap-1.5 rounded-xl" onClick={() => { setAddOpen(true); setAddResult(null); }}>
@@ -474,11 +460,11 @@ cd /opt/proxy-node && docker compose up -d --build`
               </Button>
             </div>
           ) : (
-            <div className="rounded-2xl border border-white/5 overflow-hidden">
+            <div className="rounded-xl border border-border overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-foreground/[0.04] dark:bg-white/[0.03] border-b border-white/5">
+                    <tr className="bg-foreground/[0.04] dark:bg-white/[0.03] border-b border-border">
                       <th className="text-left py-3 px-3 font-medium text-muted-foreground text-xs">Название</th>
                       <th className="text-left py-3 px-3 font-medium text-muted-foreground text-xs">Статус</th>
                       <th className="text-left py-3 px-3 font-medium text-muted-foreground text-xs">Хост / порты</th>
@@ -491,7 +477,7 @@ cd /opt/proxy-node && docker compose up -d --build`
                   </thead>
                   <tbody>
                     {nodes.map((n) => (
-                      <tr key={n.id} className="border-b border-white/5 last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
+                      <tr key={n.id} className="border-b border-border last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                         <td className="py-3 px-3">
                           <span className="font-medium">{n.name || "—"}</span>
                         </td>
@@ -502,7 +488,7 @@ cd /opt/proxy-node && docker compose up -d --build`
                         <td className="py-3 px-3 text-right tabular-nums font-semibold">{n.slotsCount}</td>
                         <td className="py-3 px-3 text-right tabular-nums">{n.currentConnections}</td>
                         <td className="py-3 px-3 text-right text-xs text-muted-foreground tabular-nums">
-                          ↓{formatBytes(n.trafficInBytes)} ↑{formatBytes(n.trafficOutBytes)}
+                          {formatBytes(n.trafficInBytes)} {formatBytes(n.trafficOutBytes)}
                         </td>
                         <td className="py-3 px-3 text-xs text-muted-foreground">{formatDate(n.lastSeenAt)}</td>
                         <td className="py-3 px-3 text-right">
@@ -527,11 +513,8 @@ cd /opt/proxy-node && docker compose up -d --build`
       </TabsContent>
 
       <TabsContent value="slots" className="mt-4">
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+      <Card className="bg-card border-border rounded-2xl p-5">
         <div className="flex items-center gap-3 mb-4">
-          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-            <Users className="h-5 w-5 text-cyan-500 dark:text-cyan-400" />
-          </div>
           <div>
             <h3 className="text-sm font-bold tracking-tight">Прокси-доступы пользователей</h3>
             <p className="text-xs text-muted-foreground">Все выданные слоты. Меняйте логин/пароль, лимит, отзывайте.</p>
@@ -542,11 +525,11 @@ cd /opt/proxy-node && docker compose up -d --build`
         ) : slots.length === 0 ? (
           <p className="text-muted-foreground py-8 text-center">Нет выданных слотов.</p>
         ) : (
-          <div className="rounded-2xl border border-white/5 overflow-hidden">
+          <div className="rounded-xl border border-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-foreground/[0.04] dark:bg-white/[0.03] border-b border-white/5">
+                  <tr className="bg-foreground/[0.04] dark:bg-white/[0.03] border-b border-border">
                     <th className="text-left py-3 px-3 font-medium text-muted-foreground text-xs">Клиент</th>
                     <th className="text-left py-3 px-3 font-medium text-muted-foreground text-xs">Нода</th>
                     <th className="text-left py-3 px-3 font-medium text-muted-foreground text-xs">Логин</th>
@@ -560,7 +543,7 @@ cd /opt/proxy-node && docker compose up -d --build`
                 </thead>
                 <tbody>
                   {slots.map((s) => (
-                    <tr key={s.id} className="border-b border-white/5 last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
+                    <tr key={s.id} className="border-b border-border last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                       <td className="py-3 px-3">
                         <span className="font-medium truncate">{s.clientEmail || s.clientTelegram || s.clientTelegramId || s.clientId.slice(0, 8)}</span>
                       </td>
@@ -571,14 +554,14 @@ cd /opt/proxy-node && docker compose up -d --build`
                       <td className="py-3 px-3 text-right text-muted-foreground text-xs tabular-nums">{formatBytes(s.trafficUsedBytes)}{s.trafficLimitBytes ? ` / ${formatBytes(s.trafficLimitBytes)}` : ""}</td>
                       <td className="py-3 px-3">
                         <span className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md",
+                          "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
                           s.status === "ACTIVE" && "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20",
                           s.status === "REVOKED" && "bg-red-500/10 text-red-500 dark:text-red-400 border-red-500/20",
-                          s.status !== "ACTIVE" && s.status !== "REVOKED" && "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-white/10",
+                          s.status !== "ACTIVE" && s.status !== "REVOKED" && "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-border",
                         )}>
                           <span className={cn(
                             "h-1.5 w-1.5 rounded-full",
-                            s.status === "ACTIVE" && "bg-emerald-400 shadow-[0_0_4px_#10b981]",
+                            s.status === "ACTIVE" && "bg-emerald-400",
                             s.status === "REVOKED" && "bg-red-400",
                             s.status !== "ACTIVE" && s.status !== "REVOKED" && "bg-muted-foreground/40",
                           )} />
@@ -624,10 +607,7 @@ cd /opt/proxy-node && docker compose up -d --build`
         {categoriesLoading ? (
           <p className="text-muted-foreground py-8 text-center">Загрузка…</p>
         ) : categories.length === 0 ? (
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-12 shadow-xl flex flex-col items-center text-center">
-            <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-3 border border-white/10">
-              <Layers className="h-8 w-8 text-muted-foreground" />
-            </div>
+          <Card className="bg-card border-border rounded-2xl py-12 flex flex-col items-center text-center">
             <p className="text-muted-foreground mb-4">Нет категорий. Создайте категорию, затем добавьте тарифы.</p>
             <Button onClick={() => setCategoryModal("add")} className="gap-1.5 rounded-xl">
               <Plus className="h-4 w-4" /> Создать категорию
@@ -636,12 +616,9 @@ cd /opt/proxy-node && docker compose up -d --build`
         ) : (
           <div className="space-y-3">
             {categories.map((cat) => (
-              <Card key={cat.id} className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-white/5 bg-foreground/[0.02] dark:bg-white/[0.02]">
+              <Card key={cat.id} className="bg-card border-border rounded-2xl overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-border bg-foreground/[0.02] dark:bg-white/[0.02]">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-violet-500/20 to-violet-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                      <Layers className="h-4 w-4 text-violet-500 dark:text-violet-400" />
-                    </div>
                     <h3 className="text-base font-bold tracking-tight truncate">{cat.name}</h3>
                   </div>
                   <div className="flex gap-2 flex-wrap shrink-0">
@@ -668,16 +645,13 @@ cd /opt/proxy-node && docker compose up -d --build`
                           key={t.id}
                           whileHover={{ y: -1 }}
                           className={cn(
-                            "rounded-xl border p-3 flex flex-wrap items-center justify-between gap-3 backdrop-blur-md transition-all",
+                            "rounded-xl border p-3 flex flex-wrap items-center justify-between gap-3 transition-all",
                             t.enabled
-                              ? "border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] hover:border-white/20"
+                              ? "border-border bg-foreground/[0.03] dark:bg-white/[0.02] hover:border-border"
                               : "border-amber-500/20 bg-amber-500/[0.04] hover:border-amber-500/30"
                           )}
                         >
                           <div className="flex items-center gap-3 flex-wrap min-w-0 flex-1">
-                            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary/15 to-primary/5 border border-white/10 flex items-center justify-center shrink-0">
-                              <Tag className="h-4 w-4 text-primary" />
-                            </div>
                             <span className="font-semibold truncate">{t.name}</span>
                             <span className="text-xs text-muted-foreground">{t.proxyCount} прокси</span>
                             <span className="text-xs text-muted-foreground">{t.durationDays} дн.</span>
@@ -717,9 +691,9 @@ cd /opt/proxy-node && docker compose up -d --build`
       </Tabs>
 
       <Dialog open={addOpen} onOpenChange={(open) => !open && closeAddDialog()}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
               <Server className="h-5 w-5" />
               Добавить прокси-ноду
             </DialogTitle>
@@ -903,7 +877,7 @@ cd /opt/proxy-node && docker compose up -d --build`
       <Dialog open={!!editSlot} onOpenChange={(open) => !open && setEditSlot(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><KeyRound className="h-5 w-5" /> Редактировать слот</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-[15px] font-bold"><KeyRound className="h-5 w-5" /> Редактировать слот</DialogTitle>
             <DialogDescription>
               Клиент: {editSlot?.clientEmail || editSlot?.clientTelegram || "—"} / Нода: {editSlot?.nodeName || "—"}
             </DialogDescription>

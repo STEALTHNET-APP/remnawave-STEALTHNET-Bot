@@ -101,7 +101,7 @@ import {
   auditClientSubscriptions,
 } from "../client/client-bulk-ops.service.js";
 import { getServerStats, getSshConfig, updateSshConfig } from "../server/server.service.js";
-import { syncFromRemna, syncToRemna, createRemnaUsersForClientsWithoutUuid } from "../sync/sync.service.js";
+import { syncFromRemna, syncToRemna, syncSubscriptionsMirror, createRemnaUsersForClientsWithoutUuid } from "../sync/sync.service.js";
 import { distributeReferralRewards } from "../referral/referral.service.js";
 import { markPaymentPaid } from "../payment/mark-paid.service.js";
 // activateTariffForClient больше не используется в admin —
@@ -2867,7 +2867,7 @@ const updateSettingsSchema = z.object({
   logo: z.string().max(5_500_000).nullable().optional(),
   logoBot: z.string().max(5_500_000).nullable().optional(),
   favicon: z.string().max(5_500_000).nullable().optional(),
-  cabinetDesign: z.enum(["classic", "stealth"]).optional(),
+  cabinetDesign: z.enum(["classic", "stealth", "aurora"]).optional(),
   cabinetDesignApplyInBrowser: z.boolean().optional(),
   remnaClientUrl: z.string().max(2000).nullable().optional(),
   smtpHost: z.string().max(255).nullable().optional(),
@@ -4330,7 +4330,13 @@ adminRouter.post("/tickets/:id/messages", uploadTicketAttachment.array("files", 
 adminRouter.post("/sync/from-remna", async (_req, res) => {
   try {
     const result = await syncFromRemna();
-    return res.json(result);
+    // T-remna-mirror: следом переносим в нашу БД состояние подписок
+    // (даты, статус, трафик) — чтобы данные не жили только в Remnawave.
+    const mirror = await syncSubscriptionsMirror().catch((e) => ({
+      ok: false, updated: 0, missing: 0,
+      errors: [e instanceof Error ? e.message : String(e)],
+    }));
+    return res.json({ ...result, mirror });
   } catch (e) {
     console.error("Sync from Remna error:", e);
     return res.status(500).json({

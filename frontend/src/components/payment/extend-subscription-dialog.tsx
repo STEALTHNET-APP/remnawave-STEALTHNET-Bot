@@ -2,7 +2,7 @@
  * красивая модалка продления подписки прямо из дашборда.
  *
  * Раньше «Продлить» уводила юзера в каталог тарифов (?extend=...) — дёргано и
- * неочевидно. Теперь продление — это один диалог: срок → доп. устройства →
+ * неочевидно. Теперь продление — это один диалог: срок  доп. устройства 
  * способ оплаты, без ухода со страницы.
  *
  * Компонент самодостаточен: по subId сам загружает подписку (clientAllSubscriptions),
@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Zap, Wallet, CreditCard, Loader2, Calendar, Smartphone } from "lucide-react";
+import { Wallet, CreditCard, Loader2, Calendar, Smartphone } from "lucide-react";
 import { api, type PublicConfig, type PublicTariffCategory } from "@/lib/api";
 import { useClientAuth } from "@/contexts/client-auth";
 import { Button } from "@/components/ui/button";
@@ -168,7 +168,7 @@ export function ExtendSubscriptionDialog({
       if (providerId === "balance") {
         await api.clientPayByBalance(token, payBase);
         await refreshProfile();
-        toast.success("Подписка продлена 🎉", `${sub?.label ?? "Подписка"} продлена на ${formatRuDays(days)}.`);
+        toast.success("Подписка продлена ", `${sub?.label ?? "Подписка"} продлена на ${formatRuDays(days)}.`);
         onPaidByBalance?.();
         onClose();
         return;
@@ -238,12 +238,9 @@ export function ExtendSubscriptionDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && !payLoading) onClose(); }}>
-      <DialogContent className="bg-background/85 backdrop-blur-3xl border-white/10 rounded-[2rem] max-w-md max-h-[92vh] overflow-y-auto">
+      <DialogContent className="bg-card border-border rounded-2xl max-w-md max-h-[92vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/25 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-              <Zap className="h-5 w-5 text-primary" />
-            </div>
+          <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
             <div className="min-w-0">
               <span className="block">Продление подписки</span>
               {sub && <span className="block text-xs font-normal text-muted-foreground truncate">{sub.label}</span>}
@@ -255,7 +252,7 @@ export function ExtendSubscriptionDialog({
         {loading ? (
           <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
         ) : !sub || !tariff ? (
-          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.07] p-4 text-sm text-amber-500/90">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.07] p-4 text-sm text-amber-500/90">
             Тариф этой подписки недоступен для продления из каталога. Откройте раздел «Тарифы» и выберите подходящий.
           </div>
         ) : readyUrl ? (
@@ -288,10 +285,10 @@ export function ExtendSubscriptionDialog({
                         type="button"
                         onClick={() => setSelectedOptionId(o.id)}
                         className={cn(
-                          "rounded-2xl border p-3 text-left transition-all duration-200",
+                          "rounded-xl border p-3 text-left transition-all duration-200",
                           active
-                            ? "border-primary/50 bg-primary/10 shadow-[0_0_24px_-8px] shadow-primary/40"
-                            : "border-white/10 bg-white/[0.03] hover:border-white/25",
+                            ? "border-border bg-primary/10 shadow-primary/40"
+                            : "border-border bg-white/[0.03] hover:border-border",
                         )}
                       >
                         <p className="text-sm font-bold">{formatRuDays(o.durationDays)}</p>
@@ -311,14 +308,14 @@ export function ExtendSubscriptionDialog({
                 type="button"
                 onClick={() => setKeepExtras((v) => !v)}
                 className={cn(
-                  "w-full text-left rounded-2xl border p-4 transition-all duration-300",
-                  keepExtras ? "bg-primary/[0.07] border-primary/30" : "bg-white/[0.03] border-white/10 hover:border-white/20",
+                  "w-full text-left rounded-xl border p-4 transition-all duration-300",
+                  keepExtras ? "bg-primary/[0.07] border-border" : "bg-white/[0.03] border-border hover:border-border",
                 )}
               >
                 <div className="flex items-start gap-3">
                   <div className={cn(
                     "mt-0.5 h-5 w-9 rounded-full p-0.5 transition-colors duration-300 shrink-0",
-                    keepExtras ? "bg-primary" : "bg-white/15",
+                    keepExtras ? "bg-primary" : "bg-card",
                   )}>
                     <div className={cn(
                       "h-4 w-4 rounded-full bg-white shadow transition-transform duration-300",
@@ -341,13 +338,13 @@ export function ExtendSubscriptionDialog({
             )}
 
             {/* Итого */}
-            <div className="rounded-2xl bg-white/[0.04] border border-white/10 px-4 py-3 flex items-center justify-between">
+            <div className="rounded-xl bg-white/[0.04] border border-border px-4 py-3 flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Итого за {formatRuDays(days)}:</span>
               <span className="text-xl font-black text-primary tabular-nums">{formatMoney(total, currency)}</span>
             </div>
 
             {payError && (
-              <div className="rounded-2xl border border-destructive/20 bg-destructive/10 p-3 text-center text-sm font-bold text-destructive">
+              <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-center text-sm font-bold text-destructive">
                 {payError}
               </div>
             )}
@@ -359,7 +356,7 @@ export function ExtendSubscriptionDialog({
                   size="lg"
                   disabled={payLoading || !hasBalance}
                   onClick={() => payWith("balance")}
-                  className="w-full h-14 justify-between rounded-2xl bg-gradient-to-r from-primary to-primary/80 border-0 shadow-lg px-5"
+                  className="w-full h-14 justify-between rounded-xl bg-primary border-0 px-5"
                 >
                   <span className="flex items-center gap-2.5 font-bold">
                     {payLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Wallet className="h-5 w-5" />}
@@ -377,7 +374,7 @@ export function ExtendSubscriptionDialog({
                   variant="outline"
                   disabled={payLoading}
                   onClick={() => payWith(p.id)}
-                  className="w-full h-14 justify-start gap-3 rounded-2xl border-white/10 bg-white/[0.03] hover:bg-white/[0.07] px-5"
+                  className="w-full h-14 justify-start gap-3 rounded-xl border-border bg-white/[0.03] hover:bg-white/[0.07] px-5"
                 >
                   <span className="p-1.5 rounded-xl bg-primary/10">
                     <CreditCard className="h-4 w-4 text-primary" />

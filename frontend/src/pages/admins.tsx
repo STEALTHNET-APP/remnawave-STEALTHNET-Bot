@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { motion } from "framer-motion";
-import { UserCog, Plus, Pencil, Trash2, Loader2, Crown, X, Shield, Zap } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Crown, X, Shield, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function AdminsPage() {
@@ -155,7 +155,7 @@ export function AdminsPage() {
   if (error && list.length === 0) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-12 text-center shadow-xl">
+        <Card className="bg-card border-border rounded-2xl py-12 text-center">
           <p className="text-muted-foreground">{error}</p>
         </Card>
       </div>
@@ -163,24 +163,19 @@ export function AdminsPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <UserCog className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Менеджеры
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
               Создавайте менеджеров и назначайте им доступ только к нужным разделам.
             </p>
           </div>
@@ -191,8 +186,8 @@ export function AdminsPage() {
         </Button>
       </motion.div>
 
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-white/5">
+      <Card className="bg-card border-border rounded-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-border">
           <h3 className="text-sm font-bold tracking-tight">Пользователи админки</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             Админ имеет полный доступ. Менеджеру доступны только выбранные разделы.
@@ -201,7 +196,7 @@ export function AdminsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-foreground/[0.04] dark:bg-white/[0.03] border-b border-white/5">
+              <tr className="bg-foreground/[0.04] dark:bg-white/[0.03] border-b border-border">
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Email</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Роль</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Разделы доступа</th>
@@ -210,16 +205,16 @@ export function AdminsPage() {
             </thead>
             <tbody>
               {list.map((item) => (
-                <tr key={item.id} className="border-b border-white/5 last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
+                <tr key={item.id} className="border-b border-border last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                   <td className="px-4 py-3 font-medium">{item.email}</td>
                   <td className="px-4 py-3">
                     {item.role === "ADMIN" ? (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 text-amber-500 dark:text-amber-400 border border-amber-500/20 px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 text-amber-500 dark:text-amber-400 border border-amber-500/20 px-2.5 py-0.5 text-[11px] font-medium">
                         <Crown className="h-3 w-3" />
                         Админ
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 text-primary border border-border px-2.5 py-0.5 text-[11px] font-medium">
                         <Shield className="h-3 w-3" />
                         Менеджер
                       </span>
@@ -231,7 +226,7 @@ export function AdminsPage() {
                     ) : item.allowedSections?.length ? (
                       <div className="flex flex-wrap gap-1">
                         {item.allowedSections.map((k) => (
-                          <span key={k} className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-white/10 px-2 py-0.5 text-[10px] font-medium">
+                          <span key={k} className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-border px-2 py-0.5 text-[10px] font-medium">
                             {MANAGER_SECTIONS.find((s) => s.key === k)?.label ?? k}
                           </span>
                         ))}
@@ -283,17 +278,17 @@ export function AdminsPage() {
       </Card>
 
       {error && modal && (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">
           {error}
         </div>
       )}
 
       {(modal === "create" || (modal === "edit" && editingId)) && (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+          <Card className="bg-card border-border rounded-2xl p-4">
             <div className="flex items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
+                <div className="h-10 w-10 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">
                   {modal === "create" ? <Plus className="h-5 w-5 text-primary" /> : <Pencil className="h-5 w-5 text-primary" />}
                 </div>
                 <div>
@@ -314,7 +309,7 @@ export function AdminsPage() {
                   disabled={modal === "edit"}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="manager@example.com"
-                  className={cn("rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50", modal === "edit" && "opacity-60")}
+                  className={cn("rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50", modal === "edit" && "opacity-60")}
                 />
               </div>
               <div className="grid gap-1.5">
@@ -324,7 +319,7 @@ export function AdminsPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                 />
               </div>
               <div>
@@ -351,7 +346,7 @@ export function AdminsPage() {
                     </Button>
                   </div>
                 </div>
-                <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-4">
+                <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-4">
                   {MANAGER_SECTION_CATEGORIES.map((cat) => {
                     const items = MANAGER_SECTIONS.filter((s) => s.category === cat.key);
                     if (items.length === 0) return null;
@@ -359,7 +354,7 @@ export function AdminsPage() {
                     const someChecked = items.some((s) => allowedSections.includes(s.key));
                     return (
                       <div key={cat.key} className="space-y-2">
-                        <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-1.5">
+                        <div className="flex items-center justify-between gap-2 border-b border-border pb-1.5">
                           <div className="flex items-center gap-2">
                             <div className="w-[2px] h-[12px] bg-primary" />
                             <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -434,7 +429,7 @@ export function AdminsPage() {
                 <p className="text-[11px] text-muted-foreground/80 mb-2 pl-1">
                   Тонкие права на чувствительные операции (возвраты, удаление устройств и т.д.). Менеджер получает доступ к ним только если есть галка.
                 </p>
-                <div className="rounded-2xl border border-amber-500/15 bg-amber-500/[0.03] p-4 space-y-4">
+                <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.03] p-4 space-y-4">
                   {actionsLoading && (
                     <div className="flex items-center justify-center py-4">
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -459,7 +454,7 @@ export function AdminsPage() {
                       const someChecked = items.some((a) => selectedActions.includes(a.key));
                       return (
                         <div key={groupKey} className="space-y-2">
-                          <div className="flex items-center justify-between gap-2 border-b border-white/5 pb-1.5">
+                          <div className="flex items-center justify-between gap-2 border-b border-border pb-1.5">
                             <div className="flex items-center gap-2">
                               <div className={cn("w-[2px] h-[12px]", meta.color)} />
                               <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{meta.label}</span>

@@ -131,7 +131,7 @@ export function MarketplaceEditListingPage() {
   );
 
   return (
-    <Card className="p-5 md:p-7 space-y-5 max-w-3xl">
+    <Card className="p-4 md:p-7 space-y-5 max-w-3xl">
       <div className="flex items-center justify-between gap-3">
         <Button asChild size="sm" variant="ghost"><Link to="/admin/marketplace/my"><ArrowLeft className="h-3.5 w-3.5" /></Link></Button>
         <h2 className="text-lg md:text-xl font-bold">
@@ -141,7 +141,7 @@ export function MarketplaceEditListingPage() {
       </div>
 
       {error && <BannerCard tone="danger">{error}</BannerCard>}
-      {loading && <Card className="p-6 text-sm text-muted-foreground animate-pulse">…</Card>}
+      {loading && <Card className="p-4 text-sm text-muted-foreground animate-pulse">…</Card>}
 
       {!loading && (
         <div className="space-y-4">

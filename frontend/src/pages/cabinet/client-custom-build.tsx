@@ -252,7 +252,7 @@ export function ClientCustomBuildPage() {
           <Layers className="h-6 w-6" />
         </div>
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Гибкий тариф</h1>
+          <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Гибкий тариф</h1>
           <p className="text-sm text-muted-foreground">Выберите срок, количество устройств и трафик</p>
         </div>
       </div>

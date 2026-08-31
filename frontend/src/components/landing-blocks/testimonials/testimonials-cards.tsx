@@ -43,7 +43,7 @@ export function TestimonialsCards({ block }: { block: LandingApiBlock }) {
             viewport={{ once: true }}
             transition={{ duration: 0.4, delay: idx * 0.05 }}
           >
-            <Card className="h-full border-slate-200/70 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur-xl">
+            <Card className="h-full border-slate-200/70 dark:border-border bg-card dark:bg-card">
               <CardContent className="flex h-full flex-col p-6">
                 <Quote className="h-7 w-7" style={{ color: accentTheme.primary }} />
                 <p className="mt-4 flex-1 text-sm leading-relaxed text-slate-700 dark:text-slate-200">{it.text}</p>

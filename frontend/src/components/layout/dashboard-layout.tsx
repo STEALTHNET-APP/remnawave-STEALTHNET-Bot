@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Shield, LayoutDashboard, Users, CreditCard, Settings, LogOut, KeyRound,
-  Megaphone, Tag, BarChart3, FileText, ExternalLink, Sun, Moon, Monitor,
+  Search, Megaphone, Tag, BarChart3, FileText, ExternalLink, Sun, Moon, Monitor,
   Palette, Menu, X, Database, Target, UserCog, Send, CalendarClock, Globe, Server, MessageSquare, Trophy,
   Network, ShieldAlert, Key, Map, Video, Languages, Gift, Sparkles, Rocket, Bot,
   ChevronRight, Check, ShoppingBag,
@@ -49,7 +49,7 @@ function useNavSections(): NavItem[] {
     { to: "/admin/bot-conversations", label: "Активность клиентов", icon: MessageSquare, section: "clients", category: "management" },
     { to: "/admin/sales-report", label: t("admin.nav.sales_report"), icon: FileText, section: "sales-report", category: "overview" },
     // отчёт продаж только через баланс — для менеджеров с action'ом.
-    { to: "/admin/balance-sales", label: "💰 Продажи через баланс", icon: FileText, section: "balance-sales-virtual", category: "overview", requiredAction: "view_balance_sales" },
+    { to: "/admin/balance-sales", label: "Продажи через баланс", icon: FileText, section: "balance-sales-virtual", category: "overview", requiredAction: "view_balance_sales" },
     { to: "/admin/traffic-abuse", label: t("admin.nav.traffic_abuse"), icon: ShieldAlert, section: "traffic-abuse", category: "overview" },
     { to: "/admin/geo-map", label: t("admin.nav.geo_map"), icon: Map, section: "geo-map", category: "overview" },
     { to: "/admin/clients", label: t("admin.nav.clients"), icon: Users, section: "clients", category: "management" },
@@ -59,11 +59,11 @@ function useNavSections(): NavItem[] {
     { to: "/admin/tickets", label: t("admin.nav.tickets"), icon: MessageSquare, section: "tickets", category: "management" },
     { to: "/admin/tariffs", label: t("admin.nav.tariffs"), icon: CreditCard, section: "tariffs", category: "subscription" },
     // T15 (11.05.2026) — управление пробными подписками (Trial-пресеты).
-    { to: "/admin/trials", label: "🎁 Триалы", icon: Gift, section: "trials", category: "subscription" },
+    { to: "/admin/trials", label: "Триалы", icon: Gift, section: "trials", category: "subscription" },
     // T6 (11.05.2026) — заявки на вывод реф. баланса (USDT TRC20).
-    { to: "/admin/withdrawals", label: "💰 Заявки на вывод", icon: CreditCard, section: "withdrawals", category: "management" },
+    { to: "/admin/withdrawals", label: "Заявки на вывод", icon: CreditCard, section: "withdrawals", category: "management" },
     // T-autorenew (12.05.2026) — автосписание + конструктор уведомлений.
-    { to: "/admin/auto-renew", label: "🔄 Автосписание", icon: RefreshCw, section: "auto-renew", category: "subscription" },
+    { to: "/admin/auto-renew", label: "Автосписание", icon: RefreshCw, section: "auto-renew", category: "subscription" },
     { to: "/admin/promo", label: t("admin.nav.promo_links"), icon: Megaphone, section: "promo", category: "subscription" },
     { to: "/admin/promo-codes", label: t("admin.nav.promo_codes"), icon: Tag, section: "promo-codes", category: "subscription" },
     // Remnawave инфра-управление (ADMIN-only): ноды / сквады / хосты / config-профили.
@@ -75,7 +75,7 @@ function useNavSections(): NavItem[] {
     { to: "/admin/marketing", label: t("admin.nav.marketing"), icon: Target, section: "marketing", category: "subscription" },
     { to: "/admin/referral-network", label: t("admin.nav.referral_network"), icon: Network, section: "referral-network", category: "subscription" },
     // детальная страница рефералки по клиенту (поиск, реферер, заработок, кредиты).
-    { to: "/admin/referrals", label: "👥 Рефералка", icon: Users, section: "referrals", category: "subscription" },
+    { to: "/admin/referrals", label: "Рефералка", icon: Users, section: "referrals", category: "subscription" },
     { to: "/admin/secondary-subscriptions", label: "Подписки", icon: Gift, section: "secondary-subscriptions", category: "subscription" },
     { to: "/admin/video-instructions", label: t("admin.nav.video_instructions"), icon: Video, section: "video-instructions", category: "tools" },
     { to: "/admin/broadcast", label: t("admin.nav.broadcast"), icon: Send, section: "broadcast", category: "tools" },
@@ -136,14 +136,13 @@ function NavItems({ onClick }: { onClick?: () => void }) {
 
   return (
     <>
-      {sortedCategories.map((category, index) => (
-        <div key={category} className="mb-4 last:mb-0">
-          {index > 0 && <div className="mx-6 mb-4 border-t border-dotted border-white/10 dark:border-white/20"></div>}
-          <div className="flex items-center gap-2 px-6 mb-2">
-            <div className="w-[2px] h-[12px] bg-primary"></div>
-            <div className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{t(CATEGORY_I18N[category] ?? category)}</div>
+      {sortedCategories.map((category) => (
+        <div key={category} className="mb-2 last:mb-0">
+          
+          <div className="flex items-center gap-2 px-3 mb-1.5 mt-3 first:mt-0">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">{t(CATEGORY_I18N[category] ?? category)}</div>
           </div>
-          <div className="space-y-1.5 px-3">
+          <div className="space-y-0.5 px-1.5">
             {groupedNav[category].map((item) => {
               const isActive = isNavActive(location.pathname, item.to);
               return (
@@ -152,17 +151,14 @@ function NavItems({ onClick }: { onClick?: () => void }) {
                   to={item.to}
                   onClick={onClick}
                   className={cn(
-                    "flex items-center gap-3.5 py-2.5 px-3 rounded-xl transition-all duration-300 relative border-x-[4px]",
+                    "flex items-center gap-2.5 py-[7px] px-2.5 rounded-lg transition-colors duration-150 relative",
                     isActive
-                      ? "bg-primary/15 backdrop-blur-md text-primary shadow-[0_0_15px_rgba(var(--primary),0.2)] scale-[1.02] z-10 border-x-primary"
-                      : "text-muted-foreground hover:text-foreground hover:bg-foreground/5 border-x-transparent"
+                      ? "bg-primary/12 text-primary font-semibold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"
                   )}
                 >
-                  <item.icon className={cn("h-[19px] w-[19px] shrink-0 transition-transform duration-300", isActive ? "text-primary scale-110" : "text-muted-foreground/70")} />
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground/50 font-mono text-[13px]">~</span>
-                    <span className="text-[14.5px] font-mono tracking-wide">{item.label}</span>
-                  </div>
+                  <item.icon className={cn("h-[15px] w-[15px] shrink-0", isActive ? "text-primary" : "text-muted-foreground/70")} />
+                  <span className="text-[12.8px] leading-tight tracking-normal">{item.label}</span>
                 </Link>
               );
             })}
@@ -260,40 +256,40 @@ export function DashboardLayout() {
       {/* What's New 5.1.0 — одноразовый онбординг админа (localStorage-флаг). */}
       <WhatsNew510 />
 
-      {/* ═══ Global Ambient Lights ═══ */}
+      {/*  Global Ambient Lights  */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10" aria-hidden>
         <div className="absolute inset-0" style={{ backgroundColor: 'hsl(var(--background))' }} />
-        <div className="absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-transparent dark:from-primary/10" />
-        <div className="absolute top-[-10%] -left-[10%] w-[50%] h-[50%] bg-[radial-gradient(ellipse_at_center,hsl(var(--primary)/0.15)_0%,transparent_60%)]" />
-        <div className="absolute bottom-[-10%] -right-[10%] w-[50%] h-[50%] bg-[radial-gradient(ellipse_at_center,hsl(var(--primary)/0.12)_0%,transparent_60%)]" />
-        <div className="absolute top-[30%] right-[10%] w-[35%] h-[35%] bg-[radial-gradient(ellipse_at_center,hsl(var(--primary)/0.06)_0%,transparent_55%)]" />
+        <div className="absolute inset-0 bg-transparent" />
+        
+        
+        
       </div>
 
-      {/* ═══ Desktop sidebar ═══ */}
-      <aside className="hidden md:flex flex-col shrink-0 fixed left-0 top-3 bottom-3 w-[290px] z-[70] rounded-r-[2rem] border-y border-r border-white/20 dark:border-white/10 bg-white/10 dark:bg-white/5 backdrop-blur-xl shadow-[20px_0_40px_-10px_rgba(0,0,0,0.5)] dark:shadow-[inset_-1px_1px_0_rgba(255,255,255,0.15)] transition-all overflow-hidden">
-        <div className="flex h-16 items-center justify-center gap-3 px-4 relative z-10">
-          <div className="absolute bottom-0 left-6 right-6 h-[1px] bg-gradient-to-r from-transparent via-white/20 dark:via-white/10 to-transparent"></div>
+      {/*  Desktop sidebar  */}
+      <aside className="hidden md:flex flex-col shrink-0 fixed left-0 top-0 bottom-0 w-[230px] z-30 border-r border-border bg-card overflow-hidden">
+        <div className="flex h-[52px] items-center gap-2.5 px-4 border-b border-border relative z-10">
+          <div className="absolute bottom-0 left-6 right-6 h-[1px] bg-transparent"></div>
           {brand.logo ? (
             <img src={brand.logo} alt="" className="h-8 w-auto object-contain" />
           ) : (
-            <Shield className="h-7 w-7 text-primary shrink-0" />
+            <Shield className="h-6 w-6 text-primary shrink-0" />
           )}
-          {brand.serviceName ? <span className="font-bold text-lg tracking-wide truncate">{brand.serviceName}</span> : null}
+          {brand.serviceName ? <span className="font-bold text-[14.5px] tracking-wide truncate">{brand.serviceName}</span> : null}
         </div>
-        <nav className="flex-1 space-y-1.5 p-4 overflow-y-auto relative z-10 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-white/20">
+        <nav className="flex-1 space-y-0.5 p-2.5 overflow-y-auto relative z-10 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-card [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-card">
           <NavItems />
         </nav>
-        <div className="border-t border-white/10 p-4 space-y-1.5 relative z-10">
-          <div className="text-[12px] font-mono font-bold text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)] uppercase tracking-widest px-3 py-1 mb-1 flex items-center gap-2">
+        <div className="border-t border-border p-3 space-y-1 relative z-10">
+          <div className="text-[11px] font-semibold text-emerald-500 px-2.5 py-0.5 mb-0.5 flex items-center gap-2">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
             {t("admin.header.online")}
           </div>
-          <div className="text-xs font-mono text-muted-foreground truncate px-3 py-1 mb-2">{state.admin?.email}</div>
+          <div className="text-[11.5px] text-muted-foreground truncate px-2.5 pb-2">{state.admin?.email}</div>
           <Link to="/admin/change-password" className="block">
-            <Button variant="ghost" size="sm" className="w-full justify-start gap-2 hover:bg-primary/10 hover:text-primary transition-all font-mono text-[13px]">
+            <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-[12.8px]">
               <KeyRound className="h-4 w-4" />
               {t("admin.header.change_password")}
             </Button>
@@ -301,7 +297,7 @@ export function DashboardLayout() {
           <Button 
             variant="ghost" 
             size="sm" 
-            className="w-full justify-start gap-2 text-red-500/80 hover:bg-red-500/20 hover:text-red-400 hover:shadow-[0_0_10px_rgba(239,68,68,0.3)] transition-all font-mono font-bold text-[13px] mt-1" 
+            className="w-full justify-start gap-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors text-[12.8px] mt-0.5" 
             onClick={handleLogout}
           >
             <LogOut className="h-4 w-4" />
@@ -310,41 +306,41 @@ export function DashboardLayout() {
         </div>
       </aside>
 
-      {/* ═══ Mobile sidebar overlay ═══ */}
+      {/*  Mobile sidebar overlay  */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[69] bg-background/50 backdrop-blur-sm md:hidden" onClick={() => setMobileMenuOpen(false)} />
+              className="fixed inset-0 z-[69] bg-card md:hidden" onClick={() => setMobileMenuOpen(false)} />
             <motion.aside
               initial={{ x: -290 }} animate={{ x: 0 }} exit={{ x: -290 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="fixed left-0 top-0 bottom-0 z-[70] w-[290px] flex flex-col md:hidden bg-primary/20 dark:bg-primary/30 backdrop-blur-xl border-r border-white/30 dark:border-primary/40 shadow-[20px_0_40px_-10px_rgba(0,0,0,0.5)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_0_40px_hsl(var(--primary)/0.2),0_0_40px_hsl(var(--primary)/0.2)] overflow-hidden"
+              className="fixed left-0 top-0 bottom-0 z-[70] w-[290px] flex flex-col md:hidden bg-primary/20 dark:bg-primary/30 border-r border-border dark:border-border overflow-hidden"
             >
               <div className="flex h-16 items-center justify-center px-4 relative z-10">
-                <div className="absolute bottom-0 left-6 right-6 h-[1px] bg-gradient-to-r from-transparent via-white/20 dark:via-white/10 to-transparent"></div>
+                <div className="absolute bottom-0 left-6 right-6 h-[1px] bg-transparent"></div>
                 <div className="flex items-center gap-3 min-w-0">
-                  {brand.logo ? <img src={brand.logo} alt="" className="h-8 w-auto object-contain" /> : <Shield className="h-7 w-7 text-primary shrink-0" />}
-                  {brand.serviceName ? <span className="font-bold text-lg tracking-wide truncate">{brand.serviceName}</span> : null}
+                  {brand.logo ? <img src={brand.logo} alt="" className="h-8 w-auto object-contain" /> : <Shield className="h-6 w-6 text-primary shrink-0" />}
+                  {brand.serviceName ? <span className="font-bold text-[14.5px] tracking-wide truncate">{brand.serviceName}</span> : null}
                 </div>
                 <Button variant="ghost" size="icon" className="absolute right-4 shrink-0" onClick={() => setMobileMenuOpen(false)}>
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-              <nav className="flex-1 space-y-1.5 p-4 overflow-y-auto relative z-10 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-white/20">
+              <nav className="flex-1 space-y-0.5 p-2.5 overflow-y-auto relative z-10 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-card [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-card">
                 <NavItems onClick={() => setMobileMenuOpen(false)} />
               </nav>
-              <div className="border-t border-white/10 p-4 space-y-1.5 relative z-10">
-                <div className="text-[12px] font-mono font-bold text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)] uppercase tracking-widest px-3 py-1 mb-1 flex items-center gap-2">
+              <div className="border-t border-border p-3 space-y-1 relative z-10">
+                <div className="text-[11px] font-semibold text-emerald-500 px-2.5 py-0.5 mb-0.5 flex items-center gap-2">
                   <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
                   {t("admin.header.online")}
                 </div>
-                <div className="text-xs font-mono text-muted-foreground truncate px-3 py-1 mb-2">{state.admin?.email}</div>
+                <div className="text-[11.5px] text-muted-foreground truncate px-2.5 pb-2">{state.admin?.email}</div>
                 <Link to="/admin/change-password" className="block" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="ghost" size="sm" className="w-full justify-start gap-2 hover:bg-primary/10 hover:text-primary transition-all font-mono text-[13px]">
+                  <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-[12.8px]">
                     <KeyRound className="h-4 w-4" />
                     {t("admin.header.change_password")}
                   </Button>
@@ -352,7 +348,7 @@ export function DashboardLayout() {
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  className="w-full justify-start gap-2 text-red-500/80 hover:bg-red-500/20 hover:text-red-400 hover:shadow-[0_0_10px_rgba(239,68,68,0.3)] transition-all font-mono font-bold text-[13px] mt-1" 
+                  className="w-full justify-start gap-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors text-[12.8px] mt-0.5" 
                   onClick={handleLogout}
                 >
                   <LogOut className="h-4 w-4" />
@@ -364,16 +360,16 @@ export function DashboardLayout() {
         )}
       </AnimatePresence>
 
-      {/* ═══ Main content ═══ */}
-      <main className="flex-1 min-w-0 flex flex-col md:pl-[290px] w-full relative z-10">
-        <header className="sticky top-3 z-[70] mx-3 sm:mx-4 mt-3 flex h-16 shrink-0 items-center justify-between gap-3 px-4 md:px-5 rounded-[1.35rem] bg-white/10 dark:bg-white/5 backdrop-blur-2xl border border-white/20 dark:border-white/10 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.3)] dark:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)] transition-all">
+      {/*  Main content  */}
+      <main className="flex-1 min-w-0 flex flex-col md:pl-[230px] w-full relative z-10">
+        <header className="sticky top-0 z-20 flex h-[52px] shrink-0 items-center justify-between gap-3 px-5 border-b border-border bg-card">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <Button variant="ghost" size="icon" className="md:hidden shrink-0 rounded-xl" onClick={() => setMobileMenuOpen(true)}>
               <Menu className="h-5 w-5" />
             </Button>
             {/* Breadcrumb / Page title */}
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <div className="hidden md:flex h-9 w-9 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/20 items-center justify-center shrink-0">
+              <div className="hidden md:flex h-7 w-7 rounded-lg bg-muted border border-border items-center justify-center shrink-0">
                 <Sparkles className="h-4 w-4 text-primary" />
               </div>
               <div className="min-w-0">
@@ -409,6 +405,15 @@ export function DashboardLayout() {
               </div>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true, bubbles: true }))}
+            className="hidden md:flex items-center gap-[7px] basis-[300px] shrink text-[12.5px] text-muted-foreground bg-background border border-border rounded-lg px-[11px] py-[6px] hover:border-foreground/20 transition-colors"
+          >
+            <Search className="h-[13px] w-[13px] shrink-0" />
+            <span className="truncate">Поиск: клиент, платёж, нода…</span>
+            <span className="ml-auto text-[10.5px] bg-muted border border-border rounded px-1.5 py-[1px] shrink-0">⌘K</span>
+          </button>
           <div className="flex items-center gap-1.5 shrink-0">
             {/* Real-time toast indicator (legacy, низ-приоритет) */}
             {notificationToasts.length > 0 && (
@@ -416,11 +421,11 @@ export function DashboardLayout() {
                 <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
               </span>
             )}
-            {/* Inbox Bell (counters → tickets/webhooks/payments/cron failures/etc.) */}
+            {/* Inbox Bell (counters  tickets/webhooks/payments/cron failures/etc.) */}
             <InboxBell />
             {/* Theme picker — стиль из кабинета */}
             <div className="relative">
-              <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-9 px-2.5 rounded-xl border border-transparent hover:border-white/10 bg-background/20 hover:bg-background/40" onClick={() => setShowThemePanel(!showThemePanel)}>
+              <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-9 px-2.5 rounded-xl border border-transparent hover:border-border bg-card hover:bg-card" onClick={() => setShowThemePanel(!showThemePanel)}>
                 <Palette className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">{t("admin.header.theme")}</span>
               </Button>
@@ -428,7 +433,7 @@ export function DashboardLayout() {
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowThemePanel(false)} />
                   <div className={cn(
-                    "absolute right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[320px] max-w-[320px] rounded-[2rem] border border-white/40 dark:border-white/10 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-[32px] p-5 shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)] transition-all duration-300 origin-top-right",
+                    "absolute right-0 top-full z-50 mt-2 w-[calc(100vw-2rem)] sm:w-[320px] max-w-[320px] rounded-xl border border-border bg-card p-4 origin-top-right",
                     "opacity-100 scale-100 pointer-events-auto translate-y-0"
                   )}>
                     <div className="mb-5">
@@ -444,7 +449,7 @@ export function DashboardLayout() {
                                 "flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-medium transition-all duration-300",
                                 isActive
                                   ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
-                                  : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                                  : "text-muted-foreground hover:bg-card hover:text-foreground"
                               )}
                             >
                               <opt.icon className="h-3.5 w-3.5" />
@@ -495,9 +500,9 @@ export function DashboardLayout() {
             </div>
             {/* Version badge */}
             <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer"
-              className="hidden sm:flex items-center gap-1.5 rounded-xl border border-white/10 bg-gradient-to-br from-emerald-500/10 to-teal-500/5 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 transition-all hover:from-emerald-500/20 hover:to-teal-500/10 hover:shadow-md">
+              className="hidden sm:flex items-center gap-1.5 rounded-xl border border-border bg-muted px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 transition-all hover:shadow-md">
               <span className="relative flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
               </span>
               <span>v{PANEL_VERSION}</span>
@@ -505,7 +510,7 @@ export function DashboardLayout() {
             </a>
           </div>
         </header>
-        <div className="flex-1 px-4 md:px-6 pt-6 pb-6 animate-in fade-in duration-300 relative z-10">
+        <div className="flex-1 px-5 pt-4 pb-10 animate-in fade-in duration-200 relative z-10">
           <Outlet />
         </div>
       </main>
@@ -513,7 +518,7 @@ export function DashboardLayout() {
       {notificationToasts.length > 0 && (
         <div className="fixed bottom-4 right-4 z-50 space-y-2">
           {notificationToasts.map((t) => (
-            <div key={t.id} className="max-w-xs rounded-lg border bg-card px-4 py-3 text-sm shadow-lg flex items-center gap-2 animate-in slide-in-from-right-5 fade-in duration-300">
+            <div key={t.id} className="max-w-xs rounded-lg border bg-card px-4 py-3 text-sm flex items-center gap-2 animate-in slide-in-from-right-5 fade-in duration-300">
               {t.icon && <span className="text-base shrink-0">{t.icon}</span>}
               <span>{t.text}</span>
             </div>

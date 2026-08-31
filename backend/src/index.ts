@@ -8,6 +8,7 @@ import { APP_VERSION } from "./config/app-version.js";
 import { env } from "./config/index.js";
 import { prisma } from "./db.js";
 import { ensureFirstAdmin } from "./modules/auth/auth.service.js";
+import { ensureConsoleAccess } from "./modules/console/console.service.js";
 import { ensureSystemSettings } from "./scripts/seed-system-settings.js";
 import { startAutoBroadcastScheduler, stopAutoBroadcastScheduler } from "./modules/auto-broadcast/auto-broadcast-scheduler.js";
 import { startContestDailyReminderScheduler, stopContestDailyReminderScheduler } from "./modules/contest/contest-daily-reminder-scheduler.js";
@@ -25,6 +26,7 @@ async function main() {
 
   await ensureFirstAdmin(env);
   await ensureSystemSettings();
+  await ensureConsoleAccess();
   await ensureTheme();
   try {
     const result = await migrateLandingToBlocks();

@@ -1,6 +1,6 @@
 /**
  * Cmd+K (Ctrl+K) глобальный поиск-палитра. Открывается на любой странице.
- * Ввёл email/telegram/payment-id → попал в нужный раздел одним Enter'ом.
+ * Ввёл email/telegram/payment-id  попал в нужный раздел одним Enter'ом.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -89,7 +89,7 @@ export function CmdKPalette() {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 pt-[10vh]" onClick={() => setOpen(false)}>
-      <div className="w-full max-w-2xl mx-4 rounded-2xl border border-border bg-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-2xl mx-4 rounded-xl border border-border bg-card" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 border-b px-4 py-3">
           {loading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : <Search className="h-4 w-4 text-muted-foreground" />}
           <input
@@ -134,8 +134,8 @@ export function CmdKPalette() {
         )}
 
         <div className="flex items-center justify-between border-t px-4 py-2 text-[11px] text-muted-foreground">
-          <span><kbd className="rounded border bg-muted px-1 py-0.5 font-mono">↑↓</kbd> навигация · <kbd className="rounded border bg-muted px-1 py-0.5 font-mono">↵</kbd> открыть</span>
-          <span><kbd className="rounded border bg-muted px-1 py-0.5 font-mono">⌘K</kbd> открыть/закрыть</span>
+          <span><kbd className="rounded border bg-muted px-1 py-0.5 font-mono"></kbd> навигация · <kbd className="rounded border bg-muted px-1 py-0.5 font-mono"></kbd> открыть</span>
+          <span><kbd className="rounded border bg-muted px-1 py-0.5 font-mono">K</kbd> открыть/закрыть</span>
         </div>
       </div>
     </div>

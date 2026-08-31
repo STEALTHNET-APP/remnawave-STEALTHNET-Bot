@@ -45,7 +45,7 @@ export function StealthLayout() {
 
   return (
     <div
-      className="min-h-screen w-full text-white relative overflow-x-hidden"
+      className="tg-fs-pad min-h-screen w-full text-white relative overflow-x-hidden"
       style={{ ["--stealth-accent" as string]: accent }}
     >
       <NetworkBg />

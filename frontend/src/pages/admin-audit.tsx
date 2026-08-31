@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Search, RefreshCw, ShieldAlert, ChevronRight, ScrollText } from "lucide-react";
+import { Loader2, Search, RefreshCw, ChevronRight } from "lucide-react";
 import { auditApi, type AdminEvent, type AuditFacets } from "@/lib/admin-extras-api";
 import { fmtMsk } from "@/lib/datetime";
 import { motion } from "framer-motion";
@@ -38,7 +38,7 @@ function colorOfKind(kind: string): string {
 }
 
 const selectCls =
-  "mt-1.5 flex h-9 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50";
+  "mt-1.5 flex h-9 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50";
 
 export function AdminAuditPage() {
   const { state } = useAuth();
@@ -86,22 +86,17 @@ export function AdminAuditPage() {
   }, [filters.kind, filters.actorId, filters.targetType]);
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-violet-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <ShieldAlert className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">Аудит-лог</h1>
-            <p className="text-sm text-muted-foreground mt-1">Журнал действий администраторов — кто, что и когда менял.</p>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Аудит-лог</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Журнал действий администраторов — кто, что и когда менял.</p>
           </div>
         </div>
         <Button onClick={() => load(true)} variant="outline" size="sm" disabled={loading} className="gap-1.5 rounded-xl">
@@ -110,7 +105,7 @@ export function AdminAuditPage() {
         </Button>
       </motion.div>
 
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+      <Card className="bg-card border-border rounded-2xl p-4">
         <div className="grid gap-3 md:grid-cols-4">
           <div>
             <Label className="text-xs text-muted-foreground">Тип события</Label>
@@ -154,7 +149,7 @@ export function AdminAuditPage() {
                 onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
                 onKeyDown={(e) => e.key === "Enter" && load(true)}
                 placeholder="kind, actor, targetId…"
-                className="pl-8 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                className="pl-8 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
               />
             </div>
           </div>
@@ -162,22 +157,19 @@ export function AdminAuditPage() {
       </Card>
 
       {error ? (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">
           {error}
         </div>
       ) : null}
 
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden py-0">
+      <Card className="bg-card border-border rounded-2xl overflow-hidden py-0">
         {items.length === 0 && !loading ? (
           <div className="flex flex-col items-center justify-center text-center py-14">
-            <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-              <ScrollText className="h-8 w-8 text-muted-foreground/60" />
-            </div>
-            <h3 className="text-lg font-semibold tracking-tight">Нет событий</h3>
-            <p className="text-sm text-muted-foreground mt-1">Журнал начинает заполняться по мере действий админов.</p>
+            <h3 className="text-[13.5px] font-bold tracking-tight">Нет событий</h3>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Журнал начинает заполняться по мере действий админов.</p>
           </div>
         ) : (
-          <div className="divide-y divide-white/5">
+          <div className="divide-y divide-border">
             {items.map((ev) => (
               <button
                 key={ev.id}
@@ -215,7 +207,7 @@ export function AdminAuditPage() {
       </Card>
 
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 min-w-0">
               <span className={`truncate ${colorOfKind(selected?.kind ?? "")}`} title={selected?.kind}>{selected?.kind}</span>
@@ -237,7 +229,7 @@ export function AdminAuditPage() {
               {selected.payload ? (
                 <div>
                   <Label className="text-xs text-muted-foreground">payload</Label>
-                  <pre className="mt-1 max-h-96 overflow-auto rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-3 text-xs font-mono">
+                  <pre className="mt-1 max-h-96 overflow-auto rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3 text-xs font-mono">
                     {JSON.stringify(selected.payload, null, 2)}
                   </pre>
                 </div>

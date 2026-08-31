@@ -26,7 +26,7 @@ import {
   notifyAdminsAboutNewTicket,
 } from "../notification/telegram-notify.service.js";
 import { requireClientAuth } from "./client.middleware.js";
-import { remnaCreateUser, remnaUpdateUser, isRemnaConfigured, remnaGetUser, remnaGetUserByUsername, remnaGetUserByEmail, remnaGetUserByTelegramId, extractRemnaUuid, remnaUsernameFromClient, remnaGetUserHwidDevices, remnaDeleteUserHwidDevice, encryptSubscriptionUrlInPlace, remnaRevokeUserSubscription } from "../remna/remna.client.js";
+import { remnaCreateUser, remnaUpdateUser, isRemnaConfigured, remnaGetUser, remnaGetUserByUsername, remnaGetUserByEmail, remnaGetUserByTelegramId, remnaGetUserByShortUuid, extractRemnaUuid, remnaUsernameFromClient, remnaGetUserHwidDevices, remnaDeleteUserHwidDevice, encryptSubscriptionUrlInPlace, remnaRevokeUserSubscription } from "../remna/remna.client.js";
 import { isSmtpConfigured, isMailConfigured, mailConfigFromSystem, sendEmail } from "../mail/mail.service.js";
 import { renderEmailTemplate } from "../email-templates/email-templates.service.js";
 import { signClientPasswordResetToken, verifyClientPasswordResetToken } from "../auth/auth.service.js";
@@ -790,6 +790,65 @@ clientAuthRouter.get("/me", requireClientAuth, async (req, res) => {
   });
   if (!full) return res.status(401).json({ message: "Требуется авторизация" });
   return res.json(toClientShape(full));
+});
+
+/**
+ * Извлекает shortUuid из ссылки-подписки. Формат Remnawave:
+ * `https://<domain>/api/sub/<shortUuid>` или `.../api/sub/<shortUuid>/<clientType>`
+ * (happ|singbox|clash|…). Берём сегмент СРАЗУ после "sub" (не последний — им
+ * может оказаться clientType). Допускаем и голый shortUuid (без URL).
+ */
+function extractShortUuidFromSubUrl(raw: string): string | null {
+  const s0 = (raw || "").trim();
+  if (!s0) return null;
+  const valid = (v: string | undefined): v is string => !!v && /^[A-Za-z0-9_-]{6,}$/.test(v);
+  if (!/^https?:\/\//i.test(s0)) return valid(s0) ? s0 : null; // голый shortUuid
+  const path = s0.split(/[?#]/)[0];
+  const segs = path.split("/").filter(Boolean); // [https:, domain, api, sub, <shortUuid>, <clientType?>]
+  const subIdx = segs.lastIndexOf("sub");
+  if (subIdx >= 0 && valid(segs[subIdx + 1])) return segs[subIdx + 1];
+  const last = segs[segs.length - 1]; // фолбэк: последний валидный сегмент
+  return valid(last) ? last : null;
+}
+
+/**
+ * POST /api/client/auth/by-subscription — авто-логин по ссылке-подписке (кабинет в приложении).
+ * Ключ входа = сама ссылка-подписка (её знает только владелец). Пароль/2FA не нужны:
+ * приложение шлёт полный sub-URL → извлекаем shortUuid → Remnawave-юзер → наш клиент-владелец
+ * → client-JWT. Адрес ЭТОЙ панели приложение узнаёт из кастомного заголовка `x-cabinet-url`
+ * в ответе подписки (как announce/истории), поэтому механика работает на любой панели-форке.
+ */
+const bySubscriptionSchema = z.object({ subscriptionUrl: z.string().min(1).max(2048) });
+clientAuthRouter.post("/by-subscription", async (req, res) => {
+  const parsed = bySubscriptionSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: "subscriptionUrl обязателен" });
+  if (!isRemnaConfigured()) return res.status(503).json({ message: "Remnawave не настроен" });
+
+  const shortUuid = extractShortUuidFromSubUrl(parsed.data.subscriptionUrl);
+  if (!shortUuid) return res.status(400).json({ message: "Не удалось разобрать ссылку подписки" });
+
+  // Remnawave-юзер по shortUuid → его uuid.
+  const remnaRes = await remnaGetUserByShortUuid(shortUuid);
+  if (remnaRes.error) return res.status(404).json({ message: "Подписка не найдена" });
+  const uuid = extractRemnaUuid(remnaRes.data);
+  if (!uuid) return res.status(404).json({ message: "Подписка не найдена" });
+
+  // Наш клиент-владелец: сперва по таблице подписок (актуальнее при перевыпуске),
+  // затем фолбэк по client.remnawaveUuid.
+  const sub = await prisma.subscription.findFirst({ where: { remnawaveUuid: uuid }, select: { ownerId: true } });
+  const clientId = sub?.ownerId
+    ?? (await prisma.client.findFirst({ where: { remnawaveUuid: uuid }, select: { id: true } }))?.id
+    ?? null;
+  if (!clientId) return res.status(404).json({ message: "Аккаунт не найден" });
+
+  const full = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true },
+  });
+  if (!full || full.isBlocked) return res.status(403).json({ message: "Аккаунт недоступен" });
+
+  // Вход по подписке БЕЗ 2FA-барьера: ключ = сама ссылка; второй фактор — только для email/пароля.
+  return res.json({ token: signClientToken(full.id), client: toClientShape(full) });
 });
 
 /**

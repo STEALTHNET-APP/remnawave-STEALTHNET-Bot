@@ -7,8 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 import {
-  Download, Upload, AlertTriangle, Loader2, RotateCcw, HardDrive, Clock, Send, Database,
-} from "lucide-react";
+  Download, Upload, AlertTriangle, Loader2, RotateCcw, HardDrive, Clock, Send, } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -224,26 +223,21 @@ export function BackupPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
+    <div className="flex flex-col gap-3.5 relative">
       {/* Ambient orbs */}
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
 
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Database className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Бэкапы
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">Создание и восстановление БД. Бэкапы хранятся на сервере по дням.</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Создание и восстановление БД. Бэкапы хранятся на сервере по дням.</p>
           </div>
         </div>
       </motion.div>
@@ -253,7 +247,7 @@ export function BackupPage() {
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400 flex items-center gap-2"
+          className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400 flex items-center gap-2"
         >
           <AlertTriangle className="h-4 w-4 shrink-0" />
           {error}
@@ -263,7 +257,7 @@ export function BackupPage() {
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 backdrop-blur-md px-4 py-3 text-sm text-emerald-500 dark:text-emerald-400"
+          className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-500 dark:text-emerald-400"
         >
           {success}
         </motion.div>
@@ -272,11 +266,8 @@ export function BackupPage() {
       {/* Action cards */}
       <div className="grid gap-4 md:grid-cols-2">
         <motion.div whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-          <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl h-full">
+          <Card className="relative overflow-hidden bg-card border-border rounded-2xl p-5 h-full">
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <Download className="h-6 w-6 text-primary" />
-              </div>
               <div className="min-w-0">
                 <h3 className="text-base font-bold tracking-tight">Создать бэкап</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -301,11 +292,8 @@ export function BackupPage() {
         </motion.div>
 
         <motion.div whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
-          <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl h-full">
+          <Card className="relative overflow-hidden bg-card border-border rounded-2xl p-5 h-full">
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <Upload className="h-6 w-6 text-amber-500 dark:text-amber-400" />
-              </div>
               <div className="min-w-0">
                 <h3 className="text-base font-bold tracking-tight">Восстановить из файла</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -317,7 +305,7 @@ export function BackupPage() {
               <label
                 onDragOver={(e) => { e.preventDefault(); }}
                 onDrop={(e) => { e.preventDefault(); if (!restoring) acceptRestoreFile(e.dataTransfer.files?.[0]); }}
-                className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-amber-500/30 bg-amber-500/5 px-4 py-6 text-center transition-colors ${restoring ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-amber-500/50 hover:bg-amber-500/10"}`}
+                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-amber-500/30 bg-amber-500/5 px-4 py-6 text-center transition-colors ${restoring ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-amber-500/50 hover:bg-amber-500/10"}`}
               >
                 <Upload className="h-6 w-6 text-amber-500 dark:text-amber-400" />
                 <span className="text-sm font-medium">Перетащи .sql сюда или нажми для выбора</span>
@@ -342,13 +330,13 @@ export function BackupPage() {
       </div>
 
       {/* Auto-backup card */}
-      <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 sm:p-6 shadow-xl">
+      <Card className="relative overflow-hidden bg-card border-border rounded-2xl p-5 sm:p-4">
         <div className="flex items-center gap-3 mb-4">
           <div className={cn(
-            "h-12 w-12 rounded-2xl flex items-center justify-center shadow-inner border border-white/10 shrink-0 transition-colors",
+            "h-9 w-9 rounded-lg flex items-center justify-center border border-border shrink-0 transition-colors",
             autoBackupEnabled
-              ? "bg-gradient-to-br from-emerald-500/25 to-emerald-500/5 text-emerald-500 dark:text-emerald-400"
-              : "bg-gradient-to-br from-muted/40 to-muted/10 text-muted-foreground"
+              ? "bg-muted text-emerald-500 dark:text-emerald-400"
+              : "bg-muted text-muted-foreground"
           )}>
             <Clock className="h-6 w-6" />
           </div>
@@ -357,13 +345,13 @@ export function BackupPage() {
               Авто-бэкап в Telegram
               {autoBackupEnabled && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-medium border border-emerald-500/20">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 shadow-[0_0_4px_currentColor]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
                   Активно
                 </span>
               )}
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              SQL-бэкап в Telegram-группу по cron. Топик «Авто-бэкапы» в Настройки → Уведомления.
+              SQL-бэкап в Telegram-группу по cron. Топик «Авто-бэкапы» в Настройки  Уведомления.
             </p>
           </div>
           <button
@@ -374,20 +362,20 @@ export function BackupPage() {
             )}
           >
             <span className={cn(
-              "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform",
+              "pointer-events-none inline-block h-5 w-5 rounded-full bg-white ring-0 transition-transform",
               autoBackupEnabled ? "translate-x-5" : "translate-x-0"
             )} />
           </button>
         </div>
 
-        <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
+        <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Расписание (cron)</Label>
             <Input
               value={autoBackupCron}
               onChange={(e) => setAutoBackupCron(e.target.value)}
               placeholder="0 7 * * *"
-              className="max-w-xs font-mono text-sm h-9 rounded-xl bg-background/60 border-white/10 focus-visible:ring-primary/50"
+              className="max-w-xs font-mono text-sm h-9 rounded-xl bg-card border-border focus-visible:ring-primary/50"
             />
             <p className="text-[11px] text-muted-foreground">
               По умолчанию: <code className="bg-foreground/[0.06] dark:bg-white/[0.06] px-1.5 py-0.5 rounded font-mono">0 7 * * *</code> — каждый день в 7:00 UTC
@@ -410,11 +398,8 @@ export function BackupPage() {
       </Card>
 
       {/* Saved backups list */}
-      <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 sm:p-6 shadow-xl">
+      <Card className="relative overflow-hidden bg-card border-border rounded-2xl p-5 sm:p-4">
         <div className="flex items-center gap-3 mb-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-            <HardDrive className="h-6 w-6 text-cyan-500 dark:text-cyan-400" />
-          </div>
           <div>
             <h3 className="text-base font-bold tracking-tight">Сохранённые на сервере</h3>
             <p className="text-xs text-muted-foreground mt-0.5">Бэкапы по дням — скачать или восстановить.</p>
@@ -432,24 +417,24 @@ export function BackupPage() {
             <p className="text-sm text-muted-foreground">Нет сохранённых бэкапов. Создайте первый.</p>
           </div>
         ) : (
-          <div className="rounded-2xl border border-white/5 overflow-hidden">
+          <div className="rounded-xl border border-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-foreground/[0.04] dark:bg-white/[0.03] border-b border-white/5">
-                    <th className="h-10 px-4 text-left font-medium text-muted-foreground text-xs">Дата</th>
-                    <th className="h-10 px-4 text-left font-medium text-muted-foreground text-xs">Файл</th>
-                    <th className="h-10 px-4 text-left font-medium text-muted-foreground text-xs">Размер</th>
-                    <th className="h-10 px-4 text-right font-medium text-muted-foreground text-xs">Действия</th>
+                  <tr className="bg-foreground/[0.04] dark:bg-white/[0.03] border-b border-border">
+                    <th className="h-9 px-[13px] text-left font-medium text-muted-foreground text-xs">Дата</th>
+                    <th className="h-9 px-[13px] text-left font-medium text-muted-foreground text-xs">Файл</th>
+                    <th className="h-9 px-[13px] text-left font-medium text-muted-foreground text-xs">Размер</th>
+                    <th className="h-9 px-[13px] text-right font-medium text-muted-foreground text-xs">Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   {list.map((item) => (
-                    <tr key={item.path} className="border-b border-white/5 last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
+                    <tr key={item.path} className="border-b border-border last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 font-mono text-muted-foreground text-xs">{formatDate(item.date)}</td>
                       <td className="px-4 py-3 font-mono text-xs">{item.filename}</td>
                       <td className="px-4 py-3 text-xs">
-                        <span className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] px-2.5 py-0.5 text-[11px] font-medium border border-white/10">
+                        <span className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] px-2.5 py-0.5 text-[11px] font-medium border border-border">
                           {formatSize(item.size)}
                         </span>
                       </td>
@@ -480,7 +465,7 @@ export function BackupPage() {
 
       {/* Confirm dialogs */}
       <Dialog open={showRestoreConfirm} onOpenChange={setShowRestoreConfirm}>
-        <DialogContent className="bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="bg-card border-border rounded-2xl">
           <DialogHeader>
             <DialogTitle>Восстановить из загруженного файла?</DialogTitle>
             <DialogDescription>
@@ -495,7 +480,7 @@ export function BackupPage() {
       </Dialog>
 
       <Dialog open={!!restoreFromPath} onOpenChange={(open) => !open && setRestoreFromPath(null)}>
-        <DialogContent className="bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="bg-card border-border rounded-2xl">
           <DialogHeader>
             <DialogTitle>Восстановить из бэкапа на сервере?</DialogTitle>
             <DialogDescription>

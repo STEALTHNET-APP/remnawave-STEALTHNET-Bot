@@ -5,15 +5,13 @@
  *   1. Period selector (7/30/90/180 days)
  *   2. KPI карточки по валюте: MRR / Revenue / ARPU / LTV / Churn
  *   3. Cohort retention таблица (12 недель)
- *   4. Funnel: register → trial → paid → repeat → auto-renew
+ *   4. Funnel: register  trial  paid  repeat  auto-renew
  *   5. Provider comparison таблица
  */
 
 import { useEffect, useState } from "react";
 import {
-  TrendingUp, Users, DollarSign, Repeat, Activity, Target, ArrowDownToLine,
-  Wallet, Loader2, AlertCircle, RefreshCw, Calendar,
-} from "lucide-react";
+  TrendingUp, Users, DollarSign, Repeat, Activity, Wallet, Loader2, AlertCircle, RefreshCw, } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -83,20 +81,17 @@ export function AdminBusinessAnalyticsPage() {
   return (
     <div className="w-full space-y-6 px-4 sm:px-6 md:px-8 pt-6 pb-10">
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <TrendingUp className="h-6 w-6 text-primary" />
-          </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between !bg-transparent !border-0 ! !shadow-none">
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground via-primary/80 to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Бизнес-аналитика
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">MRR · ARPU · LTV · Churn · Cohorts · Funnel · Providers</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">MRR · ARPU · LTV · Churn · Cohorts · Funnel · Providers</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1 bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-white/5">
+          <div className="flex items-center gap-1 bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-border">
             {PERIOD_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
@@ -104,8 +99,8 @@ export function AdminBusinessAnalyticsPage() {
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
                   days === opt.value
-                    ? "bg-primary text-primary-foreground shadow-md"
-                    : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-card"
                 )}
               >
                 {opt.label}
@@ -134,7 +129,7 @@ export function AdminBusinessAnalyticsPage() {
         <>
           {/* KPI Cards — by currency */}
           {data.kpis.length === 0 ? (
-            <Card className="p-8 text-center bg-background/40 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+            <Card className="p-8 text-center bg-card border-border rounded-2xl">
               <p className="text-sm text-muted-foreground">Нет PAID-платежей за выбранный период.</p>
             </Card>
           ) : (
@@ -188,13 +183,10 @@ export function AdminBusinessAnalyticsPage() {
           )}
 
           {/* Cohort retention */}
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-6 shadow-xl">
+          <Card className="bg-card border-border rounded-2xl p-4">
             <div className="flex items-center gap-3 mb-4">
-              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 border border-white/10 flex items-center justify-center">
-                <Calendar className="h-4 w-4 text-cyan-500" />
-              </div>
               <div>
-                <h2 className="text-lg font-bold">Cohort retention (12 недель)</h2>
+                <h2 className="text-[13.5px] font-bold">Cohort retention (12 недель)</h2>
                 <p className="text-xs text-muted-foreground">% клиентов из недельной когорты, кто сделал хоть одну оплату на N-й неделе после регистрации</p>
               </div>
             </div>
@@ -204,7 +196,7 @@ export function AdminBusinessAnalyticsPage() {
             ) : (
               <div className="overflow-x-auto -mx-2">
                 <table className="w-full text-sm">
-                  <thead className="text-xs uppercase text-muted-foreground border-b border-white/10">
+                  <thead className="text-xs uppercase text-muted-foreground border-b border-border">
                     <tr>
                       <th className="px-4 py-2.5 text-left font-semibold">Когорта (нед.)</th>
                       <th className="px-4 py-2.5 text-right font-semibold">Размер</th>
@@ -214,7 +206,7 @@ export function AdminBusinessAnalyticsPage() {
                       <th className="px-4 py-2.5 text-center font-semibold">W8</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className="divide-y divide-border">
                     {data.cohorts.map((c) => (
                       <CohortTableRow key={c.weekStart} c={c} />
                     ))}
@@ -225,13 +217,10 @@ export function AdminBusinessAnalyticsPage() {
           </Card>
 
           {/* Funnel */}
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-6 shadow-xl">
+          <Card className="bg-card border-border rounded-2xl p-4">
             <div className="flex items-center gap-3 mb-4">
-              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 border border-white/10 flex items-center justify-center">
-                <Target className="h-4 w-4 text-emerald-500" />
-              </div>
               <div>
-                <h2 className="text-lg font-bold">Воронка конверсии</h2>
+                <h2 className="text-[13.5px] font-bold">Воронка конверсии</h2>
                 <p className="text-xs text-muted-foreground">От регистрации до подписчика с авто-продлением (по всем клиентам)</p>
               </div>
             </div>
@@ -241,15 +230,15 @@ export function AdminBusinessAnalyticsPage() {
                 const widthPct = step.pctOfStart * 100;
                 return (
                   <div key={step.key} className="relative">
-                    <div className="relative h-12 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/10 overflow-hidden">
+                    <div className="relative h-12 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-border overflow-hidden">
                       <div
                         className={cn(
                           "absolute inset-y-0 left-0 rounded-xl transition-all duration-500",
-                          i === 0 && "bg-gradient-to-r from-primary/30 to-primary/10",
-                          i === 1 && "bg-gradient-to-r from-cyan-500/30 to-cyan-500/10",
-                          i === 2 && "bg-gradient-to-r from-emerald-500/30 to-emerald-500/10",
-                          i === 3 && "bg-gradient-to-r from-violet-500/30 to-violet-500/10",
-                          i === 4 && "bg-gradient-to-r from-amber-500/30 to-amber-500/10",
+                          i === 0 && "bg-muted",
+                          i === 1 && "bg-muted",
+                          i === 2 && "bg-muted",
+                          i === 3 && "bg-muted",
+                          i === 4 && "bg-muted",
                         )}
                         style={{ width: `${Math.max(widthPct, 2)}%` }}
                       />
@@ -275,13 +264,10 @@ export function AdminBusinessAnalyticsPage() {
           </Card>
 
           {/* Providers */}
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-6 shadow-xl">
+          <Card className="bg-card border-border rounded-2xl p-4">
             <div className="flex items-center gap-3 mb-4">
-              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-violet-500/20 to-violet-500/5 border border-white/10 flex items-center justify-center">
-                <ArrowDownToLine className="h-4 w-4 text-violet-500" />
-              </div>
               <div>
-                <h2 className="text-lg font-bold">Сравнение провайдеров</h2>
+                <h2 className="text-[13.5px] font-bold">Сравнение провайдеров</h2>
                 <p className="text-xs text-muted-foreground">За последние {data.windowDays} дней</p>
               </div>
             </div>
@@ -291,7 +277,7 @@ export function AdminBusinessAnalyticsPage() {
             ) : (
               <div className="overflow-x-auto -mx-2">
                 <table className="w-full text-sm">
-                  <thead className="text-xs uppercase text-muted-foreground border-b border-white/10">
+                  <thead className="text-xs uppercase text-muted-foreground border-b border-border">
                     <tr>
                       <th className="px-3 py-2.5 text-left font-semibold">Провайдер</th>
                       <th className="px-3 py-2.5 text-right font-semibold">Всего</th>
@@ -304,9 +290,9 @@ export function AdminBusinessAnalyticsPage() {
                       <th className="px-3 py-2.5 text-right font-semibold">Ø чек</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className="divide-y divide-border">
                     {data.providers.map((p) => (
-                      <tr key={p.provider} className="hover:bg-white/5 transition-colors">
+                      <tr key={p.provider} className="hover:bg-card transition-colors">
                         <td className="px-3 py-3 font-medium">{p.provider}</td>
                         <td className="px-3 py-3 text-right tabular-nums">{fmtNum(p.total)}</td>
                         <td className="px-3 py-3 text-right tabular-nums text-emerald-500">{fmtNum(p.paid)}</td>
@@ -370,24 +356,24 @@ function KpiCard({
   accent: "primary" | "emerald" | "cyan" | "violet" | "amber" | "rose";
 }) {
   const accentColors: Record<typeof accent, { iconBg: string; iconText: string }> = {
-    primary: { iconBg: "from-primary/20 to-primary/5", iconText: "text-primary" },
-    emerald: { iconBg: "from-emerald-500/20 to-emerald-500/5", iconText: "text-emerald-500" },
-    cyan: { iconBg: "from-cyan-500/20 to-cyan-500/5", iconText: "text-cyan-500" },
-    violet: { iconBg: "from-violet-500/20 to-violet-500/5", iconText: "text-violet-500" },
-    amber: { iconBg: "from-amber-500/20 to-amber-500/5", iconText: "text-amber-500" },
-    rose: { iconBg: "from-rose-500/20 to-rose-500/5", iconText: "text-rose-500" },
+    primary: { iconBg: "bg-muted", iconText: "text-primary" },
+    emerald: { iconBg: "bg-muted", iconText: "text-emerald-500" },
+    cyan: { iconBg: "bg-muted", iconText: "text-cyan-500" },
+    violet: { iconBg: "bg-muted", iconText: "text-violet-500" },
+    amber: { iconBg: "bg-muted", iconText: "text-amber-500" },
+    rose: { iconBg: "bg-muted", iconText: "text-rose-500" },
   };
   const a = accentColors[accent];
   return (
-    <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[1.5rem] p-4 shadow-xl">
+    <Card className="relative overflow-hidden bg-card border-border rounded-[1.5rem] p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground truncate">{label}</p>
-          <div className="mt-2 text-2xl font-bold tracking-tight tabular-nums text-foreground">{value}</div>
+          <div className="mt-2 text-[13.5px] font-bold tracking-tight tabular-nums text-foreground">{value}</div>
           <p className="mt-1 text-[10px] text-muted-foreground/80">{sub}</p>
         </div>
         <div className={cn(
-          "h-9 w-9 rounded-xl bg-gradient-to-br border border-white/10 flex items-center justify-center shadow-inner shrink-0",
+          "h-9 w-9 rounded-xl  border border-border flex items-center justify-center shrink-0",
           a.iconBg,
         )}>
           <Icon className={cn("h-4 w-4", a.iconText)} />
@@ -399,7 +385,7 @@ function KpiCard({
 
 function CohortTableRow({ c }: { c: CohortRow }) {
   return (
-    <tr className="hover:bg-white/5 transition-colors">
+    <tr className="hover:bg-card transition-colors">
       <td className="px-4 py-2.5 font-mono text-xs text-foreground">{c.weekStart}</td>
       <td className="px-4 py-2.5 text-right tabular-nums font-medium">{c.cohortSize}</td>
       {c.retention.map((r) => (

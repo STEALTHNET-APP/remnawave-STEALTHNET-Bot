@@ -57,11 +57,11 @@ export function MarketplaceMyListingsPage() {
       {error && <BannerCard tone="danger">{error}</BannerCard>}
 
       {loading ? (
-        <Card className="p-6 text-sm text-muted-foreground animate-pulse">…</Card>
+        <Card className="p-4 text-sm text-muted-foreground animate-pulse">…</Card>
       ) : items.length === 0 ? (
         <Card className="p-12 text-center space-y-3">
           <Upload className="h-12 w-12 mx-auto text-muted-foreground/40" />
-          <h3 className="text-lg font-semibold">{t("admin.marketplace.browse.empty_subtitle")}</h3>
+          <h3 className="text-[13.5px] font-bold">{t("admin.marketplace.browse.empty_subtitle")}</h3>
           <Button asChild>
             <Link to="/admin/marketplace/my/new">
               <Plus className="h-3.5 w-3.5" />
