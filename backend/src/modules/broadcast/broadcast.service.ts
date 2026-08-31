@@ -136,9 +136,23 @@ export async function sendDirectEmail(to: string, subject: string | undefined, m
   return send.ok ? { ok: true } : { ok: false, error: send.error };
 }
 
+// Telegram sendPhoto принимает только растровые форматы. SVG, HEIC/HEIF, TIFF и
+// иконки он отвергает с «Bad Request: IMAGE_PROCESS_FAILED», причём на КАЖДОГО
+// получателя — рассылка уходит в ноль отправленных и выглядит как «ничего не
+// работает». Такие вложения шлём документом: картинкой в ленте не станет, зато
+// дойдёт до человека. mime может нести параметры («image/svg+xml; charset=…»),
+// поэтому сверяем только тип до точки с запятой.
+const TELEGRAM_NON_PHOTO_IMAGE =
+  /^image\/(svg\+xml|svg|heic|heif|heic-sequence|heif-sequence|tiff|x-tiff|x-icon|vnd\.microsoft\.icon)$/i;
+
+function isTelegramPhoto(mimetype: string | undefined): boolean {
+  if (!mimetype?.startsWith("image/")) return false;
+  return !TELEGRAM_NON_PHOTO_IMAGE.test(mimetype.split(";")[0].trim());
+}
+
 // Одноразовая подготовка media-параметров (тип + probe видео + thumbnail) перед отправкой.
 function prepareMedia(att: BroadcastAttachment | undefined) {
-  const isImage = att?.mimetype?.startsWith("image/") ?? false;
+  const isImage = isTelegramPhoto(att?.mimetype);
   const isVideo = att?.mimetype?.startsWith("video/") ?? false;
   const videoMeta = isVideo && att ? probeVideoMetaSync(att.buffer, att.originalname) : {};
   const videoThumb = isVideo && att ? generateVideoThumbnail(att.buffer, att.originalname) : null;
@@ -669,7 +683,7 @@ export async function runBroadcast(options: {
   const config = await getSystemConfig();
   const doTelegram = channel === "telegram" || channel === "both";
   const doEmail = channel === "email" || channel === "both";
-  const isImage = attachment?.mimetype?.startsWith("image/") ?? false;
+  const isImage = isTelegramPhoto(attachment?.mimetype);
   // 25.05.2026, WolfVPN — добавили ветку video/* → sendVideo (нативный плеер
   // с превью в Telegram, в отличие от sendDocument где видео — просто файл).
   const isVideo = attachment?.mimetype?.startsWith("video/") ?? false;
@@ -1000,6 +1014,11 @@ export async function startBroadcastJob(options: {
  * 25.05.2026, WolfVPN — статус ТЕПЕРЬ читается из DB, а не из in-memory map
  * (рассылка теперь в отдельном worker-процессе, in-memory map api не виден).
  */
+/** терминальный статус — работа окончена, итог больше не изменится */
+function isTerminalBroadcastStatus(status: string): boolean {
+  return status === "completed" || status === "cancelled" || status === "error";
+}
+
 export async function getBroadcastJob(jobId: string): Promise<BroadcastJob | null> {
   const row = await prisma.broadcastHistory.findUnique({ where: { id: jobId } });
   if (!row) return null;
@@ -1017,6 +1036,23 @@ export async function getBroadcastJob(jobId: string): Promise<BroadcastJob | nul
       failedTelegram: row.failedTelegram,
       failedEmail: row.failedEmail,
     },
+    // Итог отдаём, когда статус терминальный. При переезде задач из памяти в БД
+    // это поле перестали заполнять, а фронт ждёт именно его: условие выхода из
+    // опроса — `status === "completed" && result`. Без result опрос крутился до
+    // 30-минутного дедлайна по запросу каждые 1.5 с — ~1200 запросов на одну
+    // рассылку при общем лимите 1500/15 мин. Пара рассылок клала всю админку в
+    // 429, вплоть до невозможности войти.
+    result: isTerminalBroadcastStatus(row.status)
+      ? {
+          ok: row.status === "completed",
+          sentTelegram: row.sentTelegram,
+          sentEmail: row.sentEmail,
+          failedTelegram: row.failedTelegram,
+          failedEmail: row.failedEmail,
+          errors: Array.isArray(row.errors) ? (row.errors as string[]) : [],
+          ...(row.status === "cancelled" ? { cancelled: true } : {}),
+        }
+      : undefined,
     cancelRequested: row.cancelRequested,
   };
 }

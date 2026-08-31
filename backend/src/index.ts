@@ -16,6 +16,7 @@ import { startAutoRenewScheduler } from "./modules/payment/auto-renew.cron.js";
 import { startAutoBackupScheduler, stopAutoBackupScheduler } from "./modules/backup/auto-backup.scheduler.js";
 import { startGiftExpiryCron } from "./modules/gift/gift-expiry.cron.js";
 import { startMarketplaceScheduler, stopMarketplaceScheduler } from "./modules/marketplace/marketplace.scheduler.js";
+import { startBroadcastStaleScheduler, stopBroadcastStaleScheduler } from "./modules/broadcast/broadcast-stale.scheduler.js";
 import { ensureTheme, seedDefaultsToEmptyBlocks } from "./modules/landing/landing.service.js";
 import { migrateLandingToBlocks } from "./scripts/migrate-landing-to-blocks.js";
 import { migrateRemnaIds } from "./scripts/migrate-remna-ids.js";
@@ -67,6 +68,7 @@ async function main() {
   // TG-юзерам для запуска онбординга (см. /telegram-login-check, /register). Крон бы их стирал.
   await startAutoBackupScheduler();
   startMarketplaceScheduler();
+  startBroadcastStaleScheduler();
 
   // Регистрация cron-задач в реестре для UI /admin/diagnostics → Cron monitor.
   // Имена/cron-выражения зашиты — должны соответствовать defaults в каждом scheduler.
@@ -90,6 +92,7 @@ async function main() {
 
   const shutdown = async () => {
     stopAutoBroadcastScheduler();
+    stopBroadcastStaleScheduler();
     stopContestDailyReminderScheduler();
     stopAutoBackupScheduler();
     stopMarketplaceScheduler();

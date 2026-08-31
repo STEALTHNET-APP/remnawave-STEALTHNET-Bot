@@ -191,6 +191,9 @@ export function ExtendSubscriptionDialog({
         url = r.miniAppPayUrl ?? r.webAppPayUrl ?? r.payUrl; paymentId = r.paymentId; providerLabel = "Crypto Bot";
       } else if (providerId === "heleket") {
         const r = await api.heleketCreatePayment(token, payBase);
+        url = r.payUrl;
+      } else if (providerId === "rollypay") {
+        const r = await api.rollypayCreatePayment(token, payBase);
         url = r.payUrl; paymentId = r.paymentId; providerLabel = "Heleket";
       } else if (providerId === "lava") {
         const r = await api.lavaCreatePayment(token, payBase);
@@ -220,6 +223,7 @@ export function ExtendSubscriptionDialog({
     const flags: { id: string; enabled: boolean; fb: string }[] = [
       { id: "cryptopay", enabled: Boolean(config.cryptopayEnabled), fb: "Crypto Bot" },
       { id: "heleket", enabled: Boolean(config.heleketEnabled), fb: "Heleket" },
+      { id: "rollypay", enabled: Boolean(config.rollypayEnabled), fb: "RollyPay" },
       { id: "yookassa", enabled: Boolean(config.yookassaEnabled) && isRub, fb: "СБП / Карты РФ" },
       { id: "yoomoney", enabled: Boolean(config.yoomoneyEnabled) && isRub, fb: "ЮMoney" },
       { id: "lava", enabled: Boolean(config.lavaEnabled) && isRub, fb: "LAVA" },

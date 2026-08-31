@@ -49,6 +49,7 @@ type PayMethod =
   | { kind: "yoomoney"; label: string; icon: typeof Wallet }
   | { kind: "cryptopay"; label: string; icon: typeof Bitcoin }
   | { kind: "heleket"; label: string; icon: typeof Bitcoin }
+  | { kind: "rollypay"; label: string; icon: typeof Wallet }
   | { kind: "lava"; label: string; icon: typeof Wallet }
   | { kind: "balance"; label: string; icon: typeof Wallet };
 
@@ -249,6 +250,7 @@ export function AuroraTariffs() {
     if (config.yoomoneyEnabled) list.push({ kind: "yoomoney", label: "YooMoney", icon: Wallet });
     if (config.cryptopayEnabled) list.push({ kind: "cryptopay", label: "Crypto Pay", icon: Bitcoin });
     if (config.heleketEnabled) list.push({ kind: "heleket", label: "Heleket", icon: Bitcoin });
+    if ((config as { rollypayEnabled?: boolean }).rollypayEnabled) list.push({ kind: "rollypay", label: "RollyPay", icon: Wallet });
     if (config.lavaEnabled) list.push({ kind: "lava", label: "Lava", icon: Wallet });
     return list;
   }, [config]);
@@ -419,6 +421,9 @@ export function AuroraTariffs() {
         url = r.miniAppPayUrl ?? r.webAppPayUrl ?? r.payUrl;
       } else if (selectedMethod.kind === "heleket") {
         const r = await api.heleketCreatePayment(state.token, base);
+        url = r.payUrl;
+      } else if (selectedMethod.kind === "rollypay") {
+        const r = await api.rollypayCreatePayment(state.token, base);
         url = r.payUrl;
       } else if (selectedMethod.kind === "lava") {
         const r = await api.lavaCreatePayment(state.token, base);

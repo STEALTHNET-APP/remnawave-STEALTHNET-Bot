@@ -325,7 +325,12 @@ obtain_ssl() {
   # с тем что положили, значит challenge будет доступен Lets Encrypt.
   TEST_TOKEN="install-test-$(date +%s)-$$"
   TEST_NAME="install-test-$(date +%s)"
-  docker compose --profile builtin-nginx exec -T nginx sh -c "mkdir -p /var/www/certbot/.well-known/acme-challenge/ && echo '$TEST_TOKEN' > /var/www/certbot/.well-known/acme-challenge/$TEST_NAME" 2>/dev/null || true
+  # Токен пишем контейнером certbot, а НЕ nginx: том certbot_www примонтирован
+  # к nginx как :ro, поэтому запись изнутри падает с "Read-only file system".
+  # Файл не создавался никогда, и проверка ниже на ЛЮБОМ сервере рапортовала
+  # «challenge недоступен извне» — ложная тревога уводила диагностику в сторону.
+  docker compose --profile builtin-nginx run --rm --no-deps --entrypoint sh certbot \
+    -c "mkdir -p /var/www/certbot/.well-known/acme-challenge/ && echo '$TEST_TOKEN' > /var/www/certbot/.well-known/acme-challenge/$TEST_NAME" >/dev/null 2>&1 || true
   info "Внешняя проверка достижимости challenge через allorigins.win..."
   EXT_RESP=$(curl -sf --max-time 15 "https://api.allorigins.win/raw?url=http%3A%2F%2F${DOMAIN}%2F.well-known%2Facme-challenge%2F${TEST_NAME}" 2>/dev/null || echo "")
   if [ "$EXT_RESP" = "$TEST_TOKEN" ]; then
@@ -340,6 +345,9 @@ obtain_ssl() {
     echo "  • Firewall: ufw / iptables / firewalld режет 80"
     echo "  Certbot всё равно попробуется — но скорее всего тоже упадёт."
   fi
+  # прибираем тестовый файл, чтобы он не оседал в webroot от установки к установке
+  docker compose --profile builtin-nginx run --rm --no-deps --entrypoint sh certbot \
+    -c "rm -f /var/www/certbot/.well-known/acme-challenge/$TEST_NAME" >/dev/null 2>&1 || true
 
   # 2. Запускаем certbot — webroot режим (через nginx)
   info "Запуск certbot (webroot)..."
@@ -355,14 +363,20 @@ obtain_ssl() {
     --force-renewal 2>&1 && CERTBOT_OK=1
 
   # ── Fallback: standalone режим если webroot не сработал ──
-  # Например, если nginx не отдаёт challenge файлы по какой-то причине, или
-  # маппинг порта в docker-compose битый — standalone режим certbot biндит
-  # 80 порт прямо в своём контейнере (а наш nginx надо остановить).
+  # Например, если nginx не отдаёт challenge файлы по какой-то причине — certbot
+  # поднимает собственный веб-сервер на 80 (наш nginx для этого останавливаем).
+  #
+  # ⚠️ Порт публикуем ЯВНО через -p 80:80. Раньше здесь стоял --service-ports,
+  # но этот флаг публикует ровно то, что объявлено в секции ports: сервиса, —
+  # а у certbot в docker-compose.yml её нет вовсе. Наружу не пробрасывалось
+  # ничего: certbot слушал 80 только внутри своего сетевого namespace, на хосте
+  # порт оставался пустым, и Lets Encrypt получал connection reset. То есть
+  # fallback не мог сработать ни у кого и лишь маскировал настоящую причину.
   if [ "$CERTBOT_OK" = "0" ]; then
     warn "webroot режим не сработал, пробую --standalone (certbot забиндит 80 сам)..."
     docker compose --profile builtin-nginx stop nginx 2>/dev/null || true
     sleep 2
-    docker compose --profile builtin-nginx run --rm --service-ports --entrypoint certbot certbot \
+    docker compose --profile builtin-nginx run --rm -p 80:80 --entrypoint certbot certbot \
       certonly \
       --standalone \
       --email "$CERTBOT_EMAIL" \

@@ -13,6 +13,7 @@
  */
 
 import { Router } from "express";
+import { getYookassaPaymentStatus } from "../yookassa/yookassa.service.js";
 import { timingSafeEqual } from "node:crypto";
 import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
@@ -115,7 +116,12 @@ async function verifyYookassaWebhookAuth(req: { headers: Record<string, unknown>
 yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
   // ВАЖНО: проверка аутентификации ПЕРЕД любыми DB-операциями.
   const auth = await verifyYookassaWebhookAuth(req);
-  if (!auth.ok) {
+  // Basic Auth у ЮKassa опционален. Если он не настроен — не отвергаем
+  // уведомление (иначе оплаты просто не зачисляются), а проверяем платёж
+  // запросом к самой кассе ниже. Все остальные провалы аутентификации —
+  // это подделка или неверные реквизиты, их отклоняем как прежде.
+  const needsApiConfirmation = !auth.ok && auth.reason === "no_credentials_configured";
+  if (!auth.ok && !needsApiConfirmation) {
     console.warn(`[YooKassa Webhook] Auth failed: ${auth.reason}`);
     res.set("WWW-Authenticate", 'Basic realm="yookassa-webhook"');
     return res.status(401).json({ message: "Unauthorized" });
@@ -142,6 +148,24 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
   if (event !== "payment.succeeded") {
     console.log("[YooKassa Webhook] Ignored event", { event, paymentId });
     return res.status(200).send("OK");
+  }
+
+  // Без Basic Auth телу верить нельзя — спрашиваем статус у самой ЮKassa.
+  if (needsApiConfirmation) {
+    const cfg = await getSystemConfig();
+    const shopId = (cfg as { yookassaShopId?: string | null }).yookassaShopId ?? "";
+    const secretKey = (cfg as { yookassaSecretKey?: string | null }).yookassaSecretKey ?? "";
+    const externalId = body.object?.id ?? "";
+    const confirmed = await getYookassaPaymentStatus(shopId, secretKey, externalId);
+    if (confirmed.status !== "succeeded") {
+      console.warn("[YooKassa Webhook] Не подтверждено кассой — игнорируем", {
+        paymentId,
+        externalId,
+        status: confirmed.status,
+      });
+      return res.status(200).send("OK");
+    }
+    console.log("[YooKassa Webhook] Подтверждено запросом к кассе (Basic Auth не настроен)", { paymentId });
   }
 
   const payment = await prisma.payment.findFirst({

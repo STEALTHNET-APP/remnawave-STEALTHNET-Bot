@@ -272,6 +272,7 @@ function ClassicDashboardPage() {
       searchParams.get("yoomoney_form") === "success" ||
       searchParams.get("yookassa") === "success" ||
       searchParams.get("heleket") === "success" ||
+      searchParams.get("rollypay") === "success" ||
       searchParams.get("lava") === "success" ||
       searchParams.get("lavatop") === "success" ||
       searchParams.get("overpay") === "return";
