@@ -1,4 +1,4 @@
-name: git-cliff
+﻿name: git-cliff
 
 on:
   push:
@@ -19,37 +19,74 @@ jobs:
         with:
           fetch-depth: 0 # Fetch the full commit and tag history.
 
+      - name: Prepare Release Context
+        id: release
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          python3 <<'PY'
+          import os
+          import re
+          import subprocess
+
+          branch = os.environ["BRANCH_NAME"]
+          suffix = "" if branch == "main" else f"-{branch}"
+          exact_tag_pattern = r"^v[0-9]+\.[0-9]+\.[0-9]+$" if branch == "main" else rf"^v[0-9]+\.[0-9]+\.[0-9]+{re.escape(suffix)}$"
+          fallback_tag_pattern = r"^v[0-9]+\.[0-9]+\.[0-9]+$"
+
+          tags = subprocess.check_output(["git", "tag", "--merged", "HEAD", "--list"], text=True).splitlines()
+          matched_tags = [tag for tag in tags if re.fullmatch(exact_tag_pattern, tag)]
+          if not matched_tags and branch != "main":
+              matched_tags = [tag for tag in tags if re.fullmatch(fallback_tag_pattern, tag)]
+
+          def version_key(tag):
+              base = tag[1:]
+              if suffix and base.endswith(suffix):
+                  base = base[: -len(suffix)]
+              return tuple(map(int, base.split(".")))
+
+          previous_tag = max(matched_tags, key=version_key) if matched_tags else ""
+          previous_version = version_key(previous_tag) if previous_tag else (0, 1, 0)
+          log_range = f"{previous_tag}..HEAD" if previous_tag else "HEAD"
+          messages = subprocess.check_output(["git", "log", "--format=%B", log_range], text=True)
+
+          major, minor, patch = previous_version
+          if not previous_tag:
+              next_version = previous_version
+          elif re.search(r"(^|\n)(BREAKING CHANGE:|[A-Za-z]+(\([^)]+\))?!:)", messages):
+              next_version = (major + 1, 0, 0)
+          elif re.search(r"(^|\n)feat(\([^)]+\))?:", messages):
+              next_version = (major, minor + 1, 0)
+          else:
+              next_version = (major, minor, patch + 1)
+
+          version = "v" + ".".join(map(str, next_version)) + suffix
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"version={version}\n")
+              output.write(f"tag_pattern={exact_tag_pattern}\n")
+          PY
+
       - name: Generate Changelog with git-cliff
         id: git-cliff
         uses: orhun/git-cliff-action@v4
         with:
           config: .github/cliff.toml
-          args: --unreleased --bump
+          args: --unreleased --tag ${{ steps.release.outputs.version }} --tag-pattern ${{ steps.release.outputs.tag_pattern }} --use-branch-tags
           github_token: ${{ secrets.GITHUB_TOKEN }}
         env:
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Normalize the generated version into a tag name.
-      - name: Prepare Tag Name
-        id: tag
-        run: |
-          RAW_VER="${{ steps.git-cliff.outputs.version }}"
-          if [[ "$RAW_VER" == v* ]]; then
-            echo "version=$RAW_VER" >> $GITHUB_OUTPUT
-          else
-            echo "version=v$RAW_VER" >> $GITHUB_OUTPUT
-          fi
-
       # Update the existing draft release or create a single new draft via GitHub CLI.
       - name: Create or Update Single Draft Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NEW_TAG: ${{ steps.tag.outputs.version }}
+          NEW_TAG: ${{ steps.release.outputs.version }}
+          BRANCH_NAME: ${{ github.ref_name }}
           CHANGELOG_TEXT: ${{ steps.git-cliff.outputs.content }}
         run: |
           # Save the generated changelog to a temporary notes file.
-          echo "$CHANGELOG_TEXT" > notes.md
+          printf '%s' "$CHANGELOG_TEXT" > notes.md
 
           # Convert direct commit links to PR references when GitHub can map the commit to a PR.
           # Also remove standalone merge commits so the release notes do not duplicate PR entries.
@@ -76,10 +113,38 @@ jobs:
                   cache[sha] = result.stdout.strip() if result.returncode == 0 else ""
               return cache[sha]
 
+          def login_for_commit(sha):
+              # Resolve the GitHub login for a commit author so release notes can link the nickname.
+              cache_key = f"login:{sha}"
+              if cache_key not in cache:
+                  result = subprocess.run(
+                      ["gh", "api", f"repos/{repo}/commits/{sha}", "--jq", ".author.login // .committer.login // empty"],
+                      text=True,
+                      capture_output=True,
+                      check=False,
+                  )
+                  cache[cache_key] = result.stdout.strip() if result.returncode == 0 else ""
+              return cache[cache_key]
+
+          def replace_commit_author(match):
+              # Add a plain GitHub mention when git-cliff did not emit one.
+              login = login_for_commit(match.group("sha"))
+              if not login:
+                  return match.group(0)
+              mention = match.group("linked_mention") or match.group("plain_mention") or login
+              return f"{match.group('prefix')} @{mention.lstrip('@')}"
+
           def replace_commit_link(match):
               # Replace a commit link with (#PR) only when GitHub returns an associated PR.
               number = pr_number(match.group("sha"))
               return f"(#{number})" if number else match.group(0)
+
+                                        # Add commit authors before the commit hash link is rewritten to a PR reference.
+          text = re.sub(
+              r"(?P<prefix>\(\[`(?P<short>[0-9a-f]{7})`\]\(https://github\.com/[^/]+/[^/]+/commit/(?P<sha>[0-9a-f]{40})\)\))(?: (?:\[@(?P<linked_mention>[^\]]+)\]\(https://github\.com/[^)]+\)|(?P<plain_mention>@[^\s]+)))?",
+              replace_commit_author,
+              text,
+          )
 
           # Replace git-cliff commit links with PR references for commits associated with PRs.
           text = re.sub(
@@ -91,11 +156,47 @@ jobs:
           # Remove empty changelog sections left after filtering merge commits.
           text = re.sub(r"(?ms)^## [^\n]+\n(?:\s*\n)*(?=(?:## |---|\Z))", "", text)
 
+          # Normalize release-note spacing around sections and the changelog footer.
+          lines = [line.strip() for line in text.splitlines() if line.strip()]
+          rebuilt = []
+          for line in lines:
+              if line.startswith("## "):
+                  if rebuilt:
+                      rebuilt.append("")
+                  rebuilt.extend([line, ""])
+              elif line == "---":
+                  if rebuilt and rebuilt[-1] != "":
+                      rebuilt.append("")
+                  rebuilt.extend([line, ""])
+              elif line.startswith("**Full Changelog**"):
+                  rebuilt.append(line)
+              else:
+                  rebuilt.append(line)
+
+          text = "\n".join(rebuilt).strip()
+          text = re.sub(r"\n{3,}", "\n\n", text)
           notes.write_text(text + "\n")
           PY
 
-          # Find the tag name of the currently open draft release.
-          DRAFT_TAG=$(gh api repos/${{ github.repository }}/releases --jq '.[] | select(.draft == true) | .tag_name' | head -n 1)
+          # Find the tag name of the currently open draft release for this branch.
+          DRAFT_TAG=""
+          while IFS= read -r tag; do
+            case "$BRANCH_NAME" in
+              main)
+                if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                  DRAFT_TAG="$tag"
+                  break
+                fi
+                ;;
+              *)
+                if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-${BRANCH_NAME}$ ]]; then
+                  DRAFT_TAG="$tag"
+                  break
+                fi
+                ;;
+            esac
+          done < <(gh api repos/${{ github.repository }}/releases --jq '.[] | select(.draft == true) | .tag_name')
+
 
           if [ -n "$DRAFT_TAG" ]; then
             echo "Updating existing draft ($DRAFT_TAG) -> rewriting/renaming to $NEW_TAG..."
