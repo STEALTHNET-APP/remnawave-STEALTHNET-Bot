@@ -247,13 +247,18 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
                   <span className="text-muted-foreground">ID Remna</span>
                   <span className="font-mono text-xs">{remnaUser.id ?? "—"}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">UUID</span>
-                  <span className="flex items-center gap-1">
-                    <code className="text-[10px]">{remnaUser.uuid.slice(0, 12)}…</code>
-                    <CopyButton text={remnaUser.uuid} />
-                  </span>
-                </div>
+                {/* В Remnawave 3.x поля uuid нет — пользователь адресуется
+                    числовым id (он показан строкой выше). Строку не рисуем,
+                    иначе обращение к undefined роняло всю панель. */}
+                {remnaUser.uuid && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">UUID</span>
+                    <span className="flex items-center gap-1">
+                      <code className="text-[10px]">{remnaUser.uuid.slice(0, 12)}…</code>
+                      <CopyButton text={remnaUser.uuid} />
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Трафик</span>
                   <span>
@@ -389,7 +394,7 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
                         : "bg-muted border-transparent text-muted-foreground"
                     )}
                   >
-                    <span className="font-medium">{s.name || s.uuid.slice(0, 8)}</span>
+                    <span className="font-medium">{s.name || String(s.uuid ?? "").slice(0, 8) || "—"}</span>
                     {inSquad ? (
                       <Button
                         variant="ghost"

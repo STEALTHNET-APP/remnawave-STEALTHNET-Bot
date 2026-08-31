@@ -1506,7 +1506,7 @@ export function RemnaNodesPage() {
                   {(selectedProfile.inbounds ?? []).map((ib) => (
                     <label key={ib.uuid} className="flex items-center gap-2 cursor-pointer rounded-lg px-2 py-1.5 hover:bg-foreground/5">
                       <input type="checkbox" className="rounded accent-primary" checked={form.activeInbounds.includes(ib.uuid)} onChange={() => toggleInbound(ib.uuid)} />
-                      <span className="text-sm font-mono">{ib.tag ?? ib.uuid.slice(0, 8)}</span>
+                      <span className="text-sm font-mono">{ib.tag ?? String(ib.uuid ?? "").slice(0, 8)}</span>
                       {ib.type && <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">{ib.type}{ib.port ? ` :${ib.port}` : ""}</span>}
                     </label>
                   ))}

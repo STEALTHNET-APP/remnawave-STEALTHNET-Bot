@@ -18,6 +18,7 @@ import { startGiftExpiryCron } from "./modules/gift/gift-expiry.cron.js";
 import { startMarketplaceScheduler, stopMarketplaceScheduler } from "./modules/marketplace/marketplace.scheduler.js";
 import { ensureTheme, seedDefaultsToEmptyBlocks } from "./modules/landing/landing.service.js";
 import { migrateLandingToBlocks } from "./scripts/migrate-landing-to-blocks.js";
+import { migrateRemnaIds } from "./scripts/migrate-remna-ids.js";
 import { registerCron } from "./modules/diagnostics/cron-registry.js";
 import { runContestDailyReminder } from "./modules/contest/contest-daily-reminder.service.js";
 
@@ -43,6 +44,18 @@ async function main() {
     }
   } catch (e) {
     console.error("[landing-editor] seedDefaultsToEmptyBlocks failed:", e);
+  }
+
+  try {
+    const result = await migrateRemnaIds();
+    if (result.ran) {
+      console.log(
+        `[remna-ids] Remnawave 3.x: перепривязано ${result.fixed}/${result.scanned} подписок` +
+          (result.unresolved > 0 ? `, не сопоставлено ${result.unresolved} — разобрать вручную` : ""),
+      );
+    }
+  } catch (e) {
+    console.error("[remna-ids] migrateRemnaIds failed:", e);
   }
 
   await startAutoBroadcastScheduler();

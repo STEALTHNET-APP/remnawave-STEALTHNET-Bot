@@ -16,7 +16,7 @@
 
 ---
 
-<h1 align="center">STEALTHNET 3.0</h1>
+<h1 align="center">STEALTHNET 6.1.1</h1>
 
 <p align="center">
   <img src="https://img.shields.io/badge/STEALTHNET-3.0-blueviolet?style=for-the-badge&logoColor=white" alt="STEALTHNET 3.0" />
@@ -72,7 +72,7 @@
 apt install git -y
 curl -fsSL https://get.docker.com | sh
 cd /opt
-git clone https://github.com/systemmaster1200-eng/remnawave-STEALTHNET-Bot.git
+git clone https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git
 cd remnawave-STEALTHNET-Bot
 bash install.sh
 ```

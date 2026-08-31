@@ -322,7 +322,22 @@ async function request<T>(
   return data as T;
 }
 
+/** Что умеет подключённая Remnawave: в 3.x часть разделов API вырезана. */
+export interface RemnaCapabilities {
+  /** 2 | 3 | null — null означает «не удалось определить» */
+  major: 2 | 3 | null;
+  /** /api/ip-control/* — гео-карта, сброс соединений */
+  ipControl: boolean;
+  /** ссылки happ:// через /api/system/tools/happ/encrypt */
+  happCrypt: boolean;
+  realtimeBandwidth: boolean;
+}
+
 export const api = {
+  /** Возможности подключённой Remnawave (бэкенд кэширует на 10 минут). */
+  async getRemnaCapabilities(token: string): Promise<RemnaCapabilities> {
+    return request("/admin/remna/capabilities", { token });
+  },
   async login(email: string, password: string): Promise<LoginResponse | AdminAuthRequires2FA> {
     return request<LoginResponse | AdminAuthRequires2FA>("/auth/login", {
       method: "POST",

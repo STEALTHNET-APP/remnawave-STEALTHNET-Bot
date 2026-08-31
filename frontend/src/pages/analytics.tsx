@@ -693,7 +693,10 @@ function aggregateByWeek(series: { date: string; value: number }[]): { label: st
   for (let i = 0; i < series.length; i++) {
     if (i % 7 === 0) {
       if (i > 0) weeks.push({ label: weekStart, value: weekSum });
-      weekStart = series[i].date.slice(5);
+      // дырка в ряду (бэк может не прислать точку за день) роняла всю страницу:
+      // «Cannot read properties of undefined (reading 'slice')». Соседний
+      // aggregateByWeekTwo уже защищён — приводим к тому же виду.
+      weekStart = (series[i]?.date ?? "").slice(5);
       weekSum = 0;
     }
     weekSum += series[i].value;
