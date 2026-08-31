@@ -74,14 +74,11 @@ export function AdminBotConversationsPage() {
 
   return (
     <div className="w-full space-y-4 px-4 sm:px-6 md:px-8 pt-6 pb-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <MessageSquare className="h-6 w-6 text-primary" />
-          </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between !bg-transparent !border-0 ! !shadow-none">
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">Активность клиентов</h1>
-            <p className="text-sm text-muted-foreground mt-1">Timeline всех событий по клиенту: оплаты, рассылки, тикеты, действия админа</p>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Активность клиентов</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Timeline всех событий по клиенту: оплаты, рассылки, тикеты, действия админа</p>
           </div>
         </div>
       </div>
@@ -95,7 +92,7 @@ export function AdminBotConversationsPage() {
 
       <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
         {/* LEFT: list */}
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-3 lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] overflow-y-auto">
+        <Card className="bg-card border-border rounded-xl p-3 lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] overflow-y-auto">
           <div className="flex items-center gap-1 mb-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -124,7 +121,7 @@ export function AdminBotConversationsPage() {
                   className={cn(
                     "w-full text-left rounded-xl p-2.5 transition",
                     c.id === activeId
-                      ? "bg-primary/15 border border-primary/30"
+                      ? "bg-primary/15 border border-border"
                       : "hover:bg-foreground/[0.04] border border-transparent",
                     c.isBlocked && "opacity-60",
                   )}
@@ -157,22 +154,22 @@ export function AdminBotConversationsPage() {
 
         {/* RIGHT: timeline */}
         {!activeId ? (
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-12 text-center">
+          <Card className="bg-card border-border rounded-xl p-12 text-center">
             <MessageSquare className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">Выберите клиента слева чтобы увидеть его активность</p>
           </Card>
         ) : detailLoading ? (
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-12 flex justify-center">
+          <Card className="bg-card border-border rounded-xl p-12 flex justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </Card>
         ) : detail ? (
           <div className="space-y-3">
             {/* Client summary */}
-            <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-4">
+            <Card className="bg-card border-border rounded-xl p-4">
               <div className="grid sm:grid-cols-5 gap-3 text-xs">
                 {Object.entries(detail.stats).map(([k, v]) => (
-                  <div key={k} className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/10 p-2 text-center">
-                    <div className="text-lg font-bold tabular-nums">{v}</div>
+                  <div key={k} className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-border p-2 text-center">
+                    <div className="text-[13.5px] font-bold tabular-nums">{v}</div>
                     <div className="text-[10px] uppercase tracking-widest text-muted-foreground mt-0.5">{k.replace(/([A-Z])/g, " $1").toLowerCase().trim()}</div>
                   </div>
                 ))}
@@ -180,18 +177,18 @@ export function AdminBotConversationsPage() {
             </Card>
 
             {/* Timeline */}
-            <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-4">
+            <Card className="bg-card border-border rounded-xl p-4">
               <h3 className="text-sm font-semibold mb-3">Timeline ({detail.events.length})</h3>
               {detail.events.length === 0 ? (
                 <p className="text-xs text-muted-foreground italic text-center py-4">Событий нет</p>
               ) : (
-                <ol className="relative border-l-2 border-white/10 ml-3 space-y-3">
+                <ol className="relative border-l-2 border-border ml-3 space-y-3">
                   {detail.events.map((e, i) => {
                     const meta = KIND_META[e.kind];
                     const Icon = meta.Icon;
                     return (
                       <li key={i} className="ml-4 pl-3">
-                        <div className={cn("absolute -left-[11px] mt-0.5 h-5 w-5 rounded-full bg-background border-2 border-white/10 flex items-center justify-center", meta.color)}>
+                        <div className={cn("absolute -left-[11px] mt-0.5 h-5 w-5 rounded-full bg-background border-2 border-border flex items-center justify-center", meta.color)}>
                           <Icon className="h-3 w-3" />
                         </div>
                         <div className="text-[10px] text-muted-foreground tabular-nums font-mono">{fmtMsk(e.ts)}</div>

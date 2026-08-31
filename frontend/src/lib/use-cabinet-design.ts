@@ -20,7 +20,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 
-export type CabinetDesign = "classic" | "stealth";
+export type CabinetDesign = "classic" | "stealth" | "aurora";
 
 const CACHE_KEY = "cabinet_design_cache";
 
@@ -44,9 +44,9 @@ function readCache(): DesignCache {
     const v = localStorage.getItem(CACHE_KEY);
     if (!v) return { design: "classic", applyInBrowser: false };
     // Поддерживаем legacy-формат: значение строкой "stealth"|"classic"
-    if (v === "stealth" || v === "classic") return { design: v, applyInBrowser: false };
+    if (v === "stealth" || v === "classic" || v === "aurora") return { design: v, applyInBrowser: false };
     const parsed = JSON.parse(v) as Partial<DesignCache>;
-    const design = parsed.design === "stealth" ? "stealth" : "classic";
+    const design: CabinetDesign = parsed.design === "stealth" || parsed.design === "aurora" ? parsed.design : "classic";
     const applyInBrowser = parsed.applyInBrowser === true;
     return { design, applyInBrowser };
   } catch {
@@ -63,7 +63,7 @@ function writeCache(c: DesignCache): void {
  *
  *  ─── Логика ───
  *  Оператор в админке выбирает:
- *    • `cabinetDesign` — какой дизайн использовать (Classic или Stealth)
+ *    • `cabinetDesign` — какой дизайн использовать (Classic / Stealth / Aurora)
  *    • `cabinetDesignApplyInBrowser` — применять ли его и в обычном браузере
  *
  *  Поведение:
@@ -83,7 +83,12 @@ export function useCabinetDesign(): CabinetDesign {
     api.getPublicConfig()
       .then((cfg) => {
         if (!alive) return;
-        const adminDesign = (cfg as { cabinetDesign?: CabinetDesign }).cabinetDesign === "stealth" ? "stealth" : "classic";
+        // ⚠️ Здесь раньше проверялось только "stealth" — любой новый дизайн
+        // (например aurora) молча схлопывался в classic, и переключатель
+        // в админке «не работал». Список должен расширяться вместе с CabinetDesign.
+        const rawDesign = (cfg as { cabinetDesign?: CabinetDesign }).cabinetDesign;
+        const adminDesign: CabinetDesign =
+          rawDesign === "stealth" || rawDesign === "aurora" ? rawDesign : "classic";
         const applyInBrowser = Boolean((cfg as { cabinetDesignApplyInBrowser?: boolean }).cabinetDesignApplyInBrowser);
         writeCache({ design: adminDesign, applyInBrowser });
         const next: CabinetDesign = inMiniapp || applyInBrowser ? adminDesign : "classic";

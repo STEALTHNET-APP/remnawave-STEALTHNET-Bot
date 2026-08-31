@@ -223,7 +223,7 @@ export function RemnaHostsPage() {
   if (loading) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center justify-center gap-4">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center justify-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем хосты…</p>
         </Card>
@@ -234,28 +234,23 @@ export function RemnaHostsPage() {
   if (error) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-teal-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-teal-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Network className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">Хосты</h1>
-            <p className="text-sm text-muted-foreground mt-1">Точки подключения (host-строки) для инбаундов, попадают в подписку клиента.</p>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Хосты</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Точки подключения (host-строки) для инбаундов, попадают в подписку клиента.</p>
           </div>
         </div>
         <Button onClick={openCreate} disabled={profiles.length === 0} className="gap-1.5 rounded-xl">
@@ -267,7 +262,7 @@ export function RemnaHostsPage() {
       {selected.size > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-          className="sticky top-3 z-30 flex items-center gap-2 flex-wrap rounded-2xl border border-primary/30 bg-primary/[0.07] backdrop-blur-2xl px-4 py-2.5 shadow-lg"
+          className="sticky top-3 z-30 flex items-center gap-2 flex-wrap rounded-xl border border-border bg-primary/[0.07] px-4 py-2.5"
         >
           <span className="text-sm font-semibold text-primary inline-flex items-center gap-2">
             <CheckSquare className="h-4 w-4" /> Выбрано: {selected.size}
@@ -291,28 +286,25 @@ export function RemnaHostsPage() {
       {tags.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Тег:</span>
-          <button type="button" onClick={() => setTagFilter(null)} className={cn("rounded-full border px-3 py-1 text-xs font-medium transition-colors", tagFilter === null ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] text-muted-foreground hover:text-foreground")}>Все</button>
+          <button type="button" onClick={() => setTagFilter(null)} className={cn("rounded-full border px-3 py-1 text-xs font-medium transition-colors", tagFilter === null ? "border-border bg-primary/10 text-primary" : "border-border bg-foreground/[0.03] dark:bg-white/[0.02] text-muted-foreground hover:text-foreground")}>Все</button>
           {tags.map((t) => (
-            <button key={t} type="button" onClick={() => setTagFilter(t === tagFilter ? null : t)} className={cn("rounded-full border px-3 py-1 text-xs font-medium transition-colors", tagFilter === t ? "border-primary/40 bg-primary/10 text-primary" : "border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] text-muted-foreground hover:text-foreground")}>{t}</button>
+            <button key={t} type="button" onClick={() => setTagFilter(t === tagFilter ? null : t)} className={cn("rounded-full border px-3 py-1 text-xs font-medium transition-colors", tagFilter === t ? "border-border bg-primary/10 text-primary" : "border-border bg-foreground/[0.03] dark:bg-white/[0.02] text-muted-foreground hover:text-foreground")}>{t}</button>
           ))}
         </div>
       )}
 
       {hosts.length === 0 ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-12 shadow-xl">
+        <Card className="bg-card border-border rounded-2xl p-12">
           <div className="flex flex-col items-center justify-center text-center">
-            <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-              <Network className="h-8 w-8 text-muted-foreground/60" />
-            </div>
-            <h3 className="text-lg font-semibold tracking-tight">Нет хостов</h3>
-            <p className="text-sm text-muted-foreground mt-1">Добавьте первый хост.</p>
+            <h3 className="text-[13.5px] font-bold tracking-tight">Нет хостов</h3>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Добавьте первый хост.</p>
           </div>
         </Card>
       ) : (
         <div className="grid gap-4">
           {(tagFilter ? hosts.filter((h) => (h.tags ?? []).includes(tagFilter)) : hosts).map((h, idx) => (
             <motion.div key={h.uuid} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }} whileHover={{ y: -2 }}>
-              <Card className={cn("bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl transition-colors", selected.has(h.uuid) && "ring-1 ring-primary/40 border-primary/30")}>
+              <Card className={cn("bg-card border-border rounded-2xl p-4 transition-colors", selected.has(h.uuid) && "ring-1 ring-primary/40 border-border")}>
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                   <button type="button" onClick={() => toggleSel(h.uuid)} className="shrink-0 text-muted-foreground hover:text-primary transition-colors" title="Выбрать для массового действия">
                     {selected.has(h.uuid) ? <CheckSquare className="h-5 w-5 text-primary" /> : <Square className="h-5 w-5" />}
@@ -327,12 +319,12 @@ export function RemnaHostsPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                      <code className="font-mono text-xs bg-foreground/[0.04] dark:bg-white/[0.03] border border-white/5 px-2 py-0.5 rounded-md text-foreground">{h.address}{h.port ? `:${h.port}` : ""}</code>
+                      <code className="font-mono text-xs bg-foreground/[0.04] dark:bg-white/[0.03] border border-border px-2 py-0.5 rounded-md text-foreground">{h.address}{h.port ? `:${h.port}` : ""}</code>
                       <span className="text-muted-foreground/40">•</span>
                       <span className="inline-flex items-center gap-1"><Network className="h-3 w-3" /> {inboundTag(h)}</span>
                       {h.sni && (<><span className="text-muted-foreground/40">•</span><span>SNI {h.sni}</span></>)}
                       {(h.tags ?? []).map((t) => (
-                        <button key={t} type="button" onClick={(e) => { e.stopPropagation(); setTagFilter(t); }} className="rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-medium hover:bg-primary/20 transition-colors">#{t}</button>
+                        <button key={t} type="button" onClick={(e) => { e.stopPropagation(); setTagFilter(t); }} className="rounded-full bg-primary/10 text-primary border border-border px-2 py-0.5 text-[10px] font-medium hover:bg-primary/20 transition-colors">#{t}</button>
                       ))}
                     </div>
                   </div>
@@ -352,10 +344,10 @@ export function RemnaHostsPage() {
       )}
 
       <Dialog open={showForm} onOpenChange={(open) => !open && setShowForm(false)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
+              <div className="h-10 w-10 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">
                 {editingUuid ? <Pencil className="h-5 w-5 text-primary" /> : <Plus className="h-5 w-5 text-primary" />}
               </div>
               <div>
@@ -367,23 +359,23 @@ export function RemnaHostsPage() {
           <div className="space-y-4 py-4">
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Название (remark)</Label>
-              <Input value={form.remark} onChange={(e) => setForm((f) => ({ ...f, remark: e.target.value }))} placeholder="🇩🇪 Germany" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+              <Input value={form.remark} onChange={(e) => setForm((f) => ({ ...f, remark: e.target.value }))} placeholder=" Germany" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-1.5 col-span-2">
                 <Label className="text-xs text-muted-foreground">Адрес (домен)</Label>
-                <Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="de1.example.com" className="font-mono rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+                <Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="de1.example.com" className="font-mono rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
               </div>
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Порт (из инбаунда)</Label>
-                <Input type="number" value={form.port} onChange={(e) => setForm((f) => ({ ...f, port: Number(e.target.value) || 0 }))} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+                <Input type="number" value={form.port} onChange={(e) => setForm((f) => ({ ...f, port: Number(e.target.value) || 0 }))} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
               </div>
             </div>
 
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Config-профиль</Label>
               <select
-                className="flex h-10 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 value={form.configProfileUuid}
                 onChange={(e) => onProfileChange(e.target.value)}
               >
@@ -393,7 +385,7 @@ export function RemnaHostsPage() {
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Инбаунд</Label>
               <select
-                className="flex h-10 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 value={form.configProfileInboundUuid}
                 onChange={(e) => onInboundChange(e.target.value)}
               >
@@ -407,16 +399,16 @@ export function RemnaHostsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">SNI</Label>
-                <Input value={form.sni} onChange={(e) => setForm((f) => ({ ...f, sni: e.target.value }))} placeholder="необязательно" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+                <Input value={form.sni} onChange={(e) => setForm((f) => ({ ...f, sni: e.target.value }))} placeholder="необязательно" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
               </div>
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Host</Label>
-                <Input value={form.host} onChange={(e) => setForm((f) => ({ ...f, host: e.target.value }))} placeholder="необязательно" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+                <Input value={form.host} onChange={(e) => setForm((f) => ({ ...f, host: e.target.value }))} placeholder="необязательно" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
               </div>
             </div>
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Path</Label>
-              <Input value={form.path} onChange={(e) => setForm((f) => ({ ...f, path: e.target.value }))} placeholder="необязательно" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+              <Input value={form.path} onChange={(e) => setForm((f) => ({ ...f, path: e.target.value }))} placeholder="необязательно" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
             </div>
 
             <button type="button" onClick={() => setShowAdvanced((s) => !s)} className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1">
@@ -424,17 +416,17 @@ export function RemnaHostsPage() {
               <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showAdvanced && "rotate-180")} />
             </button>
             {showAdvanced && (
-              <div className="space-y-4 rounded-2xl border border-white/10 bg-foreground/[0.02] p-3">
+              <div className="space-y-4 rounded-xl border border-border bg-foreground/[0.02] p-3">
                 <div className="grid gap-1.5">
                   <Label className="text-xs text-muted-foreground">Теги (через запятую)</Label>
-                  <Input value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value.toUpperCase() }))} placeholder="PREMIUM, EU" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
-                  <span className="text-[11px] text-muted-foreground">Только A–Z, 0–9, «_» и «:» (нижний регистр авто-конвертируется).</span>
+                  <Input value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value.toUpperCase() }))} placeholder="PREMIUM, EU" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">Только A–Z, 0–9, «_» и «:» (нижний регистр авто-конвертируется).</span>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-1.5">
                     <Label className="text-xs text-muted-foreground">Security Layer</Label>
                     <select
-                      className="flex h-10 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      className="flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                       value={form.security}
                       onChange={(e) => setForm((f) => ({ ...f, security: e.target.value }))}
                     >
@@ -446,7 +438,7 @@ export function RemnaHostsPage() {
                   <div className="grid gap-1.5">
                     <Label className="text-xs text-muted-foreground">Отпечаток (fingerprint)</Label>
                     <select
-                      className="flex h-10 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      className="flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                       value={form.fingerprint}
                       onChange={(e) => setForm((f) => ({ ...f, fingerprint: e.target.value }))}
                     >
@@ -458,7 +450,7 @@ export function RemnaHostsPage() {
                 <div className="grid gap-1.5">
                   <Label className="text-xs text-muted-foreground">ALPN</Label>
                   <select
-                    className="flex h-10 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    className="flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     value={form.alpn}
                     onChange={(e) => setForm((f) => ({ ...f, alpn: e.target.value }))}
                   >
@@ -471,7 +463,7 @@ export function RemnaHostsPage() {
 
             <label className={cn(
               "flex items-center gap-2 cursor-pointer rounded-xl border px-3 py-2.5 transition-colors",
-              form.isDisabled ? "border-zinc-500/30 bg-zinc-500/5" : "border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02]"
+              form.isDisabled ? "border-zinc-500/30 bg-zinc-500/5" : "border-border bg-foreground/[0.03] dark:bg-white/[0.02]"
             )}>
               <input type="checkbox" checked={form.isDisabled} onChange={(e) => setForm((f) => ({ ...f, isDisabled: e.target.checked }))} className="rounded accent-zinc-500" />
               <Power className="h-4 w-4 text-muted-foreground" />

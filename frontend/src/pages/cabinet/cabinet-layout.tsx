@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { DashboardTour } from "@/components/tour/dashboard-tour";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthLayout } from "@/pages/cabinet/stealth/stealth-layout";
+import { AuroraLayout } from "@/pages/cabinet/aurora/aurora-layout";
 
 function formatMoney(amount: number, currency: string) {
   return new Intl.NumberFormat("ru-RU", {
@@ -448,7 +449,7 @@ function MobileCabinetShell() {
   const logo = config?.logo && !logoError ? config.logo : null;
 
   return (
-    <div className="min-h-svh flex flex-col bg-transparent min-w-0 overflow-x-hidden pb-36 relative">
+    <div className="tg-fs-pad min-h-svh flex flex-col bg-transparent min-w-0 overflow-x-hidden pb-36 relative">
       <FloatingChat />
       <header className="sticky top-0 z-50 border-b border-border shrink-0 transition-all duration-300" style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="absolute inset-0 bg-card/40 backdrop-blur-xl -z-10 pointer-events-none" />
@@ -604,7 +605,7 @@ function CabinetShell() {
   }
 
   return (
-    <div className="min-h-svh flex flex-col bg-transparent">
+    <div className="tg-fs-pad min-h-svh flex flex-col bg-transparent">
       <FloatingChat />
       {/* левитирующая glass-капсула: отступ сверху, скруглённые
           края, контейнер шире (100rem против прежних 80rem) — лого уезжает левее,
@@ -742,6 +743,13 @@ export function CabinetLayout() {
   // не оформлен (Phase 2/3).
   if (design === "stealth" && isLoggedIn && !needs2FA && !isAuthPage) {
     return <StealthLayout />;
+  }
+
+  // Aurora — третий дизайн мини-аппа (светлый, градиентная карточка подписки).
+  // Как и Stealth, применяется только к «внутренним» страницам: экраны входа
+  // и 2FA остаются классическими.
+  if (design === "aurora" && isLoggedIn && !needs2FA && !isAuthPage) {
+    return <AuroraLayout />;
   }
 
   return (

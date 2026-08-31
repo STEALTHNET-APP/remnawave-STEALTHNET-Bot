@@ -66,6 +66,9 @@ services:
       - /etc/ssh:/host-etc/ssh
       - /proc:/host-proc:ro
       - uploads_data:/app/uploads
+      # Бэкапы БД — ОБЯЗАТЕЛЬНО на томе: без него /app/backups живёт
+      # внутри контейнера и стирается при каждой пересборке образа.
+      - backups_data:/app/backups
       # 25.05.2026, WolfVPN — shared с broadcast-worker: api сохраняет файлы рассылок сюда,
       # worker читает.
       - broadcast_attachments:/data/broadcast-attachments
@@ -192,7 +195,23 @@ services:
     networks:
       - stealthnet
 
+  console:
+    build: ./console
+    image: stealthnet-console
+    container_name: stealthnet-console
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      API_URL: "http://127.0.0.1:5000"
+      INTERNAL_KEY: "${JWT_SECRET}"
+      CONSOLE_HOSTKEY: "/data/host_ed25519"
+    volumes:
+      - console_data:/data
+    depends_on:
+      - api
+
 volumes:
+  backups_data:
   postgres_data:
   frontend_dist:
   uploads_data:
@@ -200,6 +219,7 @@ volumes:
   certbot_certs:
   # 25.05.2026, WolfVPN — shared между api и broadcast-worker.
   broadcast_attachments:
+  console_data:
 
 networks:
   stealthnet:

@@ -36,11 +36,11 @@ export function FaqAccordion({ block }: { block: LandingApiBlock }) {
             return (
               <div
                 key={`${item.q}-${idx}`}
-                className="overflow-hidden rounded-3xl border border-slate-200/70 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur-xl"
+                className="overflow-hidden rounded-xl border border-slate-200/70 dark:border-border bg-card dark:bg-card"
               >
                 <button
                   onClick={() => setOpen(isOpen ? null : idx)}
-                  className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left transition-colors hover:bg-slate-50/60 dark:hover:bg-white/5"
+                  className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left transition-colors hover:bg-slate-50/60 dark:hover:bg-card"
                 >
                   <span className="text-base font-semibold text-slate-950 dark:text-white md:text-lg">{item.q}</span>
                   <motion.span animate={{ rotate: isOpen ? 180 : 0 }} className="shrink-0">

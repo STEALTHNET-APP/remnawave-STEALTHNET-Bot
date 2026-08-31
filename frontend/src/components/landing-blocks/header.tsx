@@ -24,14 +24,14 @@ export function LandingHeader({ serviceName, logoUrl, navItems, loginText, ctaTe
   const accentBg = `linear-gradient(135deg, ${accentTheme.primary}, ${accentTheme.tertiary})`;
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-slate-950/70 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-slate-200/60 dark:border-border bg-card dark:bg-slate-950/70">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-3">
           {logoUrl ? (
             <img src={logoUrl} alt={serviceName} className="h-9 w-9 rounded-xl object-contain" />
           ) : (
             <div
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-base font-black text-white shadow-md"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-base font-black text-white"
               style={{ background: accentBg }}
             >
               {serviceName.slice(0, 1).toUpperCase()}

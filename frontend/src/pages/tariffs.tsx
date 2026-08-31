@@ -15,8 +15,6 @@ import {
   Plus,
   Pencil,
   Trash2,
-  FolderOpen,
-  CreditCard,
   Loader2,
   ChevronDown,
   Check,
@@ -24,7 +22,6 @@ import {
   Layers,
   AlertTriangle,
   Sparkles,
-  Tag,
   X,
   TrendingDown,
   FileSpreadsheet,
@@ -120,8 +117,8 @@ function parsePriceNumber(raw: string): number | null {
   return Number.isFinite(v) ? v : null;
 }
 
-const inputCls = "rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50";
-const selectCls = "flex h-10 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50";
+const inputCls = "rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50";
+const selectCls = "flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50";
 
 function SortableCategoryCard({
   cat,
@@ -159,26 +156,23 @@ function SortableCategoryCard({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden transition-shadow",
-        isDragging && "opacity-90 shadow-2xl z-10"
+        "bg-card border-border rounded-2xl overflow-hidden transition-shadow",
+        isDragging && "opacity-90 z-10"
       )}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-white/5 bg-foreground/[0.02] dark:bg-white/[0.02]">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-border bg-foreground/[0.02] dark:bg-white/[0.02]">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
-            className="h-9 w-9 shrink-0 cursor-grab active:cursor-grabbing rounded-xl bg-foreground/[0.04] dark:bg-white/[0.04] border border-white/10 text-muted-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] flex items-center justify-center transition-colors"
+            className="h-9 w-9 shrink-0 cursor-grab active:cursor-grabbing rounded-xl bg-foreground/[0.04] dark:bg-white/[0.04] border border-border text-muted-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] flex items-center justify-center transition-colors"
             {...attributes}
             {...listeners}
             title="Перетащите для изменения порядка"
           >
             <GripVertical className="h-4 w-4" />
           </button>
-          <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-violet-500/20 to-violet-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-            <FolderOpen className="h-4 w-4 text-violet-500 dark:text-violet-400" />
-          </div>
           <h3 className="text-base font-bold tracking-tight truncate">{cat.name}</h3>
-          <span className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-white/10 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+          <span className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
             {cat.tariffs.length} тарифов
           </span>
         </div>
@@ -205,7 +199,7 @@ function SortableCategoryCard({
       </div>
       <div className="p-4">
         {cat.tariffs.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-foreground/[0.02] dark:bg-white/[0.02] p-6 text-center">
+          <div className="rounded-xl border border-dashed border-border bg-foreground/[0.02] dark:bg-white/[0.02] p-4 text-center">
             <p className="text-sm text-muted-foreground">
               Нет тарифов. Нажмите «Тариф», чтобы добавить (название, срок, сквады, лимиты).
             </p>
@@ -265,30 +259,27 @@ function SortableTariffRow({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] backdrop-blur-md px-4 py-3 hover:border-white/20 hover:-translate-y-px transition-[border-color,transform]",
-        isDragging && "opacity-90 shadow-lg z-10"
+        "flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3 hover:border-border hover:-translate-y-px transition-[border-color,transform]",
+        isDragging && "opacity-90 z-10"
       )}
     >
       <div className="flex items-center gap-3 flex-wrap min-w-0 flex-1">
         <button
           type="button"
-          className="h-8 w-8 shrink-0 cursor-grab active:cursor-grabbing rounded-lg bg-foreground/[0.04] dark:bg-white/[0.04] border border-white/10 text-muted-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] flex items-center justify-center transition-colors"
+          className="h-8 w-8 shrink-0 cursor-grab active:cursor-grabbing rounded-lg bg-foreground/[0.04] dark:bg-white/[0.04] border border-border text-muted-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] flex items-center justify-center transition-colors"
           {...attributes}
           {...listeners}
           title="Перетащите для изменения порядка"
         >
           <GripVertical className="h-3.5 w-3.5" />
         </button>
-        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary/15 to-primary/5 border border-white/10 flex items-center justify-center shrink-0">
-          <CreditCard className="h-4 w-4 text-primary" />
-        </div>
         <span className="font-semibold truncate">{t.name}</span>
         {t.description?.trim() ? (
           <span className="text-muted-foreground text-xs max-w-[200px] truncate" title={t.description}>
             {t.description}
           </span>
         ) : null}
-        <span className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-white/10 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+        <span className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
           {t.durationDays} дн.
         </span>
         <span className="text-sm font-bold text-emerald-500 dark:text-emerald-400">
@@ -329,7 +320,7 @@ function SortableTariffRow({
   );
 }
 
-// ─────────────── Секция устройств (новая модель) ───────────────
+//  Секция устройств (новая модель) 
 // Поля:
 //   includedDevices — сколько входит в базовую цену тарифа
 //   pricePerExtraDevice — цена доп. устройства
@@ -393,11 +384,8 @@ function DeviceSection({
   }, null as { extras: number; perDev: number } | null);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-fuchsia-500/[0.04] via-purple-500/[0.03] to-primary/[0.04] p-4 space-y-4">
+    <div className="rounded-xl border border-border bg-muted p-4 space-y-4">
       <div className="flex items-center gap-2">
-        <div className="h-9 w-9 rounded-xl bg-fuchsia-500/15 text-fuchsia-500 dark:text-fuchsia-400 flex items-center justify-center">
-          <Layers className="h-4 w-4" />
-        </div>
         <div className="flex-1">
           <p className="text-sm font-semibold">Устройства</p>
           <p className="text-[11px] text-muted-foreground">Сколько устройств в комплекте + продажа доп. устройств клиенту</p>
@@ -430,8 +418,8 @@ function DeviceSection({
           className={cn(
             "h-10 w-full rounded-xl border text-xs font-medium transition-all flex items-center justify-center gap-2",
             extraDevicesEnabled
-              ? "bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border-emerald-500/40 text-emerald-500 dark:text-emerald-400"
-              : "bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 text-muted-foreground hover:border-white/20"
+              ? "bg-muted border-emerald-500/40 text-emerald-500 dark:text-emerald-400"
+              : "bg-foreground/[0.03] dark:bg-white/[0.02] border-border text-muted-foreground hover:border-border"
           )}
         >
           <Layers className="h-3.5 w-3.5" />
@@ -481,8 +469,8 @@ function DeviceSection({
               className={cn(
                 "h-10 w-full rounded-xl border text-xs font-medium transition-all flex items-center justify-center gap-2",
                 discountsEnabled
-                  ? "bg-gradient-to-r from-fuchsia-500/20 to-primary/20 border-fuchsia-500/40 text-fuchsia-500 dark:text-fuchsia-400"
-                  : "bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 text-muted-foreground hover:border-white/20"
+                  ? "bg-muted border-fuchsia-500/40 text-fuchsia-500 dark:text-fuchsia-400"
+                  : "bg-foreground/[0.03] dark:bg-white/[0.02] border-border text-muted-foreground hover:border-border"
               )}
             >
               <TrendingDown className="h-3.5 w-3.5" />
@@ -500,7 +488,7 @@ function DeviceSection({
                       key={p.name}
                       type="button"
                       onClick={() => applyPreset(i)}
-                      className="text-[10px] px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.03] hover:bg-foreground/[0.07] dark:hover:bg-white/[0.06] border border-white/10 text-foreground/80 transition-colors"
+                      className="text-[10px] px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.03] hover:bg-foreground/[0.07] dark:hover:bg-white/[0.06] border border-border text-foreground/80 transition-colors"
                     >
                       {p.name}
                     </button>
@@ -508,7 +496,7 @@ function DeviceSection({
                 </div>
               </div>
               {tiers.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/15 p-4 text-center">
+                <div className="rounded-xl border border-dashed border-border p-4 text-center">
                   <p className="text-xs text-muted-foreground">Нет порогов. Добавь первый или выбери пресет.</p>
                 </div>
               ) : (
@@ -516,7 +504,7 @@ function DeviceSection({
                   {tiers.map((t) => (
                     <li
                       key={t.uid}
-                      className="flex items-center gap-2 rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 hover:-translate-y-px transition-transform"
+                      className="flex items-center gap-2 rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 hover:-translate-y-px transition-transform"
                     >
                       <span className="text-xs text-muted-foreground shrink-0">от</span>
                       <Input
@@ -527,7 +515,7 @@ function DeviceSection({
                         onChange={(e) => updateTier(t.uid, { minExtraDevices: Math.max(1, parseInt(e.target.value, 10) || 1) })}
                         className={cn(inputCls, "h-8 w-16 text-center text-sm")}
                       />
-                      <span className="text-xs text-muted-foreground shrink-0">доп. →</span>
+                      <span className="text-xs text-muted-foreground shrink-0">доп. </span>
                       <span className="text-xs text-muted-foreground shrink-0">скидка</span>
                       <Input
                         type="number"
@@ -582,10 +570,10 @@ function DeviceSection({
                 className={cn(
                   "rounded-lg border px-2 py-1.5 text-center transition-colors",
                   p.extras === 0
-                    ? "border-primary/30 bg-primary/10"
+                    ? "border-border bg-primary/10"
                     : p.isTier
                       ? "border-emerald-500/30 bg-emerald-500/10"
-                      : "border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02]",
+                      : "border-border bg-foreground/[0.03] dark:bg-white/[0.02]",
                   bestExtra?.extras === p.extras && p.extras > 0 && "ring-2 ring-fuchsia-500/40"
                 )}
               >
@@ -646,18 +634,18 @@ function SortablePriceOptionRow({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "relative flex items-center gap-2 rounded-xl border bg-foreground/[0.03] dark:bg-white/[0.02] backdrop-blur-md px-2.5 py-2",
+        "relative flex items-center gap-2 rounded-xl border bg-foreground/[0.03] dark:bg-white/[0.02] px-2.5 py-2",
         isBest
-          ? "border-amber-500/40 ring-1 ring-amber-500/20 shadow-[0_0_0_1px_rgba(245,158,11,0.15)]"
+          ? "border-amber-500/40 ring-1 ring-amber-500/20"
           : isDuplicate
             ? "border-amber-500/40"
-            : "border-white/10 hover:border-white/20 hover:-translate-y-px transition-[border-color,transform]",
-        isDragging && "opacity-90 shadow-lg z-10"
+            : "border-border hover:border-border hover:-translate-y-px transition-[border-color,transform]",
+        isDragging && "opacity-90 z-10"
       )}
     >
       <button
         type="button"
-        className="h-8 w-7 shrink-0 cursor-grab active:cursor-grabbing rounded-lg bg-foreground/[0.04] dark:bg-white/[0.04] border border-white/10 text-muted-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] flex items-center justify-center transition-colors"
+        className="h-8 w-7 shrink-0 cursor-grab active:cursor-grabbing rounded-lg bg-foreground/[0.04] dark:bg-white/[0.04] border border-border text-muted-foreground hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06] flex items-center justify-center transition-colors"
         {...attributes}
         {...listeners}
         title="Перетащите для изменения порядка"
@@ -712,7 +700,7 @@ function SortablePriceOptionRow({
         <button
           type="button"
           onClick={onRemove}
-          className="h-8 w-8 shrink-0 rounded-lg bg-foreground/[0.04] dark:bg-white/[0.04] border border-white/10 text-muted-foreground hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/30 flex items-center justify-center transition-colors"
+          className="h-8 w-8 shrink-0 rounded-lg bg-foreground/[0.04] dark:bg-white/[0.04] border border-border text-muted-foreground hover:text-red-500 dark:hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/30 flex items-center justify-center transition-colors"
           title="Удалить опцию"
         >
           <X className="h-3.5 w-3.5" />
@@ -845,10 +833,8 @@ export function TariffsPage() {
 
   if (loading && categories.length === 0) {
     return (
-      <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-        <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-        <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center justify-center gap-3">
+      <div className="flex flex-col gap-3.5 relative">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center justify-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем тарифы…</p>
         </Card>
@@ -857,24 +843,19 @@ export function TariffsPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <CreditCard className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Тарифы
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
               Категории тарифов и тарифы — срок (1–360 дней), сквады, лимиты трафика и устройств
             </p>
           </div>
@@ -902,18 +883,15 @@ export function TariffsPage() {
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400"
+          className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400"
         >
           {error}
         </motion.div>
       )}
 
       {remnaConfigured === false && (
-        <Card className="bg-amber-500/5 backdrop-blur-3xl border-amber-500/30 rounded-[2rem] p-5 shadow-xl">
+        <Card className="bg-amber-500/5 border-amber-500/30 rounded-2xl p-5">
           <div className="flex items-start gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 border border-amber-500/20 flex items-center justify-center shadow-inner shrink-0">
-              <AlertTriangle className="h-5 w-5 text-amber-500 dark:text-amber-400" />
-            </div>
             <div>
               <p className="text-sm font-bold text-amber-500 dark:text-amber-400">Remna API не настроен</p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -925,10 +903,7 @@ export function TariffsPage() {
       )}
 
       {categories.length === 0 && !loading ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-12 shadow-xl flex flex-col items-center text-center">
-          <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-3 border border-white/10">
-            <Layers className="h-8 w-8 text-muted-foreground" />
-          </div>
+        <Card className="bg-card border-border rounded-2xl py-12 flex flex-col items-center text-center">
           <p className="text-muted-foreground mb-4 max-w-md px-6">
             Нет категорий. Создайте категорию тарифов, затем добавьте в неё тарифы (1–360 дней, сквады, лимиты).
           </p>
@@ -1061,12 +1036,9 @@ function CategoryModal({
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem] max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="bg-card border-border rounded-2xl max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-violet-500/20 to-violet-500/5 border border-white/10 flex items-center justify-center shadow-inner">
-              {isEdit ? <Pencil className="h-4 w-4 text-violet-500 dark:text-violet-400" /> : <Sparkles className="h-4 w-4 text-violet-500 dark:text-violet-400" />}
-            </div>
+          <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
             {isEdit ? "Редактировать категорию" : "Новая категория"}
           </DialogTitle>
           <DialogDescription className="sr-only">Форма категории</DialogDescription>
@@ -1092,24 +1064,24 @@ function CategoryModal({
               className={selectCls}
             >
               <option value="">— без эмодзи —</option>
-              <option value="ordinary">ordinary — 📦</option>
-              <option value="premium">premium — ⭐</option>
+              <option value="ordinary">ordinary — </option>
+              <option value="premium">premium — </option>
             </select>
           </div>
           <button
             type="button"
             onClick={() => setSingleMode((v) => !v)}
             className={cn(
-              "w-full text-left rounded-2xl border p-4 transition-all duration-300 group",
+              "w-full text-left rounded-xl border p-4 transition-all duration-300 group",
               singleMode
-                ? "bg-violet-500/10 border-violet-500/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
-                : "bg-white/[0.03] border-white/10 hover:border-white/20",
+                ? "bg-violet-500/10 border-violet-500/30"
+                : "bg-white/[0.03] border-border hover:border-border",
             )}
           >
             <div className="flex items-start gap-3">
               <div className={cn(
                 "mt-0.5 h-5 w-9 rounded-full p-0.5 transition-colors duration-300 shrink-0",
-                singleMode ? "bg-violet-500" : "bg-white/15",
+                singleMode ? "bg-violet-500" : "bg-card",
               )}>
                 <div className={cn(
                   "h-4 w-4 rounded-full bg-white shadow transition-transform duration-300",
@@ -1286,11 +1258,15 @@ function TariffModal({
   };
 
   const selectedSquadsList = squads.filter((s) => selectedSquadUuids.includes(s.uuid));
+  // Сквады, которые записаны в тарифе, но которых уже НЕТ в Remnawave
+  // (типичный случай — переезд на другую панель). Без этого их нельзя было снять:
+  // в списке рисовались только существующие, а счётчик их учитывал.
+  const missingSquadUuids = selectedSquadUuids.filter((u) => !squads.some((s) => s.uuid === u));
   const squadsTriggerLabel =
     selectedSquadUuids.length === 0
       ? "Выберите сквады…"
       : selectedSquadUuids.length === 1
-        ? selectedSquadsList[0]?.name || selectedSquadsList[0]?.uuid || "1 сквад"
+        ? selectedSquadsList[0]?.name || (missingSquadUuids.length === 1 ? "1 удалённый сквад" : "1 сквад")
         : `Выбрано: ${selectedSquadUuids.length}`;
 
   // ——— priceOptions helpers ———
@@ -1502,12 +1478,9 @@ function TariffModal({
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem] max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="bg-card border-border rounded-2xl max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 flex items-center justify-center shadow-inner">
-              {isEdit ? <Pencil className="h-4 w-4 text-primary" /> : <Sparkles className="h-4 w-4 text-primary" />}
-            </div>
+          <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
             {isEdit ? "Редактировать тариф" : "Новый тариф"}
           </DialogTitle>
           <DialogDescription className="sr-only">Форма тарифа</DialogDescription>
@@ -1534,14 +1507,14 @@ function TariffModal({
                 id="tariff-menu-emoji"
                 value={menuEmoji}
                 onChange={(e) => setMenuEmoji(e.target.value.slice(0, 16))}
-                placeholder="🌐"
+                placeholder=""
                 maxLength={16}
                 className={`${inputCls} text-center text-lg`}
               />
             </div>
           </div>
           <p className="text-[10px] text-muted-foreground -mt-2">
-            Эмодзи показывается перед названием подписки в главном меню бота (напр. 🌐 / 🔒 / ♾️🔒). Если пусто — fallback по типу.
+            Эмодзи показывается перед названием подписки в главном меню бота (напр.  /  / ). Если пусто — fallback по типу.
           </p>
           <div className="grid gap-1.5">
             <Label htmlFor="tariff-desc" className="text-xs text-muted-foreground">Описание (необязательно)</Label>
@@ -1552,16 +1525,13 @@ function TariffModal({
               placeholder="Краткое описание тарифа для клиентов"
               rows={3}
               maxLength={5000}
-              className="flex min-h-[80px] w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex min-h-[80px] w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
           {/* Опции цен — множественные варианты длительности */}
-          <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
+          <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="flex items-start gap-2.5 min-w-0">
-                <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 border border-white/10 flex items-center justify-center shrink-0 shadow-inner">
-                  <Tag className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
-                </div>
                 <div className="min-w-0">
                   <p className="text-sm font-bold tracking-tight">Опции цен</p>
                   <p className="text-[11px] text-muted-foreground/80 mt-0.5">
@@ -1619,7 +1589,7 @@ function TariffModal({
                 Продление (extendsSecondarySubId) пропускает проверку — это нормальная операция. */}
             <div className="grid gap-1">
               <Label htmlFor="tariff-purchase-cooldown" className="text-[11px] text-muted-foreground">
-                ⏳ Кулдаун продления (дней) <span className="text-[10px] opacity-60">(пусто или 0 = без ограничения)</span>
+                 Кулдаун продления (дней) <span className="text-[10px] opacity-60">(пусто или 0 = без ограничения)</span>
               </Label>
               <Input
                 id="tariff-purchase-cooldown"
@@ -1633,27 +1603,27 @@ function TariffModal({
                 className={inputCls}
               />
               <p className="text-[10px] text-muted-foreground">
-                Клиент сможет <b>продлевать</b> уже купленную подписку с этим тарифом не чаще раз в N дней. Полезно для дорогих/безлимитных тарифов (например, Unblock безлимит → 10 дней). <b>Новые покупки</b> этого тарифа как отдельных подписок ограничением <b>не блокируются</b>.
+                Клиент сможет <b>продлевать</b> уже купленную подписку с этим тарифом не чаще раз в N дней. Полезно для дорогих/безлимитных тарифов (например, Unblock безлимит  10 дней). <b>Новые покупки</b> этого тарифа как отдельных подписок ограничением <b>не блокируются</b>.
               </p>
             </div>
 
             {/* T11+T12 (11.05.2026) — rich-text список локаций тарифа.
-                Показывается клиенту по кнопке «🌐 Локации» в боте (детали подписки / после триала).
+                Показывается клиенту по кнопке «Локации» в боте (детали подписки / после триала).
                 Если пусто — кнопка «Локации» в боте не появляется. */}
             <div className="grid gap-1">
               <Label htmlFor="tariff-locations" className="text-[11px] text-muted-foreground">
-                🌐 Локации <span className="text-[10px] opacity-60">(rich-text для бота, plain + emoji)</span>
+                 Локации <span className="text-[10px] opacity-60">(rich-text для бота, plain + emoji)</span>
               </Label>
               <textarea
                 id="tariff-locations"
                 value={locations}
                 onChange={(e) => setLocations(e.target.value)}
-                placeholder="✨ В стандартной подписке доступны локации из списка ниже...&#10;&#10;✨ Нидерланды 1 🇳🇱 - Нидерланды&#10;✨ Германия 🇩🇪 - некоторые соцсети могут работать быстрее&#10;..."
+                placeholder=" В стандартной подписке доступны локации из списка ниже...&#10;&#10; Нидерланды 1  - Нидерланды&#10; Германия  - некоторые соцсети могут работать быстрее&#10;..."
                 rows={10}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono whitespace-pre-wrap"
               />
               <p className="text-[10px] text-muted-foreground">
-                Полный текст со списком стран и описаний. Поддерживает переносы строк и эмодзи. Клиент видит этот текст по кнопке «🌐 Локации» в боте. Если пусто — кнопка не показывается.
+                Полный текст со списком стран и описаний. Поддерживает переносы строк и эмодзи. Клиент видит этот текст по кнопке «Локации» в боте. Если пусто — кнопка не показывается.
               </p>
             </div>
 
@@ -1702,7 +1672,7 @@ function TariffModal({
                   size="sm"
                   onClick={() => addPriceOption(days)}
                   disabled={priceOptions.length >= MAX_PRICE_OPTIONS}
-                  className="gap-1 rounded-lg h-7 px-2.5 text-[11px] border-white/10 bg-foreground/[0.04] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06]"
+                  className="gap-1 rounded-lg h-7 px-2.5 text-[11px] border-border bg-foreground/[0.04] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.06]"
                 >
                   <Plus className="h-3 w-3" />
                   {days} {days === 1 ? "день" : days < 5 ? "дня" : "дней"}
@@ -1714,7 +1684,7 @@ function TariffModal({
                 size="sm"
                 onClick={() => addPriceOption(undefined)}
                 disabled={priceOptions.length >= MAX_PRICE_OPTIONS}
-                className="gap-1 rounded-lg h-7 px-2.5 text-[11px] border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary"
+                className="gap-1 rounded-lg h-7 px-2.5 text-[11px] border-border bg-primary/10 hover:bg-primary/20 text-primary"
                 title="Добавить пустую опцию для ручного заполнения"
               >
                 <Plus className="h-3 w-3" />
@@ -1729,15 +1699,26 @@ function TariffModal({
             <Label className="text-xs text-muted-foreground">Сквады (Remna)</Label>
             <p className="text-[11px] text-muted-foreground/80 mb-1.5 mt-1">Один или несколько внутренних сквадов</p>
             {squads.length === 0 ? (
-              <div className="flex h-10 items-center rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 text-sm text-muted-foreground">
-                Список сквадов пуст или Remna не настроен
+              <div className="space-y-1.5">
+                <div className="flex h-10 items-center rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 text-sm text-muted-foreground">
+                  Список сквадов пуст или Remna не настроен
+                </div>
+                {missingSquadUuids.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSquadUuids([])}
+                    className="w-full rounded-lg border border-destructive/40 px-3 py-2 text-left text-[12.5px] text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    В тарифе записаны сквады, которых нет в Remnawave ({missingSquadUuids.length}) — нажмите, чтобы очистить
+                  </button>
+                )}
               </div>
             ) : (
               <>
                 <button
                   type="button"
                   onClick={() => setSquadsOpen((o) => !o)}
-                  className="flex h-10 w-full items-center justify-between rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-left text-sm transition-colors hover:bg-foreground/[0.05] dark:hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-10 w-full items-center justify-between rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-left text-sm transition-colors hover:bg-foreground/[0.05] dark:hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <span className={selectedSquadUuids.length === 0 ? "text-muted-foreground" : ""}>
                     {squadsTriggerLabel}
@@ -1747,8 +1728,25 @@ function TariffModal({
                   />
                 </button>
                 {squadsOpen && (
-                  <div className="absolute z-10 mt-1 w-full rounded-xl border border-white/10 bg-background/95 backdrop-blur-3xl shadow-2xl">
+                  <div className="absolute z-10 mt-1 w-full rounded-xl border border-border bg-card">
                     <div className="max-h-48 overflow-y-auto p-1">
+                      {missingSquadUuids.map((u) => (
+                        <button
+                          key={u}
+                          type="button"
+                          onClick={() => toggleSquad(u)}
+                          title="Этого сквада нет в Remnawave — снимите галочку, иначе клиенты не создадутся"
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-destructive/10 focus:outline-none transition-colors"
+                        >
+                          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border bg-destructive border-destructive text-white">
+                            <Check className="h-3 w-3" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-destructive font-medium truncate">Сквад удалён в Remnawave</span>
+                            <span className="block text-[11px] text-muted-foreground font-mono truncate">{u}</span>
+                          </span>
+                        </button>
+                      ))}
                       {squads.map((s) => {
                         const checked = selectedSquadUuids.includes(s.uuid);
                         return (
@@ -1761,7 +1759,7 @@ function TariffModal({
                             <span
                               className={cn(
                                 "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
-                                checked ? "bg-primary border-primary text-primary-foreground" : "border-white/20"
+                                checked ? "bg-primary border-primary text-primary-foreground" : "border-border"
                               )}
                             >
                               {checked ? <Check className="h-3 w-3" /> : null}
@@ -1805,8 +1803,8 @@ function TariffModal({
               <option value="monthly_rolling">Скользящий месяц</option>
             </select>
             <p className="text-[11px] text-muted-foreground/80">
-              {trafficResetMode === "carry_over" && "Остаток трафика переносится на новый период. Пример: было 90 ГБ, использовано 40 → докупил 90 → станет 0 из 140 ГБ. Счётчик использованного обнуляется."}
-              {trafficResetMode === "no_reset" && "Лимит накапливается, счётчик использованного НЕ сбрасывается. Пример: было 90 ГБ, использовано 40 → докупил 90 → станет 40 из 180 ГБ."}
+              {trafficResetMode === "carry_over" && "Остаток трафика переносится на новый период. Пример: было 90 ГБ, использовано 40  докупил 90  станет 0 из 140 ГБ. Счётчик использованного обнуляется."}
+              {trafficResetMode === "no_reset" && "Лимит накапливается, счётчик использованного НЕ сбрасывается. Пример: было 90 ГБ, использовано 40  докупил 90  станет 40 из 180 ГБ."}
               {trafficResetMode === "on_purchase" && "Трафик обнуляется при каждой покупке/продлении тарифа."}
               {trafficResetMode === "monthly" && "Трафик обнуляется каждый месяц (Remna MONTH). Например: 10 ГБ/мес на 3 месяца."}
               {trafficResetMode === "monthly_rolling" && "Трафик сбрасывается через 30 дней от последнего сброса (Remna MONTH_ROLLING)."}
@@ -1835,7 +1833,7 @@ function TariffModal({
           {/* Legacy lone deviceLimit — оставляем как опциональный override для совместимости */}
           <details className="group">
             <summary className="text-[11px] text-muted-foreground/70 cursor-pointer hover:text-muted-foreground select-none">
-              Старое поле «Жёсткий лимит устройств» (legacy, скрыто) ▾
+              Старое поле «Жёсткий лимит устройств» (legacy, скрыто) 
             </summary>
             <div className="grid gap-1.5 mt-2">
               <Label htmlFor="tariff-devices" className="text-xs text-muted-foreground">Лимит устройств (legacy)</Label>

@@ -239,3 +239,58 @@ export async function runPgRestore(db: DbConnection, sqlBuffer: Buffer): Promise
     await rm(dir, { recursive: true, force: true });
   }
 }
+
+/**
+ * Удаляет бэкапы старше N дней (срок берётся из настройки backup_retention_days,
+ * по умолчанию 30; 0 = хранить вечно). Раньше чистки не было вообще — папка росла
+ * бесконечно, а на сервере с почти полным диском это приводило к отказу записи.
+ * Вызывается после каждого созданного бэкапа (ручного и автоматического).
+ */
+export async function cleanupOldBackups(retentionDays: number): Promise<{ deleted: number; freedBytes: number }> {
+  const result = { deleted: 0, freedBytes: 0 };
+  if (!Number.isFinite(retentionDays) || retentionDays <= 0) return result; // 0 = хранить всё
+  const { readdir, stat, unlink, rmdir } = await import("node:fs/promises");
+  const cutoff = Date.now() - retentionDays * 86_400_000;
+
+  const walk = async (dir: string): Promise<void> => {
+    let entries: string[];
+    try {
+      entries = await readdir(dir);
+    } catch {
+      return; // папки может не быть — это не ошибка
+    }
+    for (const name of entries) {
+      const full = path.join(dir, name);
+      let st;
+      try {
+        st = await stat(full);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) {
+        await walk(full);
+        // подчищаем опустевшие папки дат (YYYY/MM/DD)
+        try {
+          const rest = await readdir(full);
+          if (rest.length === 0) await rmdir(full);
+        } catch {
+          /* не критично */
+        }
+      } else if (name.endsWith(".sql") && st.mtimeMs < cutoff) {
+        try {
+          await unlink(full);
+          result.deleted++;
+          result.freedBytes += st.size;
+        } catch (e) {
+          console.error("[backup] не удалось удалить", full, e);
+        }
+      }
+    }
+  };
+
+  await walk(BACKUPS_DIR);
+  if (result.deleted > 0) {
+    console.log(`[backup] чистка: удалено ${result.deleted} бэкапов старше ${retentionDays} дн., освобождено ${(result.freedBytes / 1048576).toFixed(1)} МБ`);
+  }
+  return result;
+}

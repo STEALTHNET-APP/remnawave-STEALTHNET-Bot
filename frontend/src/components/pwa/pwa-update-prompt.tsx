@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { RefreshCw, X, CheckCircle2 } from "lucide-react";
+import { X, CheckCircle2 } from "lucide-react";
 
 /**
  * Тост «доступно обновление» + разовое «готово к оффлайн-работе».
@@ -52,10 +52,7 @@ export function PwaUpdatePrompt() {
           transition={{ type: "spring", stiffness: 280, damping: 26 }}
           className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-sm z-[9999]"
         >
-          <div className="rounded-2xl border border-white/10 bg-background/80 backdrop-blur-2xl shadow-2xl p-4 flex items-start gap-3">
-            <div className="h-10 w-10 shrink-0 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center">
-              <RefreshCw className="h-5 w-5 text-primary" />
-            </div>
+          <div className="rounded-xl border border-border bg-card p-4 flex items-start gap-3">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">Доступно обновление</p>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -96,7 +93,7 @@ export function PwaUpdatePrompt() {
           transition={{ type: "spring", stiffness: 280, damping: 26 }}
           className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 sm:max-w-xs z-[9999]"
         >
-          <div className="rounded-2xl border border-emerald-500/20 bg-background/80 backdrop-blur-2xl shadow-2xl p-3.5 flex items-center gap-3">
+          <div className="rounded-xl border border-emerald-500/20 bg-card p-3.5 flex items-center gap-3">
             <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
             <p className="text-sm">Приложение готово к работе офлайн</p>
           </div>

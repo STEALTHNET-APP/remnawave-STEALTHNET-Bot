@@ -6,6 +6,8 @@ import rateLimit from "express-rate-limit";
 import { env } from "./config/index.js";
 import { authRouter } from "./modules/auth/index.js";
 import { adminRouter } from "./modules/admin/admin.routes.js";
+import { consoleAdminRouter } from "./modules/console/console.routes.js";
+import { consoleInternalRouter } from "./modules/console/console.internal.routes.js";
 import { proxyAdminRouter } from "./modules/proxy/proxy.admin.routes.js";
 import { proxyAgentRouter } from "./modules/proxy/proxy.agent.routes.js";
 import { singboxAdminRouter } from "./modules/singbox/singbox.admin.routes.js";
@@ -218,6 +220,9 @@ const clientLoginLimiter = rateLimit({
 });
 app.use("/api/client/auth/login", clientLoginLimiter);
 app.use("/api/client/auth/2fa-login", clientLoginLimiter);
+// Авто-логин по ссылке-подписке (кабинет в приложении) — тот же анти-перебор,
+// что и у логина: защищает от массового зондирования shortUuid.
+app.use("/api/client/auth/by-subscription", clientLoginLimiter);
 
 // Клиент: вход через Telegram Mini App (создание аккаунта или логин)
 const clientTelegramMiniappLimiter = rateLimit({
@@ -314,6 +319,8 @@ app.use("/api/auth", authRouter);
 // /referrals/:id в adminRouter (id="network") → 404 «Клиент не найден». Граф «Реф. сеть» был сломан.
 // Специфичные под-роуты (lookup, :id, :id/referrer) живут в adminRouter и резолвятся через next().
 app.use("/api/admin/referrals", adminReferralsRouter);
+app.use("/api/admin/console", consoleAdminRouter);
+app.use("/api/internal/console", consoleInternalRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/admin/traffic-abuse", trafficAbuseRouter);
 app.use("/api/admin/api-keys", apiKeysAdminRouter);

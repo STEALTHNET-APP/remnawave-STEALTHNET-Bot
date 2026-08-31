@@ -8,10 +8,12 @@ import {
   parseDatabaseUrl,
   runPgRestore,
   saveBackupToFile,
+  cleanupOldBackups,
   listBackups,
   createBackupReadStream,
   readBackupFile,
 } from "./backup.service.js";
+import { getSystemConfig } from "../client/client.service.js";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 
@@ -32,6 +34,14 @@ export function registerBackupRoutes(
     if (!db) return res.status(503).json({ message: "Неверный формат DATABASE_URL" });
     try {
       const { relativePath, filename, fullPath } = await saveBackupToFile(db);
+      // Чистим старые бэкапы сразу после успешного создания нового,
+      // чтобы папка не росла бесконечно (без этого диск забивался).
+      try {
+        const cfg = await getSystemConfig();
+        await cleanupOldBackups(cfg.backupRetentionDays ?? 30);
+      } catch (e) {
+        console.error("[backup] чистка старых бэкапов не удалась:", e);
+      }
       const st = await stat(fullPath);
       res.setHeader("Content-Type", "application/sql");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);

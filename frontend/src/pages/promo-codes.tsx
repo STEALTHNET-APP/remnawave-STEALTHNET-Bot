@@ -31,7 +31,6 @@ import {
   ChevronLeft,
   ToggleLeft,
   ToggleRight,
-  Tag,
   Gift,
   Percent,
   Wand2,
@@ -211,14 +210,14 @@ export function PromoCodesPage() {
   function TypeBadge({ type }: { type: string }) {
     if (type === "DISCOUNT") {
       return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 text-blue-500 dark:text-blue-400 border border-blue-500/20 px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 text-blue-500 dark:text-blue-400 border border-blue-500/20 px-2.5 py-0.5 text-[11px] font-medium">
           <Percent className="h-3 w-3" />
           Скидка
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/10 text-violet-500 dark:text-violet-400 border border-violet-500/20 px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-500/10 text-violet-500 dark:text-violet-400 border border-violet-500/20 px-2.5 py-0.5 text-[11px] font-medium">
         <Gift className="h-3 w-3" />
         Бесплатные дни
       </span>
@@ -227,12 +226,12 @@ export function PromoCodesPage() {
 
   function ActiveBadge({ isActive }: { isActive: boolean }) {
     return isActive ? (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md">
-        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px_#10b981]" />
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-medium">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
         Активен
       </span>
     ) : (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 text-red-500 dark:text-red-400 border border-red-500/20 px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 text-red-500 dark:text-red-400 border border-red-500/20 px-2.5 py-0.5 text-[11px] font-medium">
         <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
         Неактивен
       </span>
@@ -242,7 +241,7 @@ export function PromoCodesPage() {
   if (loading) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center justify-center gap-4">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center justify-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем промокоды…</p>
         </Card>
@@ -253,7 +252,7 @@ export function PromoCodesPage() {
   if (error) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">
           {error}
         </div>
       </div>
@@ -263,38 +262,33 @@ export function PromoCodesPage() {
   // Detail view
   if (detail) {
     return (
-      <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-        <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-        <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+      <div className="flex flex-col gap-3.5 relative">
 
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+          className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
         >
-          <div className="flex items-center gap-4">
+          <div className="flex items-start gap-3">
             <Button variant="ghost" size="icon" className="rounded-xl shrink-0" onClick={() => setDetail(null)}>
               <ChevronLeft className="h-5 w-5" />
             </Button>
-            <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-              <Tag className="h-6 w-6 text-primary" />
-            </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+                <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
                   {detail.name}
                 </h1>
                 <TypeBadge type={detail.type} />
                 <ActiveBadge isActive={detail.isActive} />
               </div>
-              <p className="text-sm text-muted-foreground mt-1">Детали промокода и список использований</p>
+              <p className="text-[12.5px] text-muted-foreground mt-[3px]">Детали промокода и список использований</p>
             </div>
           </div>
         </motion.div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <motion.div whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 300 }}>
-            <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl h-full">
+            <Card className="bg-card border-border rounded-2xl p-4 h-full">
               <p className="text-xs text-muted-foreground mb-2">Код</p>
               <div className="flex items-center gap-2">
                 <code className="text-lg font-mono font-bold truncate">{detail.code}</code>
@@ -305,16 +299,16 @@ export function PromoCodesPage() {
             </Card>
           </motion.div>
           <motion.div whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 300 }}>
-            <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl h-full">
+            <Card className="bg-card border-border rounded-2xl p-4 h-full">
               <p className="text-xs text-muted-foreground mb-2">Использования</p>
-              <p className="text-2xl font-bold tabular-nums">
+              <p className="text-[13.5px] font-bold tabular-nums">
                 {detail.usagesCount}
                 {detail.maxUses > 0 && <span className="text-base text-muted-foreground font-normal"> / {detail.maxUses}</span>}
               </p>
             </Card>
           </motion.div>
           <motion.div whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 300 }}>
-            <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl h-full">
+            <Card className="bg-card border-border rounded-2xl p-4 h-full">
               <p className="text-xs text-muted-foreground mb-2">Параметры</p>
               {detail.type === "DISCOUNT" ? (
                 <p className="text-sm font-medium">
@@ -329,18 +323,15 @@ export function PromoCodesPage() {
             </Card>
           </motion.div>
           <motion.div whileHover={{ y: -2 }} transition={{ type: "spring", stiffness: 300 }}>
-            <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl h-full">
+            <Card className="bg-card border-border rounded-2xl p-4 h-full">
               <p className="text-xs text-muted-foreground mb-2">Истекает</p>
               <p className="text-sm font-medium">{detail.expiresAt ? fmtMskDate(detail.expiresAt) : "Бессрочно"}</p>
             </Card>
           </motion.div>
         </div>
 
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/5 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-              <Users className="h-5 w-5 text-cyan-500 dark:text-cyan-400" />
-            </div>
+        <Card className="bg-card border-border rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-border flex items-center gap-3">
             <div>
               <h3 className="text-sm font-bold tracking-tight">Использования ({detail.usages.length})</h3>
               <p className="text-xs text-muted-foreground mt-0.5">Список клиентов, которые использовали промокод</p>
@@ -348,16 +339,13 @@ export function PromoCodesPage() {
           </div>
           {detail.usages.length === 0 ? (
             <div className="px-5 py-12 flex flex-col items-center justify-center text-center">
-              <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-3">
-                <Tag className="h-8 w-8 text-muted-foreground/60" />
-              </div>
               <p className="text-sm text-muted-foreground">Промокод ещё не использовался.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-foreground/[0.04] dark:bg-white/[0.03] border-b border-white/5">
+                  <tr className="bg-foreground/[0.04] dark:bg-white/[0.03] border-b border-border">
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Клиент</th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Telegram</th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Remna UUID</th>
@@ -366,7 +354,7 @@ export function PromoCodesPage() {
                 </thead>
                 <tbody>
                   {detail.usages.map((u) => (
-                    <tr key={u.id} className="border-b border-white/5 last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
+                    <tr key={u.id} className="border-b border-border last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 font-medium">{u.client.email || u.client.id.slice(0, 8)}</td>
                       <td className="px-4 py-3 text-muted-foreground">{u.client.telegramUsername ? `@${u.client.telegramUsername}` : u.client.telegramId || "—"}</td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{u.client.remnawaveUuid?.slice(0, 12) || "—"}</td>
@@ -383,24 +371,19 @@ export function PromoCodesPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Tag className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Промокоды
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
               Промокоды на скидку при оплате или бесплатные дни подписки.
             </p>
           </div>
@@ -426,13 +409,10 @@ export function PromoCodesPage() {
 
 
       {codes.length === 0 ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-12 shadow-xl">
+        <Card className="bg-card border-border rounded-2xl p-12">
           <div className="flex flex-col items-center justify-center text-center">
-            <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-              <Tag className="h-8 w-8 text-muted-foreground/60" />
-            </div>
-            <h3 className="text-lg font-semibold tracking-tight">Нет промокодов</h3>
-            <p className="text-sm text-muted-foreground mt-1">Создайте первый промокод.</p>
+            <h3 className="text-[13.5px] font-bold tracking-tight">Нет промокодов</h3>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Создайте первый промокод.</p>
             <Button onClick={openCreate} className="gap-1.5 rounded-xl mt-4">
               <Plus className="h-4 w-4" />
               Создать промокод
@@ -449,7 +429,7 @@ export function PromoCodesPage() {
               transition={{ delay: idx * 0.03 }}
               whileHover={{ y: -2 }}
             >
-              <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+              <Card className="bg-card border-border rounded-2xl p-4">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div className="flex-1 min-w-[200px]">
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -458,7 +438,7 @@ export function PromoCodesPage() {
                       <ActiveBadge isActive={c.isActive} />
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                      <code className="font-mono text-xs bg-foreground/[0.04] dark:bg-white/[0.03] border border-white/5 px-2 py-0.5 rounded-md text-foreground">{c.code}</code>
+                      <code className="font-mono text-xs bg-foreground/[0.04] dark:bg-white/[0.03] border border-border px-2 py-0.5 rounded-md text-foreground">{c.code}</code>
                       <span className="text-muted-foreground/40">•</span>
                       {c.type === "DISCOUNT" ? (
                         <span className="inline-flex items-center gap-1">
@@ -510,10 +490,10 @@ export function PromoCodesPage() {
 
       {/* Create / Edit modal */}
       <Dialog open={showForm} onOpenChange={(open) => !open && setShowForm(false)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
+              <div className="h-10 w-10 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">
                 {editingId ? <Pencil className="h-5 w-5 text-primary" /> : <Plus className="h-5 w-5 text-primary" />}
               </div>
               <div>
@@ -530,7 +510,7 @@ export function PromoCodesPage() {
                   value={form.code}
                   onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase().replace(/\s/g, "") }))}
                   placeholder="SUMMER2026"
-                  className="font-mono rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                  className="font-mono rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                 />
               </div>
             )}
@@ -540,7 +520,7 @@ export function PromoCodesPage() {
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                 placeholder="Летняя акция -20%"
-                className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
               />
             </div>
             <div className="grid gap-1.5">
@@ -553,7 +533,7 @@ export function PromoCodesPage() {
                     "rounded-xl border px-3 py-2.5 text-sm font-medium transition-all flex items-center justify-center gap-2",
                     form.type === "DISCOUNT"
                       ? "border-blue-500/40 bg-blue-500/10 text-blue-500 dark:text-blue-400"
-                      : "border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] text-muted-foreground hover:text-foreground"
+                      : "border-border bg-foreground/[0.03] dark:bg-white/[0.02] text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <Percent className="h-4 w-4" />
@@ -566,7 +546,7 @@ export function PromoCodesPage() {
                     "rounded-xl border px-3 py-2.5 text-sm font-medium transition-all flex items-center justify-center gap-2",
                     form.type === "FREE_DAYS"
                       ? "border-violet-500/40 bg-violet-500/10 text-violet-500 dark:text-violet-400"
-                      : "border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] text-muted-foreground hover:text-foreground"
+                      : "border-border bg-foreground/[0.03] dark:bg-white/[0.02] text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <Gift className="h-4 w-4" />
@@ -586,7 +566,7 @@ export function PromoCodesPage() {
                     value={form.discountPercent ?? ""}
                     onChange={(e) => setForm((f) => ({ ...f, discountPercent: e.target.value === "" ? null : Number(e.target.value) }))}
                     placeholder="20"
-                    className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                    className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                   />
                 </div>
                 <div className="grid gap-1.5">
@@ -597,7 +577,7 @@ export function PromoCodesPage() {
                     value={form.discountFixed ?? ""}
                     onChange={(e) => setForm((f) => ({ ...f, discountFixed: e.target.value === "" ? null : Number(e.target.value) }))}
                     placeholder="100"
-                    className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                    className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                   />
                 </div>
               </div>
@@ -608,7 +588,7 @@ export function PromoCodesPage() {
                 <div className="grid gap-1.5">
                   <Label className="text-xs text-muted-foreground">Сквад</Label>
                   <select
-                    className="flex h-10 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    className="flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                     value={form.squadUuid ?? ""}
                     onChange={(e) => setForm((f) => ({ ...f, squadUuid: e.target.value || null }))}
                   >
@@ -626,7 +606,7 @@ export function PromoCodesPage() {
                       min={1}
                       value={form.durationDays ?? ""}
                       onChange={(e) => setForm((f) => ({ ...f, durationDays: e.target.value === "" ? null : Number(e.target.value) || 1 }))}
-                      className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                      className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                     />
                   </div>
                   <div className="grid gap-1.5">
@@ -636,7 +616,7 @@ export function PromoCodesPage() {
                       min={0}
                       value={Number(form.trafficLimitBytes ?? 0) / (1024 * 1024 * 1024) || 0}
                       onChange={(e) => setForm((f) => ({ ...f, trafficLimitBytes: String(Math.round((Number(e.target.value) || 0) * 1024 * 1024 * 1024)) }))}
-                      className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                      className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                     />
                   </div>
                 </div>
@@ -647,7 +627,7 @@ export function PromoCodesPage() {
                     min={0}
                     value={form.deviceLimit ?? ""}
                     onChange={(e) => setForm((f) => ({ ...f, deviceLimit: e.target.value === "" ? null : Number(e.target.value) || 0 }))}
-                    className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                    className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                   />
                 </div>
               </>
@@ -661,7 +641,7 @@ export function PromoCodesPage() {
                   min={0}
                   value={form.maxUses}
                   onChange={(e) => setForm((f) => ({ ...f, maxUses: Number(e.target.value) || 0 }))}
-                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                 />
               </div>
               <div className="grid gap-1.5">
@@ -671,7 +651,7 @@ export function PromoCodesPage() {
                   min={1}
                   value={form.maxUsesPerClient}
                   onChange={(e) => setForm((f) => ({ ...f, maxUsesPerClient: Number(e.target.value) || 1 }))}
-                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
                 />
               </div>
             </div>
@@ -682,7 +662,7 @@ export function PromoCodesPage() {
                 type="date"
                 value={form.expiresAt ? form.expiresAt.split("T")[0] : ""}
                 onChange={(e) => setForm((f) => ({ ...f, expiresAt: e.target.value ? new Date(e.target.value).toISOString() : null }))}
-                className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
               />
             </div>
 
@@ -690,7 +670,7 @@ export function PromoCodesPage() {
               "flex items-center gap-2 cursor-pointer rounded-xl border px-3 py-2.5 transition-colors",
               form.isActive
                 ? "border-emerald-500/30 bg-emerald-500/5"
-                : "border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02]"
+                : "border-border bg-foreground/[0.03] dark:bg-white/[0.02]"
             )}>
               <input
                 type="checkbox"

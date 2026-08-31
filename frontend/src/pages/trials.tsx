@@ -15,7 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Pencil, Loader2, Gift } from "lucide-react";
+import { Plus, Trash2, Pencil, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -81,22 +81,17 @@ export function TrialsPage() {
   };
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-violet-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Gift className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">Триалы</h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Триалы</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
               Пробные подписки: каждый триал привязан к тарифу, клиент активирует каждый один раз. Когда все использованы — кнопка в боте скрывается.
             </p>
           </div>
@@ -108,24 +103,21 @@ export function TrialsPage() {
       </motion.div>
 
       {error && (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
       )}
 
       {loading && (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center justify-center gap-4">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center justify-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем триалы…</p>
         </Card>
       )}
 
       {!loading && trials.length === 0 && (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-12 shadow-xl">
+        <Card className="bg-card border-border rounded-2xl p-12">
           <div className="flex flex-col items-center justify-center text-center">
-            <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-              <Gift className="h-8 w-8 text-muted-foreground/60" />
-            </div>
-            <h3 className="text-lg font-semibold tracking-tight">Триалов нет</h3>
-            <p className="text-sm text-muted-foreground mt-1">Создайте первый — он появится в боте кнопкой «Получить пробную подписку».</p>
+            <h3 className="text-[13.5px] font-bold tracking-tight">Триалов нет</h3>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Создайте первый — он появится в боте кнопкой «Получить пробную подписку».</p>
             <Button onClick={() => setModal("add")} className="mt-4 gap-1.5 rounded-xl">
               <Plus className="h-4 w-4" />
               Создать триал
@@ -135,10 +127,10 @@ export function TrialsPage() {
       )}
 
       {!loading && trials.length > 0 && (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden py-0">
+        <Card className="bg-card border-border rounded-2xl overflow-hidden py-0">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left border-b border-white/10">
+              <tr className="text-left border-b border-border">
                 <th className="px-5 py-3.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Порядок</th>
                 <th className="px-5 py-3.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Название</th>
                 <th className="px-5 py-3.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Тариф</th>
@@ -149,7 +141,7 @@ export function TrialsPage() {
             </thead>
             <tbody>
               {trials.map((t) => (
-                <tr key={t.id} className="border-t border-white/5 hover:bg-foreground/5 transition-colors">
+                <tr key={t.id} className="border-t border-border hover:bg-foreground/5 transition-colors">
                   <td className="px-5 py-3.5 text-muted-foreground">{t.sortOrder}</td>
                   <td className="px-5 py-3.5 font-medium">{t.name}</td>
                   <td className="px-5 py-3.5 text-muted-foreground">{t.tariffName ?? "—"}</td>
@@ -202,7 +194,7 @@ export function TrialsPage() {
   );
 }
 
-// ────────────────────────────────────────────────────────────────────────
+// 
 // Модалка создания/редактирования триала.
 
 function TrialFormDialog({
@@ -269,8 +261,8 @@ function TrialFormDialog({
     setSaving(true);
     setErr(null);
     try {
-      // T16 (12.05.2026) — ГБ → байты (BigInt в БД).
-      // Пустая строка / 0 / NaN → null (используется лимит тарифа).
+      // T16 (12.05.2026) — ГБ  байты (BigInt в БД).
+      // Пустая строка / 0 / NaN  null (используется лимит тарифа).
       let trafficLimitBytes: number | null = null;
       if (trialTrafficGb.trim()) {
         const gb = parseFloat(trialTrafficGb.replace(",", "."));
@@ -307,10 +299,10 @@ function TrialFormDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem] p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-card border-border rounded-2xl p-4 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
+          <div className="h-10 w-10 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">
             {mode === "add" ? <Plus className="h-5 w-5 text-primary" /> : <Pencil className="h-5 w-5 text-primary" />}
           </div>
           <div>
@@ -331,7 +323,7 @@ function TrialFormDialog({
             id="trial-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="🎁 Пробная Стандартная"
+            placeholder=" Пробная Стандартная"
           />
         </div>
 
@@ -342,14 +334,14 @@ function TrialFormDialog({
             <button
               type="button"
               onClick={() => setSource("tariff")}
-              className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${source === "tariff" ? "border-primary/60 bg-primary/10 text-primary" : "border-input bg-background text-muted-foreground"}`}
+              className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${source === "tariff" ? "border-border bg-primary/10 text-primary" : "border-input bg-background text-muted-foreground"}`}
             >
               Из тарифа
             </button>
             <button
               type="button"
               onClick={() => setSource("squad")}
-              className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${source === "squad" ? "border-primary/60 bg-primary/10 text-primary" : "border-input bg-background text-muted-foreground"}`}
+              className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${source === "squad" ? "border-border bg-primary/10 text-primary" : "border-input bg-background text-muted-foreground"}`}
             >
               Из сквада (не тариф)
             </button>
@@ -366,7 +358,7 @@ function TrialFormDialog({
             id="trial-tariff"
             value={tariffId}
             onChange={(e) => setTariffId(e.target.value)}
-            className="w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           >
             {tariffs.length === 0 && <option value="">— Сначала создайте тариф —</option>}
             {tariffs.map((t) => (
@@ -384,7 +376,7 @@ function TrialFormDialog({
               id="trial-squad"
               value={squadUuid}
               onChange={(e) => setSquadUuid(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+              className="w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
             >
               <option value="">— Выберите сквад —</option>
               {squads.map((s) => (
@@ -489,16 +481,16 @@ function TrialFormDialog({
                   onClick={() => setConvertIds((prev) => on ? prev.filter((x) => x !== t.id) : [...prev, t.id])}
                   className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                     on
-                      ? "border-primary/50 bg-primary/10 text-primary"
-                      : "border-input bg-background text-muted-foreground hover:border-primary/30"
+                      ? "border-border bg-primary/10 text-primary"
+                      : "border-input bg-background text-muted-foreground hover:border-border"
                   }`}
                 >
-                  {on ? "✓ " : ""}{t.categoryName} — {t.name}
+                  {on ? " " : ""}{t.categoryName} — {t.name}
                 </button>
               );
             })}
             {tariffs.filter((t) => t.id !== tariffId).length === 0 && (
-              <span className="text-[11px] text-muted-foreground">Других тарифов нет.</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">Других тарифов нет.</span>
             )}
           </div>
           <p className="text-[10px] text-muted-foreground">
@@ -519,7 +511,7 @@ function TrialFormDialog({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Бесплатная пробная подписка на стандартный тариф на 3 дня..."
             rows={3}
-            className="w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
         </div>
 

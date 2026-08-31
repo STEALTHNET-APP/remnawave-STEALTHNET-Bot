@@ -44,12 +44,12 @@ import {
 /**
  * бейдж статуса подписки в админке.
  * Учитывает purchasedAsGift и subscriptionIndex для корректной семантики:
- *  - index=0 + giftStatus=null → «Главная» (primary, купил себе или выдан админом)
- *  - index>0 + giftStatus=null + purchasedAsGift=false → «Своя» (доп. куплена клиентом)
- *  - index>0 + giftStatus=null + purchasedAsGift=true → «Готова к подарку» (код ещё не создан)
- *  - GIFT_RESERVED / GIFT_CODE_ACTIVE → «Код активен» (ожидает redeem)
- *  - GIFTED → «Подарена» (получатель активировал)
- *  - ACTIVATED_SELF → «Забрана себе» (отмена подарка)
+ *  - index=0 + giftStatus=null  «Главная» (primary, купил себе или выдан админом)
+ *  - index>0 + giftStatus=null + purchasedAsGift=false  «Своя» (доп. куплена клиентом)
+ *  - index>0 + giftStatus=null + purchasedAsGift=true  «Готова к подарку» (код ещё не создан)
+ *  - GIFT_RESERVED / GIFT_CODE_ACTIVE  «Код активен» (ожидает redeem)
+ *  - GIFTED  «Подарена» (получатель активировал)
+ *  - ACTIVATED_SELF  «Забрана себе» (отмена подарка)
  */
 function giftStatusBadge(
   status: string | null,
@@ -60,21 +60,21 @@ function giftStatusBadge(
   switch (status) {
     case "GIFT_RESERVED":
     case "GIFT_CODE_ACTIVE":
-      return { label: "Код активен", className: "bg-amber-500/15 text-amber-400 border border-amber-500/20 shadow-sm backdrop-blur-md" };
+      return { label: "Код активен", className: "bg-amber-500/15 text-amber-400 border border-amber-500/20 shadow-sm" };
     case "GIFTED":
-      return { label: "Подарена", className: "bg-purple-500/15 text-purple-400 border border-purple-500/20 shadow-sm backdrop-blur-md" };
+      return { label: "Подарена", className: "bg-purple-500/15 text-purple-400 border border-purple-500/20 shadow-sm" };
     case "ACTIVATED_SELF":
-      return { label: "Забрана себе", className: "bg-blue-500/15 text-blue-500 dark:text-blue-400 border border-blue-500/20 shadow-sm backdrop-blur-md" };
+      return { label: "Забрана себе", className: "bg-blue-500/15 text-blue-500 dark:text-blue-400 border border-blue-500/20 shadow-sm" };
   }
   // null / "" — обычная подписка, дальше различаем по purchasedAsGift и index.
   if (purchasedAsGift === true) {
-    return { label: "Готова к подарку", className: "bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 shadow-sm backdrop-blur-md" };
+    return { label: "Готова к подарку", className: "bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 shadow-sm" };
   }
   if (subscriptionIndex === 0) {
-    return { label: "Главная", className: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-sm backdrop-blur-md" };
+    return { label: "Главная", className: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-sm" };
   }
-  // index > 0 + purchasedAsGift=false → купленная себе доп. подписка.
-  return { label: "Своя", className: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-sm backdrop-blur-md" };
+  // index > 0 + purchasedAsGift=false  купленная себе доп. подписка.
+  return { label: "Своя", className: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shadow-sm" };
 }
 
 const EVENT_LABELS: Record<string, { icon: React.ReactNode; label: string }> = {
@@ -134,7 +134,7 @@ export function AdminSecondarySubscriptionsPage() {
   
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  // ── Edit Subscription Dialog State ──
+  //  Edit Subscription Dialog State 
   // Меняем количество дней (+/−) и/или лимит трафика (ГБ, пусто = безлимит).
   const [editOpen, setEditOpen] = useState(false);
   const [editAddDays, setEditAddDays] = useState<string>("");
@@ -143,7 +143,7 @@ export function AdminSecondarySubscriptionsPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
-  // ── Create Gift Code Dialog State ──
+  //  Create Gift Code Dialog State 
   const [createOpen, setCreateOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createClientSearch, setCreateClientSearch] = useState("");
@@ -273,7 +273,7 @@ export function AdminSecondarySubscriptionsPage() {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  // ── Create Gift Code Handlers ──
+  //  Create Gift Code Handlers 
 
   const openCreateDialog = async (notify: boolean = true) => {
     setCreateOpen(true);
@@ -338,44 +338,22 @@ export function AdminSecondarySubscriptionsPage() {
   };
 
   return (
-    <div className="space-y-6 relative z-0">
-      {/* Ambient glows */}
-      <div className="fixed -z-10 pointer-events-none bg-primary/15 blur-[120px] w-[500px] h-[500px] -top-[10%] -left-[5%]" />
-      <div className="fixed -z-10 pointer-events-none bg-purple-500/10 blur-[100px] w-[400px] h-[400px] top-[40%] -right-[5%]" />
-
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05 }}
-        className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-background/40 backdrop-blur-3xl p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 shadow-2xl"
-      >
-        {/* Decorative gradient orbs */}
-        <div className="absolute -top-20 -right-20 h-60 w-60 rounded-full bg-gradient-to-br from-primary/20 via-pink-500/15 to-transparent blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 -left-16 h-40 w-40 rounded-full bg-gradient-to-tr from-cyan-500/15 to-transparent blur-2xl pointer-events-none" />
-
-        <div className="relative z-10 flex items-center gap-5">
-          <motion.div
-            whileHover={{ scale: 1.05, rotate: -4 }}
-            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="relative h-16 w-16 flex items-center justify-center rounded-[1.5rem] bg-gradient-to-br from-primary/30 via-pink-500/20 to-purple-500/15 border border-white/10 shadow-inner shrink-0"
-          >
-            <div className="absolute inset-0 rounded-[1.5rem] bg-gradient-to-br from-primary/10 to-transparent" />
-            <Gift className="relative h-8 w-8 text-primary" />
-          </motion.div>
+    <div className="flex flex-col gap-3.5 relative z-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground via-primary to-foreground/70 dark:from-foreground dark:via-primary dark:to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Подписки
             </h1>
             <div className="flex flex-wrap items-center gap-2 mt-2 text-sm font-medium">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[11px] font-semibold text-primary backdrop-blur-md">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 border border-border px-2.5 py-0.5 text-[11px] font-semibold text-primary">
                 <Gift className="h-3 w-3" />
                 Всего: <span className="tabular-nums">{data?.total || 0}</span>
               </span>
               {data && data.items.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 backdrop-blur-md">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-500 dark:text-emerald-400 border border-emerald-500/20">
                   <span className="relative flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_4px_#10b981]" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
                   </span>
                   Live
                 </span>
@@ -387,7 +365,7 @@ export function AdminSecondarySubscriptionsPage() {
         <div className="relative z-10 flex flex-col sm:flex-row gap-2">
           <Button
             onClick={() => openCreateDialog(true)}
-            className="h-11 px-5 rounded-2xl gap-2 shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground font-semibold group"
+            className="h-9 px-[13px] rounded-lg gap-2 bg-primary text-primary-foreground text-[12.5px] font-semibold"
           >
             <Plus className="h-4 w-4 transition-transform group-hover:rotate-90" />
             Создать подарок
@@ -395,21 +373,21 @@ export function AdminSecondarySubscriptionsPage() {
           <Button
             onClick={() => openCreateDialog(false)}
             variant="secondary"
-            className="h-11 px-5 rounded-2xl gap-2 font-semibold border border-white/10 bg-foreground/[0.04] dark:bg-white/5 hover:bg-foreground/[0.08] dark:hover:bg-white/10 transition-all"
+            className="h-9 px-[13px] rounded-lg gap-2 text-[12.5px] font-semibold border border-border bg-card hover:bg-muted"
           >
             <Gift className="h-4 w-4" />
             Выдать код
           </Button>
         </div>
-      </motion.div>
+      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        <Card className="bg-background/60 backdrop-blur-3xl border border-white/10 rounded-[2rem] p-6 shadow-xl">
-          <h2 className="text-[11px] font-bold uppercase tracking-[0.25em] text-foreground/80 mb-4">Фильтры</h2>
+        <Card className="bg-card border border-border rounded-xl px-[17px] py-[15px]">
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.9px] text-muted-foreground mb-3">Фильтры</h2>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div className="flex-1 space-y-2">
               <Label className="text-xs">Поиск (Email / Telegram / подарочный код / отправитель)</Label>
@@ -417,7 +395,7 @@ export function AdminSecondarySubscriptionsPage() {
                 <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Email, @username, TG ID, код подарка (XXXX-XXXX-XXXX)..."
-                  className="pl-9 bg-background/60 border-white/10 hover:border-primary/30 focus:border-primary/50 rounded-xl h-11 transition-colors"
+                  className="pl-9 bg-card border-border hover:border-border focus:border-border rounded-xl h-9 transition-colors"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={handleKeyDown}
@@ -429,7 +407,7 @@ export function AdminSecondarySubscriptionsPage() {
               <Label className="text-xs">Статус</Label>
               <div className="relative">
                 <select
-                  className="flex h-11 w-full rounded-xl border border-white/10 bg-background/60 hover:border-primary/30 focus:border-primary/50 backdrop-blur-xl px-3 py-1 text-sm shadow-sm text-foreground focus:outline-none transition-colors appearance-none"
+                  className="flex h-9 w-full rounded-xl border border-border bg-card hover:border-border focus:border-border px-3 py-1 text-sm shadow-sm text-foreground focus:outline-none transition-colors appearance-none"
                   value={filters.giftStatus || ""}
                   onChange={(e) => handleFilterChange("giftStatus", e.target.value || undefined)}
                 >
@@ -444,11 +422,11 @@ export function AdminSecondarySubscriptionsPage() {
             </div>
 
             <div className="flex gap-3">
-              <Button variant="secondary" onClick={handleSearch} className="h-11 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border border-white/10 transition-colors px-5">
+              <Button variant="secondary" onClick={handleSearch} className="h-9 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border border-border transition-colors px-5">
                 <Search className="mr-2 h-4 w-4" />
                 Найти
               </Button>
-              <Button variant="ghost" onClick={handleResetFilters} className="h-11 rounded-xl text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] dark:hover:bg-white/5">
+              <Button variant="ghost" onClick={handleResetFilters} className="h-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] dark:hover:bg-card">
                 Сброс
               </Button>
             </div>
@@ -460,33 +438,33 @@ export function AdminSecondarySubscriptionsPage() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
-        className="bg-background/50 backdrop-blur-3xl border border-white/10 rounded-[2rem] overflow-hidden shadow-2xl relative"
+        className="bg-card border border-border rounded-2xl overflow-hidden relative"
       >
-        <div className="flex items-center justify-between p-5 border-b border-white/10 bg-white/5 relative z-10">
+        <div className="flex items-center justify-between p-4 border-b border-border bg-card relative z-10">
           <div className="flex items-center gap-3">
             <h2 className="text-[11px] font-bold uppercase tracking-[0.25em] text-foreground/80 flex items-center gap-2">
               <Gift className="w-4 h-4 text-primary" />
               Список подписок
             </h2>
             {selectedIds.size > 0 && (
-              <Button variant="destructive" size="sm" onClick={handleDeleteSelected} className="rounded-xl h-8 px-3 shadow-md shadow-destructive/20 border border-destructive/30">
+              <Button variant="destructive" size="sm" onClick={handleDeleteSelected} className="rounded-xl h-8 px-3 shadow-destructive/20 border border-destructive/30">
                 <Trash2 className="mr-2 h-3.5 w-3.5" />
                 Удалить ({selectedIds.size})
               </Button>
             )}
           </div>
-          <Button variant="ghost" size="icon" onClick={fetchItems} disabled={loading} className="h-8 w-8 rounded-full hover:bg-foreground/[0.06] dark:hover:bg-white/10">
+          <Button variant="ghost" size="icon" onClick={fetchItems} disabled={loading} className="h-8 w-8 rounded-full hover:bg-foreground/[0.06] dark:hover:bg-card">
             <RefreshCw className={cn("h-4 w-4 text-muted-foreground transition-transform", loading && "animate-[spin_1.5s_linear_infinite] text-primary")} />
           </Button>
         </div>
 
         <div className="overflow-x-auto relative z-10 min-h-[200px]">
           <table className="w-full text-sm text-left">
-            <thead className="bg-foreground/[0.04] dark:bg-white/[0.04] border-b border-white/10">
+            <thead className="bg-foreground/[0.04] dark:bg-white/[0.04] border-b border-border">
               <tr>
                 <th className="px-5 py-4 w-12 text-center">
                   <Checkbox
-                    className="border-white/20 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                    className="border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                     checked={data?.items.length ? selectedIds.size === data.items.length : false}
                     onCheckedChange={toggleSelectAll}
                   />
@@ -500,7 +478,7 @@ export function AdminSecondarySubscriptionsPage() {
                 <th className="px-5 py-4 text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground text-right">Действия</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
                   <td colSpan={8} className="px-5 py-16 text-center">
@@ -517,9 +495,6 @@ export function AdminSecondarySubscriptionsPage() {
                 <tr>
                   <td colSpan={8} className="px-5 py-16 text-center">
                     <div className="flex flex-col items-center justify-center space-y-3">
-                      <div className="h-16 w-16 rounded-full bg-foreground/[0.03] dark:bg-white/[0.04] border border-white/10 flex items-center justify-center mb-2 shadow-inner">
-                        <Gift className="h-8 w-8 text-muted-foreground/30" />
-                      </div>
                       <span className="text-sm font-medium text-foreground/70">Подписок не найдено</span>
                       <span className="text-xs text-muted-foreground">Попробуйте изменить параметры поиска</span>
                     </div>
@@ -530,10 +505,10 @@ export function AdminSecondarySubscriptionsPage() {
                   const badge = giftStatusBadge(item.giftStatus, item.purchasedAsGift, item.subscriptionIndex);
                   const ownerName = item.owner.telegramUsername ? `@${item.owner.telegramUsername}` : item.owner.email || item.owner.telegramId;
                   // «Отправитель» = создатель gift code (giftSender),
-                  // а не получатель. Если код создан админом — показываем 👑 + email админа.
+                  // а не получатель. Если код создан админом — показываем  + email админа.
                   const sender = (item as { giftSender?: { telegramUsername?: string | null; email?: string | null; isAdmin?: boolean } | null }).giftSender;
                   const giftedName = sender?.isAdmin
-                    ? `👑 ${sender.email ?? "Администратор"}`
+                    ? ` ${sender.email ?? "Администратор"}`
                     : sender?.telegramUsername
                       ? `@${sender.telegramUsername}`
                       : sender?.email || "—";
@@ -549,7 +524,7 @@ export function AdminSecondarySubscriptionsPage() {
                         "transition-all duration-200 group cursor-pointer border-l-[3px] border-l-transparent",
                         isSelected 
                           ? "bg-primary/10 border-l-primary/50 hover:bg-primary/15" 
-                          : "hover:bg-foreground/[0.05] dark:hover:bg-white/5 hover:border-l-primary/30"
+                          : "hover:bg-foreground/[0.05] dark:hover:bg-card hover:border-l-primary/30"
                       )}
                       onClick={(e) => {
                         const target = e.target as HTMLElement;
@@ -567,7 +542,7 @@ export function AdminSecondarySubscriptionsPage() {
                         }}
                       >
                         <Checkbox
-                          className={cn("border-white/20 transition-all", isSelected && "border-primary bg-primary text-primary-foreground")}
+                          className={cn("border-border transition-all", isSelected && "border-primary bg-primary text-primary-foreground")}
                           checked={isSelected}
                           onCheckedChange={() => toggleSelect(item.id)}
                         />
@@ -577,9 +552,6 @@ export function AdminSecondarySubscriptionsPage() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center shrink-0">
-                            <User className="w-4 h-4 text-muted-foreground/70" />
-                          </div>
                           <div>
                             <div className="text-sm font-medium text-foreground/90">{ownerName}</div>
                             <div className="text-[10px] text-muted-foreground mt-0.5">#{item.subscriptionIndex}</div>
@@ -603,12 +575,12 @@ export function AdminSecondarySubscriptionsPage() {
                       <td className="px-5 py-4">
                         {item.latestGiftCode ? (
                           <div className="flex items-center gap-2 group/code">
-                            <span className="font-mono text-xs bg-black/30 text-primary/90 px-2 py-1 rounded-md border border-primary/20 shadow-inner tracking-wider">
+                            <span className="font-mono text-xs bg-black/30 text-primary/90 px-2 py-1 rounded-md border border-border tracking-wider">
                               {item.latestGiftCode.code}
                             </span>
                             <button
                               onClick={(e) => { e.stopPropagation(); copyToClipboard(item.latestGiftCode!.code); }}
-                              className="w-7 h-7 rounded-md bg-foreground/[0.04] dark:bg-white/5 hover:bg-primary/15 hover:text-primary border border-white/5 hover:border-primary/30 flex items-center justify-center transition-all opacity-0 group-hover/code:opacity-100 shadow-sm"
+                              className="w-7 h-7 rounded-md bg-foreground/[0.04] dark:bg-card hover:bg-primary/15 hover:text-primary border border-border hover:border-border flex items-center justify-center transition-all opacity-0 group-hover/code:opacity-100 shadow-sm"
                             >
                               {copiedCode === item.latestGiftCode.code ? (
                                 <Check className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
@@ -624,10 +596,10 @@ export function AdminSecondarySubscriptionsPage() {
                             всегда, а не только при hover. Раньше пользователи думали что
                             кнопки удаления нет. */}
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl bg-foreground/[0.04] dark:bg-white/5 hover:bg-blue-500/15 hover:text-blue-400 border border-white/10 hover:border-blue-500/30 transition-all shadow-sm" onClick={(e) => { e.stopPropagation(); openDetail(item.id); }}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl bg-foreground/[0.04] dark:bg-card hover:bg-blue-500/15 hover:text-blue-400 border border-border hover:border-blue-500/30 transition-all shadow-sm" onClick={(e) => { e.stopPropagation(); openDetail(item.id); }}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl bg-foreground/[0.04] dark:bg-white/5 hover:bg-destructive/15 text-muted-foreground hover:text-destructive border border-white/10 hover:border-destructive/30 transition-all shadow-sm" onClick={(e) => { e.stopPropagation(); handleDeleteSingle(item.id); }}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl bg-foreground/[0.04] dark:bg-card hover:bg-destructive/15 text-muted-foreground hover:text-destructive border border-border hover:border-destructive/30 transition-all shadow-sm" onClick={(e) => { e.stopPropagation(); handleDeleteSingle(item.id); }}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -641,7 +613,7 @@ export function AdminSecondarySubscriptionsPage() {
         </div>
 
         {data && data.totalPages > 1 && (
-          <div className="flex items-center justify-between p-5 border-t border-white/10 bg-background/40 backdrop-blur-xl relative z-10">
+          <div className="flex items-center justify-between p-4 border-t border-border bg-card relative z-10">
             <span className="text-sm font-medium text-muted-foreground">
               Страница {data.page} из {data.totalPages}
             </span>
@@ -649,7 +621,7 @@ export function AdminSecondarySubscriptionsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-xl border-white/10 bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] shadow-sm transition-colors"
+                className="rounded-xl border-border bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] shadow-sm transition-colors"
                 disabled={data.page <= 1}
                 onClick={() => setFilters((p) => ({ ...p, page: p.page! - 1 }))}
               >
@@ -658,7 +630,7 @@ export function AdminSecondarySubscriptionsPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-xl border-white/10 bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] shadow-sm transition-colors"
+                className="rounded-xl border-border bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] shadow-sm transition-colors"
                 disabled={data.page >= data.totalPages}
                 onClick={() => setFilters((p) => ({ ...p, page: p.page! + 1 }))}
               >
@@ -670,16 +642,13 @@ export function AdminSecondarySubscriptionsPage() {
       </motion.div>
 
       <Dialog open={!!detailId} onOpenChange={(o) => !o && setDetailId(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 shadow-2xl p-0 sm:rounded-[2rem] [&>button]:z-50">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-card border-border p-0 sm:rounded-2xl [&>button]:z-50">
           <div className="absolute top-0 right-0 w-[500px] h-[300px] bg-primary/10 blur-[100px] pointer-events-none rounded-full" />
           <div className="absolute bottom-0 left-0 w-[400px] h-[300px] bg-purple-500/10 blur-[100px] pointer-events-none rounded-full" />
           
-          <div className="p-6 border-b border-white/10 relative z-10 bg-foreground/[0.03] dark:bg-white/5">
+          <div className="p-4 border-b border-border relative z-10 bg-foreground/[0.03] dark:bg-card">
             <DialogHeader>
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 flex items-center justify-center shadow-inner">
-                  <Gift className="w-6 h-6 text-primary" />
-                </div>
                 <div>
                   <DialogTitle className="text-xl font-bold tracking-tight">Подписка #{detailData?.subscriptionIndex}</DialogTitle>
                   <DialogDescription className="font-mono text-xs opacity-60 mt-1 flex items-center gap-2">
@@ -690,11 +659,11 @@ export function AdminSecondarySubscriptionsPage() {
             </DialogHeader>
           </div>
 
-          <div className="p-6 relative z-10">
+          <div className="p-4 relative z-10">
             {detailLoading || !detailData ? (
               <div className="py-16 flex flex-col items-center justify-center space-y-4">
                 <div className="relative w-16 h-16 flex items-center justify-center">
-                  <div className="absolute inset-0 border-2 border-dashed border-primary/30 rounded-full animate-[spin_3s_linear_infinite]" />
+                  <div className="absolute inset-0 border-2 border-dashed border-border rounded-full animate-[spin_3s_linear_infinite]" />
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
                 <span className="text-sm font-medium text-muted-foreground tracking-widest uppercase">Загрузка</span>
@@ -702,48 +671,48 @@ export function AdminSecondarySubscriptionsPage() {
             ) : (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <div className="rounded-[1.5rem] bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl border border-white/10 p-5 shadow-sm transition-all hover:shadow-md hover:border-white/20">
+                  <div className="rounded-[1.5rem] bg-card border border-border p-4 shadow-sm transition-all hover:shadow-md hover:border-border">
                     <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground block mb-2">Тариф</span>
                     <span className="text-sm font-bold text-foreground/90">{detailData.tariff?.name || "—"}</span>
                   </div>
-                  <div className="rounded-[1.5rem] bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl border border-white/10 p-5 shadow-sm transition-all hover:shadow-md hover:border-white/20 flex flex-col items-start justify-center">
+                  <div className="rounded-[1.5rem] bg-card border border-border p-4 shadow-sm transition-all hover:shadow-md hover:border-border flex flex-col items-start justify-center">
                     <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground block mb-2">Статус</span>
                     <span className={cn("px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wide", giftStatusBadge(detailData.giftStatus, detailData.purchasedAsGift, detailData.subscriptionIndex).className)}>
                       {giftStatusBadge(detailData.giftStatus, detailData.purchasedAsGift, detailData.subscriptionIndex).label}
                     </span>
                   </div>
-                  <div className="rounded-[1.5rem] bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl border border-white/10 p-5 shadow-sm transition-all hover:shadow-md hover:border-white/20">
+                  <div className="rounded-[1.5rem] bg-card border border-border p-4 shadow-sm transition-all hover:shadow-md hover:border-border">
                     <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground block mb-2">Создана</span>
                     <span className="text-sm font-medium text-foreground/80">{fmtMskDate(detailData.createdAt)}</span>
                   </div>
-                  <div className="rounded-[1.5rem] bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl border border-white/10 p-5 shadow-sm transition-all hover:shadow-md hover:border-white/20">
+                  <div className="rounded-[1.5rem] bg-card border border-border p-4 shadow-sm transition-all hover:shadow-md hover:border-border">
                     <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground block mb-2">Обновлена</span>
                     <span className="text-sm font-medium text-foreground/80">{fmtMskDate(detailData.updatedAt)}</span>
                   </div>
                 </div>
 
-                <div className="rounded-[1.5rem] bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl border border-white/10 p-5 shadow-sm relative overflow-hidden group">
+                <div className="rounded-[1.5rem] bg-card border border-border p-4 shadow-sm relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 blur-[40px] pointer-events-none rounded-full" />
                   <h3 className="text-[11px] font-bold uppercase tracking-[0.25em] text-foreground/80 flex items-center gap-2.5 mb-5">
                     <User className="h-3.5 w-3.5 text-primary" /> Владелец
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-sm relative z-10">
-                    <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-white/5 rounded-xl p-4 transition-colors group-hover:bg-foreground/[0.06] dark:group-hover:bg-white/10">
+                    <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-border rounded-xl p-4 transition-colors group-hover:bg-foreground/[0.06] dark:group-hover:bg-card">
                       <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground block mb-1">Telegram ID</span>
                       <span className="font-mono">{detailData.owner.telegramId || "—"}</span>
                     </div>
-                    <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-white/5 rounded-xl p-4 transition-colors group-hover:bg-foreground/[0.06] dark:group-hover:bg-white/10">
+                    <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-border rounded-xl p-4 transition-colors group-hover:bg-foreground/[0.06] dark:group-hover:bg-card">
                       <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground block mb-1">Username</span>
                       <span className="font-medium text-foreground/90">{detailData.owner.telegramUsername ? `@${detailData.owner.telegramUsername}` : "—"}</span>
                     </div>
-                    <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-white/5 rounded-xl p-4 transition-colors group-hover:bg-foreground/[0.06] dark:group-hover:bg-white/10">
+                    <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-border rounded-xl p-4 transition-colors group-hover:bg-foreground/[0.06] dark:group-hover:bg-card">
                       <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground block mb-1">Email</span>
                       <span className="font-medium text-foreground/90">{detailData.owner.email || "—"}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-[1.5rem] bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl border border-white/10 p-5 shadow-sm relative overflow-hidden group">
+                <div className="rounded-[1.5rem] bg-card border border-border p-4 shadow-sm relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 blur-[40px] pointer-events-none rounded-full" />
                   <div className="flex items-center justify-between mb-5">
                     <h3 className="text-[11px] font-bold uppercase tracking-[0.25em] text-foreground/80 flex items-center gap-2.5">
@@ -754,7 +723,7 @@ export function AdminSecondarySubscriptionsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="rounded-xl h-8 px-3 text-[11px] font-bold gap-1.5 border-white/10 bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08]"
+                        className="rounded-xl h-8 px-3 text-[11px] font-bold gap-1.5 border-border bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08]"
                         onClick={() => {
                           setEditAddDays("");
                           setEditTrafficGb("");
@@ -773,7 +742,7 @@ export function AdminSecondarySubscriptionsPage() {
                     //   • status — строка ACTIVE / DISABLED / LIMITED / EXPIRED (верхний регистр).
                     //   • trafficLimitBytes — лимит в байтах (0 = безлимит).
                     //   • userTraffic.usedTrafficBytes — использовано в байтах.
-                    // Раньше код читал `usedTraffic`, `trafficLimit`, `devices` — таких полей в Remna нет → всегда «0/∞».
+                    // Раньше код читал `usedTraffic`, `trafficLimit`, `devices` — таких полей в Remna нет  всегда «0/∞».
                     const remna = detailData.remnaData as Record<string, unknown>;
                     const statusStr = String(remna.status ?? "unknown");
                     const statusActive = statusStr === "ACTIVE";
@@ -796,18 +765,18 @@ export function AdminSecondarySubscriptionsPage() {
                     const deviceLimit = typeof remna.hwidDeviceLimit === "number" ? remna.hwidDeviceLimit : "—";
                     return (
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm relative z-10">
-                        <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-white/5 rounded-xl p-4">
+                        <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-border rounded-xl p-4">
                           <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground block mb-2">Статус</span>
                           <span className={cn(
                             "px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider",
                             statusActive
-                              ? "bg-emerald-500/15 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 shadow-sm backdrop-blur-md"
-                              : "bg-red-500/15 text-red-500 dark:text-red-400 border border-red-500/20 shadow-sm backdrop-blur-md"
+                              ? "bg-emerald-500/15 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 shadow-sm"
+                              : "bg-red-500/15 text-red-500 dark:text-red-400 border border-red-500/20 shadow-sm"
                           )}>
                             {statusStr}
                           </span>
                         </div>
-                        <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-white/5 rounded-xl p-4">
+                        <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-border rounded-xl p-4">
                           <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground block mb-1">Истекает</span>
                           <span className="font-medium text-foreground/80">
                             {remna.expireAt
@@ -815,43 +784,43 @@ export function AdminSecondarySubscriptionsPage() {
                               : "—"}
                           </span>
                         </div>
-                        <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-white/5 rounded-xl p-4">
+                        <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-border rounded-xl p-4">
                           <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground block mb-1">Трафик</span>
                           <span className="font-mono text-foreground/80 text-xs">{trafficStr}</span>
                         </div>
-                        <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-white/5 rounded-xl p-4">
+                        <div className="bg-foreground/[0.03] dark:bg-white/[0.04] border border-border rounded-xl p-4">
                           <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground block mb-1">Лимит устройств</span>
                           <span className="font-mono text-foreground/80">{String(deviceLimit)}</span>
                         </div>
                       </div>
                     );
                   })() : (
-                    <div className="p-6 border border-dashed border-white/10 rounded-xl flex items-center justify-center text-sm font-medium text-muted-foreground/60 relative z-10">
+                    <div className="p-4 border border-dashed border-border rounded-xl flex items-center justify-center text-sm font-medium text-muted-foreground/60 relative z-10">
                       Нет данных Remnawave
                     </div>
                   )}
                 </div>
 
                 {detailData.giftCodes && detailData.giftCodes.length > 0 && (
-                  <div className="rounded-[1.5rem] bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl border border-white/10 p-5 shadow-sm relative overflow-hidden group">
+                  <div className="rounded-[1.5rem] bg-card border border-border p-4 shadow-sm relative overflow-hidden group">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 blur-[40px] pointer-events-none rounded-full" />
                     <h3 className="text-[11px] font-bold uppercase tracking-[0.25em] text-foreground/80 flex items-center gap-2.5 mb-5">
                       <Gift className="h-3.5 w-3.5 text-purple-400" /> Подарочные коды
                     </h3>
                     <div className="space-y-4 relative z-10">
                       {detailData.giftCodes.map((code) => (
-                        <div key={code.id} className="p-4 bg-foreground/[0.03] dark:bg-white/[0.04] border border-white/10 rounded-xl text-sm grid grid-cols-1 sm:grid-cols-2 gap-4 transition-colors hover:bg-foreground/[0.06] dark:hover:bg-white/10 hover:border-white/20 shadow-sm">
+                        <div key={code.id} className="p-4 bg-foreground/[0.03] dark:bg-white/[0.04] border border-border rounded-xl text-sm grid grid-cols-1 sm:grid-cols-2 gap-4 transition-colors hover:bg-foreground/[0.06] dark:hover:bg-card hover:border-border shadow-sm">
                           <div className="flex flex-col gap-2">
                             <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Код</span>
                             <div className="flex items-center gap-3">
-                              <span className="font-mono bg-black/40 text-primary/90 px-3 py-1.5 rounded-lg border border-white/5 shadow-inner tracking-widest text-base">
+                              <span className="font-mono bg-black/40 text-primary/90 px-3 py-1.5 rounded-lg border border-border tracking-widest text-base">
                                 {code.code}
                               </span>
                               <span className={cn(
                                 "text-[10px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider",
-                                code.status === "ACTIVE" ? "bg-blue-500/15 text-blue-500 dark:text-blue-400 border border-blue-500/20 shadow-sm backdrop-blur-md" : 
-                                code.status === "REDEEMED" ? "bg-purple-500/15 text-purple-400 border border-purple-500/20 shadow-sm backdrop-blur-md" : 
-                                "bg-foreground/[0.06] dark:bg-white/10 text-muted-foreground border border-white/20 shadow-sm backdrop-blur-md"
+                                code.status === "ACTIVE" ? "bg-blue-500/15 text-blue-500 dark:text-blue-400 border border-blue-500/20 shadow-sm" : 
+                                code.status === "REDEEMED" ? "bg-purple-500/15 text-purple-400 border border-purple-500/20 shadow-sm" : 
+                                "bg-foreground/[0.06] dark:bg-card text-muted-foreground border border-border shadow-sm"
                               )}>
                                 {code.status}
                               </span>
@@ -870,9 +839,9 @@ export function AdminSecondarySubscriptionsPage() {
                             </div>
                           </div>
                           {code.giftMessage && (
-                            <div className="col-span-full mt-2 pt-4 border-t border-white/5">
+                            <div className="col-span-full mt-2 pt-4 border-t border-border">
                               <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground block mb-1">Сообщение</span>
-                              <div className="text-sm italic text-foreground/80 leading-relaxed pl-3 border-l-[3px] border-primary/50">
+                              <div className="text-sm italic text-foreground/80 leading-relaxed pl-3 border-l-[3px] border-border">
                                 "{code.giftMessage}"
                               </div>
                             </div>
@@ -883,12 +852,12 @@ export function AdminSecondarySubscriptionsPage() {
                   </div>
                 )}
 
-                <div className="rounded-[1.5rem] bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl border border-white/10 p-5 shadow-sm relative overflow-hidden">
+                <div className="rounded-[1.5rem] bg-card border border-border p-4 shadow-sm relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 blur-[40px] pointer-events-none rounded-full" />
                   <h3 className="text-[11px] font-bold uppercase tracking-[0.25em] text-foreground/80 flex items-center gap-2.5 mb-5 relative z-10">
                     <Clock className="h-3.5 w-3.5 text-orange-400" /> История
                   </h3>
-                  <div className="space-y-0 pl-6 border-l-2 border-gradient from-primary/40 to-transparent ml-3 relative z-10 py-2">
+                  <div className="space-y-0 pl-6 border-l-2 border-gradient bg-transparent ml-3 relative z-10 py-2">
                     {detailData.history.length === 0 ? (
                       <div className="text-sm text-muted-foreground -ml-6 pb-2 italic">Нет истории событий</div>
                     ) : (
@@ -898,18 +867,18 @@ export function AdminSecondarySubscriptionsPage() {
                         
                         return (
                           <div key={event.id} className={cn("relative -ml-[31px] flex items-start gap-5", !isLast && "pb-8")}>
-                            <div className="bg-background border-2 border-primary/30 rounded-full p-1.5 shadow-[0_0_10px_rgba(var(--primary),0.3)] mt-0.5 relative z-10">
+                            <div className="bg-background border-2 border-border rounded-full p-1.5 mt-0.5 relative z-10">
                               <div className="text-foreground/80">{evData.icon}</div>
                             </div>
-                            <div className="flex-1 bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] transition-colors border border-white/10 rounded-[1rem] p-4 shadow-sm">
+                            <div className="flex-1 bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] transition-colors border border-border rounded-[1rem] p-4 shadow-sm">
                               <div className="flex justify-between items-center mb-2">
                                 <span className="text-sm font-bold text-foreground/90">{evData.label}</span>
-                                <span className="text-[10px] font-medium tracking-wide text-muted-foreground bg-foreground/[0.04] dark:bg-white/[0.04] px-2 py-1 rounded-md border border-white/5">
+                                <span className="text-[10px] font-medium tracking-wide text-muted-foreground bg-foreground/[0.04] dark:bg-white/[0.04] px-2 py-1 rounded-md border border-border">
                                   {fmtMskShort(event.createdAt)}
                                 </span>
                               </div>
                               {event.metadata && Object.keys(event.metadata).length > 0 && (
-                                <pre className="text-[11px] text-muted-foreground/80 bg-black/40 p-3 rounded-lg border border-white/5 mt-3 overflow-x-auto shadow-inner leading-relaxed font-mono">
+                                <pre className="text-[11px] text-muted-foreground/80 bg-black/40 p-3 rounded-lg border border-border mt-3 overflow-x-auto leading-relaxed font-mono">
                                   {JSON.stringify(event.metadata, null, 2)}
                                 </pre>
                               )}
@@ -928,9 +897,9 @@ export function AdminSecondarySubscriptionsPage() {
 
       {/* модалка редактирования доп. подписки админом. */}
       <Dialog open={editOpen} onOpenChange={(o) => !o && !editSaving && setEditOpen(false)}>
-        <DialogContent className="sm:max-w-md bg-background/80 backdrop-blur-3xl border-white/10 shadow-2xl p-6 sm:rounded-[2rem]">
+        <DialogContent className="sm:max-w-md bg-card border-border p-4 sm:rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
+            <DialogTitle className="text-[13.5px] font-bold tracking-tight flex items-center gap-2">
               <Pencil className="h-4 w-4 text-primary" /> Редактирование подписки
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
@@ -974,7 +943,7 @@ export function AdminSecondarySubscriptionsPage() {
               ? `осталось ${Math.max(0, (limitNum - usedNum) / BYTES).toFixed(2)} ГБ`
               : "безлимит";
             return (
-              <div className="mt-4 rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.04] p-3.5 space-y-2 text-xs">
+              <div className="mt-4 rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.04] p-3.5 space-y-2 text-xs">
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">Срок:</span>
                   <span className="font-medium text-foreground/90">
@@ -1033,7 +1002,7 @@ export function AdminSecondarySubscriptionsPage() {
             </div>
             {editError && (
               <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 text-xs p-3">
-                ❌ {editError}
+                 {editError}
               </div>
             )}
             <div className="flex justify-end gap-2 pt-2">
@@ -1096,16 +1065,13 @@ export function AdminSecondarySubscriptionsPage() {
       </Dialog>
 
       <Dialog open={createOpen} onOpenChange={(open) => { if (!open) setCreateOpen(false); }}>
-        <DialogContent className="sm:max-w-lg bg-background/80 backdrop-blur-3xl border-white/10 shadow-2xl p-0 sm:rounded-[2rem] [&>button]:z-50">
+        <DialogContent className="sm:max-w-2xl bg-card border-border p-0 sm:rounded-2xl [&>button]:z-50">
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 blur-[80px] pointer-events-none rounded-full" />
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-500/10 blur-[80px] pointer-events-none rounded-full" />
           
-          <div className="p-6 border-b border-white/10 relative z-10 bg-foreground/[0.03] dark:bg-white/5">
+          <div className="p-4 border-b border-border relative z-10 bg-foreground/[0.03] dark:bg-card">
             <DialogHeader>
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 flex items-center justify-center shadow-inner">
-                  <Gift className="w-6 h-6 text-primary" />
-                </div>
+              <div className="flex items-start gap-3">
                 <div>
                   <DialogTitle className="text-xl font-bold tracking-tight">{createNotify ? "Создать подарочный код" : "Выдать код для подарка"}</DialogTitle>
                   <DialogDescription className="text-xs mt-1 text-muted-foreground/80">
@@ -1116,47 +1082,47 @@ export function AdminSecondarySubscriptionsPage() {
             </DialogHeader>
           </div>
 
-          <div className="p-6 relative z-10">
+          <div className="p-4 relative z-10">
             {createResult ? (
               <motion.div 
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="space-y-6"
               >
-                <div className="p-8 rounded-[1.5rem] bg-gradient-to-br from-green-500/10 to-emerald-500/5 border border-green-500/20 text-center space-y-4 shadow-[inset_0_0_20px_rgba(34,197,94,0.05)] relative overflow-hidden">
+                <div className="p-8 rounded-[1.5rem] bg-muted border border-green-500/20 text-center space-y-4 relative overflow-hidden">
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ type: "spring", bounce: 0.5, delay: 0.2 }}
-                    className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.3)] mb-2"
+                    className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto border border-green-500/30 mb-2"
                   >
                     <CheckCircle2 className="h-8 w-8 text-emerald-500 dark:text-emerald-400" />
                   </motion.div>
                   <p className="text-base font-bold text-emerald-500 dark:text-emerald-400">Подарочный код создан!</p>
                   
-                  <div className="flex items-center justify-center gap-3 bg-black/40 p-4 rounded-xl border border-white/10 shadow-inner group">
+                  <div className="flex items-center justify-center gap-3 bg-black/40 p-4 rounded-xl border border-border group">
                     <span className="font-mono text-2xl text-primary font-bold tracking-[0.2em]">
                       {createResult.code}
                     </span>
                     <Button 
                       size="icon" 
-                      className="h-10 w-10 rounded-xl bg-foreground/[0.04] dark:bg-white/5 hover:bg-primary/15 text-muted-foreground hover:text-primary border border-white/10 transition-all group-hover:border-primary/30" 
+                      className="h-10 w-10 rounded-xl bg-foreground/[0.04] dark:bg-card hover:bg-primary/15 text-muted-foreground hover:text-primary border border-border transition-all group-hover:border-border" 
                       onClick={() => copyToClipboard(createResult.code)}
                     >
                       {copiedCode === createResult.code ? <Check className="h-5 w-5 text-emerald-500 dark:text-emerald-400" /> : <Copy className="h-5 w-5" />}
                     </Button>
                   </div>
                   
-                  <p className="text-xs font-medium text-muted-foreground bg-background/50 inline-block px-3 py-1.5 rounded-full border border-white/5">
+                  <p className="text-xs font-medium text-muted-foreground bg-card inline-block px-3 py-1.5 rounded-full border border-border">
                     Действует до: {fmtMsk(createResult.expiresAt)}
                   </p>
 
                   {createGiftUrl && (
                     <div className="space-y-2 pt-2">
                       <p className="text-[11px] font-medium text-muted-foreground">Ссылка для пересылки дарителю:</p>
-                      <div className="flex items-center gap-2 bg-black/30 p-3 rounded-xl border border-white/10">
+                      <div className="flex items-center gap-2 bg-black/30 p-3 rounded-xl border border-border">
                         <span className="font-mono text-xs text-primary/90 flex-1 truncate text-left">{createGiftUrl}</span>
-                        <Button size="icon" className="h-9 w-9 rounded-lg bg-foreground/[0.04] dark:bg-white/5 hover:bg-primary/15 text-muted-foreground hover:text-primary border border-white/10 shrink-0" onClick={() => copyToClipboard(createGiftUrl!)}>
+                        <Button size="icon" className="h-9 w-9 rounded-lg bg-foreground/[0.04] dark:bg-card hover:bg-primary/15 text-muted-foreground hover:text-primary border border-border shrink-0" onClick={() => copyToClipboard(createGiftUrl!)}>
                           {copiedCode === createGiftUrl ? <Check className="h-4 w-4 text-emerald-500 dark:text-emerald-400" /> : <Copy className="h-4 w-4" />}
                         </Button>
                       </div>
@@ -1166,7 +1132,7 @@ export function AdminSecondarySubscriptionsPage() {
                     </div>
                   )}
                 </div>
-                <Button className="w-full h-12 rounded-2xl font-bold bg-foreground/[0.05] dark:bg-white/10 hover:bg-foreground/[0.08] dark:hover:bg-white/[0.15] text-foreground border border-white/10 transition-all shadow-sm" onClick={() => setCreateOpen(false)}>
+                <Button className="w-full h-12 rounded-xl font-bold bg-foreground/[0.05] dark:bg-card hover:bg-foreground/[0.08] dark:hover:bg-white/[0.15] text-foreground border border-border transition-all shadow-sm" onClick={() => setCreateOpen(false)}>
                   Закрыть
                 </Button>
               </motion.div>
@@ -1178,11 +1144,8 @@ export function AdminSecondarySubscriptionsPage() {
                     <motion.div 
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-primary/10 border border-primary/30 shadow-[inset_0_0_15px_rgba(var(--primary),0.1)]"
+                      className="flex items-center gap-3 p-3 rounded-xl bg-primary/10 border border-border"
                     >
-                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 shrink-0">
-                        <User className="h-4 w-4 text-primary" />
-                      </div>
                       <span className="text-sm font-medium text-foreground/90 flex-1 truncate">
                         {createSelectedClient.telegramUsername
                           ? `@${createSelectedClient.telegramUsername}`
@@ -1199,30 +1162,27 @@ export function AdminSecondarySubscriptionsPage() {
                           <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground/60" />
                           <Input
                             placeholder="Email или Telegram..."
-                            className="pl-9 bg-background/60 backdrop-blur-sm border-white/10 hover:border-primary/30 focus:border-primary/50 rounded-xl h-11 transition-all shadow-inner"
+                            className="pl-9 bg-card border-border hover:border-border focus:border-border rounded-xl h-9 transition-all"
                             value={createClientSearch}
                             onChange={(e) => setCreateClientSearch(e.target.value)}
                             onKeyDown={(e) => { if (e.key === "Enter") searchClients(); }}
                           />
                         </div>
-                        <Button variant="secondary" className="h-11 rounded-xl px-4 bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border border-white/10 transition-colors" onClick={searchClients} disabled={createClientsLoading}>
+                        <Button variant="secondary" className="h-9 rounded-xl px-4 bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border border-border transition-colors" onClick={searchClients} disabled={createClientsLoading}>
                           {createClientsLoading ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : "Найти"}
                         </Button>
                       </div>
                       {createClients.length > 0 && (
-                        <div className="max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-foreground/[0.04] dark:bg-white/[0.04] divide-y divide-white/5 mt-2 custom-scrollbar shadow-inner">
+                        <div className="max-h-48 overflow-y-auto rounded-xl border border-border bg-foreground/[0.04] dark:bg-white/[0.04] divide-y divide-border mt-2 custom-scrollbar">
                           {createClients.map((c) => (
                             <button
                               key={c.id}
-                              className="w-full text-left px-4 py-3 text-sm hover:bg-foreground/[0.06] dark:hover:bg-white/10 focus:bg-foreground/[0.06] dark:focus:bg-white/10 outline-none transition-colors flex items-center gap-3 group"
+                              className="w-full text-left px-4 py-3 text-sm hover:bg-foreground/[0.06] dark:hover:bg-card focus:bg-foreground/[0.06] dark:focus:bg-card outline-none transition-colors flex items-center gap-3 group"
                               onClick={() => {
                                 setCreateSelectedClient(c);
                                 setCreateClients([]);
                               }}
                             >
-                              <div className="w-6 h-6 rounded-full bg-foreground/[0.03] dark:bg-white/[0.04] border border-white/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 group-hover:border-primary/30 transition-colors">
-                                <User className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
-                              </div>
                               <span className="font-medium text-foreground/80 group-hover:text-foreground transition-colors truncate">
                                 {c.telegramUsername ? `@${c.telegramUsername}` : c.email || `TG: ${c.telegramId}`}
                               </span>
@@ -1238,7 +1198,7 @@ export function AdminSecondarySubscriptionsPage() {
                   <Label className="text-[11px] font-bold uppercase tracking-[0.1em] text-foreground/80 ml-1">Тариф</Label>
                   <div className="relative">
                     <select
-                      className="flex h-12 w-full rounded-xl border border-white/10 bg-background/60 hover:border-primary/30 focus:border-primary/50 backdrop-blur-sm px-4 py-2 text-sm shadow-inner text-foreground focus:outline-none transition-all appearance-none cursor-pointer"
+                      className="flex h-12 w-full rounded-xl border border-border bg-card hover:border-border focus:border-border px-4 py-2 text-sm text-foreground focus:outline-none transition-all appearance-none cursor-pointer"
                       value={createSelectedTariff}
                       onChange={(e) => setCreateSelectedTariff(e.target.value)}
                     >
@@ -1261,7 +1221,7 @@ export function AdminSecondarySubscriptionsPage() {
                       min={1}
                       max={3650}
                       placeholder="по тарифу"
-                      className="bg-background/60 border-white/10 hover:border-primary/30 focus:border-primary/50 rounded-xl h-11 shadow-inner"
+                      className="bg-card border-border hover:border-border focus:border-border rounded-xl h-9"
                       value={createDurationDays}
                       onChange={(e) => setCreateDurationDays(e.target.value)}
                     />
@@ -1273,7 +1233,7 @@ export function AdminSecondarySubscriptionsPage() {
                       min={0}
                       step={0.1}
                       placeholder="по тарифу · 0 = ∞"
-                      className="bg-background/60 border-white/10 hover:border-primary/30 focus:border-primary/50 rounded-xl h-11 shadow-inner"
+                      className="bg-card border-border hover:border-border focus:border-border rounded-xl h-9"
                       value={createTrafficGb}
                       onChange={(e) => setCreateTrafficGb(e.target.value)}
                     />
@@ -1282,7 +1242,7 @@ export function AdminSecondarySubscriptionsPage() {
                 <label className="flex items-center gap-3 px-1 cursor-pointer select-none">
                   <input
                     type="checkbox"
-                    className="h-4 w-4 rounded border-white/20 accent-primary"
+                    className="h-4 w-4 rounded border-border accent-primary"
                     checked={createNotify}
                     onChange={(e) => setCreateNotify(e.target.checked)}
                   />
@@ -1292,11 +1252,11 @@ export function AdminSecondarySubscriptionsPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between ml-1">
                     <Label className="text-[11px] font-bold uppercase tracking-[0.1em] text-foreground/80">Сообщение</Label>
-                    <span className="text-[10px] font-bold text-muted-foreground bg-foreground/[0.04] dark:bg-white/5 px-2 py-0.5 rounded-full border border-white/5">{createMessage.length}/200</span>
+                    <span className="text-[10px] font-bold text-muted-foreground bg-foreground/[0.04] dark:bg-card px-2 py-0.5 rounded-full border border-border">{createMessage.length}/200</span>
                   </div>
                   <Textarea
                     placeholder="Напишите приятные слова получателю... (необязательно)"
-                    className="bg-background/60 backdrop-blur-sm border-white/10 hover:border-primary/30 focus:border-primary/50 rounded-xl resize-none shadow-inner p-4 transition-all"
+                    className="bg-card border-border hover:border-border focus:border-border rounded-xl resize-none p-4 transition-all"
                     maxLength={200}
                     rows={3}
                     value={createMessage}
@@ -1312,11 +1272,11 @@ export function AdminSecondarySubscriptionsPage() {
                 )}
 
                 <Button
-                  className="w-full h-12 rounded-2xl gap-2 font-bold shadow-[0_0_15px_rgba(var(--primary),0.2)] hover:shadow-[0_0_25px_rgba(var(--primary),0.4)] transition-all overflow-hidden relative group"
+                  className="w-full h-12 rounded-xl gap-2 font-bold hover:shadow-[0_0_25px_rgba(var(--primary),0.4)] transition-all overflow-hidden relative group"
                   disabled={!createSelectedClient || !createSelectedTariff || createLoading}
                   onClick={handleCreateSubmit}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-[200%] group-hover:translate-x-[200%] transition-transform duration-1000 ease-in-out" />
+                  <div className="absolute inset-0 bg-transparent -translate-x-[200%] group-hover:translate-x-[200%] transition-transform duration-1000 ease-in-out" />
                   {createLoading ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
                   ) : (

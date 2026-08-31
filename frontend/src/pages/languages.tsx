@@ -27,10 +27,8 @@ import {
   X,
   Check,
   ChevronLeft,
-  Globe,
   Loader2,
-  AlertTriangle,
-} from "lucide-react";
+  } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const LANG_NAMES: Record<string, string> = {
@@ -209,9 +207,8 @@ function LanguageEditor({
 
   if (loading) {
     return (
-      <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-        <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-12 shadow-xl flex flex-col items-center justify-center gap-3">
+      <div className="flex flex-col gap-3.5 relative">
+        <Card className="bg-card border-border rounded-2xl p-12 flex flex-col items-center justify-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем переводы…</p>
         </Card>
@@ -220,36 +217,31 @@ function LanguageEditor({
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
         <div className="flex items-center gap-4 min-w-0">
           <Button
             variant="ghost"
             size="icon"
             onClick={onBack}
-            className="shrink-0 rounded-full hover:bg-white/10"
+            className="shrink-0 rounded-full hover:bg-card"
           >
             <ChevronLeft className="h-5 w-5" />
           </Button>
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10 shrink-0">
-            <Globe className="h-6 w-6 text-primary" />
-          </div>
           <div className="min-w-0">
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60 flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2 flex-wrap">
               {LANG_NAMES[code] || code}
-              <span className="text-sm font-medium text-muted-foreground uppercase rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-white/10 px-2.5 py-0.5">
+              <span className="text-sm font-medium text-muted-foreground uppercase rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-border px-2.5 py-0.5">
                 {code}
               </span>
             </h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
               Переведено{" "}
               <span className="text-foreground font-medium">
                 {translatedCount} / {totalCount}
@@ -293,7 +285,7 @@ function LanguageEditor({
       </motion.div>
 
       {/* Search + Filters + Progress */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl space-y-4">
+      <Card className="bg-card border-border rounded-2xl p-4 space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -301,7 +293,7 @@ function LanguageEditor({
               placeholder="Поиск по ключам или значениям…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+              className="pl-9 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
             />
             {search && (
               <button
@@ -312,7 +304,7 @@ function LanguageEditor({
               </button>
             )}
           </div>
-          <div className="flex items-center gap-1 bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-white/5">
+          <div className="flex items-center gap-1 bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-border">
             {(["all", "untranslated", "translated"] as FilterMode[]).map((f) => {
               const isActive = filter === f;
               return (
@@ -323,8 +315,8 @@ function LanguageEditor({
                   className={cn(
                     "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
                     isActive
-                      ? "bg-primary text-primary-foreground shadow-md"
-                      : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-card"
                   )}
                 >
                   {FILTER_LABELS[f]}
@@ -340,15 +332,15 @@ function LanguageEditor({
             <span>Прогресс перевода</span>
             <span className="font-medium text-foreground">{pct}%</span>
           </div>
-          <div className="h-2 rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-white/5 overflow-hidden">
+          <div className="h-2 rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-border overflow-hidden">
             <div
               className={cn(
                 "h-full rounded-full transition-all duration-500",
                 pct >= 90
-                  ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                  ? "bg-primary"
                   : pct >= 50
-                    ? "bg-gradient-to-r from-amber-500 to-amber-400"
-                    : "bg-gradient-to-r from-orange-500 to-orange-400"
+                    ? "bg-primary"
+                    : "bg-primary"
               )}
               style={{ width: `${pct}%` }}
             />
@@ -358,10 +350,7 @@ function LanguageEditor({
 
       {/* Grouped keys */}
       {Object.keys(filteredGroups).length === 0 ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-12 shadow-xl flex flex-col items-center text-center">
-          <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-3 border border-white/10">
-            <Search className="h-8 w-8 text-muted-foreground" />
-          </div>
+        <Card className="bg-card border-border rounded-2xl py-12 flex flex-col items-center text-center">
           <p className="text-muted-foreground">Нет ключей по фильтру</p>
         </Card>
       ) : (
@@ -374,21 +363,21 @@ function LanguageEditor({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(idx * 0.02, 0.2) }}
             >
-              <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden">
-                <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-white/5 bg-foreground/[0.04] dark:bg-white/[0.03]">
+              <Card className="bg-card border-border rounded-2xl overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border bg-foreground/[0.04] dark:bg-white/[0.03]">
                   <h3 className="text-sm font-bold tracking-tight">
                     {group}
                     <span className="ml-2 text-xs font-normal text-muted-foreground">({keys.length})</span>
                   </h3>
                 </div>
-                <div className="divide-y divide-white/5">
+                <div className="divide-y divide-border">
                   {keys.map((key) => (
                     <div
                       key={key}
                       className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr] gap-2 px-4 py-3 items-start hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors"
                     >
                       <div className="text-xs text-muted-foreground break-all pt-2 font-mono">{key}</div>
-                      <div className="text-sm text-foreground/80 rounded-xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 break-words min-h-[2.5rem]">
+                      <div className="text-sm text-foreground/80 rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 break-words min-h-[2.5rem]">
                         {masterKeys[key] || "—"}
                       </div>
                       <Input
@@ -416,7 +405,7 @@ function LanguageEditor({
           size="lg"
           onClick={handleSave}
           disabled={saving}
-          className="gap-2 rounded-2xl shadow-2xl backdrop-blur-md"
+          className="gap-2 rounded-xl"
         >
           {saveOk ? (
             <Check className="h-5 w-5" />
@@ -522,25 +511,20 @@ export default function LanguagesPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Languages className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               {t("admin.nav.languages", "Языки")}
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
               <span className="text-foreground font-medium">{languages.length}</span>{" "}
               {languages.length === 1 ? "язык" : "языков"} ·{" "}
               <span className="text-foreground font-medium">{totalKeys}</span> ключей
@@ -555,15 +539,12 @@ export default function LanguagesPage() {
 
       {/* Loading / Empty / List */}
       {loading ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-12 shadow-xl flex flex-col items-center justify-center gap-3">
+        <Card className="bg-card border-border rounded-2xl p-12 flex flex-col items-center justify-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем языки…</p>
         </Card>
       ) : languages.length === 0 ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-12 shadow-xl flex flex-col items-center text-center">
-          <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-3 border border-white/10">
-            <Globe className="h-8 w-8 text-muted-foreground" />
-          </div>
+        <Card className="bg-card border-border rounded-2xl py-12 flex flex-col items-center text-center">
           <p className="text-muted-foreground">Языковых пакетов пока нет</p>
           <Button variant="outline" onClick={() => setAddOpen(true)} className="mt-4 gap-1.5 rounded-xl">
             <Plus className="h-4 w-4" />
@@ -588,10 +569,10 @@ export default function LanguagesPage() {
                   : "text-orange-500 dark:text-orange-400";
             const accentGradient =
               pct >= 90
-                ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
+                ? "bg-primary"
                 : pct >= 50
-                  ? "bg-gradient-to-r from-amber-500 to-amber-400"
-                  : "bg-gradient-to-r from-orange-500 to-orange-400";
+                  ? "bg-primary"
+                  : "bg-primary";
             return (
               <motion.div
                 key={lang.code}
@@ -602,7 +583,7 @@ export default function LanguagesPage() {
               >
                 <Card
                   className={cn(
-                    "bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl group transition-all hover:border-white/20 hover:shadow-2xl",
+                    "bg-card border-border rounded-2xl p-4 group transition-all hover:border-border",
                     "flex flex-col gap-4"
                   )}
                 >
@@ -610,12 +591,12 @@ export default function LanguagesPage() {
                     <div className="flex items-center gap-3 min-w-0">
                       <div
                         className={cn(
-                          "h-12 w-12 rounded-2xl border border-white/10 flex items-center justify-center shadow-inner shrink-0",
+                          "h-9 w-9 rounded-lg border border-border flex items-center justify-center shrink-0",
                           accent === "emerald"
-                            ? "bg-gradient-to-br from-emerald-500/25 to-emerald-500/5"
+                            ? "bg-muted"
                             : accent === "amber"
-                              ? "bg-gradient-to-br from-amber-500/25 to-amber-500/5"
-                              : "bg-gradient-to-br from-orange-500/25 to-orange-500/5"
+                              ? "bg-muted"
+                              : "bg-muted"
                         )}
                       >
                         <span className={cn("text-xl font-bold uppercase", accentText)}>{lang.code}</span>
@@ -629,7 +610,7 @@ export default function LanguagesPage() {
                     </div>
                     <span
                       className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold backdrop-blur-md",
+                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
                         accent === "emerald"
                           ? "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20"
                           : accent === "amber"
@@ -642,7 +623,7 @@ export default function LanguagesPage() {
                   </div>
 
                   {/* Progress bar */}
-                  <div className="h-2 rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-white/5 overflow-hidden">
+                  <div className="h-2 rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-border overflow-hidden">
                     <div
                       className={cn("h-full rounded-full transition-all duration-500", accentGradient)}
                       style={{ width: `${pct}%` }}
@@ -688,12 +669,9 @@ export default function LanguagesPage() {
 
       {/* Add Language Dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="bg-card border-border rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg font-bold tracking-tight">
-              <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner">
-                <Plus className="h-4 w-4 text-primary" />
-              </div>
+            <DialogTitle className="flex items-center gap-2 text-[13.5px] font-bold tracking-tight">
               Добавить язык
             </DialogTitle>
             <DialogDescription className="sr-only">Создать новый языковой пакет</DialogDescription>
@@ -709,7 +687,7 @@ export default function LanguagesPage() {
                 value={addCode}
                 onChange={(e) => setAddCode(e.target.value.replace(/[^a-zA-Z]/g, "").slice(0, 5))}
                 maxLength={5}
-                className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
               />
               {LANG_NAMES[addCode.toLowerCase()] && (
                 <p className="text-xs text-muted-foreground">
@@ -737,17 +715,14 @@ export default function LanguagesPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
-        <DialogContent className="bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="bg-card border-border rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg font-bold tracking-tight">
-              <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-red-500/20 to-red-500/5 border border-white/10 flex items-center justify-center shadow-inner">
-                <AlertTriangle className="h-4 w-4 text-red-500 dark:text-red-400" />
-              </div>
+            <DialogTitle className="flex items-center gap-2 text-[13.5px] font-bold tracking-tight">
               Удалить языковой пакет
             </DialogTitle>
             <DialogDescription className="sr-only">Подтвердите удаление пакета</DialogDescription>
           </DialogHeader>
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/5 backdrop-blur-md px-4 py-3 text-sm">
+          <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm">
             <p className="text-foreground/80">
               Вы уверены, что хотите удалить пакет{" "}
               <strong className="text-foreground">

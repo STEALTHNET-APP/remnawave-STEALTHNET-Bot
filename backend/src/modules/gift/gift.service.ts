@@ -68,7 +68,15 @@ function normalizeCode(input: string): string {
 // `getNextSubscriptionIndex` из subscription.helpers.ts — он ищет ПЕРВЫЙ свободный слот (0, 1, 2…),
 // не max+1. Старая локальная функция возвращала 1 даже для свежего клиента (0+1=1).
 
-/** Генерирует Remnawave username для дочерней подписки: {rootUsername}_{index}. */
+/**
+ * Remnawave username для подписки.
+ *
+ * Главная подписка (index 0) — БЕЗ суффикса: просто `username`. Суффикс `_N`
+ * получают только дополнительные (1, 2, …). Раньше суффикс клеился всегда, и
+ * даже единственная подписка создавалась как `username_0` — некрасиво и сбивало
+ * с толку, особенно когда мульти-подписки выключены и подписка всегда одна.
+ * (Тот же принцип уже действовал в client-bulk-ops — теперь поведение единое.)
+ */
 function secondaryRemnaUsername(
   rootClient: { telegramUsername?: string | null; telegramId?: string | null; email?: string | null; id: string },
   index: number,
@@ -79,7 +87,7 @@ function secondaryRemnaUsername(
     email: rootClient.email,
     clientIdFallback: rootClient.id,
   });
-  const suffix = `_${index}`;
+  const suffix = index === 0 ? "" : `_${index}`;
   return (base + suffix).slice(0, 36);
 }
 

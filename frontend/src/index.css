@@ -15,8 +15,11 @@
   --color-accent: hsl(var(--accent));
   --color-accent-foreground: hsl(var(--accent-foreground));
   --color-destructive: hsl(var(--destructive));
-  --color-card: hsl(var(--card) / 0.15);
+  /* Карточки теперь ПЛОТНЫЕ (редизайн 2026): без прозрачности. */
+  --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
+  /* Бренд-акцент для точечной подсветки (KPI, графики) — розовый в обеих темах. */
+  --color-brand-500: hsl(var(--brand));
   /* Акцент stealth-мини-аппа (настраивается из админки через --stealth-accent). */
   --color-saccent-100: color-mix(in oklab, rgb(var(--stealth-accent)), white 62%);
   --color-saccent-200: color-mix(in oklab, rgb(var(--stealth-accent)), white 48%);
@@ -30,37 +33,42 @@
   :root {
     /* Дефолтный акцент stealth-мини-аппа (RGB-каналы через пробел). Перекрывается в StealthLayout из конфига. */
     --stealth-accent: 255 35 87;
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+
+    /* ═══ Светлая тема — «Clean Light» (Stripe-style, единая ДНК со STEALTHNET CORE) ═══ */
+    --background: 228 33% 97%;      /* #F6F7FB — холодный светлый фон */
+    --foreground: 226 46% 13%;      /* #0D1430 — тёмно-синий текст */
+    --card: 0 0% 100%;              /* белые карточки */
+    --card-foreground: 226 46% 13%;
+    --primary: 226 61% 22%;         /* #16225C — глубокий тёмно-синий (кнопки/актив) */
+    --primary-foreground: 0 0% 100%;
+    --muted: 228 24% 94%;           /* #EDEFF5 — светло-серые зоны */
+    --muted-foreground: 222 13% 44%;/* #626b7d — вторичный текст (AA на белом) */
+    --accent: 228 24% 94%;          /* hover-поверхность */
+    --accent-foreground: 226 61% 22%;
+    --destructive: 0 72% 44%;       /* читаемый красный */
+    --border: 228 22% 89%;          /* #DCE0EA */
+    --input: 228 22% 89%;
+    --ring: 226 61% 22%;
+    --brand: 344 90% 50%;           /* бренд-розовый, приглушён для белого фона */
   }
 
   .dark {
-    --background: 240 11% 5.3%;
-    --foreground: 210 40% 98%;
-    --card: 240 11% 5.3%;
-    --card-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --muted: 240 11% 12%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 240 11% 12%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --border: 240 11% 15%;
-    --input: 240 11% 15%;
-    --ring: 212.7 26.8% 83.9%;
+    /* ═══ Тёмная тема — «Ops Dark» (Linear/Vercel-style) ═══ */
+    --background: 222 24% 6%;       /* #0B0D12 — почти чёрный сине-графит */
+    --foreground: 222 22% 92%;      /* #E6E9F0 */
+    --card: 222 22% 9%;             /* #12151C — плотная поверхность */
+    --card-foreground: 222 22% 92%;
+    --primary: 344 100% 57%;        /* #FF2357 — фирменный розовый (единый акцент) */
+    --primary-foreground: 0 0% 100%;
+    --muted: 222 16% 13%;           /* #1A1E27 */
+    --muted-foreground: 220 13% 63%;/* #9AA3B5 */
+    --accent: 222 16% 14%;
+    --accent-foreground: 222 22% 92%;
+    --destructive: 0 72% 56%;
+    --border: 222 14% 16%;          /* тонкие видимые рамки */
+    --input: 222 14% 16%;
+    --ring: 344 100% 57%;
+    --brand: 344 100% 60%;          /* бренд-розовый (KPI/подсветка) */
   }
 }
 
@@ -69,66 +77,50 @@
     border-color: var(--color-border);
   }
 
-  body {
-    background-color: transparent;
-    /* Обязательно прозрачный, чтобы было видно анимированный фон */
+  html, body {
+    /* Плотный тематический фон (редизайн 2026): без анимированных орбов под контентом. */
+    background-color: hsl(var(--background));
     color: hsl(var(--foreground));
     font-feature-settings: "rlig" 1, "calt" 1;
     font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
+
+  /* Табличные цифры для денег/счётчиков/времени — не «прыгают». */
+  .tabular-nums { font-variant-numeric: tabular-nums; }
 }
 
-/* ── Glassmorphism Overrides ── */
 @layer components {
-
-  /* Модальные окна — всегда непрозрачный фон (читаемо на любом фоне) */
+  /* Модальные окна — всегда плотный фон. */
   .dialog-content-solid {
     background-color: hsl(var(--card)) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
 
-
-  /* Панель навигации (хедер, сайдбар) */
-  .bg-background {
-    background-color: transparent !important;
+  /* Полупрозрачные «стеклянные» шапки/сайдбары → плотная поверхность с тонкой рамкой. */
+  .bg-background\/95,
+  .bg-white\/10,
+  .dark\:bg-white\/5,
+  .bg-white\/5 {
+    background-color: hsl(var(--card)) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: hsl(var(--border));
   }
 
-  .bg-background\/95 {
-    background-color: color-mix(in srgb, hsl(var(--background)) 50%, transparent) !important;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-color: color-mix(in srgb, hsl(var(--foreground)) 8%, transparent);
-  }
-
-  .border-b,
-  .border-r,
-  .border-t,
-  .border {
-    border-color: color-mix(in srgb, hsl(var(--foreground)) 8%, transparent) !important;
-  }
-
-  /* Инпуты */
-  .bg-transparent.border {
-    background-color: color-mix(in srgb, hsl(var(--background)) 30%, transparent) !important;
-    backdrop-filter: blur(8px);
-  }
-
-  /* Muted зоны (таблицы, плашки) */
+  /* Muted-зоны — плотные. */
   .bg-muted,
   .bg-muted\/50,
   .bg-muted\/30 {
-    background-color: color-mix(in srgb, hsl(var(--foreground)) 5%, transparent) !important;
+    background-color: hsl(var(--muted)) !important;
   }
 
-  /* ── Styled <select> elements ── */
+  /* Инпуты/селекты — плотный фон карточки, читаемая рамка. */
   select {
     appearance: none;
     -webkit-appearance: none;
-    background-color: color-mix(in srgb, hsl(var(--card)) 40%, transparent) !important;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid color-mix(in srgb, hsl(var(--foreground)) 12%, transparent) !important;
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     border-radius: 0.5rem;
     color: hsl(var(--foreground));
     padding-right: 2rem;
@@ -136,19 +128,18 @@
     background-repeat: no-repeat;
     background-position: right 0.5rem center;
     background-size: 1rem;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
     cursor: pointer;
   }
 
   select:hover {
-    background-color: color-mix(in srgb, hsl(var(--card)) 55%, transparent) !important;
-    border-color: color-mix(in srgb, hsl(var(--foreground)) 20%, transparent) !important;
+    border-color: color-mix(in srgb, hsl(var(--foreground)) 22%, transparent);
   }
 
   select:focus {
     outline: none;
-    box-shadow: 0 0 0 2px color-mix(in srgb, hsl(var(--primary)) 30%, transparent);
-    border-color: color-mix(in srgb, hsl(var(--primary)) 50%, transparent) !important;
+    box-shadow: 0 0 0 2px color-mix(in srgb, hsl(var(--ring)) 45%, transparent);
+    border-color: hsl(var(--ring));
   }
 
   select option {
@@ -158,11 +149,32 @@
   }
 }
 
-/* ── Glass Card — вне @layer чтобы гарантированно побить Tailwind utilities ── */
+/* ── Карточка — вне @layer, чтобы гарантированно побить Tailwind utilities.
+   Плотная поверхность вместо стекла (редизайн 2026). ── */
 .glass-card {
-  background-color: color-mix(in srgb, hsl(var(--card)) 15%, transparent);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid color-mix(in srgb, hsl(var(--foreground)) 10%, transparent);
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  background-color: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgba(2, 6, 23, 0.04), 0 1px 3px rgba(2, 6, 23, 0.06);
+}
+.dark .glass-card {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset, 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* Пока открыта нижняя шторка Aurora — убираем стеклянное меню из отрисовки.
+   Оно и так закрыто шторкой, но его backdrop-filter продолжает считаться под
+   нашим слоем: на мобильном WebKit два вложенных размытия при каждой
+   перерисовке дают стробоскоп и проваливание фона в прозрачность. */
+[data-au-sheet="1"] .au-nav {
+  visibility: hidden;
+}
+
+/* Полноэкранный режим Telegram (Bot API 8.0+): шапка клиента с крестиком
+   ложится ПОВЕРХ контента, поэтому сдвигаем вниз всё приложение целиком.
+   Величину считает lib/telegram-viewport.ts по safe-area от Telegram.
+   Класс вешаем на КОРЕНЬ ЛЕЙАУТА, а не на #root: в отступе должен быть фон
+   самого дизайна. На #root в освободившейся полосе просвечивал фон приложения
+   (тёмная тема) — под светлым Aurora получалась чёрная полоса сверху. */
+html[data-tg-fullscreen="1"] .tg-fs-pad {
+  padding-top: var(--app-tg-top, 0px);
 }

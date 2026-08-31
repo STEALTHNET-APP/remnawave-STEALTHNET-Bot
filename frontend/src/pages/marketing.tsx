@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
 import {
-  Megaphone, Link2, BarChart3, Target, Copy, Check, ExternalLink,
+  Link2, BarChart3, Target, Copy, Check, ExternalLink,
   Info, TrendingUp, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ function CopyButton({ text, label = "Копировать" }: { text: string; la
 
 function LinkRow({ title, href, description }: { title: string; href: string; description?: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 py-3 border-b border-white/5 last:border-0">
+    <div className="flex flex-wrap items-center gap-2 py-3 border-b border-border last:border-0">
       <div className="min-w-0 flex-1">
         <p className="font-semibold text-sm">{title}</p>
         {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
@@ -49,11 +49,11 @@ function LinkRow({ title, href, description }: { title: string; href: string; de
 
 function SectionCard({ title, icon: Icon, description, children, color = "primary" }: { title: string; icon: React.ElementType; description: string; children: React.ReactNode; color?: "primary" | "violet" | "cyan" | "amber" | "emerald" }) {
   const gradMap = {
-    primary: "from-primary/20 to-primary/5",
-    violet: "from-violet-500/20 to-violet-500/5",
-    cyan: "from-cyan-500/20 to-cyan-500/5",
-    amber: "from-amber-500/20 to-amber-500/5",
-    emerald: "from-emerald-500/20 to-emerald-500/5",
+    primary: "bg-muted",
+    violet: "bg-muted",
+    cyan: "bg-muted",
+    amber: "bg-muted",
+    emerald: "bg-muted",
   };
   const iconColor = {
     primary: "text-primary",
@@ -63,9 +63,9 @@ function SectionCard({ title, icon: Icon, description, children, color = "primar
     emerald: "text-emerald-500 dark:text-emerald-400",
   };
   return (
-    <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 sm:p-6 shadow-xl">
+    <Card className="bg-card border-border rounded-2xl p-4 sm:p-4">
       <div className="flex items-start gap-3 mb-4">
-        <div className={cn("h-10 w-10 rounded-2xl bg-gradient-to-br border border-white/10 flex items-center justify-center shadow-inner shrink-0", gradMap[color])}>
+        <div className={cn("h-10 w-10 rounded-xl  border border-border flex items-center justify-center shrink-0", gradMap[color])}>
           <Icon className={cn("h-5 w-5", iconColor[color])} />
         </div>
         <div>
@@ -138,30 +138,25 @@ export function MarketingPage() {
   const botUrl = `https://t.me/${botUsername}`;
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Megaphone className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Маркетинг и аналитика
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">UTM-метки, счётчики и ссылки для рекламы</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">UTM-метки, счётчики и ссылки для рекламы</p>
           </div>
         </div>
       </motion.div>
 
       <SectionCard title="Полезные ссылки" icon={Link2} description="Ссылки для рассылок, рекламы и шаблоны с UTM" color="primary">
-        <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] px-4">
+        <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-4">
           <LinkRow title="Кабинет — вход" href={`${baseUrl}/cabinet/login`} description="Страница входа в личный кабинет" />
           <LinkRow title="Кабинет — регистрация" href={`${baseUrl}/cabinet/register`} description="Страница регистрации" />
           <LinkRow title="Бот (старт)" href={`${botUrl}?start=`} description="Ссылка на бота без параметров" />
@@ -174,7 +169,7 @@ export function MarketingPage() {
 
       <SectionCard title="Готовые ссылки с UTM" icon={Target} description="Скопируйте, при необходимости поменяйте кампанию" color="violet">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Кабинет — регистрация</p>
-        <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] px-4 mb-4">
+        <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-4 mb-4">
           <LinkRow title="Facebook / Meta" href={`${baseUrl}/cabinet/register?utm_source=facebook&utm_medium=cpc&utm_campaign=winter`} description="utm_source=facebook" />
           <LinkRow title="VK Реклама" href={`${baseUrl}/cabinet/register?utm_source=vk&utm_medium=cpc&utm_campaign=winter`} description="utm_source=vk" />
           <LinkRow title="Instagram" href={`${baseUrl}/cabinet/register?utm_source=instagram&utm_medium=stories&utm_campaign=winter`} description="utm_source=instagram" />
@@ -183,7 +178,7 @@ export function MarketingPage() {
           <LinkRow title="Блогер / партнёр" href={`${baseUrl}/cabinet/register?utm_source=blogger&utm_medium=partner&utm_campaign=winter`} description="utm_source=blogger" />
         </div>
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Бот — старт с меткой кампании</p>
-        <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] px-4">
+        <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-4">
           <LinkRow title="Бот — Facebook" href={`${botUrl}?start=c_facebook_winter`} description="источник_кампания" />
           <LinkRow title="Бот — VK" href={`${botUrl}?start=c_vk_winter`} description="источник_кампания" />
           <LinkRow title="Бот — Instagram" href={`${botUrl}?start=c_instagram_winter`} description="источник_кампания" />
@@ -193,7 +188,7 @@ export function MarketingPage() {
       </SectionCard>
 
       <SectionCard title="Отслеживание источников (UTM)" icon={Info} description="Как работает система UTM-меток" color="cyan">
-        <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 backdrop-blur-md p-4 text-sm space-y-2">
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-sm space-y-2">
           <p className="font-semibold flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
             <Info className="h-4 w-4" />
             Как это работает
@@ -217,11 +212,11 @@ export function MarketingPage() {
             Нет данных. Используйте ссылки с UTM или бот с <code className="bg-foreground/[0.06] dark:bg-white/[0.06] px-1.5 py-0.5 rounded font-mono">start=c_источник_кампания</code>.
           </p>
         ) : (
-          <div className="rounded-2xl border border-white/5 overflow-hidden">
+          <div className="rounded-xl border border-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-foreground/[0.04] dark:bg-white/[0.03] border-b border-white/5">
+                  <tr className="bg-foreground/[0.04] dark:bg-white/[0.03] border-b border-border">
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Источник</th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground text-xs">Кампания</th>
                     <th className="text-right px-4 py-3 font-medium text-muted-foreground text-xs">Регистрации</th>
@@ -232,7 +227,7 @@ export function MarketingPage() {
                 </thead>
                 <tbody>
                   {campaignsStats.map((row, i) => (
-                    <tr key={i} className="border-b border-white/5 last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
+                    <tr key={i} className="border-b border-border last:border-0 hover:bg-foreground/[0.03] dark:hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 font-medium">{row.source}</td>
                       <td className="px-4 py-3 text-muted-foreground">{row.campaign ?? "—"}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{fmt(row.registrations)}</td>
@@ -258,9 +253,9 @@ export function MarketingPage() {
                 placeholder="G-XXXXXXXXXX"
                 value={gaId}
                 onChange={(e) => setGaId(e.target.value)}
-                className="font-mono rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                className="font-mono rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
               />
-              <p className="text-[11px] text-muted-foreground">Настройка → Данные → Потоки данных → Веб</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">Настройка  Данные  Потоки данных  Веб</p>
             </div>
             <Button onClick={saveAnalyticsIds} disabled={saving} className="rounded-xl">
               {saving ? "Сохранение…" : "Сохранить"}
@@ -279,9 +274,9 @@ export function MarketingPage() {
                 placeholder="12345678"
                 value={ymId}
                 onChange={(e) => setYmId(e.target.value)}
-                className="font-mono rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                className="font-mono rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
               />
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">
                 Создайте в <a href="https://metrika.yandex.ru" target="_blank" rel="noopener noreferrer" className="text-primary underline">Яндекс.Метрике</a> и скопируйте номер.
               </p>
             </div>
@@ -297,7 +292,7 @@ export function MarketingPage() {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           className={cn(
-            "rounded-2xl border backdrop-blur-md px-4 py-3 text-sm",
+            "rounded-xl border px-4 py-3 text-sm",
             message.startsWith("Ошибка")
               ? "border-red-500/30 bg-red-500/10 text-red-500 dark:text-red-400"
               : "border-emerald-500/30 bg-emerald-500/10 text-emerald-500 dark:text-emerald-400"

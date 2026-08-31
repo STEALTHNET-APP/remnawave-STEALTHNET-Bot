@@ -11,13 +11,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Download, Upload, Link2, Settings2, Gift, Users, ArrowLeftRight, Mail, MessageCircle, CreditCard, ChevronDown, ChevronUp, Copy, Check, Bot, FileJson, Palette, Wallet, Package, Plus, Trash2, KeyRound, Loader2, Sparkles, Layers, Globe, BarChart3, RotateCw, Shield, Terminal, FileText, MapPin, GripVertical, Smile, Sliders, MessageSquare, Eye, Megaphone, Trash, Bell, Send, Building, Languages as LanguagesIcon, Network } from "lucide-react";
+import { Download, Upload, Link2, Settings2, Gift, Users, ArrowLeftRight, Mail, MessageCircle, CreditCard, ChevronDown, ChevronUp, Copy, Check, Bot, FileJson, Palette, Wallet, Package, Plus, Trash2, KeyRound, Loader2, Sparkles, Layers, Globe, BarChart3, RotateCw, Shield, Terminal, FileText, MapPin, GripVertical, Smile, Sliders, MessageSquare, Eye } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ACCENT_PALETTES } from "@/contexts/theme";
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { MarketplaceSettingsCard } from "@/pages/marketplace/marketplace-settings-card";
+import { ConsoleAccessCard } from "@/components/console-access-card";
 // drag-n-drop кнопок главного меню.
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -57,50 +58,50 @@ const DEFAULT_PLATEGA_METHODS: { id: number; enabled: boolean; label: string }[]
 
 type BotButtonItem = { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean };
 const DEFAULT_BOT_BUTTONS: BotButtonItem[] = [
-  { id: "tariffs", visible: true, label: "💳 Купить доступ / Продлить", order: 2, style: "" },
-  { id: "proxy", visible: true, label: "🌐 Прокси", order: 0.5, style: "primary", emojiKey: "SERVERS" },
-  { id: "my_proxy", visible: true, label: "📋 Мои прокси", order: 0.6, style: "primary", emojiKey: "SERVERS" },
-  { id: "singbox", visible: true, label: "🔑 Доступы", order: 0.55, style: "primary", emojiKey: "SERVERS" },
-  { id: "my_singbox", visible: true, label: "📋 Мои доступы", order: 0.65, style: "primary", emojiKey: "SERVERS" },
-  { id: "profile", visible: true, label: "👤 Профиль", order: 1, style: "", emojiKey: "PUZZLE" },
-  { id: "devices", visible: true, label: "📱 Устройства", order: 1.5, style: "primary", emojiKey: "DEVICES" },
-  { id: "topup", visible: true, label: "💳 Пополнить баланс", order: 2, style: "success", emojiKey: "CARD" },
-  { id: "referral", visible: true, label: "🔗 Реферальная программа", order: 3, style: "primary", emojiKey: "LINK" },
-  { id: "trial", visible: true, label: "🎁 Попробовать бесплатно", order: 4, style: "success", emojiKey: "TRIAL" },
-  { id: "vpn", visible: true, label: "🌐 Подключиться к VPN", order: 5, style: "danger", emojiKey: "SERVERS", onePerRow: true },
-  { id: "cabinet", visible: true, label: "🌐 Web Кабинет", order: 6, style: "primary", emojiKey: "SERVERS" },
-  { id: "tickets", visible: true, label: "🎫 Тикеты", order: 6.5, style: "primary", emojiKey: "NOTE" },
-  { id: "support", visible: true, label: "🆘 Поддержка", order: 7, style: "primary", emojiKey: "NOTE" },
-  { id: "promocode", visible: true, label: "🎟️ Промокод", order: 8, style: "primary", emojiKey: "STAR" },
-  { id: "gift", visible: true, label: "🎁 Подарки", order: 8.5, style: "primary", emojiKey: "TRIAL" },
-  { id: "extra_options", visible: true, label: "➕ Доп. опции", order: 9, style: "primary", emojiKey: "PACKAGE" },
+  { id: "tariffs", visible: true, label: " Купить доступ / Продлить", order: 2, style: "" },
+  { id: "proxy", visible: true, label: " Прокси", order: 0.5, style: "primary", emojiKey: "SERVERS" },
+  { id: "my_proxy", visible: true, label: " Мои прокси", order: 0.6, style: "primary", emojiKey: "SERVERS" },
+  { id: "singbox", visible: true, label: " Доступы", order: 0.55, style: "primary", emojiKey: "SERVERS" },
+  { id: "my_singbox", visible: true, label: " Мои доступы", order: 0.65, style: "primary", emojiKey: "SERVERS" },
+  { id: "profile", visible: true, label: " Профиль", order: 1, style: "", emojiKey: "PUZZLE" },
+  { id: "devices", visible: true, label: " Устройства", order: 1.5, style: "primary", emojiKey: "DEVICES" },
+  { id: "topup", visible: true, label: " Пополнить баланс", order: 2, style: "success", emojiKey: "CARD" },
+  { id: "referral", visible: true, label: " Реферальная программа", order: 3, style: "primary", emojiKey: "LINK" },
+  { id: "trial", visible: true, label: " Попробовать бесплатно", order: 4, style: "success", emojiKey: "TRIAL" },
+  { id: "vpn", visible: true, label: " Подключиться к VPN", order: 5, style: "danger", emojiKey: "SERVERS", onePerRow: true },
+  { id: "cabinet", visible: true, label: " Web Кабинет", order: 6, style: "primary", emojiKey: "SERVERS" },
+  { id: "tickets", visible: true, label: " Тикеты", order: 6.5, style: "primary", emojiKey: "NOTE" },
+  { id: "support", visible: true, label: " Поддержка", order: 7, style: "primary", emojiKey: "NOTE" },
+  { id: "promocode", visible: true, label: " Промокод", order: 8, style: "primary", emojiKey: "STAR" },
+  { id: "gift", visible: true, label: " Подарки", order: 8.5, style: "primary", emojiKey: "TRIAL" },
+  { id: "extra_options", visible: true, label: " Доп. опции", order: 9, style: "primary", emojiKey: "PACKAGE" },
   // Кастомные кнопки. Используются в главном меню.
-  { id: "my_subs", visible: true, label: "📋 Мои подписки", order: 3, style: "", onePerRow: true },
-  { id: "tg_proxy", visible: true, label: "🛡 Бесплатный Прокси для Telegram", order: 8, style: "", onePerRow: true },
-  { id: "site", visible: true, label: "🌐 Сайт", order: 10, style: "", onePerRow: true },
+  { id: "my_subs", visible: true, label: " Мои подписки", order: 3, style: "", onePerRow: true },
+  { id: "tg_proxy", visible: true, label: " Бесплатный Прокси для Telegram", order: 8, style: "", onePerRow: true },
+  { id: "site", visible: true, label: " Сайт", order: 10, style: "", onePerRow: true },
 ];
 
 const BOT_EMOJI_KEYS = ["HEADER", "MAIN_MENU", "STATUS", "BALANCE", "TARIFFS", "PACKAGE", "PROFILE", "CARD", "TRIAL", "LINK", "SERVERS", "BACK", "BACK_TO_SUB", "BACK_TO_SUBS_LIST", "PUZZLE", "DATE", "TIME", "TRAFFIC", "ACTIVE_GREEN", "ACTIVE_YELLOW", "INACTIVE", "CONNECT", "NOTE", "STAR", "CROWN", "DURATION", "DEVICES", "LOCATION", "CUSTOM_1", "CUSTOM_2", "CUSTOM_3", "CUSTOM_4", "CUSTOM_5"] as const;
 
 const DEFAULT_BOT_MENU_TEXTS: Record<string, string> = {
-  welcomeTitlePrefix: "🛡 ",
-  welcomeGreeting: "👋 Добро пожаловать в ",
-  balancePrefix: "💰 Баланс: ",
-  tariffPrefix: "💎 Ваш тариф : ",
-  subscriptionPrefix: "📊 Статус подписки — ",
-  statusInactive: "🔴 Истекла",
-  statusActive: "🟡 Активна",
-  statusExpired: "🔴 Истекла",
-  statusLimited: "🟡 Ограничена",
-  statusDisabled: "🔴 Отключена",
-  expirePrefix: "📅 до ",
-  daysLeftPrefix: "⏰ осталось ",
-  devicesLabel: "📱 Устройств: ",
+  welcomeTitlePrefix: " ",
+  welcomeGreeting: " Добро пожаловать в ",
+  balancePrefix: " Баланс: ",
+  tariffPrefix: " Ваш тариф : ",
+  subscriptionPrefix: " Статус подписки — ",
+  statusInactive: " Истекла",
+  statusActive: " Активна",
+  statusExpired: " Истекла",
+  statusLimited: " Ограничена",
+  statusDisabled: " Отключена",
+  expirePrefix: " до ",
+  daysLeftPrefix: " осталось ",
+  devicesLabel: " Устройств: ",
   devicesAvailable: " доступно",
-  trafficPrefix: "📈 Трафик — ",
-  linkLabel: "🔗 Ссылка подключения:",
+  trafficPrefix: " Трафик — ",
+  linkLabel: " Ссылка подключения:",
   chooseAction: "Выберите действие:",
-  subsCountLabel: "🔢 Подписок: ",
+  subsCountLabel: " Подписок: ",
   subLineFormat: "{{SUB_STATUS}} {{SUB_TYPE}} Подписка #{{SUB_NUM}} — **{{SUB_DAYS}}** до {{SUB_DATE}}{{SUB_TRAFFIC}}",
 };
 
@@ -182,7 +183,7 @@ const BOT_MENU_TEXT_LABELS: Record<string, string> = {
   trafficPrefix: "Подпись трафика",
   linkLabel: "Подпись ссылки подключения",
   chooseAction: "Призыв к действию",
-  subsCountLabel: "Мульти: счётчик подписок (🔢 Подписок: N)",
+  subsCountLabel: "Мульти: счётчик подписок ( Подписок: N)",
   subLineFormat: "Мульти: формат строки подписки — плейсхолдеры {{SUB_STATUS}} {{SUB_TYPE}} {{SUB_NUM}} {{SUB_DAYS}} {{SUB_DATE}} {{SUB_TRAFFIC}}",
 };
 
@@ -319,7 +320,7 @@ function LavatopOffersBrowser() {
       </div>
       {error && (
         <div className="text-xs rounded-md border border-red-300/50 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 p-2 mb-2">
-          ❌ {error}
+           {error}
         </div>
       )}
       {offers && offers.length === 0 && (
@@ -330,7 +331,7 @@ function LavatopOffersBrowser() {
           {offers.map((o) => {
             const isCopied = copiedId === o.offerId;
             return (
-              <div key={o.offerId} className="rounded-lg border border-white/10 bg-background/40 p-3 text-xs space-y-1.5">
+              <div key={o.offerId} className="rounded-lg border border-border bg-card p-3 text-xs space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold truncate">{o.offerName || "(без названия)"}</div>
@@ -343,14 +344,14 @@ function LavatopOffersBrowser() {
                     onClick={() => copyId(o.offerId)}
                     className="shrink-0"
                   >
-                    {isCopied ? "✓ Copied" : "Copy ID"}
+                    {isCopied ? " Copied" : "Copy ID"}
                   </Button>
                 </div>
                 <div className="font-mono text-[11px] break-all text-primary">{o.offerId}</div>
                 {o.prices.length > 0 && (
                   <div className="flex flex-wrap gap-2 pt-1">
                     {o.prices.map((p, i) => (
-                      <span key={i} className="rounded-md bg-primary/10 border border-primary/20 px-2 py-0.5">
+                      <span key={i} className="rounded-md bg-primary/10 border border-border px-2 py-0.5">
                         {p.amount} {p.currency} · {p.periodicity}
                       </span>
                     ))}
@@ -456,7 +457,7 @@ export function SettingsPage() {
         })(),
         botButtonsPerRow: (data as AdminSettings).botButtonsPerRow ?? 1,
         botEmojis: (data as AdminSettings).botEmojis ?? {},
-        botBackLabel: (data as AdminSettings).botBackLabel ?? "◀️ В меню",
+        botBackLabel: (data as AdminSettings).botBackLabel ?? " В меню",
         botDevicesText: (data as AdminSettings).botDevicesText ?? "",
         botMenuTexts: { ...DEFAULT_BOT_MENU_TEXTS, ...((data as AdminSettings).botMenuTexts ?? {}) },
         botMenuLineVisibility: { ...DEFAULT_BOT_MENU_LINE_VISIBILITY, ...((data as AdminSettings).botMenuLineVisibility ?? {}) },
@@ -477,25 +478,25 @@ export function SettingsPage() {
         instructionsLink: (data as AdminSettings).instructionsLink ?? "",
         // T11 (11.05.2026): — Политика возврата.
         refundLink: (data as AdminSettings & { refundLink?: string | null }).refundLink ?? "",
-        // Текст экрана «⭕ Помощь» (большой rich-text «цели/приоритеты»).
+        // Текст экрана «Помощь» (большой rich-text «цели/приоритеты»).
         helpIntroText: (data as AdminSettings & { helpIntroText?: string | null }).helpIntroText ?? "",
-        // настройки экрана «🛡 Бесплатный Прокси для Telegram».
+        // настройки экрана «Бесплатный Прокси для Telegram».
         tgProxyText: (data as AdminSettings).tgProxyText ?? "",
         tgProxyUrlPrimary: (data as AdminSettings).tgProxyUrlPrimary ?? "",
         tgProxyUrlBackup: (data as AdminSettings).tgProxyUrlBackup ?? "",
         // динамический список TG-прокси. Бэк уже отдаёт
-        // распарсенный массив (см. client.service.ts → tgProxyServers).
+        // распарсенный массив (см. client.service.ts  tgProxyServers).
         // Если массив пуст И есть legacy primary/backup — мигрируем их в массив
         // (one-time, при следующем сохранении уйдут только в новый формат).
         tgProxyServers: (() => {
           const fromApi = (data as AdminSettings).tgProxyServers;
           if (Array.isArray(fromApi) && fromApi.length > 0) return fromApi;
-          // Migrate legacy primary/backup → массив, чтобы UI сразу показал данные.
+          // Migrate legacy primary/backup  массив, чтобы UI сразу показал данные.
           const out: { flag: string; name: string; url: string }[] = [];
           const p = (data as AdminSettings).tgProxyUrlPrimary?.trim();
           const b = (data as AdminSettings).tgProxyUrlBackup?.trim();
-          if (p) out.push({ flag: "🇳🇱", name: "Нидерланды", url: p });
-          if (b) out.push({ flag: "🇩🇪", name: "Германия", url: b });
+          if (p) out.push({ flag: "", name: "Нидерланды", url: p });
+          if (b) out.push({ flag: "", name: "Германия", url: b });
           return out;
         })(),
         ticketsEnabled: (data as AdminSettings).ticketsEnabled ?? false,
@@ -877,7 +878,7 @@ export function SettingsPage() {
         instructionsLink: settings.instructionsLink ?? undefined,
         // T11 (11.05.2026): — Политика возврата.
         refundLink: (settings as { refundLink?: string | null }).refundLink ?? undefined,
-        // Текст экрана «⭕ Помощь».
+        // Текст экрана «Помощь».
         helpIntroText: (settings as { helpIntroText?: string | null }).helpIntroText ?? undefined,
         // экран бесплатного TG-прокси.
         tgProxyText: settings.tgProxyText ?? undefined,
@@ -911,7 +912,7 @@ export function SettingsPage() {
         giftSubscriptionsEnabled: settings.giftSubscriptionsEnabled ?? false,
         giftCodeExpiryHours: settings.giftCodeExpiryHours ?? 72,
         maxAdditionalSubscriptions: settings.maxAdditionalSubscriptions ?? 5,
-        multiSubscriptionsEnabled: settings.multiSubscriptionsEnabled ?? true,
+        multiSubscriptionsEnabled: settings.multiSubscriptionsEnabled ?? false,
         giftCodeFormatLength: settings.giftCodeFormatLength ?? 12,
         giftRateLimitPerMinute: settings.giftRateLimitPerMinute ?? 5,
         giftExpiryNotificationDays: settings.giftExpiryNotificationDays ?? 3,
@@ -1068,16 +1069,13 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* ═══ HERO ═══ */}
-      <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-sky-500/10 via-indigo-500/10 to-fuchsia-500/10 backdrop-blur-3xl shadow-2xl">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-fuchsia-500/10 pointer-events-none" />
-        <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-gradient-to-br from-sky-500/20 to-fuchsia-500/20 blur-3xl pointer-events-none" />
+      {/*  HERO  */}
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-muted">
+        <div className="absolute inset-0 bg-transparent pointer-events-none" />
+        <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-muted blur-3xl pointer-events-none" />
         <div className="relative px-6 py-7 sm:px-8 sm:py-8 flex items-start gap-5">
-          <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-sky-500/30 via-indigo-500/20 to-fuchsia-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-            <Settings2 className="h-8 w-8 text-foreground" />
-          </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-sky-500 via-indigo-500 to-fuchsia-500">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               {t("admin.settings.title")}
             </h1>
             <p className="text-sm sm:text-base text-muted-foreground mt-2 leading-relaxed max-w-2xl">
@@ -1087,95 +1085,92 @@ export function SettingsPage() {
         </div>
       </div>
 
+      <ConsoleAccessCard token={token} />
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        {/* grid-cols-9 (было 10) — старая вкладка «🎁 Триал» убрана.
+        {/* grid-cols-9 (было 10) — старая вкладка «Триал» убрана.
             Все настройки триала теперь живут в отдельном разделе /admin/trials (T15 multi-trials),
             где можно создавать несколько пробных пресетов с разными тарифами. */}
-        <TabsList className="w-full grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-9 gap-1.5 p-1.5 h-auto bg-muted/40 rounded-2xl border border-white/10 shadow-sm backdrop-blur-md">
-          <TabsTrigger value="general" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-slate-500 data-[state=active]:to-zinc-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+        <TabsList className="w-full flex flex-wrap gap-1.5 p-1.5 h-auto bg-muted/40 rounded-xl border border-border shadow-sm">
+          <TabsTrigger value="general" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Settings2 className="h-4 w-4 shrink-0" />{t("admin.settings.tab_general")}
           </TabsTrigger>
-          <TabsTrigger value="referral" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-purple-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="referral" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Users className="h-4 w-4 shrink-0" />{t("admin.settings.tab_referral")}
           </TabsTrigger>
-          <TabsTrigger value="payments" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="payments" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <CreditCard className="h-4 w-4 shrink-0" />{t("admin.settings.tab_payments")}
           </TabsTrigger>
-          <TabsTrigger value="bot" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="bot" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Bot className="h-4 w-4 shrink-0" />{t("admin.settings.tab_bot")}
           </TabsTrigger>
-          <TabsTrigger value="ai" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-fuchsia-500 data-[state=active]:to-pink-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="ai" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Sparkles className="h-4 w-4 shrink-0" />{t("admin.settings.tab_ai")}
           </TabsTrigger>
-          <TabsTrigger value="mail-telegram" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-teal-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="mail-telegram" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Mail className="h-4 w-4 shrink-0" />{t("admin.settings.tab_mail_telegram")}
           </TabsTrigger>
-          <TabsTrigger value="subpage" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-rose-500 data-[state=active]:to-pink-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="subpage" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <FileJson className="h-4 w-4 shrink-0" />{t("admin.settings.tab_subpage")}
           </TabsTrigger>
-          <TabsTrigger value="theme" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-rose-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="theme" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Palette className="h-4 w-4 shrink-0" />{t("admin.settings.tab_theme")}
           </TabsTrigger>
-          <TabsTrigger value="options" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500 data-[state=active]:to-amber-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="options" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Package className="h-4 w-4 shrink-0" />{t("admin.settings.tab_options")}
           </TabsTrigger>
-          <TabsTrigger value="custom-build" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="custom-build" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Layers className="h-4 w-4 shrink-0" />{t("admin.settings.tab_custom_build")}
           </TabsTrigger>
-          <TabsTrigger value="oauth" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-zinc-500 data-[state=active]:to-slate-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="oauth" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <KeyRound className="h-4 w-4 shrink-0" />{t("admin.settings.tab_oauth")}
           </TabsTrigger>
-          <TabsTrigger value="landing" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="landing" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Globe className="h-4 w-4 shrink-0" />{t("admin.settings.tab_landing")}
           </TabsTrigger>
-          <TabsTrigger value="server-ssh" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-stone-500 data-[state=active]:to-zinc-600 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="server-ssh" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Terminal className="h-4 w-4 shrink-0" />{t("admin.settings.tab_ssh")}
           </TabsTrigger>
-          <TabsTrigger value="proxy-settings" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="proxy-settings" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Shield className="h-4 w-4 shrink-0" />{t("admin.settings.tab_proxy")}
           </TabsTrigger>
-          <TabsTrigger value="nalog-settings" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-600 data-[state=active]:to-amber-600 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="nalog-settings" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <FileText className="h-4 w-4 shrink-0" />{t("admin.settings.tab_nalog")}
           </TabsTrigger>
-          <TabsTrigger value="geo-map" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="geo-map" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <MapPin className="h-4 w-4 shrink-0" />{t("admin.settings.tab_map")}
           </TabsTrigger>
-          <TabsTrigger value="gifts" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-pink-500 data-[state=active]:to-fuchsia-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="gifts" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Gift className="h-4 w-4 shrink-0" />Подарки
           </TabsTrigger>
-          <TabsTrigger value="sync" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="sync" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <ArrowLeftRight className="h-4 w-4 shrink-0" />{t("admin.settings.tab_sync")}
           </TabsTrigger>
         </TabsList>
 
         <form onSubmit={handleSubmit}>
           <TabsContent value="general">
-            <Card className="overflow-hidden border-white/10">
-              <div className="relative bg-gradient-to-br from-slate-500/10 via-zinc-500/10 to-stone-500/10 p-6 sm:p-8 border-b border-white/10">
-                <div className="absolute inset-0 bg-gradient-to-br from-slate-500/5 via-transparent to-zinc-500/5 pointer-events-none" />
+            <Card className="overflow-hidden border-border">
+              <div className="relative bg-muted p-4 border-b border-border">
+                <div className="absolute inset-0 bg-transparent pointer-events-none" />
                 <div className="relative flex items-start gap-5">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-slate-500/30 via-zinc-500/20 to-stone-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                    <Settings2 className="h-7 w-7 text-foreground" />
-                  </div>
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-slate-500 via-zinc-500 to-stone-500">
+                    <h2 className="text-xl font-bold tracking-tight text-foreground">
                       {t("admin.settings.general_title")}
                     </h2>
-                    <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.general_subtitle")}</p>
+                    <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.general_subtitle")}</p>
                   </div>
                 </div>
               </div>
-              <CardContent className="space-y-5 p-4 sm:p-6">
+              <CardContent className="space-y-5 p-4 sm:p-4">
                 {/* === Функции сервиса === */}
-                <div className="rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-500/5 via-blue-500/5 to-indigo-500/5 p-5 space-y-3">
+                <div className="rounded-xl border border-sky-500/20 bg-muted p-4 space-y-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-sky-500/20 flex items-center justify-center"><Sparkles className="h-4 w-4 text-sky-500" /></div>
                     <h3 className="text-base font-semibold">Функции сервиса</h3>
                   </div>
                   <p className="text-xs text-muted-foreground">Включай/выключай ключевые модули клиентского кабинета и админки.</p>
                   <div className="space-y-2">
-                    <label className="flex items-start gap-3 p-3.5 rounded-xl bg-card/40 border border-white/5 hover:border-white/10 transition-colors cursor-pointer">
-                      <div className="h-9 w-9 rounded-xl bg-sky-500/10 flex items-center justify-center shrink-0"><MessageSquare className="h-4 w-4 text-sky-500" /></div>
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl bg-card/40 border border-border hover:border-border transition-colors cursor-pointer">
                       <div className="flex-1 min-w-0">
                         <Label htmlFor="tickets-enabled-general" className="text-sm font-medium cursor-pointer">{t("admin.settings.ticket_system")}</Label>
                         <p className="text-xs text-muted-foreground mt-0.5">{t("admin.settings.ticket_hint")}</p>
@@ -1186,8 +1181,7 @@ export function SettingsPage() {
                         onCheckedChange={(checked: boolean) => setSettings((s) => (s ? { ...s, ticketsEnabled: checked === true } : s))}
                       />
                     </label>
-                    <label className="flex items-start gap-3 p-3.5 rounded-xl bg-card/40 border border-white/5 hover:border-white/10 transition-colors cursor-pointer">
-                      <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0"><Bell className="h-4 w-4 text-blue-500" /></div>
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl bg-card/40 border border-border hover:border-border transition-colors cursor-pointer">
                       <div className="flex-1 min-w-0">
                         <Label htmlFor="admin-front-notifications" className="text-sm font-medium cursor-pointer">{t("admin.settings.popup_notifications")}</Label>
                         <p className="text-xs text-muted-foreground mt-0.5">{t("admin.settings.popup_hint")}</p>
@@ -1198,8 +1192,7 @@ export function SettingsPage() {
                         onCheckedChange={(checked: boolean) => setSettings((s) => s ? { ...s, adminFrontNotificationsEnabled: checked === true } : s)}
                       />
                     </label>
-                    <label className="flex items-start gap-3 p-3.5 rounded-xl bg-card/40 border border-white/5 hover:border-white/10 transition-colors cursor-pointer">
-                      <div className="h-9 w-9 rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0"><Sparkles className="h-4 w-4 text-indigo-500" /></div>
+                    <label className="flex items-start gap-3 p-3.5 rounded-xl bg-card/40 border border-border hover:border-border transition-colors cursor-pointer">
                       <div className="flex-1 min-w-0">
                         <Label htmlFor="ai-chat-enabled" className="text-sm font-medium cursor-pointer">{t("admin.settings.ai_chat_label")}</Label>
                         <p className="text-xs text-muted-foreground mt-0.5">{t("admin.settings.ai_chat_hint")}</p>
@@ -1214,9 +1207,8 @@ export function SettingsPage() {
                 </div>
 
                 {/* === Уведомления в Telegram === */}
-                <div className="rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/5 via-teal-500/5 to-sky-500/5 p-5 space-y-3">
+                <div className="rounded-xl border border-cyan-500/20 bg-muted p-4 space-y-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-cyan-500/20 flex items-center justify-center"><Send className="h-4 w-4 text-cyan-500" /></div>
                     <h3 className="text-base font-semibold">Уведомления в Telegram-группу</h3>
                   </div>
                   <p className="text-xs text-muted-foreground">Бот шлёт системные уведомления (новые клиенты, оплаты, тикеты, бэкапы) в указанную группу. Если группа без тем — всё в общий чат, иначе можно разрулить по топикам ниже.</p>
@@ -1250,9 +1242,9 @@ export function SettingsPage() {
                     )}
                   </div>
                   {settings.notificationTelegramGroupId?.trim() && (
-                    <div className="rounded-xl border border-white/10 bg-card/40 p-4 space-y-3">
+                    <div className="rounded-xl border border-border bg-card/40 p-4 space-y-3">
                       <div className="flex items-center gap-2">
-                        <div className="h-1 w-6 rounded-full bg-gradient-to-r from-cyan-500 to-teal-500" />
+                        <div className="h-1 w-6 rounded-full bg-primary" />
                         <p className="text-sm font-medium">{t("admin.settings.topics")}</p>
                       </div>
                       <p className="text-[11px] text-muted-foreground">{t("admin.settings.topics_hint")}</p>
@@ -1352,9 +1344,8 @@ export function SettingsPage() {
                   )}
                 </div>
                 {/* === Брендинг === */}
-                <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-br from-purple-500/5 via-violet-500/5 to-fuchsia-500/5 p-5 space-y-4">
+                <div className="rounded-xl border border-purple-500/20 bg-muted p-4 space-y-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-purple-500/20 flex items-center justify-center"><Building className="h-4 w-4 text-purple-500" /></div>
                     <h3 className="text-base font-semibold">Брендинг</h3>
                   </div>
                   <p className="text-xs text-muted-foreground">Имя сервиса, логотипы, фавикон, публичный URL — всё что видит клиент в кабинете и боте.</p>
@@ -1494,7 +1485,7 @@ export function SettingsPage() {
                   <Label>Мини-апп (Stealth): картинка вместо щита</Label>
                   {settings.stealthHeroImage ? (
                     <div className="flex items-center gap-3">
-                      <img src={settings.stealthHeroImage} alt="hero" className="h-14 w-14 object-contain rounded border bg-black/40 p-1" />
+                      <img src={settings.stealthHeroImage} alt="hero" className="h-9 w-9 object-contain rounded border bg-black/40 p-1" />
                       <div className="flex gap-2">
                         <Label className="cursor-pointer">
                           <span className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground h-9 px-4">{t("admin.settings.upload_another")}</span>
@@ -1575,10 +1566,11 @@ export function SettingsPage() {
                 {/* Cabinet design selector — переключение между Classic и Stealth UI кабинета */}
                 <div className="space-y-2">
                   <Label>Дизайн мини-аппа клиента</Label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {([
-                      { v: "classic", title: "Classic", desc: "Текущий glass-дизайн с настройкой темы и акцента", swatch: "from-primary/30 to-purple-500/20" },
-                      { v: "stealth", title: "Stealth", desc: "Тёмный неон с red-акцентом, network-фоном и stadium-кнопками", swatch: "from-rose-500/40 to-orange-500/30" },
+                      { v: "classic", title: "Classic", desc: "Текущий glass-дизайн с настройкой темы и акцента", swatch: "bg-muted" },
+                      { v: "stealth", title: "Stealth", desc: "Тёмный неон с red-акцентом, network-фоном и stadium-кнопками", swatch: "bg-muted" },
+                      { v: "aurora", title: "Aurora", desc: "Светлый: крупная градиентная карточка подписки, плитки-метрики и плавающее меню из 4 вкладок", swatch: "bg-muted" },
                     ] as const).map((d) => {
                       const active = (settings.cabinetDesign ?? "classic") === d.v;
                       return (
@@ -1586,9 +1578,9 @@ export function SettingsPage() {
                           key={d.v}
                           type="button"
                           onClick={() => setSettings((s) => (s ? { ...s, cabinetDesign: d.v } : s))}
-                          className={`relative overflow-hidden rounded-2xl border p-4 text-left transition-all ${active ? "border-primary ring-2 ring-primary/30 bg-primary/5" : "border-white/10 hover:border-white/30 bg-card/40"}`}
+                          className={`relative overflow-hidden rounded-xl border p-4 text-left transition-all ${active ? "border-primary ring-2 ring-primary/30 bg-primary/5" : "border-border hover:border-border bg-card/40"}`}
                         >
-                          <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${d.swatch}`} />
+                          <div className={`absolute inset-x-0 top-0 h-1  ${d.swatch}`} />
                           <div className="flex items-center justify-between mb-1.5">
                             <span className="text-base font-semibold tracking-tight">{d.title}</span>
                             {active && <span className="text-[10px] font-bold uppercase tracking-widest bg-primary text-primary-foreground rounded-md px-1.5 py-0.5">Активно</span>}
@@ -1601,7 +1593,7 @@ export function SettingsPage() {
                   <p className="text-xs text-muted-foreground">
                     Выбранный дизайн применится ко всем клиентам при следующем открытии кабинета. Админ-панель не затрагивается.
                   </p>
-                  <label className="flex items-start gap-3 rounded-xl border border-white/10 bg-card/30 p-3 mt-2 cursor-pointer hover:bg-card/50 transition-colors">
+                  <label className="flex items-start gap-3 rounded-xl border border-border bg-card/30 p-3 mt-2 cursor-pointer hover:bg-card/50 transition-colors">
                     <Switch
                       checked={settings.cabinetDesignApplyInBrowser ?? false}
                       onCheckedChange={(checked: boolean) => setSettings((s) => (s ? { ...s, cabinetDesignApplyInBrowser: checked === true } : s))}
@@ -1617,12 +1609,11 @@ export function SettingsPage() {
                 </div>
                 </div>
                 {/* === Локализация === */}
-                <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/5 via-orange-500/5 to-yellow-500/5 p-5 space-y-4">
+                <div className="rounded-xl border border-amber-500/20 bg-muted p-4 space-y-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-amber-500/20 flex items-center justify-center"><LanguagesIcon className="h-4 w-4 text-amber-500" /></div>
                     <h3 className="text-base font-semibold">Локализация</h3>
                   </div>
-                  <p className="text-xs text-muted-foreground">Языки и валюты, доступные клиенту. Звёздочка ★ — язык/валюта по умолчанию для новых пользователей.</p>
+                  <p className="text-xs text-muted-foreground">Языки и валюты, доступные клиенту. Звёздочка  — язык/валюта по умолчанию для новых пользователей.</p>
                 <div className="space-y-2">
                   <Label className="text-xs uppercase tracking-wider text-muted-foreground">{t("admin.settings.languages")}</Label>
                   <div className="flex flex-wrap gap-2">
@@ -1652,7 +1643,7 @@ export function SettingsPage() {
                             }
                           >
                             {lang.toUpperCase()}
-                            {isActive && isDefault && " ★"}
+                            {isActive && isDefault && " "}
                           </Button>
                         );
                       });
@@ -1704,7 +1695,7 @@ export function SettingsPage() {
                             }
                           >
                             {curr.toUpperCase()}
-                            {isActive && isDefault && " ★"}
+                            {isActive && isDefault && " "}
                           </Button>
                         );
                       });
@@ -1725,17 +1716,13 @@ export function SettingsPage() {
                 </div>
                 </div>
                 {/* === Безопасность === */}
-                <div className="rounded-2xl border border-rose-500/20 bg-gradient-to-br from-rose-500/5 via-red-500/5 to-pink-500/5 p-5 space-y-4">
+                <div className="rounded-xl border border-rose-500/20 bg-muted p-4 space-y-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-rose-500/20 flex items-center justify-center"><Shield className="h-4 w-4 text-rose-500" /></div>
                     <h3 className="text-base font-semibold">{t("admin.settings.security")}</h3>
                   </div>
                   <p className="text-xs text-muted-foreground">{t("admin.settings.2fa_hint")}</p>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-muted/40 border">
                     <div className="flex items-center gap-4 min-w-0">
-                      <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-primary/10 text-primary">
-                        <KeyRound className="w-5 h-5" />
-                      </div>
                       <div className="min-w-0">
                         <p className="text-xs text-muted-foreground mb-0.5">2FA</p>
                         <p className="font-medium text-sm truncate">{t("admin.settings.2fa_multi_level")}</p>
@@ -1764,68 +1751,63 @@ export function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="bot">
-            <Card className="overflow-hidden border-white/10">
-              <div className="relative bg-gradient-to-br from-sky-500/10 via-indigo-500/10 to-fuchsia-500/10 p-6 sm:p-8 border-b border-white/10">
-                <div className="absolute inset-0 bg-gradient-to-br from-sky-500/5 via-transparent to-fuchsia-500/5 pointer-events-none" />
+            <Card className="overflow-hidden border-border">
+              <div className="relative bg-muted p-4 border-b border-border">
+                <div className="absolute inset-0 bg-transparent pointer-events-none" />
                 <div className="relative flex items-start gap-5">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-sky-500/30 via-indigo-500/20 to-fuchsia-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                    <Bot className="h-7 w-7 text-foreground" />
-                  </div>
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-sky-500 via-indigo-500 to-fuchsia-500">
+                    <h2 className="text-xl font-bold tracking-tight text-foreground">
                       Настройки Telegram-бота
                     </h2>
-                    <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                    <p className="text-[12.5px] text-muted-foreground mt-1">
                       Главное меню, тексты экранов, эмодзи, поведение и ссылки. Изменения подхватываются ботом автоматически после сохранения.
                     </p>
                   </div>
                 </div>
               </div>
-              <CardContent className="p-4 sm:p-6 space-y-6">
+              <CardContent className="p-4 sm:p-4 space-y-6">
                 <Tabs value={botSubTab} onValueChange={(v) => setBotSubTab(v as typeof botSubTab)}>
-                  <TabsList className="w-full grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-1.5 h-auto bg-muted/40 rounded-2xl border">
-                    <TabsTrigger value="menu" className="gap-2 py-2.5 px-3 rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+                  <TabsList className="w-full flex flex-wrap gap-1.5 p-1.5 h-auto bg-muted/40 rounded-xl border">
+                    <TabsTrigger value="menu" className="gap-2 py-2.5 px-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
                       <Layers className="h-4 w-4 shrink-0" /><span className="text-xs sm:text-sm">Меню</span>
                     </TabsTrigger>
-                    <TabsTrigger value="texts" className="gap-2 py-2.5 px-3 rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-purple-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+                    <TabsTrigger value="texts" className="gap-2 py-2.5 px-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
                       <MessageSquare className="h-4 w-4 shrink-0" /><span className="text-xs sm:text-sm">Тексты</span>
                     </TabsTrigger>
-                    <TabsTrigger value="emoji" className="gap-2 py-2.5 px-3 rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+                    <TabsTrigger value="emoji" className="gap-2 py-2.5 px-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
                       <Smile className="h-4 w-4 shrink-0" /><span className="text-xs sm:text-sm">Эмодзи</span>
                     </TabsTrigger>
-                    <TabsTrigger value="behavior" className="gap-2 py-2.5 px-3 rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+                    <TabsTrigger value="behavior" className="gap-2 py-2.5 px-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
                       <Sliders className="h-4 w-4 shrink-0" /><span className="text-xs sm:text-sm">Поведение</span>
                     </TabsTrigger>
-                    <TabsTrigger value="links" className="gap-2 py-2.5 px-3 rounded-xl data-[state=active]:bg-gradient-to-r data-[state=active]:from-rose-500 data-[state=active]:to-pink-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+                    <TabsTrigger value="links" className="gap-2 py-2.5 px-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
                       <Link2 className="h-4 w-4 shrink-0" /><span className="text-xs sm:text-sm">Ссылки</span>
                     </TabsTrigger>
                   </TabsList>
 
                   {/* === ВКЛАДКА: МЕНЮ === */}
                   <TabsContent value="menu" className="space-y-5 mt-5">
-                    <div className="rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-500/5 via-blue-500/5 to-indigo-500/5 p-5 space-y-3">
+                    <div className="rounded-xl border border-sky-500/20 bg-muted p-4 space-y-3">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-sky-500/20 flex items-center justify-center"><ArrowLeftRight className="h-4 w-4 text-sky-500" /></div>
                         <h3 className="text-base font-semibold">Кнопка возврата</h3>
                       </div>
                       <p className="text-xs text-muted-foreground">Текст кнопки, которая возвращает в <b>главное меню</b> бота (на предыдущий экран ведёт отдельная кнопка «Назад»). Появляется почти на всех экранах.</p>
                       <Input
-                        value={settings.botBackLabel ?? "◀️ В меню"}
-                        onChange={(e) => setSettings((s) => (s ? { ...s, botBackLabel: e.target.value || "◀️ В меню" } : s))}
-                        placeholder="◀️ В меню"
+                        value={settings.botBackLabel ?? " В меню"}
+                        onChange={(e) => setSettings((s) => (s ? { ...s, botBackLabel: e.target.value || " В меню" } : s))}
+                        placeholder=" В меню"
                       />
                     </div>
 
                     {/* редактирование текстов
                         экранов бота вынесено в отдельный редактор «Тексты экранов бота» —
                         чтобы не дублировать настройку в двух местах. */}
-                    <div className="rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-500/5 via-blue-500/5 to-indigo-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-sky-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-blue-500/20 flex items-center justify-center"><Layers className="h-4 w-4 text-blue-500" /></div>
                         <h3 className="text-base font-semibold">Кнопки главного меню</h3>
                       </div>
                       <p className="text-xs text-muted-foreground">Переименуй, скрой или поменяй порядок кнопок главного меню. Каждой кнопке можно задать иконку (эмодзи), цвет и режим «во всю ширину».</p>
-                      <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-background/40 border border-white/5">
+                      <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-card border border-border">
                         <Label htmlFor="bot-buttons-per-row" className="text-sm font-medium">Кнопок в ряд:</Label>
                         <select
                           id="bot-buttons-per-row"
@@ -1844,8 +1826,8 @@ export function SettingsPage() {
                         buttons={[...(settings.botButtons ?? DEFAULT_BOT_BUTTONS)].sort((a, b) => a.order - b.order)}
                         onChange={(updated) => setSettings((s) => (s ? { ...s, botButtons: updated } : s))}
                       />
-                      <p className="text-xs text-muted-foreground rounded-lg bg-background/40 border border-white/5 p-2.5 flex items-start gap-2">
-                        <span className="text-base">💡</span>
+                      <p className="text-xs text-muted-foreground rounded-lg bg-card border border-border p-2.5 flex items-start gap-2">
+                        <span className="text-base"></span>
                         <span>Перетаскивайте кнопки за ⋮⋮ ручку слева, чтобы менять порядок. «Во всю ширину» вытолкнет кнопку на отдельную строку даже в режиме 2-колоночного меню.</span>
                       </p>
                     </div>
@@ -1853,9 +1835,8 @@ export function SettingsPage() {
 
                   {/* === ВКЛАДКА: ЭМОДЗИ === */}
                   <TabsContent value="emoji" className="space-y-5 mt-5">
-                    <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/5 via-orange-500/5 to-rose-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-amber-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-amber-500/20 flex items-center justify-center"><Smile className="h-4 w-4 text-amber-500" /></div>
                         <h3 className="text-base font-semibold">Эмодзи и премиум-иконки</h3>
                       </div>
                       <p className="text-xs text-muted-foreground">{t("admin.settings.bot_emojis_hint")}</p>
@@ -1863,13 +1844,13 @@ export function SettingsPage() {
                         <Sparkles className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                         <p className="text-xs text-amber-700 dark:text-amber-300">{t("admin.settings.bot_emojis_premium_warn")}</p>
                       </div>
-                      <div className="rounded-xl border border-white/10 overflow-hidden bg-card/40">
-                        <div className="grid grid-cols-[1fr_90px_1fr] gap-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-muted/40 border-b border-white/10">
+                      <div className="rounded-xl border border-border overflow-hidden bg-card/40">
+                        <div className="grid grid-cols-[1fr_90px_1fr] gap-0 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-muted/40 border-b border-border">
                           <div className="py-2.5 px-3">Назначение</div>
                           <div className="py-2.5 px-2 text-center">Unicode</div>
                           <div className="py-2.5 px-3">Premium ID (Telegram)</div>
                         </div>
-                        <div className="divide-y divide-white/5">
+                        <div className="divide-y divide-border">
                           {BOT_EMOJI_KEYS.map((key) => {
                             const raw = (settings.botEmojis ?? {})[key];
                             const entry = typeof raw === "object" && raw !== null ? raw : { unicode: typeof raw === "string" ? raw : undefined, tgEmojiId: undefined };
@@ -1891,7 +1872,7 @@ export function SettingsPage() {
                                         return { ...s, botEmojis: { ...(s.botEmojis ?? {}), [key]: { ...prevObj, unicode: e.target.value || undefined } } };
                                       })
                                     }
-                                    placeholder="📦"
+                                    placeholder=""
                                   />
                                 </div>
                                 <div className="py-2 px-3">
@@ -1915,9 +1896,8 @@ export function SettingsPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/5 via-orange-500/5 to-rose-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-amber-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-orange-500/20 flex items-center justify-center"><Palette className="h-4 w-4 text-orange-500" /></div>
                         <h3 className="text-base font-semibold">Цвета вторичных кнопок</h3>
                       </div>
                       <p className="text-xs text-muted-foreground">{t("admin.settings.bot_inner_styles_hint")}</p>
@@ -1927,7 +1907,7 @@ export function SettingsPage() {
                           const currentVal = (settings.botInnerButtonStyles ?? {})[key] ?? "";
                           const swatch = BOT_STYLE_OPTIONS.find((o) => o.value === currentVal)?.swatch ?? "bg-muted";
                           return (
-                            <div key={key} className="flex items-center gap-3 p-3 rounded-xl border border-white/10 bg-card/40">
+                            <div key={key} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card/40">
                               <div className={`h-3 w-3 rounded-full ${swatch} shrink-0 ring-2 ring-white/10`} />
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium truncate">{meta.label}</div>
@@ -1957,11 +1937,11 @@ export function SettingsPage() {
 
                   {/* === ВКЛАДКА: ТЕКСТЫ === */}
                   <TabsContent value="texts" className="space-y-5 mt-5">
-                    {/* ═══ Приветственное сообщение при /start ═══ */}
-                    <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-teal-500/5 to-cyan-500/5 p-5 space-y-4">
+                    {/*  Приветственное сообщение при /start  */}
+                    <div className="rounded-xl border border-emerald-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-start justify-between gap-3 flex-wrap">
                         <div className="flex items-center gap-2.5">
-                          <div className="h-8 w-8 rounded-xl bg-emerald-500/20 flex items-center justify-center">✨</div>
+                          <div className="h-8 w-8 rounded-xl bg-emerald-500/20 flex items-center justify-center"></div>
                           <div>
                             <h3 className="text-base font-semibold">Приветственное сообщение</h3>
                             <p className="text-xs text-muted-foreground">Показывается клиенту при первом /start. Картинка-баннер + текст + кнопка «Войти».</p>
@@ -1975,14 +1955,14 @@ export function SettingsPage() {
                           <span className="text-sm">Включить</span>
                         </label>
                       </div>
-                      <div className="rounded-xl border border-white/10 bg-card/40 p-4 space-y-3">
+                      <div className="rounded-xl border border-border bg-card/40 p-4 space-y-3">
                         <div className="space-y-2">
                           <Label className="text-xs">Текст приветствия</Label>
                           <textarea
                             className="w-full min-h-[160px] rounded-md border border-input bg-background px-3 py-2 text-sm"
                             value={settings.botWelcomeText ?? ""}
                             onChange={(e) => setSettings((s) => (s ? { ...s, botWelcomeText: e.target.value || null } : s))}
-                            placeholder={"Добро пожаловать в VPN!\n\n🚀 Высокая скорость\n🚫 Удаляем рекламу\n♾ Огромный запас трафика\n👥 Платим 30% с платежей друзей"}
+                            placeholder={"Добро пожаловать в VPN!\n\n Высокая скорость\n Удаляем рекламу\n Огромный запас трафика\n Платим 30% с платежей друзей"}
                             maxLength={4000}
                           />
                           <p className="text-[10px] text-muted-foreground">До 4000 символов. Эмодзи поддерживаются. Если задана картинка — текст идёт как caption (макс. 1024 символа в Telegram).</p>
@@ -1994,7 +1974,7 @@ export function SettingsPage() {
                               <img
                                 src={settings.botWelcomeImage}
                                 alt="welcome"
-                                className="h-28 w-auto rounded-md border border-white/10 object-cover"
+                                className="h-28 w-auto rounded-md border border-border object-cover"
                               />
                             )}
                             <input
@@ -2023,7 +2003,7 @@ export function SettingsPage() {
                             )}
                           </div>
                         </div>
-                        <label className="inline-flex items-center gap-2 cursor-pointer text-xs pt-2 border-t border-white/5">
+                        <label className="inline-flex items-center gap-2 cursor-pointer text-xs pt-2 border-t border-border">
                           <Switch
                             checked={settings.botWelcomeShowOnce ?? true}
                             onCheckedChange={(checked: boolean) => setSettings((s) => (s ? { ...s, botWelcomeShowOnce: checked === true } : s))}
@@ -2033,13 +2013,12 @@ export function SettingsPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/5 via-purple-500/5 to-fuchsia-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-violet-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-violet-500/20 flex items-center justify-center"><MessageSquare className="h-4 w-4 text-violet-500" /></div>
                         <h3 className="text-base font-semibold">Главное меню — содержимое</h3>
                       </div>
                       <p className="text-xs text-muted-foreground">{t("admin.settings.bot_welcome_hint")}</p>
-                      <div className="rounded-xl border border-white/10 bg-card/40 p-4 space-y-3">
+                      <div className="rounded-xl border border-border bg-card/40 p-4 space-y-3">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <Eye className="h-4 w-4 text-violet-500" />
@@ -2111,9 +2090,8 @@ export function SettingsPage() {
                       </Collapsible>
                     </div>
 
-                    <div className="rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/5 via-purple-500/5 to-fuchsia-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-violet-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-purple-500/20 flex items-center justify-center"><Package className="h-4 w-4 text-purple-500" /></div>
                         <h3 className="text-base font-semibold">Экран «Тарифы»</h3>
                       </div>
                       <p className="text-xs text-muted-foreground">{t("admin.settings.bot_tariffs_hint")}</p>
@@ -2128,7 +2106,7 @@ export function SettingsPage() {
                         />
                         <p className="text-[11px] text-muted-foreground">Доступные плейсхолдеры: <code className="bg-muted/40 px-1 py-0.5 rounded">{`{{CATEGORY}}`}</code> — название категории, <code className="bg-muted/40 px-1 py-0.5 rounded">{`{{TARIFFS}}`}</code> — список тарифов</p>
                       </div>
-                      <div className="rounded-xl border border-white/10 bg-card/40 p-4 space-y-2">
+                      <div className="rounded-xl border border-border bg-card/40 p-4 space-y-2">
                         <div className="flex items-center justify-between gap-2">
                           <Label className="text-sm font-medium">Поля в карточке тарифа</Label>
                           <Button
@@ -2161,9 +2139,8 @@ export function SettingsPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/5 via-purple-500/5 to-fuchsia-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-violet-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-fuchsia-500/20 flex items-center justify-center"><CreditCard className="h-4 w-4 text-fuchsia-500" /></div>
                         <h3 className="text-base font-semibold">Окно оплаты</h3>
                       </div>
                       <p className="text-xs text-muted-foreground">{t("admin.settings.bot_payment_hint")}</p>
@@ -2182,9 +2159,8 @@ export function SettingsPage() {
                   </TabsContent>
                   {/* === ВКЛАДКА: ПОВЕДЕНИЕ === */}
                   <TabsContent value="behavior" className="space-y-5 mt-5">
-                    <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-teal-500/5 to-cyan-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-emerald-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-emerald-500/20 flex items-center justify-center"><Megaphone className="h-4 w-4 text-emerald-500" /></div>
                         <h3 className="text-base font-semibold">Инфо-блок (объявления)</h3>
                       </div>
                       <p className="text-xs text-muted-foreground">
@@ -2198,14 +2174,13 @@ export function SettingsPage() {
                         }
                         rows={4}
                         maxLength={2000}
-                        placeholder="📢 Тех. работы 12.05 с 03:00 до 05:00 МСК&#10;💬 Поддержка: @support_bot"
+                        placeholder=" Тех. работы 12.05 с 03:00 до 05:00 МСК&#10; Поддержка: @support_bot"
                       />
                       <p className="text-[11px] text-muted-foreground text-right">{(settings.botInfoBlock ?? "").length} / 2000</p>
                     </div>
 
-                    <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-teal-500/5 to-cyan-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-emerald-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-start gap-3">
-                        <div className="h-8 w-8 rounded-xl bg-teal-500/20 flex items-center justify-center shrink-0"><Trash className="h-4 w-4 text-teal-500" /></div>
                         <div className="flex-1 min-w-0">
                           <h3 className="text-base font-semibold mb-1">Авто-удаление нераспознанных сообщений</h3>
                           <p className="text-xs text-muted-foreground">
@@ -2223,34 +2198,33 @@ export function SettingsPage() {
                     </div>
 
                     {/* Тогглы сервисных кнопок на экране «Тарифы» бота */}
-                    <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-teal-500/5 to-cyan-500/5 p-5 space-y-4 backdrop-blur">
+                    <div className="rounded-xl border border-emerald-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-teal-500/20 flex items-center justify-center"><Bot className="h-4 w-4 text-teal-500" /></div>
                         <h3 className="text-base font-semibold">Кнопки на экране «Тарифы»</h3>
                       </div>
                       <p className="text-xs text-muted-foreground">
                         Сервисные кнопки под списком тарифов в боте. Выключи, если не продаёшь доп. устройства
                         или не хочешь показывать баланс на этом экране.
                       </p>
-                      <div className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-white/5">
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-card border border-border">
                         <Switch
                           checked={settings.botTariffsShowExtraDevicesButton !== false}
                           onCheckedChange={(checked: boolean) =>
                             setSettings((s) => (s ? { ...s, botTariffsShowExtraDevicesButton: checked === true } : s))
                           }
                         />
-                        <Label className="text-sm">Кнопка «➕ Докупить устройство» в Тарифах</Label>
+                        <Label className="text-sm">Кнопка «Докупить устройство» в Тарифах</Label>
                       </div>
-                      <div className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-white/5">
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-card border border-border">
                         <Switch
                           checked={settings.botTariffsShowBalanceButton !== false}
                           onCheckedChange={(checked: boolean) =>
                             setSettings((s) => (s ? { ...s, botTariffsShowBalanceButton: checked === true } : s))
                           }
                         />
-                        <Label className="text-sm">Кнопка «💼 Мой баланс» в Тарифах</Label>
+                        <Label className="text-sm">Кнопка «Мой баланс» в Тарифах</Label>
                       </div>
-                      <div className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-white/5">
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-card border border-border">
                         <Switch
                           checked={settings.botShowTariffCategories !== false}
                           onCheckedChange={(checked: boolean) =>
@@ -2266,13 +2240,12 @@ export function SettingsPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-teal-500/5 to-cyan-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-emerald-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-cyan-500/20 flex items-center justify-center"><Bell className="h-4 w-4 text-cyan-500" /></div>
                         <h3 className="text-base font-semibold">Обязательная подписка на канал</h3>
                       </div>
                       <p className="text-xs text-muted-foreground">{t("admin.settings.bot_force_hint")}</p>
-                      <div className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-white/5">
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-card border border-border">
                         <Switch
                           checked={!!settings.forceSubscribeEnabled}
                           onCheckedChange={(checked: boolean) =>
@@ -2303,9 +2276,8 @@ export function SettingsPage() {
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-red-500/5 via-rose-500/5 to-pink-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-red-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-start gap-3">
-                        <div className="h-8 w-8 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0"><Shield className="h-4 w-4 text-red-500" /></div>
                         <div className="flex-1 min-w-0">
                           <h3 className="text-base font-semibold mb-1">Community Blacklist</h3>
                           <p className="text-xs text-muted-foreground">{t("admin.settings.bot_blacklist_hint")}</p>
@@ -2322,14 +2294,13 @@ export function SettingsPage() {
 
                   {/* === ВКЛАДКА: ССЫЛКИ === */}
                   <TabsContent value="links" className="space-y-5 mt-5">
-                    <div className="rounded-2xl border border-rose-500/20 bg-gradient-to-br from-rose-500/5 via-pink-500/5 to-fuchsia-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-rose-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-rose-500/20 flex items-center justify-center"><Link2 className="h-4 w-4 text-rose-500" /></div>
                         <h3 className="text-base font-semibold">Ссылки и поддержка</h3>
                       </div>
                       <p className="text-xs text-muted-foreground">{t("admin.settings.bot_support_hint")}</p>
                       <div className="grid gap-3">
-                        <div className="space-y-1.5 p-4 rounded-xl border border-white/10 bg-card/40">
+                        <div className="space-y-1.5 p-4 rounded-xl border border-border bg-card/40">
                           <div className="flex items-center gap-2 mb-1">
                             <MessageCircle className="h-4 w-4 text-rose-500" />
                             <Label className="text-sm font-medium">Техническая поддержка</Label>
@@ -2341,7 +2312,7 @@ export function SettingsPage() {
                             placeholder={t("admin.settings.bot_support_placeholder")}
                           />
                         </div>
-                        <div className="space-y-1.5 p-4 rounded-xl border border-white/10 bg-card/40">
+                        <div className="space-y-1.5 p-4 rounded-xl border border-border bg-card/40">
                           <div className="flex items-center gap-2 mb-1">
                             <FileText className="h-4 w-4 text-pink-500" />
                             <Label className="text-sm font-medium">Пользовательское соглашение</Label>
@@ -2353,7 +2324,7 @@ export function SettingsPage() {
                             placeholder="https://telegra.ph/..."
                           />
                         </div>
-                        <div className="space-y-1.5 p-4 rounded-xl border border-white/10 bg-card/40">
+                        <div className="space-y-1.5 p-4 rounded-xl border border-border bg-card/40">
                           <div className="flex items-center gap-2 mb-1">
                             <FileText className="h-4 w-4 text-fuchsia-500" />
                             <Label className="text-sm font-medium">Публичная оферта</Label>
@@ -2365,7 +2336,7 @@ export function SettingsPage() {
                             placeholder="https://telegra.ph/..."
                           />
                         </div>
-                        <div className="space-y-1.5 p-4 rounded-xl border border-white/10 bg-card/40">
+                        <div className="space-y-1.5 p-4 rounded-xl border border-border bg-card/40">
                           <div className="flex items-center gap-2 mb-1">
                             <FileText className="h-4 w-4 text-purple-500" />
                             <Label className="text-sm font-medium">Инструкции по подключению</Label>
@@ -2377,80 +2348,77 @@ export function SettingsPage() {
                             placeholder="https://telegra.ph/..."
                           />
                         </div>
-                        {/* инструкция по рефералке — кнопка «📖 Инструкции» в разделе рефералки бота. */}
-                        <div className="space-y-1.5 p-4 rounded-xl border border-white/10 bg-card/40">
+                        {/* инструкция по рефералке — кнопка «Инструкции» в разделе рефералки бота. */}
+                        <div className="space-y-1.5 p-4 rounded-xl border border-border bg-card/40">
                           <div className="flex items-center gap-2 mb-1">
                             <FileText className="h-4 w-4 text-emerald-500" />
                             <Label className="text-sm font-medium">Инструкция по реферальной программе</Label>
                           </div>
-                          <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph-статья «Как пользоваться рефералкой». Кнопка «📖 Инструкции» под «Поделиться ссылкой» в разделе рефералки бота. Пусто = дефолтная ссылка.</p>
+                          <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph-статья «Как пользоваться рефералкой». Кнопка «Инструкции» под «Поделиться ссылкой» в разделе рефералки бота. Пусто = дефолтная ссылка.</p>
                           <Input
                             value={settings.referralInstructionsUrl ?? ""}
                             onChange={(e) => setSettings((s) => (s ? { ...s, referralInstructionsUrl: e.target.value } : s))}
                             placeholder="https://telegra.ph/Kak-polzovatsya-referalnoj-programmoj-i-zarabatyvat-05-28"
                           />
                         </div>
-                        {/* T11 (11.05.2026): Политика возврата (Telegraph URL). Кнопка появляется в боте «Помощь → Документы». */}
-                        <div className="space-y-1.5 p-4 rounded-xl border border-white/10 bg-card/40">
+                        {/* T11 (11.05.2026): Политика возврата (Telegraph URL). Кнопка появляется в боте «Помощь  Документы». */}
+                        <div className="space-y-1.5 p-4 rounded-xl border border-border bg-card/40">
                           <div className="flex items-center gap-2 mb-1">
                             <FileText className="h-4 w-4 text-amber-500" />
                             <Label className="text-sm font-medium">Политика возврата</Label>
                           </div>
-                          <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph-страница с правилами возврата средств. Появляется кнопкой в «Помощь → Документы».</p>
+                          <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph-страница с правилами возврата средств. Появляется кнопкой в «Помощь  Документы».</p>
                           <Input
                             value={(settings as { refundLink?: string | null }).refundLink ?? ""}
                             onChange={(e) => setSettings((s) => (s ? { ...s, refundLink: e.target.value } as typeof s : s))}
                             placeholder="https://telegra.ph/..."
                           />
                         </div>
-                        {/* Текст экрана «⭕ Помощь» (help_intro_text) — большой rich-text «цели/приоритеты». */}
-                        <div className="space-y-1.5 p-4 rounded-xl border border-white/10 bg-card/40 sm:col-span-2">
+                        {/* Текст экрана «Помощь» (help_intro_text) — большой rich-text «цели/приоритеты». */}
+                        <div className="space-y-1.5 p-4 rounded-xl border border-border bg-card/40 sm:col-span-2">
                           <div className="flex items-center gap-2 mb-1">
                             <FileText className="h-4 w-4 text-cyan-500" />
                             <Label className="text-sm font-medium">Текст экрана «Помощь»</Label>
                           </div>
-                          <p className="text-[11px] text-muted-foreground mb-2">Большой блок «цели / приоритеты / правила» в разделе «⭕ Помощь» бота. Поддерживает несколько строк и эмодзи. Пусто = скрыт.</p>
+                          <p className="text-[11px] text-muted-foreground mb-2">Большой блок «цели / приоритеты / правила» в разделе «Помощь» бота. Поддерживает несколько строк и эмодзи. Пусто = скрыт.</p>
                           <textarea
                             className="w-full min-h-[200px] rounded-xl border border-input bg-background px-3 py-2 text-sm"
                             value={(settings as { helpIntroText?: string | null }).helpIntroText ?? ""}
                             onChange={(e) => setSettings((s) => (s ? { ...s, helpIntroText: e.target.value || undefined } as typeof s : s))}
-                            placeholder="Обращайтесь к нам по любым вопросам и предложениям ✨&#10;&#10;🎯 Наша цель — ..."
+                            placeholder="Обращайтесь к нам по любым вопросам и предложениям &#10;&#10; Наша цель — ..."
                             maxLength={8000}
                           />
                         </div>
                       </div>
                     </div>
 
-                    {/* настройки экрана «🛡 Бесплатный Прокси для Telegram».
+                    {/* настройки экрана «Бесплатный Прокси для Telegram».
                         Текст экрана + динамический список прокси-серверов (любое кол-во стран).
                         Каждая запись = {flag, name, url}. Бот рендерит по кнопке на каждый
                         элемент в порядке списка. Старые поля primary/backup используются
                         только как fallback если массив пуст. */}
-                    <div className="rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-500/5 via-cyan-500/5 to-blue-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-sky-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="h-8 w-8 rounded-xl bg-sky-500/20 flex items-center justify-center">
-                          <Link2 className="h-4 w-4 text-sky-500" />
-                        </div>
-                        <h3 className="text-base font-semibold">🛡 Бесплатный Telegram-прокси</h3>
+                        <h3 className="text-base font-semibold"> Бесплатный Telegram-прокси</h3>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Кнопка «🛡 Бесплатный Прокси для Telegram» в главном меню бота. Открывает экран с инструкцией и кнопками-странами. Добавь столько прокси-серверов, сколько нужно — каждый рендерится отдельной кнопкой в порядке списка.
+                        Кнопка «Бесплатный Прокси для Telegram» в главном меню бота. Открывает экран с инструкцией и кнопками-странами. Добавь столько прокси-серверов, сколько нужно — каждый рендерится отдельной кнопкой в порядке списка.
                       </p>
                       <div className="grid gap-3">
-                        <div className="space-y-1.5 p-4 rounded-xl border border-white/10 bg-card/40">
+                        <div className="space-y-1.5 p-4 rounded-xl border border-border bg-card/40">
                           <Label className="text-sm font-medium">Текст экрана</Label>
                           <p className="text-[11px] text-muted-foreground mb-2">Markdown-текст инструкции (что такое прокси, как подключить/отключить). Показывается над кнопками.</p>
                           <textarea
                             className="w-full min-h-[160px] rounded-xl border border-input bg-background px-3 py-2 text-sm font-mono"
                             value={settings.tgProxyText ?? ""}
                             onChange={(e) => setSettings((s) => (s ? { ...s, tgProxyText: e.target.value || undefined } : s))}
-                            placeholder="🛡 Бесплатный прокси для Telegram&#10;&#10;Что такое прокси?..."
+                            placeholder=" Бесплатный прокси для Telegram&#10;&#10;Что такое прокси?..."
                             maxLength={8000}
                           />
                         </div>
 
                         {/* Список серверов */}
-                        <div className="space-y-2 p-4 rounded-xl border border-white/10 bg-card/40">
+                        <div className="space-y-2 p-4 rounded-xl border border-border bg-card/40">
                           <div className="flex items-center justify-between mb-1">
                             <Label className="text-sm font-medium">Прокси-серверы</Label>
                             <Button
@@ -2466,7 +2434,7 @@ export function SettingsPage() {
                               + Добавить страну
                             </Button>
                           </div>
-                          <p className="text-[11px] text-muted-foreground mb-2">URL формата <code className="text-[10px] bg-foreground/5 px-1 py-0.5 rounded">tg://proxy?server=IP&amp;port=4433&amp;secret=ee...</code>. Порядок в списке = порядок кнопок в боте. Стрелочки ↑↓ — поменять местами, ✕ — удалить.</p>
+                          <p className="text-[11px] text-muted-foreground mb-2">URL формата <code className="text-[10px] bg-foreground/5 px-1 py-0.5 rounded">tg://proxy?server=IP&amp;port=4433&amp;secret=ee...</code>. Порядок в списке = порядок кнопок в боте. Стрелочки  — поменять местами,  — удалить.</p>
                           {(() => {
                             const list = ((settings as { tgProxyServers?: { flag: string; name: string; url: string }[] | null }).tgProxyServers) ?? [];
                             if (list.length === 0) {
@@ -2475,7 +2443,7 @@ export function SettingsPage() {
                             return (
                               <div className="space-y-2">
                                 {list.map((srv, idx) => (
-                                  <div key={idx} className="flex items-start gap-2 p-2 rounded-lg border border-white/10 bg-background/30">
+                                  <div key={idx} className="flex items-start gap-2 p-2 rounded-lg border border-border bg-card">
                                     <div className="flex flex-col gap-1 pt-1">
                                       <button
                                         type="button"
@@ -2489,7 +2457,7 @@ export function SettingsPage() {
                                           [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
                                           return { ...s, tgProxyServers: arr } as typeof s;
                                         })}
-                                      >▲</button>
+                                      ></button>
                                       <button
                                         type="button"
                                         disabled={idx === list.length - 1}
@@ -2502,7 +2470,7 @@ export function SettingsPage() {
                                           [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
                                           return { ...s, tgProxyServers: arr } as typeof s;
                                         })}
-                                      >▼</button>
+                                      ></button>
                                     </div>
                                     <Input
                                       className="w-16 text-center"
@@ -2513,7 +2481,7 @@ export function SettingsPage() {
                                         arr[idx] = { ...arr[idx], flag: e.target.value };
                                         return { ...s, tgProxyServers: arr } as typeof s;
                                       })}
-                                      placeholder="🇳🇱"
+                                      placeholder=""
                                       maxLength={8}
                                     />
                                     <Input
@@ -2552,7 +2520,7 @@ export function SettingsPage() {
                                         arr.splice(idx, 1);
                                         return { ...s, tgProxyServers: arr } as typeof s;
                                       })}
-                                    >✕</Button>
+                                    ></Button>
                                   </div>
                                 ))}
                               </div>
@@ -2565,7 +2533,7 @@ export function SettingsPage() {
                 </Tabs>
 
                 {message && <p className="text-sm text-muted-foreground">{message}</p>}
-                <Button type="submit" disabled={saving} className="w-full sm:w-auto h-11 px-6 rounded-xl bg-gradient-to-r from-sky-500 via-indigo-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold shadow-lg shadow-primary/20">
+                <Button type="submit" disabled={saving} className="w-full sm:w-auto h-9 px-6 rounded-xl bg-primary hover:opacity-90 text-white font-semibold shadow-primary/20">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
                   {saving ? t("admin.settings.saving") : t("admin.settings.save")}
                 </Button>
@@ -2580,22 +2548,19 @@ export function SettingsPage() {
               backend fallback'ит на legacy single-trial). Но из UI настроек убраны. */}
 
           <TabsContent value="subpage">
-            <Card className="overflow-hidden border-white/10">
-              <div className="relative bg-gradient-to-br from-rose-500/10 via-pink-500/10 to-fuchsia-500/10 p-6 sm:p-8 border-b border-white/10">
-                <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 via-transparent to-fuchsia-500/5 pointer-events-none" />
+            <Card className="overflow-hidden border-border">
+              <div className="relative bg-muted p-4 border-b border-border">
+                <div className="absolute inset-0 bg-transparent pointer-events-none" />
                 <div className="relative flex items-start gap-5">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-rose-500/30 via-pink-500/20 to-fuchsia-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                    <FileJson className="h-7 w-7 text-foreground" />
-                  </div>
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-rose-500 via-pink-500 to-fuchsia-500">
+                    <h2 className="text-xl font-bold tracking-tight text-foreground">
                       {t("admin.settings.subpage_title")}
                     </h2>
-                    <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.subpage_editor_hint")}</p>
+                    <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.subpage_editor_hint")}</p>
                   </div>
                 </div>
               </div>
-              <CardContent className="p-4 sm:p-6">
+              <CardContent className="p-4 sm:p-4">
                 <div className="p-4 rounded-lg border bg-muted/40 mb-4 space-y-3">
                   <div className="flex items-center gap-2">
                     <input
@@ -2664,31 +2629,27 @@ export function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="referral">
-            <Card className="overflow-hidden border-white/10">
-              <div className="relative bg-gradient-to-br from-violet-500/10 via-purple-500/10 to-fuchsia-500/10 p-6 sm:p-8 border-b border-white/10">
-                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-fuchsia-500/5 pointer-events-none" />
+            <Card className="overflow-hidden border-border">
+              <div className="relative bg-muted p-4 border-b border-border">
+                <div className="absolute inset-0 bg-transparent pointer-events-none" />
                 <div className="relative flex items-start gap-5">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-violet-500/30 via-purple-500/20 to-fuchsia-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                    <Users className="h-7 w-7 text-foreground" />
-                  </div>
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500">
+                    <h2 className="text-xl font-bold tracking-tight text-foreground">
                       {t("admin.settings.referral_title")}
                     </h2>
-                    <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.referral_subtitle")}</p>
+                    <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.referral_subtitle")}</p>
                   </div>
                 </div>
               </div>
-              <CardContent className="space-y-5 p-4 sm:p-6">
-                <div className="rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/5 via-purple-500/5 to-fuchsia-500/5 p-5 space-y-4">
+              <CardContent className="space-y-5 p-4 sm:p-4">
+                <div className="rounded-xl border border-violet-500/20 bg-muted p-4 space-y-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-violet-500/20 flex items-center justify-center"><Network className="h-4 w-4 text-violet-500" /></div>
                     <h3 className="text-base font-semibold">3-уровневая реферальная сеть</h3>
                   </div>
                   <p className="text-xs text-muted-foreground">Процент с каждого пополнения, который начисляется на баланс реферера. Уровень 1 — прямой реф; уровень 2 — реф вашего рефа; уровень 3 — реф второго уровня.</p>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="rounded-xl border border-violet-500/30 bg-card/40 p-4 space-y-2 relative overflow-hidden">
-                      <div className="absolute -top-4 -right-4 w-16 h-16 rounded-full bg-gradient-to-br from-violet-500/20 to-violet-500/5 blur-xl" />
+                      <div className="absolute -top-4 -right-4 w-16 h-16 rounded-full bg-muted blur-xl" />
                       <div className="relative flex items-center gap-2">
                         <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-violet-500/15 text-violet-500 text-xs font-bold">L1</span>
                         <Label className="text-sm font-medium">{t("admin.settings.referral_level_1")}</Label>
@@ -2698,15 +2659,15 @@ export function SettingsPage() {
                           type="number"
                           min={0}
                           max={100}
-                          className="text-2xl font-bold tabular-nums h-14"
+                          className="text-[13.5px] font-bold tabular-nums h-14"
                           value={settings.defaultReferralPercent ?? 30}
                           onChange={(e) => setSettings((s) => (s ? { ...s, defaultReferralPercent: Number(e.target.value) || 0 } : s))}
                         />
-                        <span className="text-2xl font-bold text-violet-500">%</span>
+                        <span className="text-[13.5px] font-bold text-violet-500">%</span>
                       </div>
                     </div>
                     <div className="rounded-xl border border-purple-500/30 bg-card/40 p-4 space-y-2 relative overflow-hidden">
-                      <div className="absolute -top-4 -right-4 w-16 h-16 rounded-full bg-gradient-to-br from-purple-500/20 to-purple-500/5 blur-xl" />
+                      <div className="absolute -top-4 -right-4 w-16 h-16 rounded-full bg-muted blur-xl" />
                       <div className="relative flex items-center gap-2">
                         <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-purple-500/15 text-purple-500 text-xs font-bold">L2</span>
                         <Label className="text-sm font-medium">{t("admin.settings.referral_level_2")}</Label>
@@ -2716,15 +2677,15 @@ export function SettingsPage() {
                           type="number"
                           min={0}
                           max={100}
-                          className="text-2xl font-bold tabular-nums h-14"
+                          className="text-[13.5px] font-bold tabular-nums h-14"
                           value={settings.referralPercentLevel2 ?? 10}
                           onChange={(e) => setSettings((s) => (s ? { ...s, referralPercentLevel2: Number(e.target.value) || 0 } : s))}
                         />
-                        <span className="text-2xl font-bold text-purple-500">%</span>
+                        <span className="text-[13.5px] font-bold text-purple-500">%</span>
                       </div>
                     </div>
                     <div className="rounded-xl border border-fuchsia-500/30 bg-card/40 p-4 space-y-2 relative overflow-hidden">
-                      <div className="absolute -top-4 -right-4 w-16 h-16 rounded-full bg-gradient-to-br from-fuchsia-500/20 to-fuchsia-500/5 blur-xl" />
+                      <div className="absolute -top-4 -right-4 w-16 h-16 rounded-full bg-muted blur-xl" />
                       <div className="relative flex items-center gap-2">
                         <span className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-fuchsia-500/15 text-fuchsia-500 text-xs font-bold">L3</span>
                         <Label className="text-sm font-medium">{t("admin.settings.referral_level_3")}</Label>
@@ -2734,11 +2695,11 @@ export function SettingsPage() {
                           type="number"
                           min={0}
                           max={100}
-                          className="text-2xl font-bold tabular-nums h-14"
+                          className="text-[13.5px] font-bold tabular-nums h-14"
                           value={settings.referralPercentLevel3 ?? 10}
                           onChange={(e) => setSettings((s) => (s ? { ...s, referralPercentLevel3: Number(e.target.value) || 0 } : s))}
                         />
-                        <span className="text-2xl font-bold text-fuchsia-500">%</span>
+                        <span className="text-[13.5px] font-bold text-fuchsia-500">%</span>
                       </div>
                     </div>
                   </div>
@@ -2746,10 +2707,10 @@ export function SettingsPage() {
 
                 {/* заявки на вывод реф. баланса: вкл/выкл + мин. сумма.
                     Выключение прячет кнопку в боте и блок в кабинете/на сайте. */}
-                <div className="rounded-2xl border border-white/10 bg-card/50 p-5 space-y-4">
+                <div className="rounded-xl border border-border bg-card/50 p-4 space-y-4">
                   <div className="flex items-center justify-between gap-4">
                     <div className="space-y-1">
-                      <Label className="text-base font-semibold">💸 Заявки на вывод</Label>
+                      <Label className="text-base font-semibold"> Заявки на вывод</Label>
                       <p className="text-sm text-muted-foreground">
                         Вывод реферального баланса (USDT TRC20). Выключено — кнопка в боте и блок
                         в кабинете/на сайте скрываются, API отклоняет новые заявки.
@@ -2766,7 +2727,7 @@ export function SettingsPage() {
                       <Input
                         type="number"
                         min={1}
-                        className="h-11 rounded-xl tabular-nums"
+                        className="h-9 rounded-xl tabular-nums"
                         value={settings.withdrawalMinAmount ?? 3000}
                         onChange={(e) => setSettings((s) => (s ? { ...s, withdrawalMinAmount: Math.max(1, Number(e.target.value) || 1) } : s))}
                       />
@@ -2775,7 +2736,7 @@ export function SettingsPage() {
                 </div>
 
                 {message && <p className="text-sm text-muted-foreground">{message}</p>}
-                <Button type="submit" disabled={saving} className="w-full sm:w-auto h-11 px-6 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:opacity-90 text-white font-semibold shadow-lg shadow-violet-500/20">
+                <Button type="submit" disabled={saving} className="w-full sm:w-auto h-9 px-6 rounded-xl bg-primary hover:opacity-90 text-white font-semibold shadow-violet-500/20">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
                   {saving ? t("admin.settings.saving") : t("admin.settings.save")}
                 </Button>
@@ -2784,22 +2745,19 @@ export function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="payments" className="space-y-4">
-            <Card className="overflow-hidden border-white/10">
-              <div className="relative bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-yellow-500/10 p-6 sm:p-8 border-b border-white/10">
-                <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-yellow-500/5 pointer-events-none" />
+            <Card className="overflow-hidden border-border">
+              <div className="relative bg-muted p-4 border-b border-border">
+                <div className="absolute inset-0 bg-transparent pointer-events-none" />
                 <div className="relative flex items-start gap-5">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-amber-500/30 via-orange-500/20 to-yellow-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                    <CreditCard className="h-7 w-7 text-foreground" />
-                  </div>
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-500">
+                    <h2 className="text-xl font-bold tracking-tight text-foreground">
                       {t("admin.settings.payments_general")}
                     </h2>
-                    <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">Платёжные провайдеры, авто-продление подписки, общие настройки оплат.</p>
+                    <p className="text-[12.5px] text-muted-foreground mt-1">Платёжные провайдеры, авто-продление подписки, общие настройки оплат.</p>
                   </div>
                 </div>
               </div>
-              <CardContent className="space-y-4 p-4 sm:p-6">
+              <CardContent className="space-y-4 p-4 sm:p-4">
                 <div className="flex items-center justify-between gap-4 p-4 rounded-xl border bg-card/50">
                   <div className="space-y-1">
                     <Label className="text-base font-semibold">{t("admin.settings.auto_renew")}</Label>
@@ -2897,30 +2855,30 @@ export function SettingsPage() {
                 <CardContent>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     <div className="rounded-lg border bg-card p-4 text-center">
-                      <p className="text-2xl font-bold text-green-500">{autoRenewStats.enabled}</p>
+                      <p className="text-[13.5px] font-bold text-green-500">{autoRenewStats.enabled}</p>
                       <p className="text-xs text-muted-foreground mt-1">{t("admin.settings.auto_renew_on")}</p>
                     </div>
                     <div className="rounded-lg border bg-card p-4 text-center">
-                      <p className="text-2xl font-bold text-muted-foreground">{autoRenewStats.disabled}</p>
+                      <p className="text-[13.5px] font-bold text-muted-foreground">{autoRenewStats.disabled}</p>
                       <p className="text-xs text-muted-foreground mt-1">{t("admin.settings.auto_renew_off")}</p>
                     </div>
                     <div className="rounded-lg border bg-card p-4 text-center">
-                      <p className="text-2xl font-bold text-yellow-500">{autoRenewStats.retriesInProgress}</p>
+                      <p className="text-[13.5px] font-bold text-yellow-500">{autoRenewStats.retriesInProgress}</p>
                       <p className="text-xs text-muted-foreground mt-1">
                         <RotateCw className="inline h-3 w-3 mr-1" />
                         {t("admin.settings.retry_attempts")}
                       </p>
                     </div>
                     <div className="rounded-lg border bg-card p-4 text-center">
-                      <p className="text-2xl font-bold">{autoRenewStats.renewalsLast7Days}</p>
+                      <p className="text-[13.5px] font-bold">{autoRenewStats.renewalsLast7Days}</p>
                       <p className="text-xs text-muted-foreground mt-1">{t("admin.settings.renewals_7d")}</p>
                     </div>
                     <div className="rounded-lg border bg-card p-4 text-center">
-                      <p className="text-2xl font-bold">{autoRenewStats.renewalsLast30Days}</p>
+                      <p className="text-[13.5px] font-bold">{autoRenewStats.renewalsLast30Days}</p>
                       <p className="text-xs text-muted-foreground mt-1">{t("admin.settings.renewals_30d")}</p>
                     </div>
                     <div className="rounded-lg border bg-card p-4 text-center">
-                      <p className="text-2xl font-bold text-primary">{autoRenewStats.amountLast30Days.toLocaleString("ru-RU")} {settings?.defaultCurrency === "rub" ? "₽" : "$"}</p>
+                      <p className="text-[13.5px] font-bold text-primary">{autoRenewStats.amountLast30Days.toLocaleString("ru-RU")} {settings?.defaultCurrency === "rub" ? "₽" : "$"}</p>
                       <p className="text-xs text-muted-foreground mt-1">{t("admin.settings.amount_30d")}</p>
                     </div>
                   </div>
@@ -2928,7 +2886,7 @@ export function SettingsPage() {
               </Card>
             )}
 
-            {/* ── Порядок и названия платёжных провайдеров ── */}
+            {/*  Порядок и названия платёжных провайдеров  */}
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-2">
@@ -3006,7 +2964,7 @@ export function SettingsPage() {
                         </div>
                         <ChevronDown className="chevron h-5 w-5 shrink-0 text-muted-foreground" />
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
+                      <p className="text-[12.5px] text-muted-foreground mt-[3px]">
                         {t("admin.settings.platega_callback_note")}
                       </p>
                     </CardHeader>
@@ -3063,7 +3021,7 @@ export function SettingsPage() {
                       </div>
                     </div>
                     <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 mt-4 space-y-2">
-                      <Label className="text-emerald-700 dark:text-emerald-400">🔒 Защита webhook'ов от форджинга</Label>
+                      <Label className="text-emerald-700 dark:text-emerald-400"> Защита webhook'ов от форджинга</Label>
                       <p className="text-xs text-muted-foreground">
                         Включается автоматически когда заданы <code className="text-[11px]">Merchant ID</code> и <code className="text-[11px]">Secret key</code> выше. Каждый входящий webhook проверяется через Platega API: запрашиваем у них реальный статус транзакции и доверяем только их ответу. Атакер не может подделать ответ от <code className="text-[11px]">app.platega.io</code>, поэтому форджинг невозможен.
                       </p>
@@ -3151,7 +3109,7 @@ export function SettingsPage() {
                         </div>
                         <ChevronDown className="chevron h-5 w-5 shrink-0 text-muted-foreground" />
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
+                      <p className="text-[12.5px] text-muted-foreground mt-[3px]">
                         {t("admin.settings.yoomoney_register")} <a href="https://yoomoney.ru/myservices/new" target="_blank" rel="noreferrer" className="text-primary underline">yoomoney.ru/myservices/new</a>
                       </p>
                     </CardHeader>
@@ -3236,7 +3194,7 @@ export function SettingsPage() {
                         </div>
                         <ChevronDown className="chevron h-5 w-5 shrink-0 text-muted-foreground" />
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
+                      <p className="text-[12.5px] text-muted-foreground mt-[3px]">
                         {t("admin.settings.yookassa_register")} <a href="https://yookassa.ru/joinups" target="_blank" rel="noreferrer" className="text-primary underline">yookassa.ru</a>
                       </p>
                     </CardHeader>
@@ -3349,7 +3307,7 @@ export function SettingsPage() {
                         </div>
                         <ChevronDown className="chevron h-5 w-5 shrink-0 text-muted-foreground" />
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
+                      <p className="text-[12.5px] text-muted-foreground mt-[3px]">
                         {t("admin.settings.cryptopay_register")}
                       </p>
                     </CardHeader>
@@ -3438,7 +3396,7 @@ export function SettingsPage() {
                         </div>
                         <ChevronDown className="chevron h-5 w-5 shrink-0 text-muted-foreground" />
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
+                      <p className="text-[12.5px] text-muted-foreground mt-[3px]">
                         {t("admin.settings.heleket_register")}
                       </p>
                     </CardHeader>
@@ -3523,7 +3481,7 @@ export function SettingsPage() {
                         </div>
                         <ChevronDown className="chevron h-5 w-5 shrink-0 text-muted-foreground" />
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
+                      <p className="text-[12.5px] text-muted-foreground mt-[3px]">
                         {t("admin.settings.lava_register")}
                       </p>
                     </CardHeader>
@@ -3595,7 +3553,7 @@ export function SettingsPage() {
                       </div>
                     </div>
 
-                    {/* ─── Lava.top — отдельный провайдер, product/offer модель ─── */}
+                    {/*  Lava.top — отдельный провайдер, product/offer модель  */}
                     <div className="pt-4 mt-4 border-t border-dashed">
                       <h4 className="text-sm font-semibold mb-2">Lava.top (gate.lava.top)</h4>
                       <p className="text-xs text-muted-foreground mb-3">
@@ -3616,7 +3574,7 @@ export function SettingsPage() {
                             onChange={(e) => setSettings((s) => (s ? { ...s, lavatopApiKey: e.target.value || null } : s))}
                             placeholder="********"
                           />
-                          <p className="text-xs text-muted-foreground">ЛК Lava.top → Integrations → Public API</p>
+                          <p className="text-xs text-muted-foreground">ЛК Lava.top  Integrations  Public API</p>
                         </div>
                         <div className="space-y-2">
                           <Label>Default Offer ID (UUID)</Label>
@@ -3629,7 +3587,7 @@ export function SettingsPage() {
                         </div>
                       </div>
 
-                      {/* ─── Список офферов из Lava.top API ─── */}
+                      {/*  Список офферов из Lava.top API  */}
                       <LavatopOffersBrowser />
                     </div>
 
@@ -3657,7 +3615,7 @@ export function SettingsPage() {
                         </div>
                         <ChevronDown className="chevron h-5 w-5 shrink-0 text-muted-foreground" />
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
+                      <p className="text-[12.5px] text-muted-foreground mt-[3px]">
                         {t("admin.settings.overpay_register")}
                       </p>
                     </CardHeader>
@@ -3748,22 +3706,19 @@ export function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="ai">
-            <Card className="overflow-hidden border-white/10">
-              <div className="relative bg-gradient-to-br from-fuchsia-500/10 via-pink-500/10 to-purple-500/10 p-6 sm:p-8 border-b border-white/10">
-                <div className="absolute inset-0 bg-gradient-to-br from-fuchsia-500/5 via-transparent to-purple-500/5 pointer-events-none" />
+            <Card className="overflow-hidden border-border">
+              <div className="relative bg-muted p-4 border-b border-border">
+                <div className="absolute inset-0 bg-transparent pointer-events-none" />
                 <div className="relative flex items-start gap-5">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-fuchsia-500/30 via-pink-500/20 to-purple-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                    <Sparkles className="h-7 w-7 text-foreground" />
-                  </div>
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-fuchsia-500 via-pink-500 to-purple-500">
+                    <h2 className="text-xl font-bold tracking-tight text-foreground">
                       {t("admin.settings.ai_title")}
                     </h2>
-                    <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.ai_subtitle")} {t("admin.settings.ai_integration_hint")}</p>
+                    <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.ai_subtitle")} {t("admin.settings.ai_integration_hint")}</p>
                   </div>
                 </div>
               </div>
-              <CardContent className="space-y-4 p-4 sm:p-6">
+              <CardContent className="space-y-4 p-4 sm:p-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t("admin.settings.ai_groq_key")}</Label>
@@ -3881,28 +3836,25 @@ export function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="mail-telegram">
-            <Card className="overflow-hidden border-white/10">
-              <div className="relative bg-gradient-to-br from-cyan-500/10 via-teal-500/10 to-sky-500/10 p-6 sm:p-8 border-b border-white/10">
-                <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-sky-500/5 pointer-events-none" />
+            <Card className="overflow-hidden border-border">
+              <div className="relative bg-muted p-4 border-b border-border">
+                <div className="absolute inset-0 bg-transparent pointer-events-none" />
                 <div className="relative flex items-start gap-5">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-cyan-500/30 via-teal-500/20 to-sky-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                    <Mail className="h-7 w-7 text-foreground" />
-                  </div>
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-cyan-500 via-teal-500 to-sky-500">
+                    <h2 className="text-xl font-bold tracking-tight text-foreground">
                       {t("admin.settings.smtp_title")}
                     </h2>
-                    <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.smtp_subtitle")}</p>
+                    <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.smtp_subtitle")}</p>
                   </div>
                 </div>
               </div>
-              <CardContent className="space-y-5 p-4 sm:p-6">
+              <CardContent className="space-y-5 p-4 sm:p-4">
 
-                {/* ───── Happ Crypto Link ───── */}
-                <div className="rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/5 via-purple-500/5 to-fuchsia-500/5 p-5 space-y-3">
+                {/*  Happ Crypto Link  */}
+                <div className="rounded-xl border border-violet-500/20 bg-muted p-4 space-y-3">
                   <div className="flex items-center gap-2.5">
                     <div className="h-8 w-8 rounded-xl bg-violet-500/20 flex items-center justify-center">
-                      <span className="text-sm">🔗</span>
+                      <span className="text-sm"></span>
                     </div>
                     <h3 className="text-base font-semibold">Happ Crypto Link</h3>
                   </div>
@@ -3912,7 +3864,7 @@ export function SettingsPage() {
                     Минус: зашифрованная ссылка длиннее (~1500 символов) — в Telegram-сообщениях выглядит
                     как простыня. Рекомендуется только если у вас публичная панель и важно скрыть домен подписки.
                   </p>
-                  <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-white/5 cursor-pointer">
+                  <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
                     <input
                       type="checkbox"
                       checked={settings.happCryptEnabled === true}
@@ -3928,11 +3880,11 @@ export function SettingsPage() {
                   </label>
                 </div>
 
-                {/* ───── Антибот-защита регистраций ───── */}
-                <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-red-500/5 via-amber-500/5 to-orange-500/5 p-5 space-y-4">
+                {/*  Антибот-защита регистраций  */}
+                <div className="rounded-xl border border-red-500/20 bg-muted p-4 space-y-4">
                   <div className="flex items-center gap-2.5">
                     <div className="h-8 w-8 rounded-xl bg-red-500/20 flex items-center justify-center">
-                      <span className="text-sm">🛡️</span>
+                      <span className="text-sm"></span>
                     </div>
                     <h3 className="text-base font-semibold">Антибот-защита регистраций</h3>
                   </div>
@@ -3942,7 +3894,7 @@ export function SettingsPage() {
                     Просмотр и удаление уже накопленных ботов — на странице{" "}
                     <a href="/admin/antibot" className="text-primary underline hover:no-underline">Антибот</a>.
                   </p>
-                  <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-white/5 cursor-pointer">
+                  <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
                     <input
                       type="checkbox"
                       checked={settings.signupProtectionEnabled !== false}
@@ -3982,7 +3934,7 @@ export function SettingsPage() {
                       value={settings.emailDomainBlocklist ?? ""}
                       onChange={(e) => setSettings((s) => (s ? { ...s, emailDomainBlocklist: e.target.value } : s))}
                       placeholder="badmail.ru, fake-domain.com"
-                      className="w-full rounded-xl border border-white/10 bg-card/40 px-3 py-2 text-sm font-mono"
+                      className="w-full rounded-xl border border-border bg-card/40 px-3 py-2 text-sm font-mono"
                     />
                     <p className="text-[11px] text-muted-foreground">
                       Через запятую или с новой строки. Расширяет встроенный список (example.com, mailinator,
@@ -3996,7 +3948,7 @@ export function SettingsPage() {
                       value={settings.emailPatternBlocklist ?? ""}
                       onChange={(e) => setSettings((s) => (s ? { ...s, emailPatternBlocklist: e.target.value } : s))}
                       placeholder={"^junk\\d+@\n^fake_"}
-                      className="w-full rounded-xl border border-white/10 bg-card/40 px-3 py-2 text-sm font-mono"
+                      className="w-full rounded-xl border border-border bg-card/40 px-3 py-2 text-sm font-mono"
                     />
                     <p className="text-[11px] text-muted-foreground">
                       По одному regex на строку (без флагов, регистр игнорируется). Встроенные:{" "}
@@ -4006,20 +3958,19 @@ export function SettingsPage() {
                   </div>
                 </div>
 
-                {/* ───── Провайдер отправки писем (SMTP / Resend) ───── */}
-                <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-teal-500/5 to-cyan-500/5 p-5 space-y-4">
+                {/*  Провайдер отправки писем (SMTP / Resend)  */}
+                <div className="rounded-xl border border-emerald-500/20 bg-muted p-4 space-y-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-emerald-500/20 flex items-center justify-center"><Mail className="h-4 w-4 text-emerald-500" /></div>
                     <h3 className="text-base font-semibold">Провайдер отправки писем</h3>
                   </div>
                   <p className="text-xs text-muted-foreground">Чем отправлять письма регистрации, подтверждения почты и восстановления пароля: классический SMTP-сервер или Resend API (проще — только API-ключ и верифицированный домен).</p>
                   <div className="grid grid-cols-2 gap-3">
                     <button type="button" onClick={() => setSettings((s) => (s ? { ...s, mailProvider: "smtp" } : s))}
-                      className={`rounded-xl border p-3 text-sm font-medium transition ${(settings.mailProvider ?? "smtp") !== "resend" ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300" : "border-white/10 bg-card/40 text-muted-foreground hover:border-white/20"}`}>
+                      className={`rounded-xl border p-3 text-sm font-medium transition ${(settings.mailProvider ?? "smtp") !== "resend" ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300" : "border-border bg-card/40 text-muted-foreground hover:border-border"}`}>
                       SMTP-сервер
                     </button>
                     <button type="button" onClick={() => setSettings((s) => (s ? { ...s, mailProvider: "resend" } : s))}
-                      className={`rounded-xl border p-3 text-sm font-medium transition ${settings.mailProvider === "resend" ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300" : "border-white/10 bg-card/40 text-muted-foreground hover:border-white/20"}`}>
+                      className={`rounded-xl border p-3 text-sm font-medium transition ${settings.mailProvider === "resend" ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300" : "border-border bg-card/40 text-muted-foreground hover:border-border"}`}>
                       Resend API
                     </button>
                   </div>
@@ -4028,7 +3979,7 @@ export function SettingsPage() {
                       <div className="space-y-2">
                         <Label>Resend API-ключ</Label>
                         <Input type="password" value={settings.resendApiKey ?? ""} onChange={(e) => setSettings((s) => (s ? { ...s, resendApiKey: e.target.value || null } : s))} placeholder="re_..." />
-                        <p className="text-[11px] text-muted-foreground">Панель Resend → API Keys. Домен отправителя должен быть верифицирован в Resend.</p>
+                        <p className="text-[11px] text-muted-foreground">Панель Resend  API Keys. Домен отправителя должен быть верифицирован в Resend.</p>
                       </div>
                       <div className="space-y-2">
                         <Label>Resend: адрес отправителя (From)</Label>
@@ -4037,7 +3988,7 @@ export function SettingsPage() {
                       </div>
                     </div>
                   )}
-                  <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-white/5 cursor-pointer">
+                  <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
                     <input type="checkbox" checked={settings.passwordResetEnabled ?? false} onChange={(e) => setSettings((s) => (s ? { ...s, passwordResetEnabled: e.target.checked } : s))} className="rounded border w-4 h-4" />
                     <div className="flex-1">
                       <span className="text-sm font-medium">Восстановление пароля по email</span>
@@ -4046,13 +3997,12 @@ export function SettingsPage() {
                   </label>
                 </div>
 
-                <div className="rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/5 via-teal-500/5 to-sky-500/5 p-5 space-y-4">
+                <div className="rounded-xl border border-cyan-500/20 bg-muted p-4 space-y-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-cyan-500/20 flex items-center justify-center"><Mail className="h-4 w-4 text-cyan-500" /></div>
                     <h3 className="text-base font-semibold">SMTP-сервер</h3>
                   </div>
                   <p className="text-xs text-muted-foreground">Параметры почтового сервера для отправки email с письмами регистрации, восстановления пароля и системных уведомлений.</p>
-                <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-white/5 cursor-pointer">
+                <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
                   <input
                     type="checkbox"
                     id="skipEmailVerification"
@@ -4065,7 +4015,7 @@ export function SettingsPage() {
                     <p className="text-[11px] text-muted-foreground mt-0.5">{t("admin.settings.smtp_no_confirm_hint")}</p>
                   </div>
                 </label>
-                <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-white/5 cursor-pointer">
+                <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
                   <input
                     type="checkbox"
                     id="onboardingEmailRequired"
@@ -4149,22 +4099,19 @@ export function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
-            <Card className="mt-6 overflow-hidden border-white/10">
-              <div className="relative bg-gradient-to-br from-sky-500/10 via-blue-500/10 to-cyan-500/10 p-6 sm:p-8 border-b border-white/10">
-                <div className="absolute inset-0 bg-gradient-to-br from-sky-500/5 via-transparent to-cyan-500/5 pointer-events-none" />
+            <Card className="mt-6 overflow-hidden border-border">
+              <div className="relative bg-muted p-4 border-b border-border">
+                <div className="absolute inset-0 bg-transparent pointer-events-none" />
                 <div className="relative flex items-start gap-5">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-sky-500/30 via-blue-500/20 to-cyan-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                    <MessageCircle className="h-7 w-7 text-foreground" />
-                  </div>
                   <div className="flex-1 min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-sky-500 via-blue-500 to-cyan-500">
+                    <h2 className="text-xl font-bold tracking-tight text-foreground">
                       {t("admin.settings.telegram_title")}
                     </h2>
-                    <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.telegram_bot_hint")}</p>
+                    <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.telegram_bot_hint")}</p>
                   </div>
                 </div>
               </div>
-              <CardContent className="space-y-4 p-4 sm:p-6">
+              <CardContent className="space-y-4 p-4 sm:p-4">
                 <div className="space-y-2">
                   <Label>{t("admin.settings.telegram_bot_token")}</Label>
                   <Input
@@ -4247,23 +4194,20 @@ export function SettingsPage() {
         </form>
 
         <TabsContent value="theme">
-          <Card className="overflow-hidden border-white/10">
-            <div className="relative bg-gradient-to-br from-pink-500/10 via-rose-500/10 to-fuchsia-500/10 p-6 sm:p-8 border-b border-white/10">
-              <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 via-transparent to-fuchsia-500/5 pointer-events-none" />
+          <Card className="overflow-hidden border-border">
+            <div className="relative bg-muted p-4 border-b border-border">
+              <div className="absolute inset-0 bg-transparent pointer-events-none" />
               <div className="relative flex items-start gap-5">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-pink-500/30 via-rose-500/20 to-fuchsia-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                  <Palette className="h-7 w-7 text-foreground" />
-                </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-pink-500 via-rose-500 to-fuchsia-500">
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">
                     {t("admin.settings.theme_title")}
                   </h2>
-                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.theme_global_hint")}</p>
+                  <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.theme_global_hint")}</p>
                 </div>
               </div>
             </div>
-            <CardContent className="space-y-6 p-4 sm:p-6">
-              <div className="flex items-center justify-between rounded-xl border border-white/10 p-4 bg-card/40">
+            <CardContent className="space-y-6 p-4 sm:p-4">
+              <div className="flex items-center justify-between rounded-xl border border-border p-4 bg-card/40">
                 <div className="space-y-0.5">
                   <Label className="text-base font-medium">{t("admin.settings.theme_user_choice")}</Label>
                   <p className="text-xs text-muted-foreground">{t("admin.settings.theme_user_choice_hint")}</p>
@@ -4325,22 +4269,19 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="options">
-          <Card className="overflow-hidden border-white/10">
-            <div className="relative bg-gradient-to-br from-yellow-500/10 via-amber-500/10 to-orange-500/10 p-6 sm:p-8 border-b border-white/10">
-              <div className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 via-transparent to-orange-500/5 pointer-events-none" />
+          <Card className="overflow-hidden border-border">
+            <div className="relative bg-muted p-4 border-b border-border">
+              <div className="absolute inset-0 bg-transparent pointer-events-none" />
               <div className="relative flex items-start gap-5">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-yellow-500/30 via-amber-500/20 to-orange-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                  <Package className="h-7 w-7 text-foreground" />
-                </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-yellow-500 via-amber-500 to-orange-500">
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">
                     {t("admin.settings.options_title")}
                   </h2>
-                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.options_subtitle")}</p>
+                  <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.options_subtitle")}</p>
                 </div>
               </div>
             </div>
-            <CardContent className="space-y-6 p-4 sm:p-6">
+            <CardContent className="space-y-6 p-4 sm:p-4">
               <div className="flex items-center gap-2">
                 <Switch
                   id="sell-options-enabled"
@@ -4517,22 +4458,19 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="custom-build">
-          <Card className="overflow-hidden border-white/10">
-            <div className="relative bg-gradient-to-br from-purple-500/10 via-violet-500/10 to-indigo-500/10 p-6 sm:p-8 border-b border-white/10">
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-indigo-500/5 pointer-events-none" />
+          <Card className="overflow-hidden border-border">
+            <div className="relative bg-muted p-4 border-b border-border">
+              <div className="absolute inset-0 bg-transparent pointer-events-none" />
               <div className="relative flex items-start gap-5">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-purple-500/30 via-violet-500/20 to-indigo-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                  <Layers className="h-7 w-7 text-foreground" />
-                </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-500 via-violet-500 to-indigo-500">
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">
                     {t("admin.settings.custom_build_title")}
                   </h2>
-                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.custom_build_subtitle")}</p>
+                  <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.custom_build_subtitle")}</p>
                 </div>
               </div>
             </div>
-            <CardContent className="space-y-4 p-4 sm:p-6">
+            <CardContent className="space-y-4 p-4 sm:p-4">
               <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
                 <Switch
                   id="custom-build-enabled"
@@ -4669,22 +4607,19 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="oauth">
-          <Card className="overflow-hidden border-white/10">
-            <div className="relative bg-gradient-to-br from-zinc-500/10 via-slate-500/10 to-stone-500/10 p-6 sm:p-8 border-b border-white/10">
-              <div className="absolute inset-0 bg-gradient-to-br from-zinc-500/5 via-transparent to-stone-500/5 pointer-events-none" />
+          <Card className="overflow-hidden border-border">
+            <div className="relative bg-muted p-4 border-b border-border">
+              <div className="absolute inset-0 bg-transparent pointer-events-none" />
               <div className="relative flex items-start gap-5">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-zinc-500/30 via-slate-500/20 to-stone-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                  <KeyRound className="h-7 w-7 text-foreground" />
-                </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-zinc-500 via-slate-500 to-stone-500">
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">
                     {t("admin.settings.oauth_title")}
                   </h2>
-                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.oauth_subtitle")}</p>
+                  <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.oauth_subtitle")}</p>
                 </div>
               </div>
             </div>
-            <CardContent className="space-y-6 p-4 sm:p-6">
+            <CardContent className="space-y-6 p-4 sm:p-4">
               <div className="space-y-4 rounded-lg border p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -4796,26 +4731,23 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="landing">
-          <Card className="overflow-hidden border-white/10">
-            <div className="relative bg-gradient-to-br from-green-500/10 via-emerald-500/10 to-teal-500/10 p-6 sm:p-8 border-b border-white/10">
-              <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-teal-500/5 pointer-events-none" />
+          <Card className="overflow-hidden border-border">
+            <div className="relative bg-muted p-4 border-b border-border">
+              <div className="absolute inset-0 bg-transparent pointer-events-none" />
               <div className="relative flex items-start gap-5">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-green-500/30 via-emerald-500/20 to-teal-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                  <Globe className="h-7 w-7 text-foreground" />
-                </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl font-bold tracking-tight">{t("admin.settings.tab_landing")}</h2>
-                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                  <h2 className="text-[13.5px] font-bold tracking-tight">{t("admin.settings.tab_landing")}</h2>
+                  <p className="text-[12.5px] text-muted-foreground mt-1">
                     Лендинг переехал в отдельный блочный редактор: drag-drop секций, превью без сохранения, шрифты и снапшоты.
                   </p>
                 </div>
               </div>
             </div>
 
-            <CardContent className="p-6 sm:p-8">
-              <div className="rounded-2xl border border-white/10 bg-white/40 dark:bg-white/5 p-8 text-center">
+            <CardContent className="p-4">
+              <div className="rounded-xl border border-border bg-card dark:bg-card p-8 text-center">
                 <Globe className="mx-auto h-10 w-10 text-emerald-500" />
-                <h3 className="mt-4 text-lg font-semibold">Откройте редактор лендинга</h3>
+                <h3 className="mt-4 text-[13.5px] font-bold">Откройте редактор лендинга</h3>
                 <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
                   Здесь больше нет полей: тексты, картинки, шрифты, цвета и порядок секций редактируются в визуальном редакторе.
                 </p>
@@ -4831,22 +4763,19 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="server-ssh">
-          <Card className="overflow-hidden border-white/10">
-            <div className="relative bg-gradient-to-br from-stone-500/10 via-zinc-500/10 to-slate-600/10 p-6 sm:p-8 border-b border-white/10">
-              <div className="absolute inset-0 bg-gradient-to-br from-stone-500/5 via-transparent to-slate-600/5 pointer-events-none" />
+          <Card className="overflow-hidden border-border">
+            <div className="relative bg-muted p-4 border-b border-border">
+              <div className="absolute inset-0 bg-transparent pointer-events-none" />
               <div className="relative flex items-start gap-5">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-stone-500/30 via-zinc-500/20 to-slate-600/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                  <Terminal className="h-7 w-7 text-foreground" />
-                </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-stone-400 via-zinc-400 to-slate-400">
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">
                     {t("admin.settings.ssh_title")}
                   </h2>
-                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.ssh_subtitle")}</p>
+                  <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.ssh_subtitle")}</p>
                 </div>
               </div>
             </div>
-            <CardContent className="space-y-6 p-4 sm:p-6">
+            <CardContent className="space-y-6 p-4 sm:p-4">
               {!sshConfig ? (
                 <p className="text-sm text-muted-foreground py-4">
                   {t("admin.settings.ssh_not_found")}
@@ -4936,25 +4865,21 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="proxy-settings">
-          <Card className="overflow-hidden border-white/10">
-            <div className="relative bg-gradient-to-br from-orange-500/10 via-red-500/10 to-rose-500/10 p-6 sm:p-8 border-b border-white/10">
-              <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 via-transparent to-rose-500/5 pointer-events-none" />
+          <Card className="overflow-hidden border-border">
+            <div className="relative bg-muted p-4 border-b border-border">
+              <div className="absolute inset-0 bg-transparent pointer-events-none" />
               <div className="relative flex items-start gap-5">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-orange-500/30 via-red-500/20 to-rose-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                  <Shield className="h-7 w-7 text-foreground" />
-                </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-orange-500 via-red-500 to-rose-500">
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">
                     {t("admin.settings.proxy_title")}
                   </h2>
-                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.proxy_subtitle")}</p>
+                  <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.proxy_subtitle")}</p>
                 </div>
               </div>
             </div>
-            <CardContent className="space-y-5 p-4 sm:p-6">
-              <div className="rounded-2xl border border-orange-500/20 bg-gradient-to-br from-orange-500/5 via-red-500/5 to-rose-500/5 p-5 space-y-4">
+            <CardContent className="space-y-5 p-4 sm:p-4">
+              <div className="rounded-xl border border-orange-500/20 bg-muted p-4 space-y-4">
                 <div className="flex items-start gap-3">
-                  <div className="h-9 w-9 rounded-xl bg-orange-500/15 flex items-center justify-center shrink-0"><Shield className="h-4 w-4 text-orange-500" /></div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-base font-semibold mb-1">{t("admin.settings.proxy_enabled")}</h3>
                     <p className="text-xs text-muted-foreground">Глобальный переключатель — выключает ВСЕ прокси-маршруты сразу. Если выключен, бот/платежи/AI ходят напрямую.</p>
@@ -4977,15 +4902,13 @@ export function SettingsPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-red-500/5 via-rose-500/5 to-pink-500/5 p-5 space-y-4">
+              <div className="rounded-xl border border-red-500/20 bg-muted p-4 space-y-4">
                 <div className="flex items-center gap-2.5">
-                  <div className="h-8 w-8 rounded-xl bg-red-500/20 flex items-center justify-center"><Network className="h-4 w-4 text-red-500" /></div>
                   <h3 className="text-base font-semibold">{t("admin.settings.proxy_routing")}</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">Какие сервисы пускать через прокси. Можно гибко включать/выключать по одному.</p>
 
-                <label className="flex items-start gap-3 p-3.5 rounded-xl bg-card/40 border border-white/5 cursor-pointer">
-                  <div className="h-9 w-9 rounded-xl bg-sky-500/10 flex items-center justify-center shrink-0"><MessageCircle className="h-4 w-4 text-sky-500" /></div>
+                <label className="flex items-start gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
                   <div className="flex-1 min-w-0">
                     <Label className="text-sm font-medium cursor-pointer">{t("admin.settings.proxy_telegram")}</Label>
                     <p className="text-[11px] text-muted-foreground mt-0.5">Бот, уведомления, отправка сообщений в Telegram</p>
@@ -4997,8 +4920,7 @@ export function SettingsPage() {
                   />
                 </label>
 
-                <label className="flex items-start gap-3 p-3.5 rounded-xl bg-card/40 border border-white/5 cursor-pointer">
-                  <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0"><CreditCard className="h-4 w-4 text-amber-500" /></div>
+                <label className="flex items-start gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
                   <div className="flex-1 min-w-0">
                     <Label className="text-sm font-medium cursor-pointer">{t("admin.settings.proxy_payments")}</Label>
                     <p className="text-[11px] text-muted-foreground mt-0.5">Platega, YooKassa, YooMoney, CryptoPay, Heleket</p>
@@ -5008,8 +4930,7 @@ export function SettingsPage() {
                     onCheckedChange={(v) => setSettings({ ...settings, proxyPayments: v })}
                     disabled={!settings.proxyEnabled}
                   /></label>
-                <label className="flex items-start gap-3 p-3.5 rounded-xl bg-card/40 border border-white/5 cursor-pointer">
-                  <div className="h-9 w-9 rounded-xl bg-fuchsia-500/10 flex items-center justify-center shrink-0"><Sparkles className="h-4 w-4 text-fuchsia-500" /></div>
+                <label className="flex items-start gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
                   <div className="flex-1 min-w-0">
                     <Label className="text-sm font-medium cursor-pointer">AI чат</Label>
                     <p className="text-[11px] text-muted-foreground mt-0.5">Запросы к Groq API (api.groq.com) — нужен прокси если хостинг блочит их IP</p>
@@ -5022,7 +4943,7 @@ export function SettingsPage() {
                 </label>
               </div>
 
-              <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-orange-500/5 p-4 flex items-start gap-3">
+              <div className="rounded-xl border border-amber-500/30 bg-muted p-4 flex items-start gap-3">
                 <Sparkles className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-amber-700 dark:text-amber-300">
                   <strong>Важно:</strong> после изменения настроек прокси для Telegram бота необходимо перезапустить контейнер бота,
@@ -5035,7 +4956,7 @@ export function SettingsPage() {
                   handleSubmit(e as unknown as React.FormEvent);
                 }}
                 disabled={saving}
-                className="w-full sm:w-auto h-11 px-6 rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 hover:opacity-90 text-white font-semibold shadow-lg shadow-orange-500/20"
+                className="w-full sm:w-auto h-9 px-6 rounded-xl bg-primary hover:opacity-90 text-white font-semibold shadow-orange-500/20"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
                 {saving ? t("admin.settings.saving") : t("admin.settings.save")}
@@ -5045,22 +4966,19 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="nalog-settings">
-          <Card className="overflow-hidden border-white/10">
-            <div className="relative bg-gradient-to-br from-yellow-600/10 via-amber-600/10 to-orange-600/10 p-6 sm:p-8 border-b border-white/10">
-              <div className="absolute inset-0 bg-gradient-to-br from-yellow-600/5 via-transparent to-orange-600/5 pointer-events-none" />
+          <Card className="overflow-hidden border-border">
+            <div className="relative bg-muted p-4 border-b border-border">
+              <div className="absolute inset-0 bg-transparent pointer-events-none" />
               <div className="relative flex items-start gap-5">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-yellow-600/30 via-amber-600/20 to-orange-600/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                  <FileText className="h-7 w-7 text-foreground" />
-                </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-yellow-600 via-amber-600 to-orange-600">
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">
                     {t("admin.settings.nalog_title")}
                   </h2>
-                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.nalog_subtitle")} {t("admin.settings.nalog_selfemployed_hint")}</p>
+                  <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.nalog_subtitle")} {t("admin.settings.nalog_selfemployed_hint")}</p>
                 </div>
               </div>
             </div>
-            <CardContent className="space-y-4 p-4 sm:p-6">
+            <CardContent className="space-y-4 p-4 sm:p-4">
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div className="space-y-0.5">
                   <Label className="text-base font-medium">{t("admin.settings.nalog_enabled")}</Label>
@@ -5163,22 +5081,19 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="geo-map">
-          <Card className="overflow-hidden border-white/10">
-            <div className="relative bg-gradient-to-br from-teal-500/10 via-cyan-500/10 to-sky-500/10 p-6 sm:p-8 border-b border-white/10">
-              <div className="absolute inset-0 bg-gradient-to-br from-teal-500/5 via-transparent to-sky-500/5 pointer-events-none" />
+          <Card className="overflow-hidden border-border">
+            <div className="relative bg-muted p-4 border-b border-border">
+              <div className="absolute inset-0 bg-transparent pointer-events-none" />
               <div className="relative flex items-start gap-5">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-teal-500/30 via-cyan-500/20 to-sky-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                  <MapPin className="h-7 w-7 text-foreground" />
-                </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-teal-500 via-cyan-500 to-sky-500">
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">
                     {t("admin.settings.map_title")}
                   </h2>
-                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.map_subtitle")}</p>
+                  <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.map_subtitle")}</p>
                 </div>
               </div>
             </div>
-            <CardContent className="space-y-6 p-4 sm:p-6">
+            <CardContent className="space-y-6 p-4 sm:p-4">
               <div className="flex items-center justify-between rounded-lg border p-4">
                 <div className="space-y-0.5">
                   <Label className="text-base font-medium">{t("admin.settings.map_enabled")}</Label>
@@ -5242,26 +5157,23 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="gifts">
-          <Card className="overflow-hidden border-white/10">
-            <div className="relative bg-gradient-to-br from-pink-500/10 via-fuchsia-500/10 to-rose-500/10 p-6 sm:p-8 border-b border-white/10">
-              <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 via-transparent to-rose-500/5 pointer-events-none" />
+          <Card className="overflow-hidden border-border">
+            <div className="relative bg-muted p-4 border-b border-border">
+              <div className="absolute inset-0 bg-transparent pointer-events-none" />
               <div className="relative flex items-start gap-5">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-pink-500/30 via-fuchsia-500/20 to-rose-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                  <Gift className="h-7 w-7 text-foreground" />
-                </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-pink-500 via-fuchsia-500 to-rose-500">
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">
                     Подарки и доп. подписки
                   </h2>
-                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">Настройки системы подарков, кодов и дополнительных подписок</p>
+                  <p className="text-[12.5px] text-muted-foreground mt-1">Настройки системы подарков, кодов и дополнительных подписок</p>
                 </div>
               </div>
             </div>
-            <CardContent className="space-y-6 p-4 sm:p-6">
+            <CardContent className="space-y-6 p-4 sm:p-4">
               <div className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
                 <Switch
                   id="multi-subscriptions-enabled"
-                  checked={settings.multiSubscriptionsEnabled ?? true}
+                  checked={settings.multiSubscriptionsEnabled ?? false}
                   onCheckedChange={(checked: boolean) =>
                     setSettings((s) => (s ? { ...s, multiSubscriptionsEnabled: checked === true } : s))
                   }
@@ -5271,7 +5183,7 @@ export function SettingsPage() {
                     Мульти-подписки
                   </Label>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Вкл (по умолчанию): у клиента может быть несколько подписок одновременно. Выкл: одна подписка — при покупке другого тарифа старая заменяется новой (остаток дней сгорает, VPN-ссылка сохраняется), клиенту показывается предупреждение.
+                    Вкл: у клиента может быть несколько подписок одновременно. Выкл (по умолчанию): одна подписка — при покупке другого тарифа старая заменяется новой (остаток дней сгорает, VPN-ссылка сохраняется), клиенту показывается предупреждение.
                   </p>
                 </div>
               </div>
@@ -5294,7 +5206,7 @@ export function SettingsPage() {
               </div>
 
               {settings.giftSubscriptionsEnabled && (
-                <div className="space-y-6 pl-4 border-l-2 border-primary/30">
+                <div className="space-y-6 pl-4 border-l-2 border-border">
                   <div className="space-y-4 rounded-lg border p-4 bg-muted/20">
                     <div className="flex items-center gap-2 mb-2">
                       <Gift className="h-4 w-4 text-primary shrink-0" />
@@ -5451,48 +5363,45 @@ export function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="sync">
-          <Card className="overflow-hidden border-white/10">
-            <div className="relative bg-gradient-to-br from-violet-500/10 via-indigo-500/10 to-blue-500/10 p-6 sm:p-8 border-b border-white/10">
-              <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-blue-500/5 pointer-events-none" />
+          <Card className="overflow-hidden border-border">
+            <div className="relative bg-muted p-4 border-b border-border">
+              <div className="absolute inset-0 bg-transparent pointer-events-none" />
               <div className="relative flex items-start gap-5">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-violet-500/30 via-indigo-500/20 to-blue-500/30 flex items-center justify-center shadow-xl border border-white/20 shrink-0">
-                  <ArrowLeftRight className="h-7 w-7 text-foreground" />
-                </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500">
+                  <h2 className="text-xl font-bold tracking-tight text-foreground">
                     {t("admin.settings.sync_title")}
                   </h2>
-                  <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">{t("admin.settings.sync_subtitle")}</p>
+                  <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.sync_subtitle")}</p>
                 </div>
               </div>
             </div>
-            <CardContent className="space-y-4 p-4 sm:p-6">
+            <CardContent className="space-y-4 p-4 sm:p-4">
               <div className="grid gap-3 sm:grid-cols-3">
-                <button type="button" onClick={handleSyncFromRemna} disabled={syncLoading !== null} className="group relative overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 via-violet-500/5 to-transparent p-5 text-left transition-all hover:border-violet-500/50 hover:shadow-lg hover:shadow-violet-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
+                <button type="button" onClick={handleSyncFromRemna} disabled={syncLoading !== null} className="group relative overflow-hidden rounded-xl border border-violet-500/30 bg-transparent p-4 text-left transition-all hover:border-violet-500/50 hover:shadow-violet-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
                   <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-violet-500/10 blur-2xl group-hover:bg-violet-500/20 transition-colors" />
                   <div className="relative flex items-center gap-3 mb-2">
                     <div className="h-10 w-10 rounded-xl bg-violet-500/20 flex items-center justify-center">
                       {syncLoading === "from" ? <Loader2 className="h-5 w-5 text-violet-500 animate-spin" /> : <Download className="h-5 w-5 text-violet-500" />}
                     </div>
-                    <span className="text-sm font-bold uppercase tracking-wider text-violet-500/80">From Remna →</span>
+                    <span className="text-sm font-bold uppercase tracking-wider text-violet-500/80">From Remna </span>
                   </div>
                   <div className="relative text-base font-semibold mb-1">{syncLoading === "from" ? t("admin.settings.sync_in_progress") : t("admin.settings.sync_from_remna")}</div>
                   <p className="relative text-xs text-muted-foreground">Подтянуть всех клиентов и подписки из Remna в локальную БД</p>
                 </button>
 
-                <button type="button" onClick={handleSyncToRemna} disabled={syncLoading !== null} className="group relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/10 via-indigo-500/5 to-transparent p-5 text-left transition-all hover:border-indigo-500/50 hover:shadow-lg hover:shadow-indigo-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
+                <button type="button" onClick={handleSyncToRemna} disabled={syncLoading !== null} className="group relative overflow-hidden rounded-xl border border-indigo-500/30 bg-transparent p-4 text-left transition-all hover:border-indigo-500/50 hover:shadow-indigo-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
                   <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-indigo-500/10 blur-2xl group-hover:bg-indigo-500/20 transition-colors" />
                   <div className="relative flex items-center gap-3 mb-2">
                     <div className="h-10 w-10 rounded-xl bg-indigo-500/20 flex items-center justify-center">
                       {syncLoading === "to" ? <Loader2 className="h-5 w-5 text-indigo-500 animate-spin" /> : <Upload className="h-5 w-5 text-indigo-500" />}
                     </div>
-                    <span className="text-sm font-bold uppercase tracking-wider text-indigo-500/80">→ To Remna</span>
+                    <span className="text-sm font-bold uppercase tracking-wider text-indigo-500/80"> To Remna</span>
                   </div>
                   <div className="relative text-base font-semibold mb-1">{syncLoading === "to" ? t("admin.settings.sync_in_progress") : t("admin.settings.sync_to_remna")}</div>
                   <p className="relative text-xs text-muted-foreground">Записать локальные изменения обратно в Remna-панель</p>
                 </button>
 
-                <button type="button" onClick={handleSyncCreateRemnaForMissing} disabled={syncLoading !== null} className="group relative overflow-hidden rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent p-5 text-left transition-all hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
+                <button type="button" onClick={handleSyncCreateRemnaForMissing} disabled={syncLoading !== null} className="group relative overflow-hidden rounded-xl border border-blue-500/30 bg-transparent p-4 text-left transition-all hover:border-blue-500/50 hover:shadow-blue-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
                   <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-blue-500/10 blur-2xl group-hover:bg-blue-500/20 transition-colors" />
                   <div className="relative flex items-center gap-3 mb-2">
                     <div className="h-10 w-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
@@ -5505,7 +5414,7 @@ export function SettingsPage() {
                 </button>
               </div>
               {syncMessage && (
-                <div className="rounded-xl border border-white/10 bg-card/40 p-4 text-sm">{syncMessage}</div>
+                <div className="rounded-xl border border-border bg-card/40 p-4 text-sm">{syncMessage}</div>
               )}
             </CardContent>
           </Card>
@@ -5515,7 +5424,7 @@ export function SettingsPage() {
       <Dialog open={twoFaEnableOpen} onOpenChange={(open) => !open && closeTwoFaEnable()}>
         <DialogContent className="max-w-sm" onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
               <KeyRound className="h-5 w-5" />
               {t("admin.settings.2fa_enable_title")}
             </DialogTitle>
@@ -5532,7 +5441,7 @@ export function SettingsPage() {
               </div>
             ) : twoFaStep === 1 && twoFaSetupData ? (
               <>
-                <div className="flex justify-center rounded-xl bg-white p-4 dark:bg-white/95">
+                <div className="flex justify-center rounded-xl bg-white p-4 dark:bg-card">
                   <QRCodeSVG value={twoFaSetupData.otpauthUrl} size={200} level="M" />
                 </div>
                 <p className="text-xs text-muted-foreground break-all font-mono bg-muted/50 rounded-lg p-2">{twoFaSetupData.secret}</p>
@@ -5586,7 +5495,7 @@ export function SettingsPage() {
   );
 }
 
-// ─── Sortable cards для кнопок главного меню ────
+//  Sortable cards для кнопок главного меню 
 
 function BotButtonsList({
   buttons,
@@ -5653,21 +5562,21 @@ function SortableBotButtonCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`group rounded-2xl border bg-gradient-to-br from-white/[0.04] to-white/[0.02] backdrop-blur p-3 transition-all hover:from-white/[0.06] hover:to-white/[0.03] ${
-        btn.visible ? "border-white/10" : "border-white/5 opacity-50"
+      className={`group rounded-xl border  bg-muted p-3 transition-all ${
+        btn.visible ? "border-border" : "border-border opacity-50"
       } ${isDragging ? "shadow-2xl ring-2 ring-sky-500/40 z-10" : ""}`}
     >
       <div className="flex items-center gap-2 mb-2.5">
         <button
           type="button"
-          className="cursor-grab active:cursor-grabbing touch-none p-1 rounded-md hover:bg-white/10 transition-colors shrink-0"
+          className="cursor-grab active:cursor-grabbing touch-none p-1 rounded-md hover:bg-card transition-colors shrink-0"
           {...attributes}
           {...listeners}
           title="Перетащите чтобы изменить порядок"
         >
           <GripVertical className="h-4 w-4 text-muted-foreground" />
         </button>
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500/30 to-blue-500/20 text-sky-200 text-xs font-bold border border-sky-500/30 shrink-0">
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-sky-200 text-xs font-bold border border-sky-500/30 shrink-0">
           {idx + 1}
         </span>
         <span className={`h-3 w-3 rounded-full ${swatch} shrink-0 ring-2 ring-white/10`} title={styleLabel} />
@@ -5684,7 +5593,7 @@ function SortableBotButtonCard({
       </div>
 
       {/* Preview как будет выглядеть кнопка в боте */}
-      <div className="mb-2.5 p-2 rounded-lg bg-background/40 border border-white/5">
+      <div className="mb-2.5 p-2 rounded-lg bg-card border border-border">
         <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
           <Eye className="h-3 w-3" />
           Предпросмотр
@@ -5693,7 +5602,7 @@ function SortableBotButtonCard({
           btn.style === "success" ? "bg-emerald-500/30 text-emerald-100 border border-emerald-500/40"
           : btn.style === "danger" ? "bg-rose-500/30 text-rose-100 border border-rose-500/40"
           : btn.style === "primary" ? "bg-sky-500/30 text-sky-100 border border-sky-500/40"
-          : "bg-white/10 text-foreground border border-white/15"
+          : "bg-card text-foreground border border-border"
         }`}>
           {btn.label || "(пустое название)"}
         </div>
@@ -5702,7 +5611,7 @@ function SortableBotButtonCard({
       <div className="grid gap-2 sm:grid-cols-[1fr_140px_140px_auto]">
         <div className="space-y-1">
           <Label className="text-[10px] uppercase text-muted-foreground tracking-wider">Текст кнопки</Label>
-          <Input className="h-9" value={btn.label} onChange={(e) => onUpdate({ label: e.target.value })} placeholder="🔌 Подключиться" />
+          <Input className="h-9" value={btn.label} onChange={(e) => onUpdate({ label: e.target.value })} placeholder=" Подключиться" />
         </div>
         <div className="space-y-1">
           <Label className="text-[10px] uppercase text-muted-foreground tracking-wider">Иконка (premium)</Label>

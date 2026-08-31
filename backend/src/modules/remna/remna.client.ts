@@ -108,28 +108,71 @@ export function remnaGetUserByUsername(username: string) {
 
 /** GET /api/users/by-email/{email} — может вернуть массив или объект с users */
 export function remnaGetUserByEmail(email: string) {
-  const encoded = encodeURIComponent(email);
-  return remnaFetch<unknown>(`/api/users/by-email/${encoded}`);
+  // ⚠️ Remnawave 3.x: /api/users/by-email/{email} УДАЛЁН (404).
+  // Замена — фильтр списка: /api/users?filters=[{"id":"email","value":"..."}]
+  const filters = encodeURIComponent(JSON.stringify([{ id: "email", value: email }]));
+  return remnaFetch<unknown>(`/api/users?size=1&filters=${filters}`);
 }
 
 /** GET /api/users/by-telegram-id/{telegramId} */
 export function remnaGetUserByTelegramId(telegramId: string) {
-  const encoded = encodeURIComponent(telegramId);
-  return remnaFetch<unknown>(`/api/users/by-telegram-id/${encoded}`);
+  // ⚠️ Remnawave 3.x: /api/users/by-telegram-id/{id} УДАЛЁН (404). Ищем фильтром.
+  const filters = encodeURIComponent(JSON.stringify([{ id: "telegramId", value: telegramId }]));
+  return remnaFetch<unknown>(`/api/users?size=1&filters=${filters}`);
+}
+
+/**
+ * GET /api/users/by-short-uuid/{shortUuid} — юзер по короткому ID из ссылки-подписки.
+ * shortUuid = последний сегмент sub-URL (`.../api/sub/<shortUuid>`). Нужен для
+ * авто-логина приложения по подписке (кабинет): подписка → remna-user → наш клиент.
+ */
+export function remnaGetUserByShortUuid(shortUuid: string) {
+  const encoded = encodeURIComponent(shortUuid);
+  return remnaFetch<unknown>(`/api/users/by-short-uuid/${encoded}`);
 }
 
 /** Извлечь UUID из ответа Remna (create/get: объект, response, data, users[0]). */
+/**
+ * Идентификатор пользователя Remnawave из любого ответа API.
+ *
+ * ⚠️ Remnawave 3.x: поле `uuid` у пользователя УДАЛЕНО, вместо него числовой `id`
+ * (пути стали `/api/users/{userId}`). Мы продолжаем хранить идентификатор в
+ * Client.remnawaveUuid / Subscription.remnawaveUuid как строку — теперь это
+ * строковое представление числового id. Функция поддерживает оба формата,
+ * поэтому старые установки (Remnawave 2.x) продолжают работать.
+ */
+function pickUserId(v: unknown): string | null {
+  if (!v || typeof v !== "object") return null;
+  const r = v as Record<string, unknown>;
+  if (typeof r.uuid === "string" && r.uuid) return r.uuid;           // Remnawave 2.x
+  if (typeof r.id === "number" && Number.isFinite(r.id)) return String(r.id); // Remnawave 3.x
+  if (typeof r.id === "string" && /^\d+$/.test(r.id)) return r.id;
+  return null;
+}
+
+/** Строковые идентификаторы (наш Client.remnawaveUuid) → числовые userIds для Remnawave 3.x. */
+function toUserIds(ids: (string | number)[]): number[] {
+  return ids.map((v) => Number(String(v).trim())).filter((v) => Number.isFinite(v) && v > 0);
+}
+
 export function extractRemnaUuid(d: unknown): string | null {
   if (!d || typeof d !== "object") return null;
   const o = d as Record<string, unknown>;
-  if (typeof o.uuid === "string") return o.uuid;
+  const direct = pickUserId(o);
+  if (direct) return direct;
   const resp = (o.response ?? o.data) as Record<string, unknown> | undefined;
-  if (resp && typeof resp.uuid === "string") return resp.uuid;
-  const users = Array.isArray(o.users) ? o.users : Array.isArray(o.response) ? o.response : Array.isArray(o.data) ? o.data : null;
-  const first = users?.[0];
-  return first && typeof first === "object" && first !== null && typeof (first as Record<string, unknown>).uuid === "string"
-    ? (first as Record<string, unknown>).uuid as string
-    : null;
+  const fromResp = pickUserId(resp);
+  if (fromResp) return fromResp;
+  // списки: { response: { users: [...] } } | { users: [...] } | [...]
+  const lists: unknown[] = [];
+  for (const c of [o.users, o.response, o.data, resp?.users, resp?.response]) {
+    if (Array.isArray(c)) lists.push(...c);
+  }
+  for (const item of lists) {
+    const id = pickUserId(item);
+    if (id) return id;
+  }
+  return null;
 }
 
 /**
@@ -168,13 +211,77 @@ export function remnaUsernameFromClient(opts: {
 }
 
 /** POST /api/users */
-export function remnaCreateUser(body: Record<string, unknown>) {
-  return remnaFetch<unknown>("/api/users", { method: "POST", body: JSON.stringify(body) });
+
+/**
+ * Отсев несуществующих сквадов перед созданием/обновлением пользователя.
+ *
+ * Зачем: Remnawave отвечает глухим «Failed to create user» / «Validation failed»,
+ * если в activeInternalSquads попал UUID сквада, которого в панели нет. Типичный
+ * случай — переезд на новую Remnawave: в тарифах остались UUID сквадов старой
+ * панели. Без этой проверки админ видит непонятную ошибку и не может создать юзера.
+ *
+ * Список сквадов кэшируем на 60 секунд, чтобы не ходить в API на каждого клиента.
+ */
+let squadCache: { at: number; uuids: Set<string> } | null = null;
+
+export async function getKnownSquadUuids(): Promise<Set<string>> {
+  if (squadCache && Date.now() - squadCache.at < 60_000) return squadCache.uuids;
+  const res = await remnaFetch<{ response?: { internalSquads?: { uuid?: string }[] } | { uuid?: string }[] }>(
+    "/api/internal-squads",
+  );
+  const raw = res.data?.response as unknown;
+  const list = Array.isArray(raw)
+    ? raw
+    : ((raw as { internalSquads?: unknown[] } | undefined)?.internalSquads ?? []);
+  const uuids = new Set<string>();
+  for (const item of list as { uuid?: unknown }[]) {
+    if (item && typeof item.uuid === "string") uuids.add(item.uuid);
+  }
+  // Пустой ответ (например, Remna недоступна) не кэшируем — иначе снесём сквады всем.
+  if (uuids.size > 0) squadCache = { at: Date.now(), uuids };
+  return uuids;
+}
+
+/** Убирает из тела запроса сквады, которых нет в текущей Remnawave. */
+async function sanitizeSquads(body: Record<string, unknown>): Promise<{ body: Record<string, unknown>; dropped: string[] }> {
+  const list = body.activeInternalSquads;
+  if (!Array.isArray(list) || list.length === 0) return { body, dropped: [] };
+  const known = await getKnownSquadUuids();
+  if (known.size === 0) return { body, dropped: [] }; // не смогли проверить — не трогаем
+  const keep = list.filter((u) => typeof u === "string" && known.has(u));
+  const dropped = list.filter((u) => typeof u === "string" && !known.has(u)) as string[];
+  if (dropped.length === 0) return { body, dropped: [] };
+  const next = { ...body };
+  if (keep.length > 0) next.activeInternalSquads = keep;
+  else delete next.activeInternalSquads;
+  console.warn(
+    `[remna] сквады не найдены в панели и пропущены: ${dropped.join(", ")}. ` +
+      `Проверь UUID сквадов в тарифах (Настройки → Тарифы).`,
+  );
+  return { body: next, dropped };
+}
+
+export async function remnaCreateUser(body: Record<string, unknown>) {
+  const { body: safe, dropped } = await sanitizeSquads(body);
+  const res = await remnaFetch<unknown>("/api/users", { method: "POST", body: JSON.stringify(safe) });
+  if (res.error && dropped.length > 0) {
+    res.error = `${res.error} (сквады не найдены в Remnawave: ${dropped.join(", ")} — обнови их в тарифе)`;
+  }
+  return res;
 }
 
 /** PATCH /api/users */
-export function remnaUpdateUser(body: Record<string, unknown>) {
-  return remnaFetch<unknown>("/api/users", { method: "PATCH", body: JSON.stringify(body) });
+export async function remnaUpdateUser(body: Record<string, unknown>) {
+  // Remnawave 3.x ждёт в теле числовой `id`. Вызывающий код исторически передаёт
+  // `uuid` (наш Client.remnawaveUuid) — переводим прозрачно, чтобы не менять 10+ мест.
+  const payload = { ...body };
+  const raw = payload.uuid;
+  if (typeof raw === "string" && /^\d+$/.test(raw.trim())) {
+    payload.id = Number(raw.trim());
+    delete payload.uuid;
+  }
+  const { body: safe } = await sanitizeSquads(payload);
+  return remnaFetch<unknown>("/api/users", { method: "PATCH", body: JSON.stringify(safe) });
 }
 
 /** GET /api/subscriptions */
@@ -360,9 +467,11 @@ export function remnaDeleteUserHwidDevice(userUuid: string, hwid: string) {
 
 /** POST /api/users/bulk/update-squads — массово выставляет один и тот же список сквадов многим пользователям (uuids[]). Не использовать для одного — нет мержа с доп. сквадами. */
 export function remnaBulkUpdateUsersSquads(body: { uuids: string[]; activeInternalSquads: string[] }) {
+  // Remnawave 3.x: поле называется userIds и содержит ЧИСЛА (было uuids: string[]).
+  const payload = { userIds: toUserIds(body.uuids), activeInternalSquads: body.activeInternalSquads };
   return remnaFetch<unknown>("/api/users/bulk/update-squads", {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
 }
 

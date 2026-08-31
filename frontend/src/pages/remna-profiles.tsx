@@ -20,7 +20,6 @@ import {
   Pencil,
   Trash2,
   Loader2,
-  FileCode2,
   Server as ServerIcon,
   Copy,
   Check,
@@ -292,7 +291,7 @@ export function RemnaProfilesPage() {
   if (loading) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center justify-center gap-4">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center justify-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем профили…</p>
         </Card>
@@ -303,28 +302,23 @@ export function RemnaProfilesPage() {
   if (error) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-indigo-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-indigo-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <FileCode2 className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">Config-профили</h1>
-            <p className="text-sm text-muted-foreground mt-1">Xray-конфигурации с инбаундами. К профилю привязываются ноды, хосты и сквады.</p>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Config-профили</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Xray-конфигурации с инбаундами. К профилю привязываются ноды, хосты и сквады.</p>
           </div>
         </div>
         <Button onClick={openCreate} className="gap-1.5 rounded-xl">
@@ -334,20 +328,17 @@ export function RemnaProfilesPage() {
       </motion.div>
 
       {profiles.length === 0 ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-12 shadow-xl">
+        <Card className="bg-card border-border rounded-2xl p-12">
           <div className="flex flex-col items-center justify-center text-center">
-            <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-              <FileCode2 className="h-8 w-8 text-muted-foreground/60" />
-            </div>
-            <h3 className="text-lg font-semibold tracking-tight">Нет профилей</h3>
-            <p className="text-sm text-muted-foreground mt-1">Создайте первый config-профиль.</p>
+            <h3 className="text-[13.5px] font-bold tracking-tight">Нет профилей</h3>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Создайте первый config-профиль.</p>
           </div>
         </Card>
       ) : (
         <div className="grid gap-4">
           {profiles.map((p, idx) => (
             <motion.div key={p.uuid} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }} whileHover={{ y: -2 }}>
-              <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+              <Card className="bg-card border-border rounded-2xl p-4">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div className="flex-1 min-w-[200px]">
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -365,7 +356,7 @@ export function RemnaProfilesPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <code className="font-mono text-[10px] text-muted-foreground/70">{p.uuid.slice(0, 8)}…</code>
                       {(p.inbounds ?? []).map((ib) => (
-                        <code key={ib.uuid} className="font-mono text-[11px] bg-foreground/[0.04] dark:bg-white/[0.03] border border-white/5 px-1.5 py-0.5 rounded text-muted-foreground">{ib.tag ?? ib.uuid.slice(0, 8)}{ib.port ? ` :${ib.port}` : ""}</code>
+                        <code key={ib.uuid} className="font-mono text-[11px] bg-foreground/[0.04] dark:bg-white/[0.03] border border-border px-1.5 py-0.5 rounded text-muted-foreground">{ib.tag ?? ib.uuid.slice(0, 8)}{ib.port ? ` :${ib.port}` : ""}</code>
                       ))}
                     </div>
                   </div>
@@ -391,10 +382,10 @@ export function RemnaProfilesPage() {
       )}
 
       <Dialog open={showForm} onOpenChange={(open) => !open && setShowForm(false)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
+              <div className="h-10 w-10 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">
                 {editingUuid ? <Pencil className="h-5 w-5 text-primary" /> : <Plus className="h-5 w-5 text-primary" />}
               </div>
               <div>
@@ -406,13 +397,13 @@ export function RemnaProfilesPage() {
           <div className="space-y-4 py-4">
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Название</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Main profile" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Main profile" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[11px] text-muted-foreground">Шаблон:</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">Шаблон:</span>
               {TEMPLATES.map((t) => (
-                <button key={t.name} type="button" onClick={() => applyTemplate(t)} className="rounded-lg border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] hover:border-primary/40 hover:text-primary px-2.5 py-1 text-xs transition-colors">
+                <button key={t.name} type="button" onClick={() => applyTemplate(t)} className="rounded-lg border border-border bg-foreground/[0.03] dark:bg-white/[0.02] hover:border-border hover:text-primary px-2.5 py-1 text-xs transition-colors">
                   {t.name}
                 </button>
               ))}
@@ -429,7 +420,7 @@ export function RemnaProfilesPage() {
                 onChange={(e) => setConfigText(e.target.value)}
                 spellCheck={false}
                 rows={18}
-                className={`w-full rounded-xl border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-xs font-mono leading-relaxed focus-visible:outline-none focus-visible:ring-2 ${configValidation.valid ? "border-white/10 focus-visible:ring-primary/50" : "border-red-500/40 focus-visible:ring-red-500/40"}`}
+                className={`w-full rounded-xl border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-xs font-mono leading-relaxed focus-visible:outline-none focus-visible:ring-2 ${configValidation.valid ? "border-border focus-visible:ring-primary/50" : "border-red-500/40 focus-visible:ring-red-500/40"}`}
               />
               {configValidation.valid ? (
                 <div className="flex items-center gap-2 text-xs text-emerald-500 dark:text-emerald-400">

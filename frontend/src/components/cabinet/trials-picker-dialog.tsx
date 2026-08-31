@@ -41,11 +41,11 @@ function formatTrafficLabel(bytesStr: string | null): string {
 
 // Градиенты по индексу — циклически проходим, чтобы карточки выглядели разнообразно.
 const CARD_GRADIENTS = [
-  "from-emerald-500/20 via-emerald-500/5 to-transparent border-emerald-500/30",
-  "from-violet-500/20 via-violet-500/5 to-transparent border-violet-500/30",
-  "from-sky-500/20 via-sky-500/5 to-transparent border-sky-500/30",
-  "from-amber-500/20 via-amber-500/5 to-transparent border-amber-500/30",
-  "from-pink-500/20 via-pink-500/5 to-transparent border-pink-500/30",
+  "bg-transparent border-emerald-500/30",
+  "bg-transparent border-violet-500/30",
+  "bg-transparent border-sky-500/30",
+  "bg-transparent border-amber-500/30",
+  "bg-transparent border-pink-500/30",
 ];
 
 const ICON_BG = [
@@ -96,7 +96,7 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
 
         <DialogHeader className="relative z-10 p-6 pb-2 text-left">
             <div className="flex items-center gap-3 mb-1">
-              <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg shadow-emerald-500/30">
+              <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-emerald-500/30">
                 <Gift className="h-5 w-5 text-white" />
               </div>
               <div>
@@ -147,7 +147,7 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95 }}
                         transition={{ duration: 0.22, delay: idx * 0.04 }}
-                        className={`relative overflow-hidden rounded-2xl border bg-gradient-to-br ${gradient} p-5 transition-all duration-300 ${isDisabled ? "opacity-50" : "hover:scale-[1.015] hover:shadow-xl"}`}
+                        className={`relative overflow-hidden rounded-2xl border  ${gradient} p-5 transition-all duration-300 ${isDisabled ? "opacity-50" : "hover:scale-[1.015] hover:shadow-xl"}`}
                       >
                         <div className="flex items-start gap-4">
                           <div className={`shrink-0 inline-flex h-12 w-12 items-center justify-center rounded-2xl ${iconBg}`}>

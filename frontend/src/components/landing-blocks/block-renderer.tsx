@@ -68,7 +68,7 @@ function UnknownBlock({ block }: { block: LandingApiBlock }) {
   if (import.meta.env.PROD) return null;
   return (
     <section className="container mx-auto px-4 py-6">
-      <div className="rounded-3xl border border-dashed border-amber-300 bg-amber-50/40 p-6 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/20 dark:text-amber-100">
+      <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50/40 p-6 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/20 dark:text-amber-100">
         <strong>Unknown block:</strong> {block.type}/{block.variant} (id={block.id}). Нет рендерера в block-renderer.tsx.
       </div>
     </section>

@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, RefreshCw, Inbox, ChevronRight, Repeat2, Search, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { Loader2, RefreshCw, ChevronRight, Repeat2, Search, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import {
   webhookInboxApi,
   type WebhookEventListItem,
@@ -92,17 +92,12 @@ export function AdminWebhookInboxPage() {
   };
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-violet-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Inbox className="h-6 w-6 text-primary" />
-          </div>
+    <div className="flex flex-col gap-3.5 relative">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between !bg-transparent !border-0 ! !shadow-none">
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">Webhook inbox</h1>
-            <p className="text-sm text-muted-foreground mt-1">Входящие вебхуки платёжных провайдеров: статус обработки и replay.</p>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Webhook inbox</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Входящие вебхуки платёжных провайдеров: статус обработки и replay.</p>
           </div>
         </div>
         <Button onClick={() => load(true)} variant="outline" size="sm" disabled={loading} className="gap-1.5 rounded-xl">
@@ -111,18 +106,18 @@ export function AdminWebhookInboxPage() {
         </Button>
       </div>
 
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl">
+      <Card className="bg-card border-border rounded-2xl">
         <CardContent className="p-4 grid gap-3 md:grid-cols-3">
           <div>
             <Label className="text-xs">Провайдер</Label>
-            <select value={provider} onChange={(e) => setProvider(e.target.value)} className="mt-1.5 flex h-9 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+            <select value={provider} onChange={(e) => setProvider(e.target.value)} className="mt-1.5 flex h-9 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
               <option value="">Все</option>
               {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           <div>
             <Label className="text-xs">Результат</Label>
-            <select value={outcome} onChange={(e) => setOutcome(e.target.value)} className="mt-1.5 flex h-9 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+            <select value={outcome} onChange={(e) => setOutcome(e.target.value)} className="mt-1.5 flex h-9 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
               <option value="">Все</option>
               {Object.entries(OUTCOME_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
             </select>
@@ -137,9 +132,9 @@ export function AdminWebhookInboxPage() {
         </CardContent>
       </Card>
 
-      {error ? <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div> : null}
+      {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div> : null}
 
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden">
+      <Card className="bg-card border-border rounded-2xl overflow-hidden">
         <CardContent className="p-0">
           {items.length === 0 && !loading ? (
             <div className="p-8 text-center text-sm text-muted-foreground">
@@ -179,9 +174,9 @@ export function AdminWebhookInboxPage() {
       </Card>
 
       <Dialog open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
               {selectedDetail?.provider}
               <span className="text-xs text-muted-foreground font-mono">{selectedDetail?.id.slice(0, 12)}…</span>
             </DialogTitle>

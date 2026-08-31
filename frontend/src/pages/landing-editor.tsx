@@ -83,7 +83,7 @@ import { getBlockSchema, BLOCK_SCHEMAS, VARIANT_DESCRIPTIONS } from "@/component
 import { ThemeDialog } from "@/components/landing-editor/theme-dialog";
 import { fmtMsk } from "@/lib/datetime";
 
-/** Маппинг имени иконки в schema.icon → компонент. */
+/** Маппинг имени иконки в schema.icon  компонент. */
 const ICON_MAP: Record<string, LucideIcon> = {
   Sparkles, Star, Award, BarChart3, Tag, Monitor, HelpCircle, Megaphone, Layers,
   ImageIcon, MessageSquare, Video, Minus,
@@ -347,7 +347,7 @@ export function LandingEditorPage() {
       {/* Toast */}
       {toast ? (
         <div
-          className={`fixed top-4 right-4 z-50 flex items-center gap-2 rounded-xl border px-4 py-3 text-sm shadow-lg ${
+          className={`fixed top-4 right-4 z-50 flex items-center gap-2 rounded-xl border px-4 py-3 text-sm ${
             toast.kind === "ok"
               ? "border-emerald-500/30 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
               : "border-red-500/30 bg-red-50 text-red-900 dark:bg-red-950/50 dark:text-red-100"
@@ -359,7 +359,7 @@ export function LandingEditorPage() {
       ) : null}
 
       {/* Header */}
-      <div className="border-b border-border bg-card/50 backdrop-blur-md">
+      <div className="border-b border-border bg-card/50">
         <div className="container mx-auto flex flex-wrap items-center justify-between gap-3 px-4 py-4">
           <div className="flex flex-wrap items-center gap-3">
             <Button asChild variant="ghost" size="sm">
@@ -370,7 +370,7 @@ export function LandingEditorPage() {
             </Button>
             <div className="h-6 w-px bg-border" />
             <Globe className="h-5 w-5 text-emerald-500" />
-            <h1 className="text-xl font-bold">Редактор лендинга</h1>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Редактор лендинга</h1>
             <div className="ml-2 flex items-center gap-2 rounded-full border border-border bg-muted/40 px-3 py-1">
               <Switch checked={landingEnabled} onCheckedChange={handleToggleLanding} />
               <span className={`text-xs font-medium ${landingEnabled ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}`}>
@@ -433,7 +433,7 @@ export function LandingEditorPage() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : error ? (
-          <div className="rounded-xl border border-red-500/30 bg-red-50 p-6 text-sm text-red-900 dark:bg-red-950/50 dark:text-red-100">
+          <div className="rounded-xl border border-red-500/30 bg-red-50 p-4 text-sm text-red-900 dark:bg-red-950/50 dark:text-red-100">
             Ошибка загрузки: {error}
           </div>
         ) : (
@@ -472,12 +472,12 @@ export function LandingEditorPage() {
 
             {/* Editor */}
             <Card className="min-w-0">
-              <CardContent className="p-6">
+              <CardContent className="p-4">
                 {!selected ? (
                   <div className="flex h-96 flex-col items-center justify-center gap-3 text-center">
                     <Eye className="h-10 w-10 text-muted-foreground" />
                     <div>
-                      <h3 className="text-lg font-semibold">Выберите блок слева</h3>
+                      <h3 className="text-[13.5px] font-bold">Выберите блок слева</h3>
                       <p className="mt-1 text-sm text-muted-foreground">
                         Каждый блок редактируется как JSON. После Publish — изменения видны на лендинге.
                       </p>
@@ -561,7 +561,7 @@ export function LandingEditorPage() {
 
       {/* Add Block dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Добавить блок</DialogTitle>
             <DialogDescription>Выберите тип. Блок будет создан в конце списка с пустыми полями.</DialogDescription>
@@ -575,9 +575,7 @@ export function LandingEditorPage() {
                   onClick={() => handleAddBlock(bt.type, bt.variant)}
                   className="flex items-start gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:border-emerald-500 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/30"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                    <Icon className="h-5 w-5" />
-                  </div>
+                  <Icon className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium">{bt.label}</div>
                     {bt.description ? <div className="mt-0.5 text-xs text-muted-foreground">{bt.description}</div> : null}
@@ -616,7 +614,7 @@ export function LandingEditorPage() {
   );
 }
 
-// ─── SortableBlockRow (drag-drop через @dnd-kit) ─────────────────────────────
+//  SortableBlockRow (drag-drop через @dnd-kit) 
 
 interface SortableBlockRowProps {
   block: AdminLandingBlock;
@@ -649,6 +647,7 @@ function SortableBlockRow({ block, isFirst, isLast, isSelected, onSelect, onMove
         isSelected ? "border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/30" : "border-border hover:bg-accent"
       }`}
     >
+      <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
       <button
         {...attributes}
         {...listeners}
@@ -665,9 +664,6 @@ function SortableBlockRow({ block, isFirst, isLast, isSelected, onSelect, onMove
         <Button onClick={(e) => { e.stopPropagation(); onMoveDown(); }} variant="ghost" size="sm" className="h-5 w-5 p-0" disabled={isLast}>
           <ArrowDown className="h-3 w-3" />
         </Button>
-      </div>
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-        <Icon className="h-4 w-4" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
@@ -687,7 +683,7 @@ function SortableBlockRow({ block, isFirst, isLast, isSelected, onSelect, onMove
   );
 }
 
-// ─── BlockEditor (правый сайд) ───────────────────────────────────────────────
+//  BlockEditor (правый сайд) 
 
 interface BlockEditorProps {
   block: AdminLandingBlock;
@@ -769,15 +765,11 @@ function BlockEditor({ block, token, onSaved, onError, onDelete, onPublishOne, o
         <div className="flex items-start gap-3">
           {(() => {
             const Icon = ICON_MAP[BLOCK_SCHEMAS[block.type]?.icon ?? ""] ?? Layers;
-            return (
-              <div className="mt-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                <Icon className="h-5 w-5" />
-              </div>
-            );
+            return <Icon className="h-5 w-5 text-primary shrink-0 mt-0.5" />;
           })()}
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Блок</div>
-            <h2 className="mt-1 text-2xl font-bold">
+            <h2 className="mt-1 text-[13.5px] font-bold">
               {schema?.label ?? block.type}
               {schema && schema.variants.length > 1 ? (
                 <span className="text-muted-foreground"> · {schema.variants.find((v) => v.value === variant)?.label ?? variant}</span>
@@ -931,7 +923,7 @@ function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
-// ─── Snapshots Dialog ────────────────────────────────────────────────────────
+//  Snapshots Dialog 
 
 interface SnapshotsDialogProps {
   open: boolean;
@@ -979,7 +971,7 @@ function SnapshotsDialog({ open, onClose, token, onRestored, onError }: Snapshot
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>История снапшотов</DialogTitle>
           <DialogDescription>

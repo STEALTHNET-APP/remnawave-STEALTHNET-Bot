@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Trophy, Plus, Pencil, Trash2, Loader2, Users, Shuffle, Send, Clock, X, MousePointerClick, Sparkles, Award } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Users, Shuffle, Send, Clock, X, MousePointerClick, Sparkles, Award } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { fmtMsk, isoToMskInputValue, mskInputValueToIso } from "@/lib/datetime";
@@ -42,14 +42,14 @@ const STATUS_LABELS: Record<string, string> = {
 
 function statusBadge(status: string) {
   const map: Record<string, { cls: string; dot: string }> = {
-    draft: { cls: "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-white/10", dot: "bg-muted-foreground/40" },
-    active: { cls: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400 shadow-[0_0_4px_#10b981]" },
-    ended: { cls: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20", dot: "bg-amber-400 shadow-[0_0_4px_#fbbf24]" },
-    drawn: { cls: "bg-violet-500/10 text-violet-500 dark:text-violet-400 border-violet-500/20", dot: "bg-violet-400 shadow-[0_0_4px_#a78bfa]" },
+    draft: { cls: "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-border", dot: "bg-muted-foreground/40" },
+    active: { cls: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20", dot: "bg-emerald-400" },
+    ended: { cls: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20", dot: "bg-amber-400" },
+    drawn: { cls: "bg-violet-500/10 text-violet-500 dark:text-violet-400 border-violet-500/20", dot: "bg-violet-400" },
   };
   const cfg = map[status] ?? map.draft;
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md", cfg.cls)}>
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium", cfg.cls)}>
       <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />
       {STATUS_LABELS[status] ?? status}
     </span>
@@ -122,8 +122,8 @@ const emptyForm: ContestFormPayload = {
   reminderDeadlineHoursBefore: "",
 };
 
-const inputCls = "rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50";
-const selectCls = "flex h-10 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50";
+const inputCls = "rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50";
+const selectCls = "flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50";
 
 export function ContestsPage() {
   const { state } = useAuth();
@@ -364,24 +364,19 @@ export function ContestsPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Trophy className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Конкурсы
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">Создавайте розыгрыши и поощряйте активных пользователей</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Создавайте розыгрыши и поощряйте активных пользователей</p>
           </div>
         </div>
         <Button onClick={openCreate} className="gap-1.5 rounded-xl">
@@ -394,19 +389,16 @@ export function ContestsPage() {
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400"
+          className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400"
         >
           {error}
         </motion.div>
       )}
 
       <Dialog open={showForm} onOpenChange={(open) => !open && setShowForm(false)}>
-        <DialogContent className="bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem] max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-card border-border rounded-2xl max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 flex items-center justify-center shadow-inner">
-                {editingId ? <Pencil className="h-4 w-4 text-primary" /> : <Sparkles className="h-4 w-4 text-primary" />}
-              </div>
+            <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
               {editingId ? "Редактировать конкурс" : "Новый конкурс"}
             </DialogTitle>
             <DialogDescription className="sr-only">Форма создания и редактирования конкурса</DialogDescription>
@@ -455,7 +447,7 @@ export function ContestsPage() {
             </div>
             <div className="grid gap-2">
               <Label className="text-xs text-muted-foreground">Условия участия (опционально)</Label>
-              <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="grid gap-1">
                   <Label className="text-[11px] text-muted-foreground">Мин. дней тарифа</Label>
                   <Input
@@ -493,14 +485,14 @@ export function ContestsPage() {
             </div>
             {([1, 2, 3] as const).map((place) => {
               const colors = {
-                1: { grad: "from-amber-500/20 to-amber-500/5", text: "text-amber-500 dark:text-amber-400", label: "1 место" },
-                2: { grad: "from-slate-400/20 to-slate-400/5", text: "text-slate-400 dark:text-slate-300", label: "2 место" },
-                3: { grad: "from-orange-500/20 to-orange-500/5", text: "text-orange-500 dark:text-orange-400", label: "3 место" },
+                1: { grad: "bg-muted", text: "text-amber-500 dark:text-amber-400", label: "1 место" },
+                2: { grad: "bg-muted", text: "text-slate-400 dark:text-slate-300", label: "2 место" },
+                3: { grad: "bg-muted", text: "text-orange-500 dark:text-orange-400", label: "3 место" },
               }[place];
               return (
-                <div key={place} className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
+                <div key={place} className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <div className={cn("h-7 w-7 rounded-xl bg-gradient-to-br border border-white/10 flex items-center justify-center", colors.grad)}>
+                    <div className={cn("h-7 w-7 rounded-xl  border border-border flex items-center justify-center", colors.grad)}>
                       <Award className={cn("h-4 w-4", colors.text)} />
                     </div>
                     <span className="text-sm font-semibold">Приз — {colors.label}</span>
@@ -574,7 +566,7 @@ export function ContestsPage() {
             </div>
 
             {/* Расписание напоминаний (issue #35) */}
-            <div className="grid gap-3 rounded-xl border border-white/10 bg-foreground/[0.02] p-4">
+            <div className="grid gap-3 rounded-xl border border-border bg-foreground/[0.02] p-4">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-medium">Напоминания об активном конкурсе</Label>
                 <label className="inline-flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
@@ -613,7 +605,7 @@ export function ContestsPage() {
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Пример: интервал <code className="font-mono">24</code> + deadline <code className="font-mono">24,1</code> →
+                Пример: интервал <code className="font-mono">24</code> + deadline <code className="font-mono">24,1</code> 
                 раз в сутки + дополнительные напоминания за 24ч и 1ч до окончания. Поставьте интервал <code className="font-mono">0</code>,
                 если хотите только deadline-напоминания (или анонс при старте).
               </p>
@@ -633,17 +625,14 @@ export function ContestsPage() {
       </Dialog>
 
       {loading ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center justify-center gap-3">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center justify-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем конкурсы…</p>
         </Card>
       ) : (
         <div className="space-y-4">
           {list.length === 0 ? (
-            <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-12 shadow-xl flex flex-col items-center text-center">
-              <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center mb-3 border border-white/10">
-                <Trophy className="h-8 w-8 text-muted-foreground" />
-              </div>
+            <Card className="bg-card border-border rounded-2xl py-12 flex flex-col items-center text-center">
               <p className="text-muted-foreground mb-4">Нет конкурсов. Создайте первый.</p>
               <Button onClick={openCreate} className="gap-1.5 rounded-xl">
                 <Plus className="h-4 w-4" /> Создать конкурс
@@ -658,12 +647,9 @@ export function ContestsPage() {
                 transition={{ delay: idx * 0.04 }}
                 whileHover={{ y: -2 }}
               >
-                <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+                <Card className="bg-card border-border rounded-2xl p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                        <Trophy className="h-5 w-5 text-primary" />
-                      </div>
                       <div className="min-w-0">
                         <h3 className="text-base font-bold tracking-tight truncate">{c.name}</h3>
                         <p className="text-xs text-muted-foreground mt-0.5">
@@ -675,26 +661,26 @@ export function ContestsPage() {
                   </div>
 
                   {isContestActive(c) && (
-                    <div className="rounded-xl border border-primary/20 bg-primary/5 backdrop-blur-md px-3 py-2 mb-3 flex items-center gap-1.5 text-sm font-medium text-primary">
+                    <div className="rounded-xl border border-border bg-primary/5 px-3 py-2 mb-3 flex items-center gap-1.5 text-sm font-medium text-primary">
                       <Clock className="h-4 w-4" />
                       {formatTimeLeft(c.endAt)}
                     </div>
                   )}
 
-                  <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2 mb-3">
+                  <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2 mb-3">
                     <p className="text-xs text-muted-foreground">
                       Розыгрыш: <span className="text-foreground font-medium">{DRAW_TYPES.find((t) => t.value === c.drawType)?.label ?? c.drawType}</span>
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       {([1, 2, 3] as const).map((place) => {
                         const colors = {
-                          1: { text: "text-amber-500 dark:text-amber-400", grad: "from-amber-500/15 to-amber-500/5" },
-                          2: { text: "text-slate-400 dark:text-slate-300", grad: "from-slate-400/15 to-slate-400/5" },
-                          3: { text: "text-orange-500 dark:text-orange-400", grad: "from-orange-500/15 to-orange-500/5" },
+                          1: { text: "text-amber-500 dark:text-amber-400", grad: "bg-muted" },
+                          2: { text: "text-slate-400 dark:text-slate-300", grad: "bg-muted" },
+                          3: { text: "text-orange-500 dark:text-orange-400", grad: "bg-muted" },
                         }[place];
                         const value = c[`prize${place}Value` as "prize1Value" | "prize2Value" | "prize3Value"];
                         return (
-                          <div key={place} className={cn("rounded-xl bg-gradient-to-br border border-white/10 p-2.5 flex items-center gap-2", colors.grad)}>
+                          <div key={place} className={cn("rounded-xl  border border-border p-2.5 flex items-center gap-2", colors.grad)}>
                             <Award className={cn("h-4 w-4 shrink-0", colors.text)} />
                             <div className="min-w-0">
                               <p className="text-[10px] text-muted-foreground">{place} место</p>
@@ -707,7 +693,7 @@ export function ContestsPage() {
                   </div>
 
                   {c.winners.length > 0 && (
-                    <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 backdrop-blur-md p-3 mb-3">
+                    <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 mb-3">
                       <p className="text-xs font-medium text-violet-500 dark:text-violet-400 mb-1.5">Победители</p>
                       <p className="text-xs text-muted-foreground break-words">
                         {c.winners.map((w) => `#${w.place} ${w.client?.telegramUsername ?? w.client?.email ?? w.client?.id ?? "—"}`).join(", ")}
@@ -763,12 +749,9 @@ export function ContestsPage() {
 
       {(detailId && (detail || participantsPreview)) && (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+          <Card className="bg-card border-border rounded-2xl p-4">
             <div className="flex items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                  <Users className="h-5 w-5 text-cyan-500 dark:text-cyan-400" />
-                </div>
                 <div>
                   <h3 className="text-sm font-bold tracking-tight">{detail?.name ?? "Участники"}</h3>
                   <p className="text-xs text-muted-foreground">Превью и победители</p>
@@ -780,23 +763,23 @@ export function ContestsPage() {
             </div>
             <div className="space-y-4">
               {detail && isContestActive(detail) && (
-                <div className="rounded-xl border border-primary/20 bg-primary/5 backdrop-blur-md px-3 py-2 flex items-center gap-1.5 text-sm font-medium text-primary">
+                <div className="rounded-xl border border-border bg-primary/5 px-3 py-2 flex items-center gap-1.5 text-sm font-medium text-primary">
                   <Clock className="h-4 w-4" />
                   {formatTimeLeft(detail.endAt)}
                 </div>
               )}
               {participantsPreview !== null && (
-                <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
+                <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
                   <p className="text-sm font-medium mb-2">
                     Превью участников (по условиям конкурса):
-                    <span className="ml-2 inline-flex items-center rounded-full bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 text-xs font-semibold">
+                    <span className="ml-2 inline-flex items-center rounded-full bg-primary/10 text-primary border border-border px-2.5 py-0.5 text-xs font-semibold">
                       {participantsPreview.total} чел.
                     </span>
                   </p>
                   {participantsPreview.participants.length > 0 && (
                     <ul className="text-xs text-muted-foreground mt-2 space-y-1">
                       {participantsPreview.participants.slice(0, 20).map((p, i) => (
-                        <li key={i} className="rounded-lg bg-foreground/[0.04] dark:bg-white/[0.04] border border-white/5 px-2.5 py-1.5">
+                        <li key={i} className="rounded-lg bg-foreground/[0.04] dark:bg-white/[0.04] border border-border px-2.5 py-1.5">
                           <span className="font-mono">clientId: {p.clientId}</span>
                           <span className="mx-2">·</span>
                           дней: <span className="text-foreground font-medium">{p.totalDaysBought}</span>
@@ -818,7 +801,7 @@ export function ContestsPage() {
                 </div>
               )}
               {detail?.winners && detail.winners.length > 0 && (
-                <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 backdrop-blur-md p-4">
+                <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-medium text-violet-500 dark:text-violet-400 flex items-center gap-1.5">
                       <Award className="h-4 w-4" /> Победители
@@ -840,7 +823,7 @@ export function ContestsPage() {
                       const winnerObj = w as typeof w & { id?: string };
                       const wId = winnerObj.id;
                       return (
-                        <li key={w.place} className="rounded-lg bg-foreground/[0.04] dark:bg-white/[0.04] border border-white/5 px-3 py-2 flex flex-wrap items-center gap-2">
+                        <li key={w.place} className="rounded-lg bg-foreground/[0.04] dark:bg-white/[0.04] border border-border px-3 py-2 flex flex-wrap items-center gap-2">
                           <span className="inline-flex items-center rounded-full bg-violet-500/10 text-violet-500 dark:text-violet-400 border border-violet-500/20 px-2 py-0.5 text-[11px] font-semibold">
                             {w.place} место
                           </span>

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthDashboard } from "@/pages/cabinet/stealth/stealth-dashboard";
+import { AuroraDashboard } from "@/pages/cabinet/aurora/aurora-dashboard";
 import {
   
   Package,
@@ -132,7 +133,7 @@ export function ClientDashboardPage() {
   return (
     <>
       <LinkTelegramPrompt />
-      {design === "stealth" ? <StealthDashboard /> : <ClassicDashboardPage />}
+      {design === "stealth" ? <StealthDashboard /> : design === "aurora" ? <AuroraDashboard /> : <ClassicDashboardPage />}
     </>
   );
 }

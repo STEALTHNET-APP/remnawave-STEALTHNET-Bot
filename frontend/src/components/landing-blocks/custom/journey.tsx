@@ -38,10 +38,10 @@ export function CustomJourney({ block }: { block: LandingApiBlock }) {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.4, delay: idx * 0.08 }}
-              className="rounded-3xl border border-slate-200/70 dark:border-white/10 bg-white/80 dark:bg-white/5 p-6 backdrop-blur-xl"
+              className="rounded-xl border border-slate-200/70 dark:border-border bg-card dark:bg-card p-6"
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl" style={{ background: `${accentTheme.primary}18`, color: accentTheme.primary }}>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: `${accentTheme.primary}18`, color: accentTheme.primary }}>
                   <Icon className="h-5 w-5" />
                 </div>
                 <div className="text-xs font-semibold uppercase tracking-[0.32em]" style={{ color: accentTheme.primary }}>

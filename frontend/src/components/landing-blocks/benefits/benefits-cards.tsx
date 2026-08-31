@@ -37,7 +37,7 @@ export function BenefitsCards({ block }: { block: LandingApiBlock }) {
     <section id="benefits" className={`container mx-auto px-4 py-16 md:py-24 ${SECTION_SCROLL_OFFSET}`}>
       <div className="text-center">
         {badge ? (
-          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/60 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-600 dark:text-slate-300">
+          <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/60 dark:border-border bg-card dark:bg-card px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-600 dark:text-slate-300">
             <Sparkles className="h-3.5 w-3.5" style={{ color: accentTheme.primary }} />
             {badge}
           </div>
@@ -57,9 +57,9 @@ export function BenefitsCards({ block }: { block: LandingApiBlock }) {
               viewport={{ once: true }}
               transition={{ duration: 0.4, delay: idx * 0.05 }}
             >
-              <Card className="h-full border-slate-200/70 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur-xl">
+              <Card className="h-full border-slate-200/70 dark:border-border bg-card dark:bg-card">
                 <CardContent className="p-6">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl" style={{ background: `${accentTheme.primary}18`, color: accentTheme.primary }}>
+                  <div className="flex h-9 w-11 items-center justify-center rounded-xl" style={{ background: `${accentTheme.primary}18`, color: accentTheme.primary }}>
                     <Icon className="h-5 w-5" />
                   </div>
                   <h3 className="mt-5 text-lg font-bold text-slate-950 dark:text-white">{it.title}</h3>

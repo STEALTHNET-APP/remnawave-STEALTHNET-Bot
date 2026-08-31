@@ -87,7 +87,7 @@ function formatRate(bps?: number | null): string {
   return `${kb.toFixed(1)} КБ/с`;
 }
 
-/** 🇫🇮 из ISO-кода страны (регионrandom indicator symbols). */
+/**  из ISO-кода страны (регионrandom indicator symbols). */
 function flagEmoji(cc?: string | null): string {
   const code = (cc ?? "").trim().toUpperCase();
   if (!/^[A-Z]{2}$/.test(code)) return "";
@@ -548,7 +548,7 @@ export function RemnaNodesPage() {
 
   function StatCard({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
+      <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
         <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5">{icon} {label}</div>
         <div className="text-sm font-medium mt-1 truncate">{value}</div>
       </div>
@@ -557,18 +557,18 @@ export function RemnaNodesPage() {
 
   function KpiCard({ icon, label, value, sub, tone }: { icon: ReactNode; label: string; value: string; sub?: string; tone?: "emerald" | "red" | "primary" | "cyan" }) {
     const toneCls =
-      tone === "emerald" ? "from-emerald-500/15 to-emerald-500/0 text-emerald-500 dark:text-emerald-400 border-emerald-500/20"
-      : tone === "red" ? "from-red-500/15 to-red-500/0 text-red-500 dark:text-red-400 border-red-500/20"
-      : tone === "cyan" ? "from-cyan-500/15 to-cyan-500/0 text-cyan-500 dark:text-cyan-400 border-cyan-500/20"
-      : "from-primary/15 to-primary/0 text-primary border-primary/20";
+      tone === "emerald" ? "bg-muted text-emerald-500 dark:text-emerald-400 border-emerald-500/20"
+      : tone === "red" ? "bg-muted text-red-500 dark:text-red-400 border-red-500/20"
+      : tone === "cyan" ? "bg-muted text-cyan-500 dark:text-cyan-400 border-cyan-500/20"
+      : "bg-muted text-primary border-border";
     return (
-      <div className="rounded-2xl border border-white/10 bg-background/50 backdrop-blur-2xl p-4 flex items-center gap-3 shadow-lg">
-        <div className={cn("h-10 w-10 rounded-xl bg-gradient-to-br border flex items-center justify-center shrink-0", toneCls)}>
+      <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+        <div className={cn("h-10 w-10 rounded-xl  border flex items-center justify-center shrink-0", toneCls)}>
           {icon}
         </div>
         <div className="min-w-0">
           <div className="text-[11px] text-muted-foreground leading-none">{label}</div>
-          <div className="text-lg font-bold tracking-tight tabular-nums leading-tight mt-1 truncate">{value}</div>
+          <div className="text-[13.5px] font-bold tracking-tight tabular-nums leading-tight mt-1 truncate">{value}</div>
           {sub && <div className="text-[10px] text-muted-foreground/70 leading-none mt-0.5 truncate">{sub}</div>}
         </div>
       </div>
@@ -579,11 +579,11 @@ export function RemnaNodesPage() {
     const key = "s" + n;
     return (
       <div className="flex gap-3">
-        <div className="h-6 w-6 rounded-full bg-primary/15 border border-primary/30 text-primary text-xs font-bold flex items-center justify-center shrink-0">{n}</div>
+        <div className="h-6 w-6 rounded-full bg-primary/15 border border-border text-primary text-xs font-bold flex items-center justify-center shrink-0">{n}</div>
         <div className="flex-1 min-w-0 space-y-1.5">
           <p className="text-sm font-medium">{title}</p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 min-w-0 text-[11px] font-mono bg-foreground/[0.04] dark:bg-white/[0.03] border border-white/10 rounded-lg px-2.5 py-1.5 overflow-x-auto whitespace-nowrap">{cmd}</code>
+            <code className="flex-1 min-w-0 text-[11px] font-mono bg-foreground/[0.04] dark:bg-white/[0.03] border border-border rounded-lg px-2.5 py-1.5 overflow-x-auto whitespace-nowrap">{cmd}</code>
             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg shrink-0" title="Копировать команду" onClick={() => copyStep(cmd, key)}>
               {copiedStep === key ? <Check className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
             </Button>
@@ -596,14 +596,14 @@ export function RemnaNodesPage() {
   function StatusBadge({ n }: { n: RemnaNode }) {
     if (n.isDisabled) {
       return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border border-zinc-500/20 px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-zinc-500/10 text-zinc-500 dark:text-zinc-400 border border-zinc-500/20 px-2.5 py-0.5 text-[11px] font-medium">
           <Power className="h-3 w-3" /> Отключена
         </span>
       );
     }
     if (n.isConnected) {
       return (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-medium">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -613,7 +613,7 @@ export function RemnaNodesPage() {
       );
     }
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 text-red-500 dark:text-red-400 border border-red-500/20 px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 text-red-500 dark:text-red-400 border border-red-500/20 px-2.5 py-0.5 text-[11px] font-medium">
         <WifiOff className="h-3 w-3" /> {n.isConnecting ? "Подключается…" : "Не в сети"}
       </span>
     );
@@ -640,7 +640,7 @@ export function RemnaNodesPage() {
   if (loading) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center justify-center gap-4">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center justify-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем ноды…</p>
         </Card>
@@ -651,7 +651,7 @@ export function RemnaNodesPage() {
   if (error) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">
           {error}
         </div>
       </div>
@@ -659,24 +659,19 @@ export function RemnaNodesPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-cyan-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-cyan-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Server className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Ноды
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
               Регистрация и управление нодами Remnawave прямо из панели.
               {refreshedAt && (
                 <span className="inline-flex items-center gap-1.5 ml-2 text-[11px] text-emerald-500/90 dark:text-emerald-400/90">
@@ -738,7 +733,7 @@ export function RemnaNodesPage() {
 
       {/* Обзор самой панели Remnawave — юзеры по статусам, RAM и uptime control-plane */}
       {panelStats && (
-        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-white/10 bg-background/50 backdrop-blur-2xl px-4 py-3 shadow-lg flex items-center gap-x-5 gap-y-2 flex-wrap">
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border bg-card px-4 py-3 flex items-center gap-x-5 gap-y-2 flex-wrap">
           <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1.5">
             <Activity className="h-3.5 w-3.5 text-primary" /> Панель Remnawave
           </span>
@@ -789,7 +784,7 @@ export function RemnaNodesPage() {
 
       {/* Инфра-биллинг (API 2.8): ближайшие оплаты серверов — чтобы не проспать продление */}
       {billingNodes.length > 0 && (
-        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-white/10 bg-background/50 backdrop-blur-2xl px-4 py-3 shadow-lg flex items-center gap-x-5 gap-y-2 flex-wrap">
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border bg-card px-4 py-3 flex items-center gap-x-5 gap-y-2 flex-wrap">
           <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1.5">
             <CalendarClock className="h-3.5 w-3.5 text-primary" /> Оплаты серверов
           </span>
@@ -799,7 +794,7 @@ export function RemnaNodesPage() {
             .map((b) => {
               const d = b.nextBillingAt ? new Date(b.nextBillingAt) : null;
               const days = d ? Math.ceil((d.getTime() - Date.now()) / 86_400_000) : null;
-              const tone = days == null ? "" : days < 0 ? "bg-red-500/10 text-red-500 dark:text-red-400 border-red-500/20" : days <= 3 ? "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20" : "bg-foreground/[0.04] dark:bg-white/[0.03] text-muted-foreground border-white/10";
+              const tone = days == null ? "" : days < 0 ? "bg-red-500/10 text-red-500 dark:text-red-400 border-red-500/20" : days <= 3 ? "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20" : "bg-foreground/[0.04] dark:bg-white/[0.03] text-muted-foreground border-border";
               return (
                 <span key={b.uuid} className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium", tone)}>
                   {flagEmoji(b.node?.countryCode)} {b.node?.name ?? "—"}
@@ -819,12 +814,12 @@ export function RemnaNodesPage() {
 
       {/* Recap: суммарная сводка панели (API 2.8 /system/stats/recap) */}
       {recap?.total && (
-        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-white/10 bg-background/50 backdrop-blur-2xl px-4 py-3 shadow-lg flex items-center gap-x-5 gap-y-2 flex-wrap">
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border border-border bg-card px-4 py-3 flex items-center gap-x-5 gap-y-2 flex-wrap">
           <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground inline-flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-primary" /> Сводка
           </span>
           {recap.thisMonth && (
-            <span className="inline-flex items-center gap-1.5 text-xs rounded-full bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5">
+            <span className="inline-flex items-center gap-1.5 text-xs rounded-full bg-primary/10 text-primary border border-border px-2.5 py-0.5">
               за месяц: <b className="tabular-nums">{recap.thisMonth.users ?? 0}</b> юзеров · <b className="tabular-nums">{formatBytes(Number(recap.thisMonth.traffic) || 0)}</b>
             </span>
           )}
@@ -838,20 +833,17 @@ export function RemnaNodesPage() {
       )}
 
       {profiles.length === 0 && (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 backdrop-blur-md px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
           Нет config-профилей. Сначала создайте профиль на вкладке «Config-профили» — нода привязывается к профилю и его инбаундам.
         </div>
       )}
 
       {nodes.length === 0 ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-12 shadow-xl">
+        <Card className="bg-card border-border rounded-2xl p-12">
           <div className="flex flex-col items-center justify-center text-center">
-            <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-              <Server className="h-8 w-8 text-muted-foreground/60" />
-            </div>
-            <h3 className="text-lg font-semibold tracking-tight">Нет нод</h3>
+            <h3 className="text-[13.5px] font-bold tracking-tight">Нет нод</h3>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-              1. Создайте config-профиль → 2. Добавьте ноду → 3. Разверните её через docker-compose (панель подскажет).
+              1. Создайте config-профиль  2. Добавьте ноду  3. Разверните её через docker-compose (панель подскажет).
             </p>
             <Button onClick={openCreate} disabled={profiles.length === 0} className="gap-1.5 rounded-xl mt-5">
               <Plus className="h-4 w-4" />
@@ -869,7 +861,7 @@ export function RemnaNodesPage() {
             return (
               <motion.div key={n.uuid} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }} whileHover={{ y: -2 }}>
                 <Card
-                  className="relative bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 pl-6 shadow-xl cursor-pointer overflow-visible"
+                  className="relative bg-card border-border rounded-2xl p-4 pl-6 cursor-pointer overflow-visible"
                   onClick={() => setDetailUuid(n.uuid)}
                   title="Открыть детали ноды"
                 >
@@ -886,7 +878,7 @@ export function RemnaNodesPage() {
                         <StatusBadge n={n} />
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                        <code className="font-mono text-xs bg-foreground/[0.04] dark:bg-white/[0.03] border border-white/5 px-2 py-0.5 rounded-md text-foreground">
+                        <code className="font-mono text-xs bg-foreground/[0.04] dark:bg-white/[0.03] border border-border px-2 py-0.5 rounded-md text-foreground">
                           {n.address}{n.port ? `:${n.port}` : ""}
                         </code>
                         <span className="text-muted-foreground/40">•</span>
@@ -933,11 +925,11 @@ export function RemnaNodesPage() {
                       {menuFor === n.uuid && (
                         <>
                           <div className="fixed inset-0 z-40" onClick={() => setMenuFor(null)} />
-                          <div className="absolute right-0 top-10 z-50 w-56 rounded-2xl border border-white/10 bg-background/95 backdrop-blur-2xl shadow-2xl p-1.5">
+                          <div className="absolute right-0 top-10 z-50 w-56 rounded-xl border border-border bg-card p-1.5">
                             <MenuItem icon={<Cpu />} label="Система (CPU/RAM/сеть)" onClick={() => { setMenuFor(null); setDetailUuid(n.uuid); }} />
                             <MenuItem icon={<Terminal />} label="Установка (docker-compose)" onClick={() => { setMenuFor(null); setInstallNode(n); }} />
                             <MenuItem icon={copiedUuid === n.uuid ? <Check className="text-emerald-500" /> : <Copy />} label="Скопировать UUID" onClick={() => copyNodeUuid(n.uuid)} />
-                            <div className="h-px bg-white/10 my-1" />
+                            <div className="h-px bg-card my-1" />
                             <MenuItem icon={busy === n.uuid + "restart" ? <Loader2 className="animate-spin" /> : <RefreshCw />} label="Перезапустить" disabled={busy === n.uuid + "restart"} onClick={() => { setMenuFor(null); runAction(n.uuid, "restart"); }} />
                             <MenuItem
                               icon={busy === n.uuid + (n.isDisabled ? "enable" : "disable") ? <Loader2 className="animate-spin" /> : <Power className={n.isDisabled ? "text-emerald-500" : "text-amber-500"} />}
@@ -958,7 +950,7 @@ export function RemnaNodesPage() {
                                 finally { setBusy(null); }
                               }}
                             />
-                            <div className="h-px bg-white/10 my-1" />
+                            <div className="h-px bg-card my-1" />
                             <MenuItem icon={busy === n.uuid + "del" ? <Loader2 className="animate-spin" /> : <Trash2 />} label="Удалить ноду" danger disabled={busy === n.uuid + "del"} onClick={() => { setMenuFor(null); handleDelete(n); }} />
                           </div>
                         </>
@@ -974,12 +966,9 @@ export function RemnaNodesPage() {
 
       {/* Детали системы ноды (живые — обновляются вместе со списком) */}
       <Dialog open={!!detailNode} onOpenChange={(open) => !open && setDetailUuid(null)}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <Cpu className="h-5 w-5 text-primary" />
-              </div>
               <div className="min-w-0">
                 <DialogTitle className="text-base font-bold tracking-tight flex items-center gap-2">
                   {flagEmoji(detailNode?.countryCode) && <span>{flagEmoji(detailNode?.countryCode)}</span>}
@@ -1015,7 +1004,7 @@ export function RemnaNodesPage() {
                   <StatCard icon={<Activity className="h-4 w-4" />} label="Платформа" value={info?.platform ? info.platform.toUpperCase() : "—"} />
                   <StatCard icon={<Clock className="h-4 w-4" />} label="Uptime" value={formatUptime(stats?.uptime)} />
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
+                <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-muted-foreground inline-flex items-center gap-1.5"><MemoryStick className="h-3.5 w-3.5" /> Память</span>
                     <span className="text-sm font-medium tabular-nums">{formatBytes(memUsed)} / {formatBytes(memTotal)} ({memPct}%)</span>
@@ -1024,7 +1013,7 @@ export function RemnaNodesPage() {
                     <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${Math.min(memPct, 100)}%` }} />
                   </div>
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2">
+                <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground inline-flex items-center gap-1.5"><Cpu className="h-3.5 w-3.5" /> Процессор</span>
                     {cpu != null && <span className="text-sm font-medium tabular-nums">{cpu}%</span>}
@@ -1039,26 +1028,26 @@ export function RemnaNodesPage() {
                     <div className="text-xs text-muted-foreground font-mono">Load avg: {loadAvg.map((x) => x.toFixed(2)).join("  ")}</div>
                   )}
                 </div>
-                <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2">
+                <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2">
                   <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5"><Globe className="h-3.5 w-3.5" /> Сетевой интерфейс</div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex items-center gap-2">
                       <ArrowDown className="h-4 w-4 text-emerald-500 dark:text-emerald-400 shrink-0" />
-                      <div><div className="text-sm font-medium tabular-nums">{formatRate(iface?.rxBytesPerSec)}</div><div className="text-[11px] text-muted-foreground">всего {formatBytes(iface?.rxTotal)}</div></div>
+                      <div><div className="text-sm font-medium tabular-nums">{formatRate(iface?.rxBytesPerSec)}</div><div className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">всего {formatBytes(iface?.rxTotal)}</div></div>
                     </div>
                     <div className="flex items-center gap-2">
                       <ArrowUp className="h-4 w-4 text-blue-500 dark:text-blue-400 shrink-0" />
-                      <div><div className="text-sm font-medium tabular-nums">{formatRate(iface?.txBytesPerSec)}</div><div className="text-[11px] text-muted-foreground">всего {formatBytes(iface?.txTotal)}</div></div>
+                      <div><div className="text-sm font-medium tabular-nums">{formatRate(iface?.txBytesPerSec)}</div><div className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">всего {formatBytes(iface?.txTotal)}</div></div>
                     </div>
                   </div>
                 </div>
                 {(dm?.inboundsStats?.length ?? 0) > 0 && (
-                  <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2">
+                  <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2">
                     <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5"><BarChart3 className="h-3.5 w-3.5" /> Трафик по инбаундам</div>
                     <div className="space-y-1.5">
                       {dm!.inboundsStats!.map((ib) => (
                         <div key={ib.tag} className="flex items-center justify-between gap-3 text-sm">
-                          <code className="font-mono text-xs bg-foreground/[0.04] dark:bg-white/[0.03] border border-white/5 px-1.5 py-0.5 rounded truncate">{ib.tag}</code>
+                          <code className="font-mono text-xs bg-foreground/[0.04] dark:bg-white/[0.03] border border-border px-1.5 py-0.5 rounded truncate">{ib.tag}</code>
                           <span className="text-xs tabular-nums text-muted-foreground shrink-0 inline-flex items-center gap-2.5">
                             <span className="inline-flex items-center gap-1"><ArrowDown className="h-3 w-3 text-emerald-500 dark:text-emerald-400" /> {ib.download}</span>
                             <span className="inline-flex items-center gap-1"><ArrowUp className="h-3 w-3 text-blue-500 dark:text-blue-400" /> {ib.upload}</span>
@@ -1073,9 +1062,9 @@ export function RemnaNodesPage() {
                   <StatCard icon={<Gauge className="h-4 w-4" />} label="Трафик" value={formatBytes(detailNode.trafficUsedBytes)} />
                 </div>
                 <div className="flex items-center gap-2 flex-wrap text-xs">
-                  {detailNode.versions?.xray && <span className="rounded-lg bg-foreground/[0.04] dark:bg-white/[0.03] border border-white/10 px-2 py-1">Xray {detailNode.versions.xray}</span>}
-                  {detailNode.versions?.node && <span className="rounded-lg bg-foreground/[0.04] dark:bg-white/[0.03] border border-white/10 px-2 py-1">Node {detailNode.versions.node}</span>}
-                  {info?.hostname && <span className="rounded-lg bg-foreground/[0.04] dark:bg-white/[0.03] border border-white/10 px-2 py-1 font-mono">{info.hostname}</span>}
+                  {detailNode.versions?.xray && <span className="rounded-lg bg-foreground/[0.04] dark:bg-white/[0.03] border border-border px-2 py-1">Xray {detailNode.versions.xray}</span>}
+                  {detailNode.versions?.node && <span className="rounded-lg bg-foreground/[0.04] dark:bg-white/[0.03] border border-border px-2 py-1">Node {detailNode.versions.node}</span>}
+                  {info?.hostname && <span className="rounded-lg bg-foreground/[0.04] dark:bg-white/[0.03] border border-border px-2 py-1 font-mono">{info.hostname}</span>}
                   {dm?.providerName && dm.providerName.toLowerCase() !== "unknown" && <span className="rounded-lg bg-violet-500/10 text-violet-500 dark:text-violet-400 border border-violet-500/20 px-2 py-1">{dm.providerName}</span>}
                 </div>
               </div>
@@ -1086,12 +1075,9 @@ export function RemnaNodesPage() {
 
       {/* HWID — устройства по платформам + топ юзеров */}
       <Dialog open={hwidOpen} onOpenChange={(open) => !open && setHwidOpen(false)}>
-        <DialogContent className="max-w-lg max-h-[88vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <HardDrive className="h-5 w-5 text-primary" />
-              </div>
               <div>
                 <DialogTitle className="text-base font-bold tracking-tight">Устройства (HWID)</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">Привязанные устройства клиентов — по платформам и приложениям</DialogDescription>
@@ -1112,7 +1098,7 @@ export function RemnaNodesPage() {
                 return (
                   <>
                     {plats.length > 0 && (
-                      <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2.5">
+                      <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2.5">
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-muted-foreground">По платформам</span>
                           <span className="text-xs font-semibold tabular-nums">Всего {totalDev}</span>
@@ -1131,12 +1117,12 @@ export function RemnaNodesPage() {
                       </div>
                     )}
                     {(hwidTop?.users?.length ?? 0) > 0 && (
-                      <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2">
+                      <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2">
                         <div className="text-xs text-muted-foreground inline-flex items-center gap-1.5"><Trophy className="h-3.5 w-3.5" /> Топ по числу устройств</div>
                         {(hwidTop!.users ?? []).slice(0, 15).map((u, i) => (
                           <div key={u.userUuid} className="flex items-center justify-between gap-3 text-sm">
                             <span className="flex items-center gap-2 min-w-0">
-                              <span className="text-xs text-muted-foreground/60 tabular-nums w-6 text-right shrink-0">{i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1}</span>
+                              <span className="text-xs text-muted-foreground/60 tabular-nums w-6 text-right shrink-0">{i < 3 ? ["", "", ""][i] : i + 1}</span>
                               <span className="font-mono truncate">{u.username}</span>
                             </span>
                             <span className="text-xs font-semibold tabular-nums shrink-0">{u.devicesCount} устр.</span>
@@ -1154,12 +1140,9 @@ export function RemnaNodesPage() {
 
       {/* Торрент-блокер: статистика + отчёты (схема ремны свободная — рендер защитный) */}
       <Dialog open={torrentOpen} onOpenChange={(open) => !open && setTorrentOpen(false)}>
-        <DialogContent className="max-w-lg max-h-[88vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <ShieldAlert className="h-5 w-5 text-primary" />
-              </div>
               <div>
                 <DialogTitle className="text-base font-bold tracking-tight">Торрент-блокер</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">Статистика поимок и последние отчёты по нодам</DialogDescription>
@@ -1173,9 +1156,9 @@ export function RemnaNodesPage() {
               {torrentStats && Object.keys(torrentStats).length > 0 && (
                 <div className="grid grid-cols-2 gap-3">
                   {Object.entries(torrentStats).filter(([, v]) => typeof v === "number" || typeof v === "string").slice(0, 6).map(([k, v]) => (
-                    <div key={k} className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
+                    <div key={k} className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
                       <div className="text-[11px] text-muted-foreground truncate">{k}</div>
-                      <div className="text-lg font-bold tabular-nums mt-1 truncate">{String(v)}</div>
+                      <div className="text-[13.5px] font-bold tabular-nums mt-1 truncate">{String(v)}</div>
                     </div>
                   ))}
                 </div>
@@ -1193,7 +1176,7 @@ export function RemnaNodesPage() {
                 </div>
               )}
               {torrentReports.length > 0 ? (
-                <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] divide-y divide-white/5">
+                <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] divide-y divide-border">
                   {torrentReports.slice(0, 30).map((r, i) => {
                     const o = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
                     const user = String(o.username ?? o.userUuid ?? o.tag ?? "—");
@@ -1208,7 +1191,7 @@ export function RemnaNodesPage() {
                   })}
                 </div>
               ) : (
-                <div className="py-8 text-center text-sm text-muted-foreground">Отчётов нет — либо торрент-блокер выключен, либо ловить нечего 👍</div>
+                <div className="py-8 text-center text-sm text-muted-foreground">Отчётов нет — либо торрент-блокер выключен, либо ловить нечего </div>
               )}
             </div>
           )}
@@ -1217,12 +1200,9 @@ export function RemnaNodesPage() {
 
       {/* Инфра-биллинг: провайдеры + привязка нод к оплате */}
       <Dialog open={billingOpen} onOpenChange={(open) => !open && setBillingOpen(false)}>
-        <DialogContent className="max-w-xl max-h-[88vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-xl max-h-[88vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <CalendarClock className="h-5 w-5 text-primary" />
-              </div>
               <div>
                 <DialogTitle className="text-base font-bold tracking-tight">Оплаты серверов</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">Провайдеры и даты продления нод — чтобы не проспать оплату сервера</DialogDescription>
@@ -1234,38 +1214,38 @@ export function RemnaNodesPage() {
           ) : (
             <div className="space-y-5 py-2">
               {/* Провайдеры */}
-              <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
+              <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
                 <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Провайдеры</div>
                 {providers.length > 0 && (
                   <div className="space-y-1.5">
                     {providers.map((pr) => (
-                      <div key={pr.uuid} className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-background/40 px-3 py-2 text-sm">
-                        <span className="font-medium truncate">{pr.name}{pr.loginUrl && <a href={pr.loginUrl} target="_blank" rel="noreferrer" className="text-primary ml-2 text-xs hover:underline">панель ↗</a>}</span>
+                      <div key={pr.uuid} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+                        <span className="font-medium truncate">{pr.name}{pr.loginUrl && <a href={pr.loginUrl} target="_blank" rel="noreferrer" className="text-primary ml-2 text-xs hover:underline">панель </a>}</span>
                         <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10 shrink-0" onClick={() => deleteProvider(pr.uuid, pr.name)}><Trash2 className="h-3.5 w-3.5" /></Button>
                       </div>
                     ))}
                   </div>
                 )}
                 <div className="flex items-center gap-2">
-                  <Input value={newProviderName} onChange={(e) => setNewProviderName(e.target.value)} placeholder="Название (Hetzner…)" className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 h-9 text-sm" />
-                  <Input value={newProviderUrl} onChange={(e) => setNewProviderUrl(e.target.value)} placeholder="URL панели (опц.)" className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 h-9 text-sm" />
+                  <Input value={newProviderName} onChange={(e) => setNewProviderName(e.target.value)} placeholder="Название (Hetzner…)" className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-border h-9 text-sm" />
+                  <Input value={newProviderUrl} onChange={(e) => setNewProviderUrl(e.target.value)} placeholder="URL панели (опц.)" className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-border h-9 text-sm" />
                   <Button size="sm" className="rounded-lg gap-1.5 shrink-0" disabled={billBusy || !newProviderName.trim()} onClick={createProvider}><Plus className="h-3.5 w-3.5" /> Добавить</Button>
                 </div>
               </div>
 
               {/* Привязать ноду к биллингу */}
-              <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
+              <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
                 <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Привязать ноду к оплате</div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <select className="h-9 rounded-lg border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-2 text-sm" value={billForm.providerUuid} onChange={(e) => setBillForm((f) => ({ ...f, providerUuid: e.target.value }))}>
+                  <select className="h-9 rounded-lg border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-2 text-sm" value={billForm.providerUuid} onChange={(e) => setBillForm((f) => ({ ...f, providerUuid: e.target.value }))}>
                     <option value="">Провайдер…</option>
                     {providers.map((pr) => <option key={pr.uuid} value={pr.uuid}>{pr.name}</option>)}
                   </select>
-                  <select className="h-9 rounded-lg border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-2 text-sm" value={billForm.nodeUuid} onChange={(e) => setBillForm((f) => ({ ...f, nodeUuid: e.target.value }))}>
+                  <select className="h-9 rounded-lg border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-2 text-sm" value={billForm.nodeUuid} onChange={(e) => setBillForm((f) => ({ ...f, nodeUuid: e.target.value }))}>
                     <option value="">Нода…</option>
                     {nodes.filter((n) => !billingNodes.some((b) => b.node?.uuid === n.uuid)).map((n) => <option key={n.uuid} value={n.uuid}>{n.name}</option>)}
                   </select>
-                  <Input type="date" value={billForm.date} onChange={(e) => setBillForm((f) => ({ ...f, date: e.target.value }))} className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 h-9 text-sm" />
+                  <Input type="date" value={billForm.date} onChange={(e) => setBillForm((f) => ({ ...f, date: e.target.value }))} className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-border h-9 text-sm" />
                 </div>
                 <Button size="sm" className="rounded-lg gap-1.5 w-full" disabled={billBusy || !billForm.providerUuid || !billForm.nodeUuid || !billForm.date} onClick={createBillingNode}>
                   {billBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Добавить в биллинг
@@ -1274,13 +1254,13 @@ export function RemnaNodesPage() {
 
               {/* Уже в биллинге */}
               {billingNodes.length > 0 && (
-                <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2">
+                <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-2">
                   <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">В биллинге</div>
                   {[...billingNodes].sort((a, b) => new Date(a.nextBillingAt ?? 0).getTime() - new Date(b.nextBillingAt ?? 0).getTime()).map((b) => {
                     const d = b.nextBillingAt ? new Date(b.nextBillingAt) : null;
                     const days = d ? Math.ceil((d.getTime() - Date.now()) / 86_400_000) : null;
                     return (
-                      <div key={b.uuid} className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-background/40 px-3 py-2 text-sm">
+                      <div key={b.uuid} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
                         <span className="truncate">{flagEmoji(b.node?.countryCode)} {b.node?.name ?? "—"} <span className="text-muted-foreground text-xs">· {b.provider?.name}</span></span>
                         <span className="flex items-center gap-2 shrink-0">
                           <span className={cn("text-xs tabular-nums", days != null && days < 0 ? "text-red-500 dark:text-red-400" : days != null && days <= 3 ? "text-amber-500 dark:text-amber-400" : "text-muted-foreground")}>
@@ -1300,12 +1280,9 @@ export function RemnaNodesPage() {
 
       {/* Плагины нод */}
       <Dialog open={pluginsOpen} onOpenChange={(open) => !open && setPluginsOpen(false)}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <Puzzle className="h-5 w-5 text-primary" />
-              </div>
               <div>
                 <DialogTitle className="text-base font-bold tracking-tight">Плагины нод</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">Установленные плагины (напр. торрент-блокер). Конфигурация правится в Remnawave.</DialogDescription>
@@ -1319,7 +1296,7 @@ export function RemnaNodesPage() {
           ) : (
             <div className="space-y-2 py-2">
               {plugins.map((pl) => (
-                <div key={pl.uuid} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2.5">
+                <div key={pl.uuid} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2.5">
                   <span className="text-sm font-medium truncate">{pl.name}</span>
                   <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10 shrink-0" title="Удалить плагин" onClick={() => deletePlugin(pl.uuid, pl.name)}>
                     <Trash2 className="h-4 w-4" />
@@ -1333,12 +1310,9 @@ export function RemnaNodesPage() {
 
       {/* Статистика трафика по пользователям */}
       <Dialog open={!!statsNode} onOpenChange={(open) => !open && setStatsNode(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <BarChart3 className="h-5 w-5 text-primary" />
-              </div>
               <div>
                 <DialogTitle className="text-base font-bold tracking-tight">Трафик по пользователям — {statsNode?.name}</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">Топ-50 пользователей ноды за период</DialogDescription>
@@ -1355,8 +1329,8 @@ export function RemnaNodesPage() {
                   className={cn(
                     "rounded-lg px-3 py-1.5 text-xs font-medium transition-colors border",
                     statsDays === d
-                      ? "border-primary/40 bg-primary/10 text-primary"
-                      : "border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] text-muted-foreground hover:text-foreground"
+                      ? "border-border bg-primary/10 text-primary"
+                      : "border-border bg-foreground/[0.03] dark:bg-white/[0.02] text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {d} дней
@@ -1366,7 +1340,7 @@ export function RemnaNodesPage() {
             {statsLoading ? (
               <div className="py-10 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
             ) : (() => {
-              // total может прийти строкой/null — нормализуем; если у ВСЕХ 0 → честный empty-state
+              // total может прийти строкой/null — нормализуем; если у ВСЕХ 0  честный empty-state
               // (раньше width: NaN% ронял вёрстку и рисовал «полный» бар при нуле).
               const users = (statsData?.topUsers ?? []).map((u) => ({ ...u, totalNum: Number(u.total) || 0 }));
               const max = Math.max(...users.map((u) => u.totalNum), 0);
@@ -1381,7 +1355,7 @@ export function RemnaNodesPage() {
               return (
                 <div className="space-y-4">
                   {sparkMax > 0 && (
-                    <div className="rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
+                    <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-xs text-muted-foreground">Трафик по дням</span>
                         <span className="text-xs font-semibold tabular-nums">Σ {formatBytes(periodTotal)}</span>
@@ -1408,7 +1382,7 @@ export function RemnaNodesPage() {
                   <div className="space-y-2.5">
                   {users.map((u, i) => (
                     <div key={u.username + i} className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground/60 tabular-nums w-6 text-right shrink-0">{i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1}</span>
+                      <span className="text-xs text-muted-foreground/60 tabular-nums w-6 text-right shrink-0">{i < 3 ? ["", "", ""][i] : i + 1}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <span className="text-sm font-mono truncate">{u.username}</span>
@@ -1431,12 +1405,9 @@ export function RemnaNodesPage() {
 
       {/* Install-команда */}
       <Dialog open={!!installNode} onOpenChange={(open) => !open && setInstallNode(null)}>
-        <DialogContent className="max-w-2xl bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-3xl bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <Terminal className="h-5 w-5 text-primary" />
-              </div>
               <div>
                 <DialogTitle className="text-base font-bold tracking-tight">Установка ноды {installNode?.name}</DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground">Сохраните как <code className="font-mono">docker-compose.yml</code> на сервере ноды и запустите <code className="font-mono">docker compose up -d</code>.</DialogDescription>
@@ -1449,10 +1420,10 @@ export function RemnaNodesPage() {
               <InstallStep n={2} title="Создайте директорию проекта" cmd="mkdir -p /opt/remnanode && cd /opt/remnanode" />
               <InstallStep n={3} title="Создайте файл docker-compose.yml" cmd="nano docker-compose.yml" />
               <div className="flex gap-3">
-                <div className="h-6 w-6 rounded-full bg-primary/15 border border-primary/30 text-primary text-xs font-bold flex items-center justify-center shrink-0">4</div>
+                <div className="h-6 w-6 rounded-full bg-primary/15 border border-border text-primary text-xs font-bold flex items-center justify-center shrink-0">4</div>
                 <div className="flex-1 min-w-0 space-y-2">
                   <p className="text-sm font-medium">Вставьте содержимое <code className="font-mono text-xs">docker-compose.yml</code></p>
-                  <pre className="text-[10.5px] leading-relaxed font-mono bg-foreground/[0.04] dark:bg-white/[0.03] border border-white/10 rounded-xl p-3 overflow-x-auto max-h-52 whitespace-pre-wrap break-all">{installCommand(installNode)}</pre>
+                  <pre className="text-[10.5px] leading-relaxed font-mono bg-foreground/[0.04] dark:bg-white/[0.03] border border-border rounded-xl p-3 overflow-x-auto max-h-52 whitespace-pre-wrap break-all">{installCommand(installNode)}</pre>
                   <Button onClick={() => copyStep(installCommand(installNode), "yaml")} size="sm" className="gap-2 rounded-lg">
                     {copiedStep === "yaml" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                     {copiedStep === "yaml" ? "Скопировано" : "Копировать docker-compose.yml"}
@@ -1467,10 +1438,10 @@ export function RemnaNodesPage() {
 
       {/* Create / Edit */}
       <Dialog open={showForm} onOpenChange={(open) => !open && setShowForm(false)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
+              <div className="h-10 w-10 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">
                 {editingUuid ? <Pencil className="h-5 w-5 text-primary" /> : <Plus className="h-5 w-5 text-primary" />}
               </div>
               <div>
@@ -1482,40 +1453,40 @@ export function RemnaNodesPage() {
           <div className="space-y-4 py-4">
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Название</Label>
-              <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="DE-Frankfurt-1" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+              <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="DE-Frankfurt-1" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div className="grid gap-1.5 col-span-2">
                 <Label className="text-xs text-muted-foreground">Адрес (IP / домен)</Label>
-                <Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="10.0.0.1" className="font-mono rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+                <Input value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} placeholder="10.0.0.1" className="font-mono rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
               </div>
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Порт</Label>
-                <Input type="number" value={form.port} onChange={(e) => setForm((f) => ({ ...f, port: Number(e.target.value) || 0 }))} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+                <Input type="number" value={form.port} onChange={(e) => setForm((f) => ({ ...f, port: Number(e.target.value) || 0 }))} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Код страны (напр. DE)</Label>
                 <div className="relative">
-                  <Input value={form.countryCode} onChange={(e) => setForm((f) => ({ ...f, countryCode: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="DE" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50 pr-9" />
+                  <Input value={form.countryCode} onChange={(e) => setForm((f) => ({ ...f, countryCode: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="DE" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50 pr-9" />
                   {flagEmoji(form.countryCode) && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-base">{flagEmoji(form.countryCode)}</span>}
                 </div>
               </div>
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Множитель трафика ×</Label>
-                <Input type="number" step="0.1" min={0} value={form.consumptionMultiplier} onChange={(e) => setForm((f) => ({ ...f, consumptionMultiplier: Number(e.target.value) || 0 }))} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+                <Input type="number" step="0.1" min={0} value={form.consumptionMultiplier} onChange={(e) => setForm((f) => ({ ...f, consumptionMultiplier: Number(e.target.value) || 0 }))} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
               </div>
             </div>
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Лимит трафика (ГБ, 0 = без лимита)</Label>
-              <Input type="number" min={0} value={form.trafficLimitGb} onChange={(e) => setForm((f) => ({ ...f, trafficLimitGb: Number(e.target.value) || 0 }))} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+              <Input type="number" min={0} value={form.trafficLimitGb} onChange={(e) => setForm((f) => ({ ...f, trafficLimitGb: Number(e.target.value) || 0 }))} className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
             </div>
 
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Config-профиль</Label>
               <select
-                className="flex h-10 w-full rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 value={form.activeConfigProfileUuid}
                 onChange={(e) => onProfileChange(e.target.value)}
               >
@@ -1528,7 +1499,7 @@ export function RemnaNodesPage() {
             {selectedProfile && (
               <div className="grid gap-1.5">
                 <Label className="text-xs text-muted-foreground">Инбаунды профиля</Label>
-                <div className="grid gap-1.5 rounded-xl border border-white/10 bg-foreground/[0.02] p-2 max-h-40 overflow-y-auto">
+                <div className="grid gap-1.5 rounded-xl border border-border bg-foreground/[0.02] p-2 max-h-40 overflow-y-auto">
                   {(selectedProfile.inbounds ?? []).length === 0 && (
                     <span className="text-xs text-muted-foreground px-1 py-1">У профиля нет инбаундов</span>
                   )}
@@ -1536,7 +1507,7 @@ export function RemnaNodesPage() {
                     <label key={ib.uuid} className="flex items-center gap-2 cursor-pointer rounded-lg px-2 py-1.5 hover:bg-foreground/5">
                       <input type="checkbox" className="rounded accent-primary" checked={form.activeInbounds.includes(ib.uuid)} onChange={() => toggleInbound(ib.uuid)} />
                       <span className="text-sm font-mono">{ib.tag ?? ib.uuid.slice(0, 8)}</span>
-                      {ib.type && <span className="text-[11px] text-muted-foreground">{ib.type}{ib.port ? ` :${ib.port}` : ""}</span>}
+                      {ib.type && <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">{ib.type}{ib.port ? ` :${ib.port}` : ""}</span>}
                     </label>
                   ))}
                 </div>
@@ -1545,12 +1516,12 @@ export function RemnaNodesPage() {
 
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Заметка</Label>
-              <Input value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} placeholder="необязательно" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+              <Input value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} placeholder="необязательно" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
             </div>
 
             <label className={cn(
               "flex items-center gap-2 cursor-pointer rounded-xl border px-3 py-2.5 transition-colors",
-              form.isTrafficTrackingActive ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02]"
+              form.isTrafficTrackingActive ? "border-emerald-500/30 bg-emerald-500/5" : "border-border bg-foreground/[0.03] dark:bg-white/[0.02]"
             )}>
               <input type="checkbox" checked={form.isTrafficTrackingActive} onChange={(e) => setForm((f) => ({ ...f, isTrafficTrackingActive: e.target.checked }))} className="rounded accent-emerald-500" />
               <Activity className="h-4 w-4 text-muted-foreground" />
@@ -1558,7 +1529,7 @@ export function RemnaNodesPage() {
             </label>
 
             {!editingUuid && (
-              <details className="group rounded-2xl border border-primary/20 bg-primary/[0.04] overflow-hidden">
+              <details className="group rounded-xl border border-border bg-primary/[0.04] overflow-hidden">
                 <summary className="flex items-center justify-between gap-2 cursor-pointer list-none px-3 py-2.5 select-none">
                   <span className="text-xs font-semibold text-primary inline-flex items-center gap-2"><Terminal className="h-3.5 w-3.5" /> docker-compose.yml для ноды</span>
                   <ChevronDown className="h-4 w-4 text-primary transition-transform group-open:rotate-180" />
@@ -1570,8 +1541,8 @@ export function RemnaNodesPage() {
                       {copied ? "Скопировано" : "Копировать"}
                     </Button>
                   </div>
-                  <pre className="text-[10px] leading-relaxed font-mono bg-background/40 border border-white/10 rounded-xl p-3 overflow-x-auto max-h-36 whitespace-pre-wrap break-all">{composeYaml(form.port)}</pre>
-                  <p className="text-[11px] text-muted-foreground">Разверните на сервере ноды (сохраните файл → <code className="font-mono">docker compose up -d</code>). <code className="font-mono">NODE_PORT</code> должен совпадать с полем «Порт» выше. Полная инструкция появится после создания (кнопка «Установка» в меню ноды).</p>
+                  <pre className="text-[10px] leading-relaxed font-mono bg-card border border-border rounded-xl p-3 overflow-x-auto max-h-36 whitespace-pre-wrap break-all">{composeYaml(form.port)}</pre>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">Разверните на сервере ноды (сохраните файл  <code className="font-mono">docker compose up -d</code>). <code className="font-mono">NODE_PORT</code> должен совпадать с полем «Порт» выше. Полная инструкция появится после создания (кнопка «Установка» в меню ноды).</p>
                 </div>
               </details>
             )}

@@ -87,7 +87,7 @@ export function LandingPage({ config }: LandingPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white via-slate-50/50 to-white text-slate-900 dark:from-slate-950 dark:via-slate-950 dark:to-slate-950 dark:text-slate-100" style={themeStyle}>
+    <div className="min-h-screen bg-primary text-slate-900 dark:text-slate-100" style={themeStyle}>
       {data.theme.customCss ? <style dangerouslySetInnerHTML={{ __html: data.theme.customCss }} /> : null}
 
       <LandingHeader

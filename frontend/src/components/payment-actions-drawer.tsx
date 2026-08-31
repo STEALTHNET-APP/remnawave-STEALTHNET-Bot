@@ -146,15 +146,15 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
   // топбара/сайдбара, оказываясь визуально под ними.
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-[80] bg-black/40" onClick={onClose} />
       <aside
         className={cn(
           "fixed right-0 top-0 z-[81] h-screen w-full sm:w-[480px] max-w-full overflow-y-auto",
-          "bg-slate-200/80 dark:bg-slate-950/80 backdrop-blur-2xl border-l border-white/40 dark:border-white/10",
+          "bg-slate-200/80 dark:bg-slate-950/80 border-l border-border dark:border-border",
           "shadow-2xl flex flex-col"
         )}
       >
-        <header className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-xl border-b border-white/30 dark:border-white/10">
+        <header className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 bg-slate-200/60 dark:bg-slate-900/60 border-b border-border dark:border-border">
           <div>
             <h3 className="text-sm font-bold tracking-tight text-foreground">Действия с платежом</h3>
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-mono">{paymentId.slice(0, 24)}…</p>
@@ -176,7 +176,7 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
           ) : p ? (
             <>
               {/* Summary card */}
-              <Card className="p-4 bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl space-y-2">
+              <Card className="p-4 bg-card border-border rounded-xl space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Сумма</span>
                   <span className="font-bold text-foreground">
@@ -210,7 +210,7 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
               </Card>
 
               {/* Client card */}
-              <Card className="p-4 bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl">
+              <Card className="p-4 bg-card border-border rounded-xl">
                 <div className="flex items-center gap-2 mb-2">
                   <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Клиент</span>
@@ -238,7 +238,7 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
 
               {/* Referral credits */}
               {data!.referralCredits.length > 0 && (
-                <Card className="p-4 bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl">
+                <Card className="p-4 bg-card border-border rounded-xl">
                   <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
                     Referral-credits ({data!.referralCredits.length})
                   </div>
@@ -265,7 +265,7 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                     placeholder="Напр. «Дубль платежа» или «Запрос клиента»"
-                    className="bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 rounded-xl text-xs"
+                    className="bg-foreground/[0.03] dark:bg-white/[0.02] border-border rounded-xl text-xs"
                   />
                 </div>
               )}
@@ -282,7 +282,7 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
                 </Card>
               )}
 
-              <div className="space-y-2 pt-2 border-t border-white/10">
+              <div className="space-y-2 pt-2 border-t border-border">
                 {/* Retry activation — для PAID */}
                 {isPaid && (
                   <Button
@@ -330,7 +330,7 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
                 {/* Refund — для PAID */}
                 {isPaid && (
                   <>
-                    <div className="rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-3 space-y-2.5">
+                    <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3 space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-foreground">Зачислить на баланс клиента</span>
                         <Switch checked={refundToBalance} onCheckedChange={setRefundToBalance} />

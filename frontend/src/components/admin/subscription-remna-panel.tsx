@@ -5,9 +5,9 @@
  * Используется в карточке клиента (вкладка «Подписки»), для primary и secondary
  * подписок одинаково. Делит UI на 3 внутренних вкладки:
  *
- *   - 📊 «Обзор»       — данные Remna user + лимиты + кнопка «Применить»
- *   - 🛡️ «Сквады»      — список internalSquads, добавить/убрать у этой подписки
- *   - ⚡ «Действия»    — Отозвать / Disable / Enable / Reset traffic / Refresh / Unlink
+ *   -  «Обзор»       — данные Remna user + лимиты + кнопка «Применить»
+ *   -  «Сквады»      — список internalSquads, добавить/убрать у этой подписки
+ *   -  «Действия»    — Отозвать / Disable / Enable / Reset traffic / Refresh / Unlink
  *
  * Все вызовы идут на `/admin/subscriptions/:subId/remna/...`. Если подписка
  * ещё не привязана к Remna (remnawaveUuid=null) — рисуется warning-плашка.
@@ -33,6 +33,7 @@ import {
   Unlink,
   Copy,
   Check,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -60,7 +61,7 @@ function CopyButton({ text }: { text: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       }}
-      className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-white/10 transition-colors"
+      className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-card transition-colors"
       title="Скопировать"
     >
       {copied ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
@@ -79,7 +80,7 @@ function MiniSelect({
 }) {
   return (
     <select
-      className="flex h-9 w-full rounded-xl border border-white/10 bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-black/30 transition-colors px-3 py-1 text-sm shadow-sm"
+      className="flex h-9 w-full rounded-xl border border-border bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-black/30 transition-colors px-3 py-1 text-sm shadow-sm"
       value={value}
       onChange={(e) => onChange(e.target.value)}
     >
@@ -145,7 +146,7 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
         });
       }
     } catch (e) {
-      setActionMsg(`❌ ${e instanceof Error ? e.message : "Ошибка загрузки"}`);
+      setActionMsg(` ${e instanceof Error ? e.message : "Ошибка загрузки"}`);
     } finally {
       setLoading(false);
     }
@@ -165,11 +166,11 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
       if (editForm.trafficLimitStrategy) payload.trafficLimitStrategy = editForm.trafficLimitStrategy;
       if (editForm.expireAt) payload.expireAt = editForm.expireAt;
       await api.updateSubscriptionRemna(token, subscription.id, payload);
-      setActionMsg("✅ Лимиты применены");
+      setActionMsg(" Лимиты применены");
       await loadRemna();
       onChanged?.();
     } catch (e) {
-      setActionMsg(`❌ ${e instanceof Error ? e.message : "Ошибка"}`);
+      setActionMsg(` ${e instanceof Error ? e.message : "Ошибка"}`);
     } finally {
       setSaving(false);
     }
@@ -179,11 +180,11 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
     setActionMsg(null);
     try {
       await fn();
-      setActionMsg(`✅ ${successLabel}`);
+      setActionMsg(` ${successLabel}`);
       await loadRemna();
       onChanged?.();
     } catch (e) {
-      setActionMsg(`❌ ${e instanceof Error ? e.message : "Ошибка"}`);
+      setActionMsg(` ${e instanceof Error ? e.message : "Ошибка"}`);
     }
   }
 
@@ -197,11 +198,11 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
     setActiveSquads((prev) => prev.filter((u) => u !== uuid));
   }
 
-  // Нет привязки к Remna → плашка.
+  // Нет привязки к Remna  плашка.
   if (!subscription.remnawaveUuid) {
     return (
-      <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/[0.06] p-4 text-sm text-yellow-200">
-        ⚠️ Эта подписка ещё не привязана к Remna (`remnawaveUuid = null`).
+      <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/[0.06] p-4 text-sm text-yellow-200">
+         Эта подписка ещё не привязана к Remna (`remnawaveUuid = null`).
         Купите/активируйте тариф или сделайте «Push в Remna» в массовых операциях клиента.
       </div>
     );
@@ -213,24 +214,24 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
   return (
     <div className="space-y-3">
       <Tabs value={innerTab} onValueChange={(v) => setInnerTab(v as InnerTab)}>
-        <TabsList className="grid grid-cols-3 gap-1 bg-foreground/[0.03] dark:bg-white/[0.03] p-1 rounded-xl border border-white/5">
+        <TabsList className="flex flex-wrap gap-1 bg-foreground/[0.03] dark:bg-white/[0.03] p-1 rounded-xl border border-border">
           <TabsTrigger value="overview" className="text-xs rounded-lg data-[state=active]:bg-primary/15 data-[state=active]:text-primary">
-            📊 Обзор
+             Обзор
           </TabsTrigger>
           <TabsTrigger value="squads" className="text-xs rounded-lg data-[state=active]:bg-primary/15 data-[state=active]:text-primary">
-            🛡️ Сквады
+             Сквады
           </TabsTrigger>
           <TabsTrigger value="actions" className="text-xs rounded-lg data-[state=active]:bg-primary/15 data-[state=active]:text-primary">
-            ⚡ Действия
+             Действия
           </TabsTrigger>
         </TabsList>
 
-        {/* ─── ОБЗОР: данные Remna + лимиты + Применить ──────────────────── */}
+        {/*  ОБЗОР: данные Remna + лимиты + Применить  */}
         <TabsContent value="overview" className="mt-3 space-y-4">
           {loading && <p className="text-muted-foreground text-sm">Загрузка данных Remna…</p>}
 
           {remnaUser && (
-            <div className="rounded-2xl bg-gradient-to-br from-background/80 to-background/40 border border-white/10 p-4 space-y-2 text-sm">
+            <div className="rounded-xl bg-card border border-border p-4 space-y-2 text-sm">
               <div className="font-medium text-xs uppercase tracking-wider text-muted-foreground mb-1">
                 Данные Remna
               </div>
@@ -361,7 +362,7 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
             <Button
               variant="outline"
               size="sm"
-              className="mt-3 rounded-xl border-white/10 bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]"
+              className="mt-3 rounded-xl border-border bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]"
               onClick={applyLimits}
               disabled={saving}
             >
@@ -370,7 +371,7 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
           </div>
         </TabsContent>
 
-        {/* ─── СКВАДЫ ─────────────────────────────────────────────────── */}
+        {/*  СКВАДЫ  */}
         <TabsContent value="squads" className="mt-3">
           {remnaSquads.length === 0 ? (
             <div className="text-sm text-muted-foreground">Сквады Remna не настроены.</div>
@@ -384,7 +385,7 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
                     className={cn(
                       "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs border transition-colors",
                       inSquad
-                        ? "bg-primary/10 border-primary/30 text-primary"
+                        ? "bg-primary/10 border-border text-primary"
                         : "bg-muted border-transparent text-muted-foreground"
                     )}
                   >
@@ -415,55 +416,53 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
           )}
         </TabsContent>
 
-        {/* ─── ДЕЙСТВИЯ (быстрые действия per-subscription) ───────────── */}
-        <TabsContent value="actions" className="mt-3">
-          <h3 className="font-semibold text-sm mb-3">Быстрые действия Remna</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Button
-              variant="outline"
-              className="justify-start gap-2 rounded-xl border-white/10 bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]"
-              onClick={() => runAction("Подписка отозвана", () => api.subscriptionRemnaRevokeSubscription(token, subscription.id))}
-            >
-              <Ticket className="h-4 w-4" /> Отозвать подписку
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start gap-2 text-destructive border-destructive/30 hover:bg-destructive/10 rounded-xl"
-              onClick={() => runAction("Отключено в Remna", () => api.subscriptionRemnaDisable(token, subscription.id))}
-            >
-              <Ban className="h-4 w-4" /> Отключить в Remna
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start gap-2 text-green-700 dark:text-green-400 border-green-500/30 hover:bg-green-500/10 rounded-xl"
-              onClick={() => runAction("Включено в Remna", () => api.subscriptionRemnaEnable(token, subscription.id))}
-            >
-              <ShieldCheck className="h-4 w-4" /> Включить в Remna
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start gap-2 rounded-xl border-white/10 bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]"
-              onClick={() => runAction("Трафик сброшен", () => api.subscriptionRemnaResetTraffic(token, subscription.id))}
-            >
-              <Wifi className="h-4 w-4" /> Сбросить трафик
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start gap-2 rounded-xl border-white/10 bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]"
-              onClick={() => loadRemna()}
-            >
-              <RefreshCw className="h-4 w-4" /> Обновить данные
-            </Button>
-            <Button
-              variant="outline"
-              className="justify-start gap-2 text-yellow-700 dark:text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10 rounded-xl"
-              onClick={() => {
-                if (!confirm("Отвязать эту подписку от Remna? UUID будет обнулён, при следующей покупке создастся новый.")) return;
-                runAction("Подписка отвязана от Remna", () => api.subscriptionRemnaUnlink(token, subscription.id));
-              }}
-            >
-              <Unlink className="h-4 w-4" /> Отвязать от Remna
-            </Button>
+        {/*  ДЕЙСТВИЯ (быстрые действия per-subscription)  */}
+        <TabsContent value="actions" className="mt-3 space-y-4">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.9px] text-muted-foreground mb-2">Подписка в Remnawave</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Button variant="outline" className="justify-start gap-2 rounded-lg border-border bg-card hover:bg-muted text-[12.8px] font-semibold h-9"
+                onClick={() => runAction("Включено в Remna", () => api.subscriptionRemnaEnable(token, subscription.id))}>
+                <ShieldCheck className="h-4 w-4" /> Включить в Remna
+              </Button>
+              <Button variant="outline" className="justify-start gap-2 rounded-lg border-border bg-card hover:bg-muted text-[12.8px] font-semibold h-9"
+                onClick={() => runAction("Трафик сброшен", () => api.subscriptionRemnaResetTraffic(token, subscription.id))}>
+                <Wifi className="h-4 w-4" /> Сбросить трафик
+              </Button>
+              <Button variant="outline" className="justify-start gap-2 rounded-lg border-border bg-card hover:bg-muted text-[12.8px] font-semibold h-9"
+                onClick={() => loadRemna()}>
+                <RefreshCw className="h-4 w-4" /> Обновить данные
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.9px] text-muted-foreground mb-2">Опасная зона</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Button variant="outline" className="justify-start gap-2 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 text-[12.8px] font-semibold h-9"
+                onClick={() => runAction("Отключено в Remna", () => api.subscriptionRemnaDisable(token, subscription.id))}>
+                <Ban className="h-4 w-4" /> Отключить в Remna
+              </Button>
+              <Button variant="outline" className="justify-start gap-2 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 text-[12.8px] font-semibold h-9"
+                onClick={() => runAction("Подписка отозвана", () => api.subscriptionRemnaRevokeSubscription(token, subscription.id))}>
+                <Ticket className="h-4 w-4" /> Отозвать подписку
+              </Button>
+              <Button variant="outline" className="justify-start gap-2 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 text-[12.8px] font-semibold h-9"
+                onClick={() => {
+                  if (!confirm("Отвязать эту подписку от Remna? UUID будет обнулён, при следующей покупке создастся новый.")) return;
+                  runAction("Подписка отвязана от Remna", () => api.subscriptionRemnaUnlink(token, subscription.id));
+                }}>
+                <Unlink className="h-4 w-4" /> Отвязать от Remna
+              </Button>
+              <Button variant="outline" className="justify-start gap-2 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 text-[12.8px] font-semibold h-9"
+                onClick={() => {
+                  if (!confirm("Удалить эту подписку? Она исчезнет у клиента, а пользователь в Remnawave будет удалён. Действие необратимо.")) return;
+                  runAction("Подписка удалена", () => api.deleteSecondarySubscription(token, subscription.id));
+                }}>
+                <Trash2 className="h-4 w-4" /> Удалить подписку
+              </Button>
+            </div>
+            <p className="text-[11.5px] text-muted-foreground mt-2">Отзыв подписки перевыпустит ссылку — старые конфиги у клиента перестанут работать. Удаление необратимо: подписка исчезнет и у клиента, и в Remnawave.</p>
           </div>
         </TabsContent>
       </Tabs>

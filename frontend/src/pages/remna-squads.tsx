@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Loader2, Layers, Users as UsersIcon, Copy, Check, Tag, Unlink } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Users as UsersIcon, Copy, Check, Tag, Unlink } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface InternalSquad {
@@ -76,7 +76,7 @@ export function RemnaSquadsPage() {
 
   useEffect(() => { load(); }, [token]);
 
-  /** uuid инбаунда → {tag,type,port} из config-профилей (для чипов). */
+  /** uuid инбаунда  {tag,type,port} из config-профилей (для чипов). */
   const inboundByUuid = useMemo(() => {
     const map = new Map<string, { tag?: string; type?: string; port?: number | null }>();
     for (const p of profiles) {
@@ -87,7 +87,7 @@ export function RemnaSquadsPage() {
     return map;
   }, [profiles]);
 
-  /** squadUuid → тарифы, которые его выдают (Tariff.internalSquadUuids). */
+  /** squadUuid  тарифы, которые его выдают (Tariff.internalSquadUuids). */
   const tariffsBySquad = useMemo(() => {
     const map = new Map<string, TariffRecord[]>();
     for (const t of tariffs) {
@@ -151,7 +151,7 @@ export function RemnaSquadsPage() {
   const handleDelete = async (s: InternalSquad) => {
     const linked = tariffsBySquad.get(s.uuid) ?? [];
     const warn = linked.length
-      ? `\n\n⚠️ Сквад выдают ${plural(linked.length, ["тариф", "тарифа", "тарифов"])}: ${linked.map((t) => t.name).join(", ")} — они потеряют его.`
+      ? `\n\n Сквад выдают ${plural(linked.length, ["тариф", "тарифа", "тарифов"])}: ${linked.map((t) => t.name).join(", ")} — они потеряют его.`
       : "";
     if (!confirm(`Удалить сквад «${s.name}»?${warn}`)) return;
     setBusy(s.uuid);
@@ -168,7 +168,7 @@ export function RemnaSquadsPage() {
   if (loading) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center justify-center gap-4">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center justify-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем сквады…</p>
         </Card>
@@ -179,28 +179,23 @@ export function RemnaSquadsPage() {
   if (error) {
     return (
       <div className="px-4 sm:px-6 md:px-8 pt-6 pb-10">
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-violet-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Layers className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">Сквады</h1>
-            <p className="text-sm text-muted-foreground mt-1">Internal-сквады: наборы инбаундов, которые выдаются подпискам.</p>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Сквады</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Internal-сквады: наборы инбаундов, которые выдаются подпискам.</p>
           </div>
         </div>
         <Button onClick={openCreate} className="gap-1.5 rounded-xl">
@@ -210,12 +205,9 @@ export function RemnaSquadsPage() {
       </motion.div>
 
       {squads.length === 0 ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-12 shadow-xl">
+        <Card className="bg-card border-border rounded-2xl p-12">
           <div className="flex flex-col items-center justify-center text-center">
-            <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-              <Layers className="h-8 w-8 text-muted-foreground/60" />
-            </div>
-            <h3 className="text-lg font-semibold tracking-tight">Нет сквадов</h3>
+            <h3 className="text-[13.5px] font-bold tracking-tight">Нет сквадов</h3>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm">Сквад — это набор инбаундов из config-профилей. Подписка получает сквад, а с ним — доступ к нодам.</p>
             <Button onClick={openCreate} className="gap-1.5 rounded-xl mt-5">
               <Plus className="h-4 w-4" />
@@ -230,7 +222,7 @@ export function RemnaSquadsPage() {
             const ibUuids = squadInboundUuids(s);
             return (
               <motion.div key={s.uuid} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }} whileHover={{ y: -2 }}>
-                <Card className="relative bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 pl-6 shadow-xl overflow-visible">
+                <Card className="relative bg-card border-border rounded-2xl p-4 pl-6 overflow-visible">
                   <div className={`absolute left-2.5 top-5 bottom-5 w-1 rounded-full ${linkedTariffs.length > 0 ? "bg-violet-500" : "bg-zinc-500/50"}`} />
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div className="flex-1 min-w-[240px] space-y-2">
@@ -247,7 +239,7 @@ export function RemnaSquadsPage() {
                         {ibUuids.map((u) => {
                           const ib = inboundByUuid.get(u);
                           return (
-                            <code key={u} className="font-mono text-[11px] bg-foreground/[0.04] dark:bg-white/[0.03] border border-white/5 px-1.5 py-0.5 rounded text-muted-foreground">
+                            <code key={u} className="font-mono text-[11px] bg-foreground/[0.04] dark:bg-white/[0.03] border border-border px-1.5 py-0.5 rounded text-muted-foreground">
                               {ib?.tag ?? u.slice(0, 8)}{ib?.port ? ` :${ib.port}` : ""}
                             </code>
                           );
@@ -297,10 +289,10 @@ export function RemnaSquadsPage() {
       )}
 
       <Dialog open={showForm} onOpenChange={(open) => !open && setShowForm(false)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-background/80 backdrop-blur-3xl border-white/10 rounded-[2rem]">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-card border-border rounded-2xl">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
+              <div className="h-10 w-10 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">
                 {editingUuid ? <Pencil className="h-5 w-5 text-primary" /> : <Plus className="h-5 w-5 text-primary" />}
               </div>
               <div>
@@ -312,11 +304,11 @@ export function RemnaSquadsPage() {
           <div className="space-y-4 py-4">
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Название</Label>
-              <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Premium" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50" />
+              <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Premium" className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50" />
             </div>
             <div className="grid gap-1.5">
               <Label className="text-xs text-muted-foreground">Инбаунды (из config-профилей)</Label>
-              <div className="grid gap-2 rounded-xl border border-white/10 bg-foreground/[0.02] p-3 max-h-72 overflow-y-auto">
+              <div className="grid gap-2 rounded-xl border border-border bg-foreground/[0.02] p-3 max-h-72 overflow-y-auto">
                 {profiles.length === 0 && <span className="text-xs text-muted-foreground">Нет профилей с инбаундами.</span>}
                 {profiles.map((p) => (
                   <div key={p.uuid}>
@@ -327,7 +319,7 @@ export function RemnaSquadsPage() {
                         <label key={ib.uuid} className="flex items-center gap-2 cursor-pointer rounded-lg px-2 py-1.5 hover:bg-foreground/5">
                           <input type="checkbox" className="rounded accent-primary" checked={form.inbounds.includes(ib.uuid)} onChange={() => toggleInbound(ib.uuid)} />
                           <span className="text-sm font-mono">{ib.tag ?? ib.uuid.slice(0, 8)}</span>
-                          {ib.type && <span className="text-[11px] text-muted-foreground">{ib.type}{ib.port ? ` :${ib.port}` : ""}</span>}
+                          {ib.type && <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">{ib.type}{ib.port ? ` :${ib.port}` : ""}</span>}
                         </label>
                       ))}
                     </div>

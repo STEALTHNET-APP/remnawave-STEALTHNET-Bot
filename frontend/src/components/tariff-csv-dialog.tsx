@@ -1,7 +1,7 @@
 /**
  * Dialog для CSV-импорта тарифов.
  *
- * Workflow: paste/upload CSV → preview (dryRun) → apply.
+ * Workflow: paste/upload CSV  preview (dryRun)  apply.
  * Кнопка экспорта здесь же — просто скачивает текущий CSV.
  */
 
@@ -134,9 +134,9 @@ export function TariffCsvDialog({ open, onClose, onApplied }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) { reset(); onClose(); } }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
             <FileSpreadsheet className="h-5 w-5 text-primary" />
             Импорт / экспорт тарифов (CSV)
           </DialogTitle>
@@ -145,7 +145,7 @@ export function TariffCsvDialog({ open, onClose, onApplied }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-2 mt-2 pt-2 border-b border-white/10 pb-3">
+        <div className="flex items-center gap-2 mt-2 pt-2 border-b border-border pb-3">
           <Button variant="outline" onClick={handleExport} disabled={busy !== null} className="gap-2">
             {busy === "export" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             Скачать текущие
@@ -166,7 +166,7 @@ export function TariffCsvDialog({ open, onClose, onApplied }: Props) {
         <div className="mt-3">
           <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-1 block">CSV-данные</label>
           <textarea
-            className="w-full h-40 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/10 p-3 font-mono text-xs"
+            className="w-full h-40 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-border p-3 font-mono text-xs"
             placeholder="id,category_id,name,description,duration_days,price,currency,..."
             value={csv}
             onChange={(e) => { setCsv(e.target.value); setPreview(null); setResult(null); }}
@@ -189,7 +189,7 @@ export function TariffCsvDialog({ open, onClose, onApplied }: Props) {
                 Превью: {preview.wouldCreate} создать, {preview.wouldUpdate} обновить (всего {preview.total})
               </span>
             </div>
-            <div className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/10 max-h-[260px] overflow-y-auto">
+            <div className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-border max-h-[260px] overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="bg-foreground/[0.03] dark:bg-white/[0.02] text-muted-foreground uppercase">
                   <tr>
@@ -201,7 +201,7 @@ export function TariffCsvDialog({ open, onClose, onApplied }: Props) {
                     <th className="px-2 py-1.5 text-right font-semibold">Устройств</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5">
+                <tbody className="divide-y divide-border">
                   {preview.previewRows.map((r, i) => (
                     <tr key={i}>
                       <td className="px-2 py-1.5">
@@ -246,7 +246,7 @@ export function TariffCsvDialog({ open, onClose, onApplied }: Props) {
           </div>
         )}
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-white/10">
+        <div className="flex justify-end gap-2 pt-3 border-t border-border">
           <Button variant="outline" onClick={() => { reset(); onClose(); }}>Закрыть</Button>
           <Button variant="outline" onClick={handleDryRun} disabled={busy !== null || !csv.trim()} className="gap-2">
             {busy === "dryRun" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}

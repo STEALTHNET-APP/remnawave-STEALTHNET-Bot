@@ -40,7 +40,7 @@ export function TourTooltip({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -20, scale: 0.95 }}
       transition={{ type: "spring", stiffness: 300, damping: 25 }}
-      className="flex flex-col w-[400px] max-w-[90vw] z-[10000] overflow-hidden rounded-3xl border border-white/10 bg-background/80 shadow-2xl backdrop-blur-2xl"
+      className="flex flex-col w-[400px] max-w-[90vw] z-[10000] overflow-hidden rounded-xl border border-border bg-card"
     >
       {/* Top area: content + mascot side by side */}
       <div className="flex">
@@ -75,7 +75,7 @@ export function TourTooltip({
                 variant="outline"
                 size="sm"
                 onClick={() => setIsVideoOpen(true)}
-                className="mt-3 w-fit bg-white/10 hover:bg-white/20 border-white/20 text-foreground backdrop-blur-md rounded-xl"
+                className="mt-3 w-fit bg-card hover:bg-card border-border text-foreground rounded-xl"
               >
                 <Play className="w-4 h-4 mr-2" />
                 Смотреть видео
@@ -86,8 +86,8 @@ export function TourTooltip({
 
         {/* Mascot Side — PNG image */}
         {mascot && (
-          <div className="relative flex w-[40%] shrink-0 items-end justify-center bg-primary/5 pt-4 overflow-hidden border-l border-white/5">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent pointer-events-none" />
+          <div className="relative flex w-[40%] shrink-0 items-end justify-center bg-primary/5 pt-4 overflow-hidden border-l border-border">
+            <div className="absolute inset-0 bg-transparent pointer-events-none" />
             <img
               src={mascot.imageUrl}
               alt={mascot.name}
@@ -99,7 +99,7 @@ export function TourTooltip({
       </div>
 
       {/* Buttons — always below content+mascot */}
-      <div className="px-6 pb-4 pt-2 flex items-center justify-between gap-3 border-t border-white/5">
+      <div className="px-6 pb-4 pt-2 flex items-center justify-between gap-3 border-t border-border">
         <div className="flex items-center gap-2">
           {index > 0 && (
             <Button
@@ -108,7 +108,7 @@ export function TourTooltip({
               size="sm"
               className="text-xs text-muted-foreground hover:text-foreground h-9 px-3"
             >
-              ← Назад
+               Назад
             </Button>
           )}
           {!isLastStep && (
@@ -126,9 +126,9 @@ export function TourTooltip({
         <Button
           {...primaryProps}
           size="sm"
-          className={`h-9 px-5 ml-auto font-medium shadow-md hover:scale-105 transition-transform ${isLastStep ? "bg-green-600 hover:bg-green-700 text-white" : "bg-primary text-primary-foreground"}`}
+          className={`h-9 px-5 ml-auto font-medium hover:scale-105 transition-transform ${isLastStep ? "bg-green-600 hover:bg-green-700 text-white" : "bg-primary text-primary-foreground"}`}
         >
-          {isLastStep ? "Завершить" : "Далее →"}
+          {isLastStep ? "Завершить" : "Далее "}
         </Button>
       </div>
 
@@ -140,7 +140,7 @@ export function TourTooltip({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+              className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 p-4"
               onClick={() => setIsVideoOpen(false)}
             >
               <motion.div
@@ -148,7 +148,7 @@ export function TourTooltip({
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="relative w-[95vw] max-w-[1400px] aspect-video rounded-3xl overflow-hidden border border-white/10 bg-black/50 shadow-2xl"
+                className="relative w-[95vw] max-w-[1400px] aspect-video rounded-xl overflow-hidden border border-border bg-black/50"
                 onClick={(e) => e.stopPropagation()}
               >
                 <button

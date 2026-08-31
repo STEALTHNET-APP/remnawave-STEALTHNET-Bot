@@ -12,7 +12,7 @@ import { api } from "@/lib/api";
 import type { WithdrawalRequestRecord } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Check, X, RefreshCw, Copy, Wallet, Clock3, Inbox } from "lucide-react";
+import { Loader2, Check, X, RefreshCw, Copy, Clock3 } from "lucide-react";
 import { fmtMsk } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
@@ -119,22 +119,17 @@ export function WithdrawalsPage() {
   };
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-violet-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Wallet className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">Заявки на вывод</h1>
-            <p className="text-sm text-muted-foreground mt-1">USDT TRC20 · Минимальная сумма заявки 3000₽ · reject возвращает баланс автоматически.</p>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Заявки на вывод</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">USDT TRC20 · Минимальная сумма заявки 3000₽ · reject возвращает баланс автоматически.</p>
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1.5 rounded-xl">
@@ -143,7 +138,7 @@ export function WithdrawalsPage() {
         </Button>
       </motion.div>
 
-      <div className="flex flex-wrap gap-1.5 bg-background/60 backdrop-blur-3xl border border-white/10 rounded-2xl p-1.5 w-fit shadow-xl">
+      <div className="flex flex-wrap gap-1.5 bg-card border border-border rounded-xl p-1.5 w-fit">
         {FILTERS.map((f) => (
           <button
             key={f.key}
@@ -161,22 +156,19 @@ export function WithdrawalsPage() {
       </div>
 
       {error && (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 backdrop-blur-md px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
       )}
 
       {loading ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center justify-center gap-4">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center justify-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем заявки…</p>
         </Card>
       ) : items.length === 0 ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-12 shadow-xl">
+        <Card className="bg-card border-border rounded-2xl p-12">
           <div className="flex flex-col items-center justify-center text-center">
-            <div className="h-16 w-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
-              <Inbox className="h-8 w-8 text-muted-foreground/60" />
-            </div>
-            <h3 className="text-lg font-semibold tracking-tight">Нет заявок</h3>
-            <p className="text-sm text-muted-foreground mt-1">
+            <h3 className="text-[13.5px] font-bold tracking-tight">Нет заявок</h3>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
               {filter === "ALL" ? "Заявок на вывод пока не было." : `Со статусом «${filter === "PENDING" ? "Ожидает" : filter === "APPROVED" ? "Одобрено" : "Отклонено"}» ничего нет.`}
             </p>
           </div>
@@ -185,7 +177,7 @@ export function WithdrawalsPage() {
         <div className="grid gap-4">
           {items.map((item, idx) => (
             <motion.div key={item.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(idx * 0.03, 0.3) }} whileHover={{ y: -2 }}>
-              <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl space-y-3">
+              <Card className="bg-card border-border rounded-2xl p-5 space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -198,7 +190,7 @@ export function WithdrawalsPage() {
                         {fmtMsk(item.createdAt)}
                       </span>
                     </div>
-                    <p className="text-2xl font-bold tracking-tight">{item.amount.toFixed(2)} ₽</p>
+                    <p className="text-[13.5px] font-bold tracking-tight">{item.amount.toFixed(2)} ₽</p>
                   </div>
                   {item.status === "PENDING" && (
                     <div className="flex gap-2">
@@ -225,7 +217,7 @@ export function WithdrawalsPage() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm rounded-2xl border border-white/10 bg-foreground/[0.02] p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm rounded-xl border border-border bg-foreground/[0.02] p-4">
                   <div className="space-y-1">
                     <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Клиент</p>
                     <p className="font-medium">{clientLabel(item.client)}</p>
@@ -236,7 +228,7 @@ export function WithdrawalsPage() {
                   <div className="space-y-1">
                     <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Кошелёк TRC20</p>
                     <div className="flex items-center gap-2">
-                      <code className="text-xs bg-foreground/5 border border-white/10 px-2 py-1 rounded-lg break-all">{item.walletTrc20}</code>
+                      <code className="text-xs bg-foreground/5 border border-border px-2 py-1 rounded-lg break-all">{item.walletTrc20}</code>
                       <Button
                         size="icon"
                         variant="ghost"
@@ -251,7 +243,7 @@ export function WithdrawalsPage() {
                 </div>
 
                 {item.adminComment && (
-                  <div className="text-sm pt-2 border-t border-white/10">
+                  <div className="text-sm pt-2 border-t border-border">
                     <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Комментарий админа</p>
                     <p className="text-muted-foreground">{item.adminComment}</p>
                   </div>

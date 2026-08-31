@@ -85,7 +85,9 @@ export async function syncFromRemna(): Promise<{
     if (users.length === 0) hasMore = false;
     else {
       for (const u of users) {
-        const uuid = u.uuid;
+        // Remnawave 3.x: у пользователя больше нет uuid — идентификатор это числовой id.
+        const rawId = (u as unknown as { uuid?: unknown; id?: unknown }).uuid ?? (u as unknown as { id?: unknown }).id;
+        const uuid = rawId == null ? null : String(rawId);
         if (!uuid) {
           result.skipped++;
           continue;
@@ -188,7 +190,12 @@ function extractRemnaUserFields(data: unknown): {
 
 /** Проверка, что ошибка Remna — «пользователь не найден» (удалён в Remna или не существует). */
 function isRemnaNotFoundError(status: number, error?: string): boolean {
-  return status === 404 || (typeof error === "string" && /not found|not exist/i.test(error));
+  if (status === 404) return true;
+  // ⚠️ Remnawave 3.x: идентификатор юзера стал числовым. Старый строковый uuid
+  // не проходит валидацию пути и возвращает 400 (а не 404). Для нас это то же
+  // самое «пользователя нет» — иначе клиент навсегда завис бы с битой привязкой.
+  if (status === 400) return true;
+  return typeof error === "string" && /not found|not exist|validation/i.test(error);
 }
 
 /** Повторить запрос к Remna один раз при сетевой ошибке («fetch failed» и подобные). */
@@ -329,6 +336,87 @@ export async function createRemnaUsersForClientsWithoutUuid(): Promise<{
       }
     } catch (e) {
       result.errors.push(`Client ${c.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  return { ok: result.errors.length === 0, ...result };
+}
+
+/**
+ * Зеркалирование состояния подписок из Remnawave в НАШУ базу (T-remna-mirror).
+ *
+ * Зачем: раньше даты/трафик/статус жили только в Remna — при её недоступности
+ * панель не могла показать даже дату окончания, а отчёты требовали похода в API.
+ * Теперь Subscription хранит снимок: expireAt, shortUuid, статус, трафик,
+ * даты сброса трафика и отзыва подписки + отметку времени синхронизации.
+ *
+ * Идентификатор берём из Subscription.remnawaveUuid (в Remnawave 3.x это
+ * строковое представление числового id). Если пользователя в Remna нет —
+ * помечаем подписку как EXPIRED-снимок и НЕ трогаем привязку: решение об
+ * отвязке принимает syncToRemna, чтобы не расходиться в логике.
+ */
+export async function syncSubscriptionsMirror(): Promise<{
+  ok: boolean;
+  updated: number;
+  missing: number;
+  errors: string[];
+}> {
+  const result = { updated: 0, missing: 0, errors: [] as string[] };
+  if (!isRemnaConfigured()) {
+    result.errors.push("Remna API не настроен");
+    return { ok: false, ...result };
+  }
+
+  const subs = await prisma.subscription.findMany({
+    where: { remnawaveUuid: { not: null } },
+    select: { id: true, remnawaveUuid: true },
+  });
+
+  for (const sub of subs) {
+    const uid = sub.remnawaveUuid;
+    if (!uid) continue;
+    try {
+      const res = await remnaGetUserWithRetry(uid);
+      if (res.error) {
+        if (isRemnaNotFoundError(res.status, res.error)) {
+          result.missing++;
+          await prisma.subscription.update({
+            where: { id: sub.id },
+            data: { remnaStatus: "MISSING", remnaSyncedAt: new Date() },
+          });
+        } else {
+          result.errors.push(`${uid}: ${res.error}`);
+        }
+        continue;
+      }
+
+      const raw = res.data as { response?: Record<string, unknown> } | undefined;
+      const u = (raw?.response ?? {}) as Record<string, unknown>;
+      const num = (v: unknown): number | null =>
+        typeof v === "number" && Number.isFinite(v) ? v : null;
+      const date = (v: unknown): Date | null => {
+        if (typeof v !== "string" || !v) return null;
+        const d = new Date(v);
+        return Number.isNaN(d.getTime()) ? null : d;
+      };
+      const usedRaw = (u.userTraffic as Record<string, unknown> | undefined)?.usedTrafficBytes ?? u.usedTrafficBytes;
+
+      await prisma.subscription.update({
+        where: { id: sub.id },
+        data: {
+          expireAt: date(u.expireAt) ?? undefined,
+          shortUuid: typeof u.shortUuid === "string" ? u.shortUuid : undefined,
+          remnaStatus: typeof u.status === "string" ? u.status : undefined,
+          trafficUsedBytes: num(usedRaw) ?? undefined,
+          trafficLimitBytes: num(u.trafficLimitBytes) ?? undefined,
+          lastTrafficResetAt: date(u.lastTrafficResetAt) ?? undefined,
+          subRevokedAt: date(u.subRevokedAt) ?? undefined,
+          remnaSyncedAt: new Date(),
+        },
+      });
+      result.updated++;
+    } catch (e) {
+      result.errors.push(`${uid}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 

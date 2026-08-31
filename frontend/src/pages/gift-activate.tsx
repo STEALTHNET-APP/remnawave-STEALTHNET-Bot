@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Gift, 
   Sparkles, 
   Clock, 
   User, 
@@ -118,7 +117,7 @@ export function GiftActivatePage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="rounded-[2.5rem] border border-white/10 dark:border-white/5 bg-background/40 backdrop-blur-2xl shadow-2xl overflow-hidden p-8 flex flex-col items-center justify-center"
+              className="rounded-[2.5rem] border border-border dark:border-border bg-card overflow-hidden p-8 flex flex-col items-center justify-center"
             >
               <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
               <p className="text-muted-foreground font-medium">Распаковываем подарок...</p>
@@ -130,12 +129,9 @@ export function GiftActivatePage() {
               animate="visible"
               exit="exit"
               variants={containerVariants}
-              className="rounded-[2.5rem] border border-red-500/20 bg-background/40 backdrop-blur-2xl shadow-2xl overflow-hidden p-8 flex flex-col items-center justify-center text-center"
+              className="rounded-[2.5rem] border border-red-500/20 bg-card overflow-hidden p-8 flex flex-col items-center justify-center text-center"
             >
-              <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center mb-6">
-                <Gift className="w-10 h-10 text-red-500 opacity-50" />
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Подарок не найден</h2>
+              <h2 className="text-[13.5px] font-bold mb-2">Подарок не найден</h2>
               <p className="text-muted-foreground mb-6">{error}</p>
               <Button onClick={() => window.location.reload()} variant="outline" className="gap-2 rounded-xl">
                 <RefreshCw className="w-4 h-4" />
@@ -148,7 +144,7 @@ export function GiftActivatePage() {
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ type: "spring", bounce: 0.5 }}
-              className="rounded-[2.5rem] border border-green-500/20 bg-background/40 backdrop-blur-2xl shadow-2xl overflow-hidden p-8 flex flex-col items-center justify-center text-center"
+              className="rounded-[2.5rem] border border-green-500/20 bg-card overflow-hidden p-8 flex flex-col items-center justify-center text-center"
             >
               <motion.div 
                 initial={{ scale: 0 }}
@@ -163,7 +159,7 @@ export function GiftActivatePage() {
                   className="absolute inset-0 border-2 border-dashed border-green-500/30 rounded-full"
                 />
               </motion.div>
-              <h2 className="text-3xl font-bold text-green-500 mb-2">Подарок активирован!</h2>
+              <h2 className="text-xl font-bold text-green-500 mb-2">Подарок активирован!</h2>
               <p className="text-muted-foreground">Сейчас вы будете перенаправлены в панель управления...</p>
             </motion.div>
           ) : giftInfo ? (
@@ -172,15 +168,12 @@ export function GiftActivatePage() {
               variants={containerVariants}
               initial="hidden"
               animate="visible"
-              className="rounded-[2.5rem] border border-amber-500/20 bg-background/40 backdrop-blur-2xl shadow-2xl overflow-hidden"
+              className="rounded-[2.5rem] border border-amber-500/20 bg-card overflow-hidden"
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute inset-0 bg-transparent pointer-events-none" />
               
               <div className="p-8 flex flex-col items-center text-center relative z-10">
                 <motion.div variants={childVariants} className="relative mb-6">
-                  <div className="w-24 h-24 rounded-3xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 shadow-inner">
-                    <Gift className="w-12 h-12 text-amber-500" />
-                  </div>
                   {giftInfo.status === "ACTIVE" && !giftInfo.isExpired && (
                     <motion.div
                       animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
@@ -192,15 +185,15 @@ export function GiftActivatePage() {
                   )}
                 </motion.div>
 
-                <motion.h1 variants={childVariants} className="text-3xl font-extrabold mb-2 bg-clip-text text-transparent bg-gradient-to-r from-amber-200 to-amber-500">
+                <motion.h1 variants={childVariants} className="text-3xl font-extrabold mb-2 text-foreground">
                   Вам подарок!
                 </motion.h1>
 
-                <motion.div variants={childVariants} className="w-full bg-background/50 rounded-2xl p-4 mb-6 border border-white/5 backdrop-blur-md">
+                <motion.div variants={childVariants} className="w-full bg-card rounded-xl p-4 mb-6 border border-border">
                   <div className="text-sm text-muted-foreground mb-1">Тариф</div>
                   <div className="text-xl font-bold text-foreground">{giftInfo.tariffName || "Подписка VPN"}</div>
                   
-                  <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between text-sm">
+                  <div className="mt-4 pt-4 border-t border-border flex items-center justify-between text-sm">
                     <div className="flex items-center text-muted-foreground">
                       <Clock className="w-4 h-4 mr-2" />
                       Действует до
@@ -221,17 +214,17 @@ export function GiftActivatePage() {
 
                 {/* Status Handling */}
                 {giftInfo.isExpired || giftInfo.status === "EXPIRED" ? (
-                  <motion.div variants={childVariants} className="w-full p-4 rounded-2xl bg-secondary/50 border border-border flex items-center justify-center gap-3 text-muted-foreground">
+                  <motion.div variants={childVariants} className="w-full p-4 rounded-xl bg-secondary/50 border border-border flex items-center justify-center gap-3 text-muted-foreground">
                     <Clock className="w-6 h-6" />
                     <span className="font-medium">Срок действия кода истёк</span>
                   </motion.div>
                 ) : giftInfo.status === "REDEEMED" ? (
-                  <motion.div variants={childVariants} className="w-full p-4 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center gap-3 text-green-500">
+                  <motion.div variants={childVariants} className="w-full p-4 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center gap-3 text-green-500">
                     <CheckCircle className="w-6 h-6" />
                     <span className="font-medium">Этот код уже был использован</span>
                   </motion.div>
                 ) : giftInfo.status === "CANCELLED" ? (
-                  <motion.div variants={childVariants} className="w-full p-4 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center gap-3 text-red-500">
+                  <motion.div variants={childVariants} className="w-full p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center gap-3 text-red-500">
                     <XCircle className="w-6 h-6" />
                     <span className="font-medium">Этот код был отменён</span>
                   </motion.div>
@@ -247,7 +240,7 @@ export function GiftActivatePage() {
                     <Button 
                       onClick={handleExistingAccount}
                       disabled={redeeming}
-                      className="w-full h-14 rounded-2xl text-base font-bold shadow-xl hover:scale-[1.02] transition-all gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white border-0"
+                      className="w-full h-14 rounded-xl text-base font-bold hover:scale-[1.02] transition-all gap-2 bg-primary text-white border-0"
                     >
                       {redeeming ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
@@ -263,7 +256,7 @@ export function GiftActivatePage() {
                       onClick={handleNewAccount}
                       disabled={redeeming}
                       variant="outline"
-                      className="w-full h-14 rounded-2xl text-base font-bold shadow-sm hover:scale-[1.02] transition-all gap-2 border-white/10 hover:bg-white/5"
+                      className="w-full h-14 rounded-xl text-base font-bold shadow-sm hover:scale-[1.02] transition-all gap-2 border-border hover:bg-card"
                     >
                       <UserPlus className="w-5 h-5" />
                       Создать новый аккаунт

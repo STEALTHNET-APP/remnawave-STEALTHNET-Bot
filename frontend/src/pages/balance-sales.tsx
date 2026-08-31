@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
-import { DollarSign, ShoppingCart, Search, CalendarDays, RefreshCw, User, Package, X, Wallet } from "lucide-react";
+import { Search, CalendarDays, RefreshCw, Package, X } from "lucide-react";
 import { fmtMskShort } from "@/lib/datetime";
 
 function fmtDate(s: string | null) {
@@ -87,24 +87,20 @@ export function BalanceSalesPage() {
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-emerald-500/10 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-emerald-500/30 to-teal-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Wallet className="h-6 w-6 text-emerald-500" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Продажи через баланс
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
               Только платежи, оплаченные с баланса клиентов
             </p>
           </div>
@@ -116,44 +112,38 @@ export function BalanceSalesPage() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-5 shadow-xl">
+        <Card className="bg-card border-border rounded-xl p-5">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-              <DollarSign className="h-5 w-5 text-emerald-500" />
-            </div>
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wider">Сумма продаж</p>
-              <p className="text-2xl font-bold">{fmtMoney(totalAmount)}</p>
+              <p className="text-[13.5px] font-bold">{fmtMoney(totalAmount)}</p>
             </div>
           </div>
         </Card>
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-5 shadow-xl">
+        <Card className="bg-card border-border rounded-xl p-5">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-sky-500/20 flex items-center justify-center">
-              <ShoppingCart className="h-5 w-5 text-sky-500" />
-            </div>
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wider">Кол-во продаж</p>
-              <p className="text-2xl font-bold">{totalCount}</p>
+              <p className="text-[13.5px] font-bold">{totalCount}</p>
             </div>
           </div>
         </Card>
       </div>
 
       {/* Filters */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-5 shadow-xl">
+      <Card className="bg-card border-border rounded-xl p-5">
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground flex items-center gap-1"><CalendarDays className="h-3 w-3" /> С даты</label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-xl bg-foreground/[0.03] border-white/10" />
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-xl bg-foreground/[0.03] border-border" />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs text-muted-foreground flex items-center gap-1"><CalendarDays className="h-3 w-3" /> По дату</label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-xl bg-foreground/[0.03] border-white/10" />
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-xl bg-foreground/[0.03] border-border" />
           </div>
           <div className="sm:col-span-2 space-y-1.5">
             <label className="text-xs text-muted-foreground flex items-center gap-1"><Search className="h-3 w-3" /> Поиск (email/TG/тариф)</label>
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="например, manager@example.com" className="rounded-xl bg-foreground/[0.03] border-white/10" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="например, manager@example.com" className="rounded-xl bg-foreground/[0.03] border-border" />
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-3">
@@ -164,14 +154,14 @@ export function BalanceSalesPage() {
       </Card>
 
       {/* Table */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden">
+      <Card className="bg-card border-border rounded-2xl overflow-hidden">
         {error && (
           <div className="bg-rose-500/10 border-b border-rose-500/30 px-5 py-3 text-sm text-rose-500">{error}</div>
         )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left border-b border-white/10">
+              <tr className="text-left border-b border-border">
                 <th className="px-5 py-3.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Дата</th>
                 <th className="px-5 py-3.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Клиент</th>
                 <th className="px-5 py-3.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Тариф</th>
@@ -183,22 +173,16 @@ export function BalanceSalesPage() {
                 <tr>
                   <td colSpan={4} className="px-4 py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
-                      <div className="h-14 w-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                        <ShoppingCart className="h-7 w-7 text-muted-foreground/60" />
-                      </div>
                       <p className="text-sm text-muted-foreground">Ничего не найдено — измените фильтры или период.</p>
                     </div>
                   </td>
                 </tr>
               )}
               {items.map((it) => (
-                <tr key={it.id} className="border-t border-white/5 hover:bg-white/[0.02] transition-colors">
+                <tr key={it.id} className="border-t border-border hover:bg-white/[0.02] transition-colors">
                   <td className="px-4 py-3 whitespace-nowrap text-xs text-muted-foreground">{fmtDate(it.paidAt)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="h-7 w-7 rounded-lg bg-sky-500/15 flex items-center justify-center shrink-0">
-                        <User className="h-3.5 w-3.5 text-sky-500" />
-                      </div>
                       <div className="min-w-0">
                         {it.clientEmail && <div className="text-xs font-medium truncate">{it.clientEmail}</div>}
                         {it.clientTelegramUsername && <div className="text-xs text-muted-foreground truncate">@{it.clientTelegramUsername}</div>}
@@ -223,7 +207,7 @@ export function BalanceSalesPage() {
         </div>
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-white/5 flex items-center justify-between text-xs">
+          <div className="px-4 py-3 border-t border-border flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Страница {page} из {totalPages} · всего {total}</span>
             <div className="flex gap-1.5">
               <Button size="sm" variant="outline" className="rounded-lg h-8" disabled={page <= 1} onClick={() => setPage(page - 1)}>Назад</Button>

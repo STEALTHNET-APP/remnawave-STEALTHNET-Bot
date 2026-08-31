@@ -353,7 +353,7 @@ export function ApiDocsPage() {
           <Code className="h-6 w-6" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold">External API v1</h1>
+          <h1 className="text-[13.5px] font-bold">External API v1</h1>
           <p className="text-sm text-muted-foreground">
             Документация для интеграции с мобильными приложениями и внешними сервисами
           </p>
@@ -361,7 +361,7 @@ export function ApiDocsPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card className="border-primary/20 shadow-sm">
+        <Card className="border-border shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <Key className="h-5 w-5 text-primary" />
@@ -405,7 +405,7 @@ export function ApiDocsPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-[560px]">
+        <TabsList className="flex flex-wrap w-full max-w-[560px]">
           <TabsTrigger value="endpoints">Эндпоинты</TabsTrigger>
           <TabsTrigger value="examples">Примеры (cURL)</TabsTrigger>
           <TabsTrigger value="errors">Ошибки</TabsTrigger>

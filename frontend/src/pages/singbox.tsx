@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { motion } from "framer-motion";
-import { Server, Plus, Copy, Check, Loader2, Pencil, Trash2, FileJson, Layers, Tag, Boxes, MousePointerClick } from "lucide-react";
+import { Server, Plus, Copy, Check, Loader2, Pencil, Trash2, FileJson, Layers, Tag } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -50,17 +50,17 @@ function formatDate(iso: string | null): string {
 function statusBadge(status: string) {
   const map: Record<string, string> = {
     ONLINE: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20",
-    OFFLINE: "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-white/10",
+    OFFLINE: "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-border",
     DISABLED: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20",
   };
   const dotColor: Record<string, string> = {
-    ONLINE: "bg-emerald-400 shadow-[0_0_4px_#10b981]",
+    ONLINE: "bg-emerald-400",
     OFFLINE: "bg-muted-foreground/40",
-    DISABLED: "bg-amber-400 shadow-[0_0_4px_#fbbf24]",
+    DISABLED: "bg-amber-400",
   };
   const label = status === "ONLINE" ? "Онлайн" : status === "DISABLED" ? "Отключена" : "Офлайн";
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium backdrop-blur-md", map[status] ?? map.OFFLINE)}>
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium", map[status] ?? map.OFFLINE)}>
       <span className={cn("h-1.5 w-1.5 rounded-full", dotColor[status] ?? dotColor.OFFLINE)} />
       {label}
     </span>
@@ -379,24 +379,19 @@ export function SingboxPage() {
   }
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <Boxes className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Sing-box
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
               Ноды VLESS / Shadowsocks / Trojan / Hysteria2. Категории и тарифы для продажи доступов.
             </p>
           </div>
@@ -410,7 +405,7 @@ export function SingboxPage() {
       </motion.div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full max-w-md grid-cols-3 bg-foreground/[0.03] dark:bg-white/[0.02] border border-white/5 rounded-xl p-1">
+        <TabsList className="flex flex-wrap w-full max-w-md bg-foreground/[0.03] dark:bg-white/[0.02] border border-border rounded-xl p-1">
           <TabsTrigger value="nodes" className="flex items-center gap-1.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
             <Server className="h-4 w-4" />
             Ноды
@@ -427,17 +422,14 @@ export function SingboxPage() {
 
         <TabsContent value="nodes" className="mt-4">
       {loading ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center gap-3">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем ноды…</p>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+          <Card className="bg-card border-border rounded-2xl p-5">
             <div className="flex items-center gap-3 mb-4">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <Server className="h-5 w-5 text-primary" />
-              </div>
               <div>
                 <h3 className="text-sm font-bold tracking-tight">Ноды</h3>
                 <p className="text-xs text-muted-foreground">Список sing-box нод</p>
@@ -445,9 +437,6 @@ export function SingboxPage() {
             </div>
             {nodes.length === 0 ? (
               <div className="flex flex-col items-center justify-center text-center py-8">
-                <div className="h-14 w-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-3">
-                  <Server className="h-7 w-7 text-muted-foreground/60" />
-                </div>
                 <p className="text-sm font-medium">Нод пока нет</p>
                 <p className="text-xs text-muted-foreground mt-1">Нажмите «Добавить ноду» в шапке страницы.</p>
               </div>
@@ -458,17 +447,14 @@ export function SingboxPage() {
                     key={n.id}
                     whileHover={{ y: -1 }}
                     className={cn(
-                      "relative overflow-hidden flex items-center justify-between gap-2 rounded-xl border p-3 cursor-pointer transition-all backdrop-blur-md",
+                      "relative overflow-hidden flex items-center justify-between gap-2 rounded-xl border p-3 cursor-pointer transition-all",
                       detailId === n.id
-                        ? "border-primary/40 bg-primary/5 shadow-md"
-                        : "border-white/10 bg-foreground/[0.02] dark:bg-white/[0.02] hover:bg-foreground/[0.05] dark:hover:bg-white/[0.04] hover:border-white/20"
+                        ? "border-border bg-primary/5"
+                        : "border-border bg-foreground/[0.02] dark:bg-white/[0.02] hover:bg-foreground/[0.05] dark:hover:bg-white/[0.04] hover:border-border"
                     )}
                     onClick={() => setDetailId(n.id)}
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary/15 to-primary/5 border border-white/10 flex items-center justify-center shrink-0">
-                        <Server className="h-4 w-4 text-primary" />
-                      </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="font-medium truncate">{n.name || n.id.slice(0, 8)}</span>
@@ -482,7 +468,7 @@ export function SingboxPage() {
                         </div>
                       </div>
                     </div>
-                    <span className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-white/10 px-2 py-0.5 text-[10px] text-muted-foreground shrink-0">
+                    <span className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-border px-2 py-0.5 text-[10px] text-muted-foreground shrink-0">
                       {n.slotsCount} сл.
                     </span>
                   </motion.li>
@@ -491,11 +477,8 @@ export function SingboxPage() {
             )}
           </Card>
 
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+          <Card className="bg-card border-border rounded-2xl p-5">
             <div className="flex items-center gap-3 mb-4">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                <FileJson className="h-5 w-5 text-cyan-500 dark:text-cyan-400" />
-              </div>
               <div>
                 <h3 className="text-sm font-bold tracking-tight">Детали ноды</h3>
                 <p className="text-xs text-muted-foreground">
@@ -505,9 +488,6 @@ export function SingboxPage() {
             </div>
             {!detailId ? (
               <div className="flex flex-col items-center justify-center text-center py-8">
-                <div className="h-14 w-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-3">
-                  <MousePointerClick className="h-7 w-7 text-muted-foreground/60" />
-                </div>
                 <p className="text-sm text-muted-foreground">Выберите ноду из списка слева.</p>
               </div>
             ) : detailLoading ? (
@@ -516,13 +496,13 @@ export function SingboxPage() {
               </div>
             ) : detailNode ? (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-white/5 bg-foreground/[0.03] dark:bg-white/[0.02] p-4 grid gap-2 text-sm">
+                <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 grid gap-2 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">Название</span><span className="font-medium">{detailNode.name || "—"}</span></div>
                   <div className="flex justify-between items-center"><span className="text-muted-foreground">Статус</span>{statusBadge(detailNode.status)}</div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Хост</span><span className="font-mono text-xs">{detailNode.publicHost || "—"}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Порт / протокол</span><span className="font-mono text-xs">{detailNode.port} / {detailNode.protocol}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Heartbeat</span><span className="text-xs">{formatDate(detailNode.lastSeenAt)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Трафик</span><span className="text-xs tabular-nums">↓ {formatBytes(detailNode.trafficInBytes)} ↑ {formatBytes(detailNode.trafficOutBytes)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Трафик</span><span className="text-xs tabular-nums"> {formatBytes(detailNode.trafficInBytes)}  {formatBytes(detailNode.trafficOutBytes)}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Слотов</span><span className="font-semibold">{detailNode.slots.length}</span></div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -542,7 +522,7 @@ export function SingboxPage() {
                 {detailNode.slots.length > 0 && (
                   <div>
                     <Label className="text-xs text-muted-foreground mb-2 block">Слоты</Label>
-                    <ul className="rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] divide-y divide-white/5 text-sm overflow-hidden">
+                    <ul className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] divide-y divide-border text-sm overflow-hidden">
                       {detailNode.slots.map((s) => (
                         <li key={s.id} className="px-3 py-2 flex justify-between items-center">
                           <span className="font-mono text-xs">{s.userIdentifier}</span>
@@ -562,12 +542,9 @@ export function SingboxPage() {
         </TabsContent>
 
         <TabsContent value="categories" className="mt-4">
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+          <Card className="bg-card border-border rounded-2xl p-5">
             <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-violet-500/20 to-violet-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                  <Layers className="h-5 w-5 text-violet-500 dark:text-violet-400" />
-                </div>
                 <div>
                   <h3 className="text-sm font-bold tracking-tight">Категории</h3>
                   <p className="text-xs text-muted-foreground">Группы тарифов для магазина доступов</p>
@@ -591,16 +568,13 @@ export function SingboxPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.03 }}
                     whileHover={{ y: -1 }}
-                    className="rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-3 flex items-center justify-between hover:border-white/20 transition-all"
+                    className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3 flex items-center justify-between hover:border-border transition-all"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500/15 to-violet-500/5 border border-white/10 flex items-center justify-center shrink-0">
-                        <Layers className="h-4 w-4 text-violet-500 dark:text-violet-400" />
-                      </div>
                       <span className="font-medium truncate">{c.name}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-white/10 px-2 py-0.5 text-[10px] text-muted-foreground">
+                      <span className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
                         {c.tariffs.length} тарифов
                       </span>
                       <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => { setCategoryModal({ edit: c }); setCategoryForm({ name: c.name, sortOrder: String(c.sortOrder) }); }}>
@@ -618,12 +592,9 @@ export function SingboxPage() {
         </TabsContent>
 
         <TabsContent value="tariffs" className="mt-4">
-          <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-5 shadow-xl">
+          <Card className="bg-card border-border rounded-2xl p-5">
             <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-amber-500/20 to-amber-500/5 border border-white/10 flex items-center justify-center shadow-inner shrink-0">
-                  <Tag className="h-5 w-5 text-amber-500 dark:text-amber-400" />
-                </div>
                 <div>
                   <h3 className="text-sm font-bold tracking-tight">Тарифы</h3>
                   <p className="text-xs text-muted-foreground">Тарифы по категориям. Клиенты покупают по singboxTariffId.</p>
@@ -660,16 +631,13 @@ export function SingboxPage() {
                             key={t.id}
                             whileHover={{ y: -1 }}
                             className={cn(
-                              "rounded-xl border p-3 flex items-center justify-between gap-3 backdrop-blur-md transition-all flex-wrap",
+                              "rounded-xl border p-3 flex items-center justify-between gap-3 transition-all flex-wrap",
                               t.enabled
-                                ? "border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] hover:border-white/20"
+                                ? "border-border bg-foreground/[0.03] dark:bg-white/[0.02] hover:border-border"
                                 : "border-amber-500/20 bg-amber-500/[0.04] hover:border-amber-500/30"
                             )}
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary/15 to-primary/5 border border-white/10 flex items-center justify-center shrink-0">
-                                <Tag className="h-4 w-4 text-primary" />
-                              </div>
                               <div className="min-w-0">
                                 <p className="font-medium truncate">{t.name}</p>
                                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -711,7 +679,7 @@ export function SingboxPage() {
 
       {/* Диалог: добавить ноду */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Добавить sing-box ноду</DialogTitle>
             <DialogDescription>Заполните параметры. После создания скопируйте docker-compose на сервер.</DialogDescription>
@@ -931,7 +899,7 @@ export function SingboxPage() {
 
       {/* Диалог: редактор конфига JSON */}
       <Dialog open={configOpen} onOpenChange={setConfigOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Конфиг sing-box (JSON)</DialogTitle>
             <DialogDescription>

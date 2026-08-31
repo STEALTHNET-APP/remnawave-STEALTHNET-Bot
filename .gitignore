@@ -1,43 +1,42 @@
-# Dependencies
+# ── Dependencies ──────────────────────────────
 node_modules/
+**/node_modules/
 
-# Build
+# ── Build output ──────────────────────────────
 dist/
 build/
-*.tsbuildinfo
+**/dist/
+**/build/
 
-# Env (конфигурация — не коммитить!)
+# ── Secrets & keys (НИКОГДА в git!) ───────────
+keys/
+*.pem
+*.key
 .env
-.env.local
-.env.*.local
-backend/.env
-bot/.env
-
-# Logs
-*.log
-logs/
-
-# IDE
-.idea/
-.vscode/
-.cursor/
-*.swp
-.DS_Store
-
-# Docker volumes
-postgres_data/
-
-# Prisma
-backend/prisma/migrations/*_migration.sql
-
-# Nginx: сгенерированный конфиг (создаётся install.sh, у каждого сервера свой)
-# Если файл уже в репозитории — один раз: git rm --cached nginx/nginx.conf && git commit -m "Stop tracking nginx.conf"
-nginx/nginx.conf
+.env.*
+!.env.example
 nginx/ssl/
+nginx/nginx.conf
 
-# Frontend dist
-frontend/dist/
+# ── Claude / AI tooling (память содержит креды!) ─
+.claude/
+.opencode/
+.sisyphus/
+opencode.json
+.mcp.json
 
-# For Gemini
-output.xml
+# ── OS junk ───────────────────────────────────
 .DS_Store
+**/.DS_Store
+Thumbs.db
+nul
+
+# ── Temp & artifacts ──────────────────────────
+temp/
+*.log
+*.tar.gz
+*.zip
+
+# ── Local server/helper files ─────────────────
+server_info.md
+git-manager.*

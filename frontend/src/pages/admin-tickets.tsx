@@ -7,8 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { motion } from "framer-motion";
 import {
-  MessageSquare, Loader2, Send, ArrowLeft, Lock, Unlock,
-  CircleDot, CircleCheck, RefreshCw, MessagesSquare, Paperclip, X as XIcon,
+  Loader2, Send, ArrowLeft, Lock, Unlock,
+  CircleDot, CircleCheck, RefreshCw, Paperclip, X as XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtMskShort } from "@/lib/datetime";
@@ -42,7 +42,7 @@ function AttachmentsGallery({ items }: { items: TicketAttachmentDto[] }) {
           href={a.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="block overflow-hidden rounded-xl border border-white/10 bg-black/30 hover:opacity-90 transition-opacity shrink-0"
+          className="block overflow-hidden rounded-xl border border-border bg-black/30 hover:opacity-90 transition-opacity shrink-0"
           style={{ width: cellSize, height: cellSize }}
           title={a.name ?? "Открыть оригинал"}
         >
@@ -184,29 +184,24 @@ export function AdminTicketsPage() {
     }
   };
 
-  /* ── Detail view ── */
+  /*  Detail view  */
   if (detailId && detail) {
     const isOpen = detail.status === "open";
     const clientLabel = detail.client.email ?? (detail.client.telegramUsername ? `@${detail.client.telegramUsername}` : detail.client.id);
     return (
-      <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-        <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-        <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+      <div className="flex flex-col gap-3.5 relative">
 
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-5 rounded-[2rem] shadow-2xl"
+          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <Button variant="ghost" size="icon" onClick={() => { setDetailId(null); setDetail(null); }} className="rounded-full hover:bg-white/10 shrink-0">
+            <Button variant="ghost" size="icon" onClick={() => { setDetailId(null); setDetail(null); }} className="rounded-full hover:bg-card shrink-0">
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10 shrink-0">
-              <MessageSquare className="h-6 w-6 text-primary" />
-            </div>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60 truncate">
+              <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground truncate">
                 {detail.subject}
               </h1>
               <p className="text-xs text-muted-foreground truncate">
@@ -216,10 +211,10 @@ export function AdminTicketsPage() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border backdrop-blur-md",
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border",
               isOpen
                 ? "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20"
-                : "bg-muted/40 text-muted-foreground border-white/10"
+                : "bg-muted/40 text-muted-foreground border-border"
             )}>
               {isOpen ? <CircleDot className="h-3.5 w-3.5" /> : <CircleCheck className="h-3.5 w-3.5" />}
               {isOpen ? "Открыт" : "Закрыт"}
@@ -231,7 +226,7 @@ export function AdminTicketsPage() {
           </div>
         </motion.div>
 
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl p-5 sm:p-6 space-y-4">
+        <Card className="bg-card border-border rounded-2xl p-5 sm:p-4 space-y-4">
           <div className="space-y-3">
             {detail.messages.map((m, i) => {
               const isSupport = m.authorType === "support";
@@ -242,10 +237,10 @@ export function AdminTicketsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}
                   className={cn(
-                    "rounded-2xl px-4 py-3 text-sm border backdrop-blur-md",
+                    "rounded-xl px-4 py-3 text-sm border",
                     isSupport
-                      ? "bg-primary/10 border-primary/20 ml-0 sm:ml-8"
-                      : "bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 mr-0 sm:mr-8"
+                      ? "bg-primary/10 border-border ml-0 sm:ml-8"
+                      : "bg-foreground/[0.03] dark:bg-white/[0.02] border-border mr-0 sm:mr-8"
                   )}
                 >
                   <div className="flex justify-between gap-2 text-[11px] mb-1.5">
@@ -261,7 +256,7 @@ export function AdminTicketsPage() {
             })}
           </div>
           {isOpen && (
-            <div className="flex flex-col gap-2 pt-3 border-t border-white/10">
+            <div className="flex flex-col gap-2 pt-3 border-t border-border">
               <Label htmlFor="admin-reply" className="text-xs text-muted-foreground">Ответ поддержки</Label>
               <Textarea
                 id="admin-reply"
@@ -269,14 +264,14 @@ export function AdminTicketsPage() {
                 value={replyText}
                 onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setReplyText(e.target.value)}
                 rows={3}
-                className="resize-none rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-primary/50"
+                className="resize-none rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
               />
               {replyFiles.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {replyFiles.map((f, i) => (
                     <div
                       key={`${f.name}-${i}`}
-                      className="relative group flex items-center gap-2 rounded-xl border border-white/10 bg-background/60 px-2 py-1.5 backdrop-blur-md"
+                      className="relative group flex items-center gap-2 rounded-xl border border-border bg-card px-2 py-1.5"
                     >
                       <img
                         src={URL.createObjectURL(f)}
@@ -288,7 +283,7 @@ export function AdminTicketsPage() {
                       <button
                         type="button"
                         onClick={() => setReplyFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
+                        className="flex h-5 w-5 items-center justify-center rounded-full bg-card text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
                         aria-label="Удалить"
                       >
                         <XIcon className="h-3 w-3" />
@@ -346,48 +341,43 @@ export function AdminTicketsPage() {
     );
   }
 
-  /* ── List view ── */
+  /*  List view  */
   const openCount = list.filter((t) => t.status === "open").length;
 
   return (
-    <div className="space-y-5 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[250px] h-[250px] rounded-full pointer-events-none" />
+    <div className="flex flex-col gap-3.5 relative">
 
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between bg-background/40 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] shadow-2xl"
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 flex items-center justify-center shadow-inner border border-white/10">
-            <MessagesSquare className="h-6 w-6 text-primary" />
-          </div>
+        <div className="flex items-start gap-3">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/60">
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               Тикеты
             </h1>
             <div className="flex items-center gap-2 mt-1.5">
-              <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary border border-primary/20 backdrop-blur-md">
+              <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary border border-border">
                 Всего: {list.length}
               </span>
               {openCount > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 px-2.5 py-0.5 text-[11px] font-medium border border-emerald-500/20 backdrop-blur-md">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 px-2.5 py-0.5 text-[11px] font-medium border border-emerald-500/20">
                   <CircleDot className="h-3 w-3" /> Открытых: {openCount}
                 </span>
               )}
             </div>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={loadList} disabled={loading} className="rounded-full hover:bg-white/10">
+        <Button variant="ghost" size="icon" onClick={loadList} disabled={loading} className="rounded-full hover:bg-card">
           <RefreshCw className={cn("h-4 w-4 text-muted-foreground", loading && "animate-spin text-primary")} />
         </Button>
       </motion.div>
 
       {/* Filters */}
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] p-4 shadow-xl">
-        <div className="flex items-center gap-2 bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-white/5 w-fit">
+      <Card className="bg-card border-border rounded-2xl p-4">
+        <div className="flex items-center gap-2 bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-border w-fit">
           {(["all", "open", "closed"] as const).map((f) => (
             <button
               key={f}
@@ -395,8 +385,8 @@ export function AdminTicketsPage() {
               className={cn(
                 "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
                 filter === f
-                  ? "bg-primary text-primary-foreground shadow-md"
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-card"
               )}
             >
               {f === "all" ? "Все" : f === "open" ? "Открытые" : "Закрытые"}
@@ -407,15 +397,12 @@ export function AdminTicketsPage() {
 
       {/* List */}
       {loading ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center gap-3">
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">Загружаем тикеты...</p>
         </Card>
       ) : list.length === 0 ? (
-        <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] py-16 shadow-xl flex flex-col items-center text-center gap-3">
-          <div className="h-16 w-16 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
-            <MessageSquare className="h-8 w-8 text-muted-foreground" />
-          </div>
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center text-center gap-3">
           <p className="text-muted-foreground">Нет тикетов</p>
         </Card>
       ) : (
@@ -434,20 +421,20 @@ export function AdminTicketsPage() {
                 <Card
                   onClick={() => setDetailId(t.id)}
                   className={cn(
-                    "relative overflow-hidden cursor-pointer bg-background/60 backdrop-blur-3xl border-white/10 rounded-2xl p-4 shadow-lg hover:shadow-xl hover:border-white/20 transition-all duration-300",
+                    "relative overflow-hidden cursor-pointer bg-card border-border rounded-xl p-4 hover:border-border transition-all duration-300",
                   )}
                 >
                   {/* Left accent bar */}
                   <div className={cn(
-                    "absolute left-0 top-0 bottom-0 w-1 rounded-r-full bg-gradient-to-b",
-                    isOpen ? "from-emerald-500 to-emerald-500/30" : "from-muted-foreground/40 to-transparent"
+                    "absolute left-0 top-0 bottom-0 w-1 rounded-r-full ",
+                    isOpen ? "bg-primary" : "bg-transparent"
                   )} />
                   <div className="flex items-center gap-3">
                     <div className={cn(
                       "h-9 w-9 rounded-xl flex items-center justify-center shrink-0 border",
                       isOpen
                         ? "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20"
-                        : "bg-muted/40 text-muted-foreground border-white/10"
+                        : "bg-muted/40 text-muted-foreground border-border"
                     )}>
                       {isOpen ? <CircleDot className="h-4 w-4" /> : <CircleCheck className="h-4 w-4" />}
                     </div>
@@ -459,7 +446,7 @@ export function AdminTicketsPage() {
                         <span>{formatDate(t.updatedAt)}</span>
                       </div>
                     </div>
-                    <span className="text-muted-foreground/40 shrink-0">→</span>
+                    <span className="text-muted-foreground/40 shrink-0"></span>
                   </div>
                 </Card>
               </motion.div>

@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Send, Paperclip, X, MousePointerClick, Mail, MessageSquare, Loader2, AlertTriangle, CheckCircle2,
+  Send, Paperclip, X, Mail, MessageSquare, Loader2, AlertTriangle, CheckCircle2,
   History as HistoryIcon, Eye, RefreshCw, Sparkles, Megaphone, Users, Image as ImageIcon, FileText, Film,
   Zap, Activity,
 } from "lucide-react";
@@ -23,22 +23,22 @@ const MAX_ATTACHMENT_MB = 50;
 
 const BUTTON_ACTIONS = [
   { value: "", label: "Без кнопки" },
-  { value: "menu:my_subs", label: "📋 Мои подписки" },
-  { value: "menu:tariffs", label: "📦 Тарифы" },
-  { value: "menu:topup", label: "💳 Пополнить баланс" },
-  { value: "menu:profile", label: "👤 Профиль" },
-  { value: "menu:trial", label: "🎁 Бесплатный триал" },
-  { value: "menu:referral", label: "🔗 Реферальная программа" },
-  { value: "menu:promocode", label: "🎟️ Промокод" },
-  { value: "menu:support", label: "🆘 Поддержка" },
-  { value: "menu:vpn", label: "📋 VPN подключение" },
-  { value: "menu:devices", label: "📱 Устройства" },
-  { value: "menu:extra_options", label: "➕ Доп. опции" },
-  { value: "menu:main", label: "📋 Главное меню" },
-  { value: "webapp:/cabinet", label: "🌐 Web кабинет" },
-  { value: "webapp:/cabinet/subscribe", label: "🌐 Страница подключения" },
-  { value: "webapp:/cabinet/tickets", label: "🌐 Тикеты" },
-  { value: "__custom_url__", label: "🔗 Своя ссылка (URL)" },
+  { value: "menu:my_subs", label: " Мои подписки" },
+  { value: "menu:tariffs", label: " Тарифы" },
+  { value: "menu:topup", label: " Пополнить баланс" },
+  { value: "menu:profile", label: " Профиль" },
+  { value: "menu:trial", label: " Бесплатный триал" },
+  { value: "menu:referral", label: " Реферальная программа" },
+  { value: "menu:promocode", label: " Промокод" },
+  { value: "menu:support", label: " Поддержка" },
+  { value: "menu:vpn", label: " VPN подключение" },
+  { value: "menu:devices", label: " Устройства" },
+  { value: "menu:extra_options", label: " Доп. опции" },
+  { value: "menu:main", label: " Главное меню" },
+  { value: "webapp:/cabinet", label: " Web кабинет" },
+  { value: "webapp:/cabinet/subscribe", label: " Страница подключения" },
+  { value: "webapp:/cabinet/tickets", label: " Тикеты" },
+  { value: "__custom_url__", label: " Своя ссылка (URL)" },
 ];
 
 type ChannelKey = "telegram" | "email" | "both";
@@ -48,7 +48,7 @@ const CHANNEL_META: Record<ChannelKey, { label: string; desc: string; icon: type
     label: "Telegram",
     desc: "Сообщение в чат бота",
     icon: MessageSquare,
-    gradient: "from-sky-500/30 via-blue-500/20 to-indigo-500/30",
+    gradient: "bg-muted",
     ring: "ring-sky-400/60 border-sky-400/40",
     iconBg: "bg-sky-500/20 text-sky-500 dark:text-sky-400",
     accent: "text-sky-500 dark:text-sky-400",
@@ -57,7 +57,7 @@ const CHANNEL_META: Record<ChannelKey, { label: string; desc: string; icon: type
     label: "Email",
     desc: "Письмо с темой и вложением",
     icon: Mail,
-    gradient: "from-cyan-500/30 via-teal-500/20 to-emerald-500/30",
+    gradient: "bg-muted",
     ring: "ring-cyan-400/60 border-cyan-400/40",
     iconBg: "bg-cyan-500/20 text-cyan-500 dark:text-cyan-400",
     accent: "text-cyan-500 dark:text-cyan-400",
@@ -66,7 +66,7 @@ const CHANNEL_META: Record<ChannelKey, { label: string; desc: string; icon: type
     label: "Telegram + Email",
     desc: "Отправить везде сразу",
     icon: Sparkles,
-    gradient: "from-fuchsia-500/30 via-purple-500/20 to-pink-500/30",
+    gradient: "bg-muted",
     ring: "ring-fuchsia-400/60 border-fuchsia-400/40",
     iconBg: "bg-fuchsia-500/20 text-fuchsia-500 dark:text-fuchsia-400",
     accent: "text-fuchsia-500 dark:text-fuchsia-400",
@@ -175,7 +175,7 @@ export function BroadcastPage() {
   }, [listRaw]);
   const parsedListRecipients = singleChannel === "email" ? parsedListEmails : parsedListIds;
 
-  // T-list-send: применить выбранную колонку файла → заполнить textarea (ID или email по каналу).
+  // T-list-send: применить выбранную колонку файла  заполнить textarea (ID или email по каналу).
   function applyTableColumn(table: ParsedTable, idx: number) {
     const vals = singleChannel === "email" ? extractEmails(table, idx) : extractIds(table, idx);
     setListRaw(vals.join("\n"));
@@ -394,21 +394,21 @@ export function BroadcastPage() {
             onDragLeave={() => setSingleDragOver(false)}
             onDrop={(e) => { e.preventDefault(); setSingleDragOver(false); const f = e.dataTransfer.files?.[0]; if (f) setSingleAttachment(f); }}
             className={cn(
-              "cursor-pointer rounded-2xl border-2 border-dashed p-5 text-center transition-all",
-              singleDragOver ? "border-sky-400/60 bg-sky-500/10" : "border-white/15 bg-foreground/[0.02] dark:bg-white/[0.02] hover:border-white/30 hover:bg-white/[0.04]"
+              "cursor-pointer rounded-xl border-2 border-dashed p-4 text-center transition-all",
+              singleDragOver ? "border-sky-400/60 bg-sky-500/10" : "border-border bg-foreground/[0.02] dark:bg-white/[0.02] hover:border-border hover:bg-white/[0.04]"
             )}
           >
             <ImageIcon className={cn("h-7 w-7 mx-auto mb-2", singleDragOver ? "text-sky-500" : "text-muted-foreground")} />
             <p className="text-sm font-medium">Перетащи файл сюда или <span className="text-sky-500 underline">выбери</span></p>
-            <p className="text-[11px] text-muted-foreground mt-1">Картинка → фото, видео → плеер, остальное → файл</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Картинка  фото, видео  плеер, остальное  файл</p>
           </div>
         ) : (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="flex items-center gap-3 rounded-2xl border border-sky-400/30 bg-sky-500/10 p-3.5"
+            className="flex items-center gap-3 rounded-xl border border-sky-400/30 bg-sky-500/10 p-3.5"
           >
-            <div className="h-11 w-11 rounded-xl bg-sky-500/20 flex items-center justify-center shrink-0">
+            <div className="h-9 w-11 rounded-xl bg-sky-500/20 flex items-center justify-center shrink-0">
               {singleAttachment.type.startsWith("image/")
                 ? <ImageIcon className="h-5 w-5 text-sky-500" />
                 : singleAttachment.type.startsWith("video/")
@@ -434,18 +434,15 @@ export function BroadcastPage() {
       {/* INLINE-КНОПКА (только Telegram — email не поддерживает inline-кнопки) */}
       {singleChannel === "telegram" && (
       <section>
-        <div className="rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-500/5 via-blue-500/5 to-indigo-500/5 p-4 space-y-3">
+        <div className="rounded-xl border border-sky-500/20 bg-muted p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-xl bg-sky-500/20 flex items-center justify-center">
-              <MousePointerClick className="h-4 w-4 text-sky-500 dark:text-sky-400" />
-            </div>
             <p className="text-sm font-semibold">Кнопка под сообщением <span className="text-[11px] font-normal text-muted-foreground">(необязательно)</span></p>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Действие</Label>
               <select
-                className="flex h-11 w-full rounded-xl border border-white/10 bg-background/60 px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50"
+                className="flex h-9 w-full rounded-xl border border-border bg-card px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50"
                 value={singleBtnAction}
                 onChange={(e) => setSingleBtnAction(e.target.value)}
               >
@@ -462,7 +459,7 @@ export function BroadcastPage() {
                   onChange={(e) => setSingleBtnText(e.target.value)}
                   placeholder="Открыть тарифы"
                   maxLength={64}
-                  className="h-11 rounded-xl bg-background/60 border-white/10 focus-visible:ring-sky-500/40"
+                  className="h-9 rounded-xl bg-card border-border focus-visible:ring-sky-500/40"
                 />
               </div>
             )}
@@ -475,7 +472,7 @@ export function BroadcastPage() {
                 onChange={(e) => setSingleBtnCustomUrl(e.target.value)}
                 placeholder="https://example.com/tariffs"
                 maxLength={500}
-                className="h-11 rounded-xl bg-background/60 border-white/10 focus-visible:ring-sky-500/40"
+                className="h-9 rounded-xl bg-card border-border focus-visible:ring-sky-500/40"
               />
             </div>
           )}
@@ -489,66 +486,63 @@ export function BroadcastPage() {
   );
 
   return (
-    <div className="space-y-6 px-4 sm:px-6 md:px-8 pt-6 pb-10 relative">
+    <div className="flex flex-col gap-3.5 relative">
       {/* Декоративные блобы фона */}
-      <div className="fixed -z-10 bg-primary/15 blur-[120px] top-[-50px] left-[-50px] w-[300px] h-[300px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-purple-500/10 blur-[100px] top-[20%] right-[-50px] w-[280px] h-[280px] rounded-full pointer-events-none" />
-      <div className="fixed -z-10 bg-cyan-500/10 blur-[90px] bottom-[10%] left-[30%] w-[240px] h-[240px] rounded-full pointer-events-none" />
 
       {/* HERO */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden bg-gradient-to-br from-background/50 via-background/30 to-background/50 backdrop-blur-3xl border border-white/10 p-6 sm:p-8 rounded-[2.5rem] shadow-2xl"
+        className="relative overflow-hidden bg-card border border-border p-4 rounded-[2.5rem]"
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-fuchsia-500/10 pointer-events-none" />
+        <div className="absolute inset-0 bg-transparent pointer-events-none" />
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-primary/20 blur-3xl rounded-full pointer-events-none" />
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex items-center gap-4">
+        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
             <motion.div
               animate={{ rotate: [0, -8, 8, -4, 0] }}
               transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 4 }}
-              className="h-16 w-16 rounded-3xl bg-gradient-to-br from-primary/30 via-fuchsia-500/20 to-purple-500/30 flex items-center justify-center shadow-xl border border-white/20"
+              className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center border border-border shrink-0"
             >
-              <Megaphone className="h-8 w-8 text-primary drop-shadow-lg" />
+              <Megaphone className="h-5 w-5 text-primary" />
             </motion.div>
             <div>
-              <h1 className="text-4xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary via-fuchsia-500 to-purple-500">
+              <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
                 Рассылка
               </h1>
-              <p className="text-sm text-muted-foreground mt-1.5 max-w-md">
+              <p className="text-[12.5px] text-muted-foreground mt-[3px] max-w-md">
                 Отправляй сообщения клиентам в Telegram и/или на email — с кнопками, фото и файлами
               </p>
             </div>
           </div>
           {broadcastRecipients && (
             <div className="flex flex-wrap gap-2">
-              <StatPill icon={MessageSquare} label="Telegram" value={broadcastRecipients.withTelegram} colorClass="from-sky-500/20 to-blue-500/10 text-sky-500 dark:text-sky-400 border-sky-400/30" />
-              <StatPill icon={Mail} label="Email" value={broadcastRecipients.withEmail} colorClass="from-cyan-500/20 to-teal-500/10 text-cyan-500 dark:text-cyan-400 border-cyan-400/30" />
-              <StatPill icon={Users} label="Всего" value={broadcastRecipients.withTelegram + broadcastRecipients.withEmail} colorClass="from-fuchsia-500/20 to-purple-500/10 text-fuchsia-500 dark:text-fuchsia-400 border-fuchsia-400/30" />
+              <StatPill icon={MessageSquare} label="Telegram" value={broadcastRecipients.withTelegram} colorClass="bg-muted text-sky-500 dark:text-sky-400 border-sky-400/30" />
+              <StatPill icon={Mail} label="Email" value={broadcastRecipients.withEmail} colorClass="bg-muted text-cyan-500 dark:text-cyan-400 border-cyan-400/30" />
+              <StatPill icon={Users} label="Всего" value={broadcastRecipients.withTelegram + broadcastRecipients.withEmail} colorClass="bg-muted text-fuchsia-500 dark:text-fuchsia-400 border-fuchsia-400/30" />
             </div>
           )}
         </div>
       </motion.div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "compose" | "history")} className="w-full">
-        <TabsList className="bg-background/40 backdrop-blur-3xl border border-white/10 rounded-2xl p-1.5 shadow-lg h-auto">
-          <TabsTrigger value="compose" className="rounded-xl px-5 py-2.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-fuchsia-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+        <TabsList className="bg-card border border-border rounded-xl p-1.5 h-auto">
+          <TabsTrigger value="compose" className="rounded-xl px-5 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Send className="h-4 w-4 mr-2" /> Создать
           </TabsTrigger>
-          <TabsTrigger value="single" className="rounded-xl px-5 py-2.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500 data-[state=active]:to-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="single" className="rounded-xl px-5 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <MessageSquare className="h-4 w-4 mr-2" /> Личное
           </TabsTrigger>
-          <TabsTrigger value="history" className="rounded-xl px-5 py-2.5 data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-fuchsia-500 data-[state=active]:text-white data-[state=active]:shadow-md">
+          <TabsTrigger value="history" className="rounded-xl px-5 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <HistoryIcon className="h-4 w-4 mr-2" /> История
           </TabsTrigger>
         </TabsList>
 
-        {/* ────────── COMPOSE ────────── */}
+        {/*  COMPOSE  */}
         <TabsContent value="compose" className="mt-5 space-y-5">
-          <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl">
-            <div className={cn("absolute inset-x-0 top-0 h-1 bg-gradient-to-r", channelMeta.gradient)} />
-            <form onSubmit={handleBroadcastSend} className="p-5 sm:p-7 space-y-7">
+          <Card className="relative overflow-hidden bg-card border-border rounded-2xl">
+            <div className={cn("absolute inset-x-0 top-0 h-1 ", channelMeta.gradient)} />
+            <form onSubmit={handleBroadcastSend} className="p-4 sm:p-7 space-y-7">
 
               {/* CHANNEL CARDS */}
               <section>
@@ -571,21 +565,21 @@ export function BroadcastPage() {
                         type="button"
                         onClick={() => setBroadcastChannel(c)}
                         className={cn(
-                          "relative overflow-hidden text-left rounded-2xl border p-4 transition-all duration-200",
-                          "hover:scale-[1.02] hover:shadow-lg",
+                          "relative overflow-hidden text-left rounded-xl border p-4 transition-all duration-200",
+                          "hover:scale-[1.02]",
                           isActive
-                            ? cn("bg-gradient-to-br ring-2", meta.gradient, meta.ring, "shadow-lg")
-                            : "bg-foreground/[0.02] dark:bg-white/[0.02] border-white/10 hover:border-white/20"
+                            ? cn("ring-2", meta.gradient, meta.ring, "shadow-lg")
+                            : "bg-foreground/[0.02] dark:bg-white/[0.02] border-border hover:border-border"
                         )}
                       >
                         {isActive && (
                           <motion.div
                             layoutId="channelGlow"
-                            className="absolute -top-8 -right-8 w-24 h-24 bg-white/30 rounded-full blur-2xl pointer-events-none"
+                            className="absolute -top-8 -right-8 w-24 h-24 bg-card rounded-full blur-2xl pointer-events-none"
                           />
                         )}
                         <div className="relative flex items-start gap-3">
-                          <div className={cn("h-11 w-11 rounded-2xl flex items-center justify-center shrink-0", meta.iconBg)}>
+                          <div className={cn("h-9 w-11 rounded-xl flex items-center justify-center shrink-0", meta.iconBg)}>
                             <Icon className="h-5 w-5" />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -613,19 +607,19 @@ export function BroadcastPage() {
                 <select
                   value={broadcastTargetGroup}
                   onChange={(e) => setBroadcastTargetGroup(e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.04] px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  className="w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.04] px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 >
-                  <option value="all">📣 Все клиенты</option>
-                  <option value="with_any_subs">📋 С любыми подписками</option>
-                  <option value="without_subs">🚫 Без подписок</option>
-                  <option value="active_subs">✅ С активными подписками</option>
-                  <option value="expired_subs">⛔ С истёкшими подписками</option>
-                  <option value="standard_subs">🌐 Со Стандартной подпиской</option>
-                  <option value="unblock_subs">🔒 С Unblock-подпиской</option>
-                  <option value="unblock_unlimited">♾️🔒 С Безлимитным Unblock</option>
+                  <option value="all"> Все клиенты</option>
+                  <option value="with_any_subs"> С любыми подписками</option>
+                  <option value="without_subs"> Без подписок</option>
+                  <option value="active_subs"> С активными подписками</option>
+                  <option value="expired_subs"> С истёкшими подписками</option>
+                  <option value="standard_subs"> Со Стандартной подпиской</option>
+                  <option value="unblock_subs"> С Unblock-подпиской</option>
+                  <option value="unblock_unlimited"> С Безлимитным Unblock</option>
                 </select>
                 <p className="text-[11px] text-muted-foreground mt-2">
-                  Фильтр по тарифам — через menu_emoji (🌐 / 🔒 / ♾️🔒). Активные/Истёкшие — точный фильтр по expireAt подписок.
+                  Фильтр по тарифам — через menu_emoji ( /  / ). Активные/Истёкшие — точный фильтр по expireAt подписок.
                 </p>
               </section>
 
@@ -646,7 +640,7 @@ export function BroadcastPage() {
                       onChange={(e) => setBroadcastSubject(e.target.value)}
                       placeholder="Сообщение от сервиса"
                       maxLength={500}
-                      className="h-11 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 focus-visible:ring-cyan-500/40"
+                      className="h-9 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-cyan-500/40"
                     />
                   </motion.section>
                 )}
@@ -662,13 +656,13 @@ export function BroadcastPage() {
                     "text-[10px] font-mono px-2 py-0.5 rounded-full border",
                     broadcastMessage.length > 3800
                       ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                      : "bg-foreground/5 text-muted-foreground border-white/10"
+                      : "bg-foreground/5 text-muted-foreground border-border"
                   )}>
                     {broadcastMessage.length} / 4096
                   </span>
                 </div>
                 <textarea
-                  className="flex min-h-[180px] w-full rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 resize-y leading-relaxed"
+                  className="flex min-h-[180px] w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 resize-y leading-relaxed"
                   value={broadcastMessage}
                   onChange={(e) => setBroadcastMessage(e.target.value)}
                   placeholder={`Введите текст рассылки.\n\nДля Telegram поддерживается HTML: <b>жирный</b>, <i>курсив</i>, <a href="...">ссылки</a>.`}
@@ -698,22 +692,22 @@ export function BroadcastPage() {
                     onDragLeave={() => setDragOver(false)}
                     onDrop={handleFileDrop}
                     className={cn(
-                      "cursor-pointer rounded-2xl border-2 border-dashed p-6 text-center transition-all",
+                      "cursor-pointer rounded-xl border-2 border-dashed p-4 text-center transition-all",
                       dragOver
-                        ? "border-primary/60 bg-primary/10"
-                        : "border-white/15 bg-foreground/[0.02] dark:bg-white/[0.02] hover:border-white/30 hover:bg-white/[0.04]"
+                        ? "border-border bg-primary/10"
+                        : "border-border bg-foreground/[0.02] dark:bg-white/[0.02] hover:border-border hover:bg-white/[0.04]"
                     )}
                   >
                     <ImageIcon className={cn("h-8 w-8 mx-auto mb-2", dragOver ? "text-primary" : "text-muted-foreground")} />
                     <p className="text-sm font-medium">Перетащи файл сюда или <span className="text-primary underline">выбери</span></p>
                     {/* 25.05.2026, WolfVPN — добавили видео в список форматов. */}
-                    <p className="text-[11px] text-muted-foreground mt-1">Картинки → как фото с подписью. Видео → как плеер с подписью. Документы → как файл.</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">Картинки  как фото с подписью. Видео  как плеер с подписью. Документы  как файл.</p>
                   </div>
                 ) : (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/10 p-4"
+                    className="flex items-center gap-3 rounded-xl border border-border bg-primary/10 p-4"
                   >
                     <div className="h-12 w-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
                       {/* 25.05.2026, WolfVPN — отдельная иконка Film для видео. */}
@@ -748,11 +742,8 @@ export function BroadcastPage() {
                     exit={{ opacity: 0, height: 0 }}
                     className="overflow-hidden"
                   >
-                    <div className="rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-500/5 via-blue-500/5 to-indigo-500/5 p-5 space-y-4">
+                    <div className="rounded-xl border border-sky-500/20 bg-muted p-4 space-y-4">
                       <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-xl bg-sky-500/20 flex items-center justify-center">
-                          <MousePointerClick className="h-4 w-4 text-sky-500 dark:text-sky-400" />
-                        </div>
                         <div>
                           <p className="text-sm font-semibold">Кнопка под сообщением</p>
                           <p className="text-[11px] text-muted-foreground">Только для Telegram</p>
@@ -762,7 +753,7 @@ export function BroadcastPage() {
                         <div className="space-y-1.5">
                           <Label className="text-xs text-muted-foreground">Действие</Label>
                           <select
-                            className="flex h-11 w-full rounded-xl border border-white/10 bg-background/60 px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50"
+                            className="flex h-9 w-full rounded-xl border border-border bg-card px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50"
                             value={broadcastButtonAction}
                             onChange={(e) => setBroadcastButtonAction(e.target.value)}
                           >
@@ -779,7 +770,7 @@ export function BroadcastPage() {
                               onChange={(e) => setBroadcastButtonText(e.target.value)}
                               placeholder="Открыть тарифы"
                               maxLength={64}
-                              className="h-11 rounded-xl bg-background/60 border-white/10 focus-visible:ring-sky-500/40"
+                              className="h-9 rounded-xl bg-card border-border focus-visible:ring-sky-500/40"
                             />
                           </div>
                         )}
@@ -792,7 +783,7 @@ export function BroadcastPage() {
                             onChange={(e) => setBroadcastButtonCustomUrl(e.target.value)}
                             placeholder="https://example.com/tariffs"
                             maxLength={500}
-                            className="h-11 rounded-xl bg-background/60 border-white/10 focus-visible:ring-sky-500/40"
+                            className="h-9 rounded-xl bg-card border-border focus-visible:ring-sky-500/40"
                           />
                         </div>
                       )}
@@ -810,7 +801,7 @@ export function BroadcastPage() {
                 <Button
                   type="submit"
                   disabled={broadcastLoading || !broadcastMessage.trim()}
-                  className="h-12 px-8 rounded-2xl text-base font-semibold gap-2 bg-gradient-to-r from-primary via-fuchsia-500 to-purple-500 hover:from-primary/90 hover:via-fuchsia-500/90 hover:to-purple-500/90 shadow-lg shadow-primary/30 disabled:opacity-50"
+                  className="h-12 px-8 rounded-xl text-base font-semibold gap-2 bg-primary shadow-primary/30 disabled:opacity-50"
                 >
                   {broadcastLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
                   {broadcastLoading ? "Идёт рассылка…" : "Запустить рассылку"}
@@ -830,10 +821,10 @@ export function BroadcastPage() {
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   className={cn(
-                    "rounded-2xl border p-5 text-sm backdrop-blur-md",
+                    "rounded-xl border p-4 text-sm",
                     broadcastResult.ok
-                      ? "border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-teal-500/5"
-                      : "border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-red-500/5"
+                      ? "border-emerald-500/30 bg-muted"
+                      : "border-amber-500/30 bg-muted"
                   )}
                 >
                   <div className="flex items-start gap-3">
@@ -878,17 +869,14 @@ export function BroadcastPage() {
           </Card>
         </TabsContent>
 
-        {/* ────────── SINGLE (точечная отправка одному юзеру) ────────── */}
+        {/*  SINGLE (точечная отправка одному юзеру)  */}
         <TabsContent value="single" className="mt-5">
-          <Card className="relative overflow-hidden bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl max-w-2xl">
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500" />
-            <div className="p-5 sm:p-7 space-y-6">
+          <Card className="relative overflow-hidden bg-card border-border rounded-2xl max-w-2xl">
+            <div className="absolute inset-x-0 top-0 h-1 bg-primary" />
+            <div className="p-4 sm:p-7 space-y-6">
               {/* HEADER + переключатель режима */}
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-sky-500/20 to-blue-500/10 flex items-center justify-center border border-sky-400/30 shrink-0">
-                    <MessageSquare className="h-6 w-6 text-sky-500 dark:text-sky-400" />
-                  </div>
                   <div>
                     <h2 className="font-bold text-lg leading-tight">Личное сообщение</h2>
                     <p className="text-sm text-muted-foreground mt-0.5">
@@ -898,13 +886,13 @@ export function BroadcastPage() {
                     </p>
                   </div>
                 </div>
-                <div className="inline-flex rounded-2xl bg-background/50 border border-white/10 p-1 gap-1 self-start shrink-0">
+                <div className="inline-flex rounded-xl bg-card border border-border p-1 gap-1 self-start shrink-0">
                   <button
                     type="button"
                     onClick={() => setSingleMode("one")}
                     className={cn(
                       "px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                      singleMode === "one" ? "bg-gradient-to-r from-sky-500 to-blue-500 text-white shadow" : "text-muted-foreground hover:text-foreground"
+                      singleMode === "one" ? "bg-primary text-white shadow" : "text-muted-foreground hover:text-foreground"
                     )}
                   >
                     <MessageSquare className="inline h-3.5 w-3.5 mr-1.5" />Один
@@ -914,7 +902,7 @@ export function BroadcastPage() {
                     onClick={() => setSingleMode("list")}
                     className={cn(
                       "px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                      singleMode === "list" ? "bg-gradient-to-r from-sky-500 to-blue-500 text-white shadow" : "text-muted-foreground hover:text-foreground"
+                      singleMode === "list" ? "bg-primary text-white shadow" : "text-muted-foreground hover:text-foreground"
                     )}
                   >
                     <Users className="inline h-3.5 w-3.5 mr-1.5" />Список
@@ -923,13 +911,13 @@ export function BroadcastPage() {
               </div>
 
               {/* КАНАЛ: Telegram / Email */}
-              <div className="inline-flex rounded-2xl bg-background/50 border border-white/10 p-1 gap-1">
+              <div className="inline-flex rounded-xl bg-card border border-border p-1 gap-1">
                 <button
                   type="button"
                   onClick={() => { setSingleChannel("telegram"); setSingleResult(null); setListJob(null); setListRaw(""); setListTable(null); setListFileName(null); }}
                   className={cn(
                     "px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                    singleChannel === "telegram" ? "bg-gradient-to-r from-sky-500 to-blue-500 text-white shadow" : "text-muted-foreground hover:text-foreground"
+                    singleChannel === "telegram" ? "bg-primary text-white shadow" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <MessageSquare className="inline h-3.5 w-3.5 mr-1.5" />Telegram
@@ -939,14 +927,14 @@ export function BroadcastPage() {
                   onClick={() => { setSingleChannel("email"); setSingleResult(null); setListJob(null); setListRaw(""); setListTable(null); setListFileName(null); }}
                   className={cn(
                     "px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                    singleChannel === "email" ? "bg-gradient-to-r from-cyan-500 to-teal-500 text-white shadow" : "text-muted-foreground hover:text-foreground"
+                    singleChannel === "email" ? "bg-primary text-white shadow" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <Mail className="inline h-3.5 w-3.5 mr-1.5" />Email
                 </button>
               </div>
 
-              {/* ───────── РЕЖИМ: ОДИН ПОЛУЧАТЕЛЬ ───────── */}
+              {/*  РЕЖИМ: ОДИН ПОЛУЧАТЕЛЬ  */}
               {singleMode === "one" && (
                 <form onSubmit={handleSendToUser} className="space-y-6">
                   {/* ПОЛУЧАТЕЛЬ */}
@@ -961,7 +949,7 @@ export function BroadcastPage() {
                         onChange={(e) => { setSingleTgId(e.target.value.replace(/\D/g, "")); setSingleResult(null); }}
                         placeholder="например, 488948685"
                         inputMode="numeric"
-                        className="rounded-2xl"
+                        className="rounded-xl"
                       />
                       <p className="text-[11px] text-muted-foreground mt-1.5">
                         Числовой ID из Telegram. Пользователь должен был хоть раз написать боту, иначе отправка невозможна.
@@ -979,7 +967,7 @@ export function BroadcastPage() {
                           value={singleEmail}
                           onChange={(e) => { setSingleEmail(e.target.value); setSingleResult(null); }}
                           placeholder="user@example.com"
-                          className="rounded-2xl"
+                          className="rounded-xl"
                         />
                       </section>
                       <section>
@@ -992,7 +980,7 @@ export function BroadcastPage() {
                           onChange={(e) => setSingleSubject(e.target.value)}
                           placeholder="Сообщение от сервиса"
                           maxLength={300}
-                          className="rounded-2xl"
+                          className="rounded-xl"
                         />
                       </section>
                     </>
@@ -1008,14 +996,14 @@ export function BroadcastPage() {
                         "text-[11px] px-2 py-0.5 rounded-full border",
                         singleMsg.length > 3800
                           ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                          : "bg-foreground/5 text-muted-foreground border-white/10"
+                          : "bg-foreground/5 text-muted-foreground border-border"
                       )}>
                         {singleMsg.length} / 4096
                       </span>
                     </div>
                     <textarea
                       id="single-msg"
-                      className="flex min-h-[160px] w-full rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 resize-y leading-relaxed"
+                      className="flex min-h-[160px] w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 resize-y leading-relaxed"
                       value={singleMsg}
                       onChange={(e) => { setSingleMsg(e.target.value); setSingleResult(null); }}
                       placeholder={`Введите текст сообщения.\n\nПоддерживается HTML: <b>жирный</b>, <i>курсив</i>, <a href="...">ссылка</a>.`}
@@ -1034,7 +1022,7 @@ export function BroadcastPage() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
                         className={cn(
-                          "flex items-center gap-2 rounded-2xl px-4 py-3 text-sm border",
+                          "flex items-center gap-2 rounded-xl px-4 py-3 text-sm border",
                           singleResult.ok
                             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                             : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30"
@@ -1051,7 +1039,7 @@ export function BroadcastPage() {
                   <Button
                     type="submit"
                     disabled={singleSending || (singleChannel === "email" ? !singleEmail.trim() : !singleTgId.trim()) || !singleMsg.trim()}
-                    className="w-full h-12 rounded-2xl text-base font-semibold bg-gradient-to-r from-sky-500 to-blue-500 hover:from-sky-400 hover:to-blue-400 text-white shadow-lg shadow-sky-500/20 transition-all"
+                    className="w-full h-12 rounded-xl text-base font-semibold bg-primary text-white shadow-sky-500/20 transition-all"
                   >
                     {singleSending
                       ? <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Отправка…</>
@@ -1060,7 +1048,7 @@ export function BroadcastPage() {
                 </form>
               )}
 
-              {/* ───────── РЕЖИМ: СПИСОК ID ───────── */}
+              {/*  РЕЖИМ: СПИСОК ID  */}
               {singleMode === "list" && (
                 <form onSubmit={handleSendToList} className="space-y-6">
                   {/* ИСТОЧНИК: загрузка файла */}
@@ -1076,13 +1064,13 @@ export function BroadcastPage() {
                       type="button"
                       variant="outline"
                       onClick={() => listFileRef.current?.click()}
-                      className="rounded-xl border-white/15"
+                      className="rounded-xl border-border"
                     >
                       <Paperclip className="h-4 w-4 mr-2" /> Загрузить .txt / .csv
                     </Button>
                     <span className="text-[11px] text-muted-foreground">или вставьте ID вручную ниже</span>
                     {listFileName && (
-                      <span className="text-xs text-muted-foreground inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-foreground/5 border border-white/10">
+                      <span className="text-xs text-muted-foreground inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-foreground/5 border border-border">
                         <FileText className="h-3.5 w-3.5 shrink-0" /> {listFileName}
                         <button type="button" onClick={clearListFile} className="hover:text-foreground" aria-label="Убрать файл">
                           <X className="h-3.5 w-3.5" />
@@ -1093,7 +1081,7 @@ export function BroadcastPage() {
 
                   {/* ВЫБОР КОЛОНКИ (если в файле несколько столбцов) */}
                   {listTable && listTable.columnCount > 1 && (
-                    <div className="rounded-2xl border border-sky-400/30 bg-sky-500/5 p-3.5 space-y-2.5">
+                    <div className="rounded-xl border border-sky-400/30 bg-sky-500/5 p-3.5 space-y-2.5">
                       <p className="text-xs text-muted-foreground">
                         В файле <b className="text-foreground">{listTable.columnCount}</b> {listTable.columnCount < 5 ? "столбца" : "столбцов"} — выбери, в каком {singleChannel === "email" ? "Email" : "Telegram ID"}:
                       </p>
@@ -1111,7 +1099,7 @@ export function BroadcastPage() {
                                 "px-3 py-1.5 rounded-xl text-xs border transition-all text-left",
                                 listColIndex === idx
                                   ? "bg-sky-500 text-white border-sky-500 shadow"
-                                  : "bg-background/40 border-white/10 hover:border-white/30"
+                                  : "bg-card border-border hover:border-border"
                               )}
                             >
                               <span className="font-medium block">{label}</span>
@@ -1137,7 +1125,7 @@ export function BroadcastPage() {
                     </div>
                     <textarea
                       id="list-ids"
-                      className="flex min-h-[120px] w-full rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3 text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 resize-y leading-relaxed"
+                      className="flex min-h-[120px] w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3 text-sm font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 resize-y leading-relaxed"
                       value={listRaw}
                       onChange={(e) => { setListRaw(e.target.value); setListJob(null); }}
                       placeholder={singleChannel === "email"
@@ -1161,7 +1149,7 @@ export function BroadcastPage() {
                         onChange={(e) => setSingleSubject(e.target.value)}
                         placeholder="Сообщение от сервиса"
                         maxLength={300}
-                        className="rounded-2xl"
+                        className="rounded-xl"
                       />
                     </section>
                   )}
@@ -1176,14 +1164,14 @@ export function BroadcastPage() {
                         "text-[11px] px-2 py-0.5 rounded-full border",
                         listMsg.length > 3800
                           ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                          : "bg-foreground/5 text-muted-foreground border-white/10"
+                          : "bg-foreground/5 text-muted-foreground border-border"
                       )}>
                         {listMsg.length} / 4096
                       </span>
                     </div>
                     <textarea
                       id="list-msg"
-                      className="flex min-h-[140px] w-full rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 resize-y leading-relaxed"
+                      className="flex min-h-[140px] w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 resize-y leading-relaxed"
                       value={listMsg}
                       onChange={(e) => setListMsg(e.target.value)}
                       placeholder={`Введите текст сообщения.\n\nПоддерживается HTML: <b>жирный</b>, <i>курсив</i>, <a href="...">ссылка</a>.`}
@@ -1201,16 +1189,16 @@ export function BroadcastPage() {
                         initial={{ opacity: 0, y: -6 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
-                        className="rounded-2xl border border-white/10 bg-foreground/[0.02] p-4 space-y-3"
+                        className="rounded-xl border border-border bg-foreground/[0.02] p-4 space-y-3"
                       >
                         <div>
                           <div className="flex items-center justify-between text-xs mb-1.5">
                             <span className="text-muted-foreground">{listJob.done ? "Готово" : "Отправка…"}</span>
                             <span className="font-medium">{listJob.sent + listJob.failed} / {listJob.total}</span>
                           </div>
-                          <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                          <div className="h-2 rounded-full bg-card overflow-hidden">
                             <motion.div
-                              className="h-full bg-gradient-to-r from-sky-500 to-blue-500"
+                              className="h-full bg-primary"
                               initial={{ width: 0 }}
                               animate={{ width: `${listJob.total ? Math.round(((listJob.sent + listJob.failed) / listJob.total) * 100) : 0}%` }}
                             />
@@ -1229,7 +1217,7 @@ export function BroadcastPage() {
                         {listJob.done && listJob.errors.length > 0 && (
                           <details className="text-xs">
                             <summary className="cursor-pointer text-muted-foreground hover:text-foreground select-none">Показать ошибки ({listJob.errors.length})</summary>
-                            <div className="mt-2 max-h-40 overflow-auto space-y-1 rounded-xl bg-background/40 p-2 font-mono">
+                            <div className="mt-2 max-h-40 overflow-auto space-y-1 rounded-xl bg-card p-2 font-mono">
                               {listJob.errors.map((er, i) => (
                                 <div key={i} className="text-red-500/90"><span className="text-muted-foreground">{er.telegramId}:</span> {er.error}</div>
                               ))}
@@ -1244,7 +1232,7 @@ export function BroadcastPage() {
                   <Button
                     type="submit"
                     disabled={listSending || !parsedListRecipients.length || !listMsg.trim()}
-                    className="w-full h-12 rounded-2xl text-base font-semibold bg-gradient-to-r from-sky-500 to-blue-500 hover:from-sky-400 hover:to-blue-400 text-white shadow-lg shadow-sky-500/20 transition-all"
+                    className="w-full h-12 rounded-xl text-base font-semibold bg-primary text-white shadow-sky-500/20 transition-all"
                   >
                     {listSending
                       ? <><Loader2 className="h-5 w-5 mr-2 animate-spin" /> Рассылка… {listJob ? `${listJob.sent + listJob.failed}/${listJob.total}` : ""}</>
@@ -1256,7 +1244,7 @@ export function BroadcastPage() {
           </Card>
         </TabsContent>
 
-        {/* ────────── HISTORY ────────── */}
+        {/*  HISTORY  */}
         <TabsContent value="history" className="mt-5">
           <BroadcastHistoryPanel token={token} />
         </TabsContent>
@@ -1267,7 +1255,7 @@ export function BroadcastPage() {
 
 function StatPill({ icon: Icon, label, value, colorClass }: { icon: typeof Send; label: string; value: number; colorClass: string }) {
   return (
-    <div className={cn("inline-flex items-center gap-2 rounded-2xl bg-gradient-to-br border px-4 py-2 backdrop-blur-md shadow-sm", colorClass)}>
+    <div className={cn("inline-flex items-center gap-2 rounded-xl  border px-4 py-2 shadow-sm", colorClass)}>
       <Icon className="h-4 w-4" />
       <div>
         <p className="text-[10px] uppercase tracking-wide opacity-80 leading-none mb-0.5">{label}</p>
@@ -1294,7 +1282,7 @@ function BroadcastProgressPanel({
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-fuchsia-500/5 to-purple-500/10 p-5 text-sm backdrop-blur-md space-y-4"
+      className="rounded-xl border border-border bg-muted p-4 text-sm space-y-4"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -1305,7 +1293,7 @@ function BroadcastProgressPanel({
           <div className="min-w-0">
             <p className="font-semibold truncate">
               {cancelRequested
-                ? "⏳ Останавливаем рассылку…"
+                ? " Останавливаем рассылку…"
                 : `Рассылка идёт${progress.currentChannel === "telegram" ? " — Telegram" : progress.currentChannel === "email" ? " — Email" : ""}…`}
             </p>
             <p className="text-[11px] text-muted-foreground">
@@ -1336,7 +1324,7 @@ function BroadcastProgressPanel({
           total={progress.totalTelegram}
           failed={progress.failedTelegram}
           pct={tgPct}
-          colorClass="bg-gradient-to-r from-sky-500 to-blue-500"
+          colorClass="bg-primary"
           labelColor="text-sky-500 dark:text-sky-400"
         />
       )}
@@ -1348,7 +1336,7 @@ function BroadcastProgressPanel({
           total={progress.totalEmail}
           failed={progress.failedEmail}
           pct={emailPct}
-          colorClass="bg-gradient-to-r from-cyan-500 to-teal-500"
+          colorClass="bg-primary"
           labelColor="text-cyan-500 dark:text-cyan-400"
         />
       )}
@@ -1368,11 +1356,11 @@ function ProgressBar({ label, icon: Icon, done, total, failed, pct, colorClass, 
         </span>
         <span className="text-muted-foreground font-mono">
           <strong className="text-foreground">{done}</strong> / {total}
-          {failed > 0 && <span className="ml-2 text-amber-500">· ⚠ {failed}</span>}
+          {failed > 0 && <span className="ml-2 text-amber-500">·  {failed}</span>}
           <span className="ml-2 text-[10px] opacity-70">{pct}%</span>
         </span>
       </div>
-      <div className="h-2.5 rounded-full bg-foreground/10 dark:bg-white/10 overflow-hidden">
+      <div className="h-2.5 rounded-full bg-foreground/10 dark:bg-card overflow-hidden">
         <div
           className={cn("h-full transition-all duration-300", colorClass)}
           style={{ width: `${pct}%` }}
@@ -1497,20 +1485,17 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
     <div className="space-y-4">
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <HistoryStatCard icon={HistoryIcon} label="Всего рассылок" value={total} colorClass="from-primary/20 to-fuchsia-500/10 border-primary/30 text-primary" />
-        <HistoryStatCard icon={MessageSquare} label="Доставлено TG" value={stats.totalSentTg} colorClass="from-sky-500/20 to-blue-500/10 border-sky-500/30 text-sky-500 dark:text-sky-400" />
-        <HistoryStatCard icon={Mail} label="Доставлено Email" value={stats.totalSentEmail} colorClass="from-cyan-500/20 to-teal-500/10 border-cyan-500/30 text-cyan-500 dark:text-cyan-400" />
-        <HistoryStatCard icon={AlertTriangle} label="Ошибок доставки" value={stats.totalFailed} colorClass="from-red-500/20 to-amber-500/10 border-red-500/30 text-red-500 dark:text-red-400" />
+        <HistoryStatCard icon={HistoryIcon} label="Всего рассылок" value={total} colorClass="bg-muted border-border text-primary" />
+        <HistoryStatCard icon={MessageSquare} label="Доставлено TG" value={stats.totalSentTg} colorClass="bg-muted border-sky-500/30 text-sky-500 dark:text-sky-400" />
+        <HistoryStatCard icon={Mail} label="Доставлено Email" value={stats.totalSentEmail} colorClass="bg-muted border-cyan-500/30 text-cyan-500 dark:text-cyan-400" />
+        <HistoryStatCard icon={AlertTriangle} label="Ошибок доставки" value={stats.totalFailed} colorClass="bg-muted border-red-500/30 text-red-500 dark:text-red-400" />
       </div>
 
-      <Card className="bg-background/60 backdrop-blur-3xl border-white/10 rounded-[2rem] shadow-xl overflow-hidden">
-        <div className="flex items-center justify-between p-5 sm:p-6 border-b border-white/5">
+      <Card className="bg-card border-border rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between p-4 sm:p-4 border-b border-border">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-primary/15 flex items-center justify-center">
-              <HistoryIcon className="h-5 w-5 text-primary" />
-            </div>
             <div>
-              <h2 className="text-lg font-bold">История рассылок</h2>
+              <h2 className="text-[13.5px] font-bold">История рассылок</h2>
               <p className="text-xs text-muted-foreground">Последние {Math.min(items.length, 100)} записей</p>
             </div>
           </div>
@@ -1531,7 +1516,7 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
             <p className="text-xs text-muted-foreground">Запусти первую — она появится здесь</p>
           </div>
         ) : (
-          <div className="divide-y divide-white/5">
+          <div className="divide-y divide-border">
             {items.map((it) => {
               const b = statusBadge(it.status);
               const ch = channelMetaIcon(it.channel);
@@ -1547,9 +1532,9 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
                 <button
                   key={it.id}
                   onClick={() => setDetail(it)}
-                  className="w-full text-left p-4 sm:p-5 hover:bg-white/[0.03] transition-colors flex flex-col sm:flex-row gap-4 sm:items-center group"
+                  className="w-full text-left p-4 sm:p-4 hover:bg-white/[0.03] transition-colors flex flex-col sm:flex-row gap-4 sm:items-center group"
                 >
-                  <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center shrink-0", ch.cls)}>
+                  <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0", ch.cls)}>
                     <ChIcon className="h-5 w-5" />
                   </div>
                   <div className="flex-1 min-w-0 space-y-1.5">
@@ -1575,7 +1560,7 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
                         </span>
                       )}
                       {it.attachmentName && (
-                        <span className="inline-flex items-center gap-1 bg-foreground/5 text-muted-foreground px-2 py-0.5 rounded-md border border-white/10">
+                        <span className="inline-flex items-center gap-1 bg-foreground/5 text-muted-foreground px-2 py-0.5 rounded-md border border-border">
                           <Paperclip className="h-3 w-3" /> {it.attachmentName}
                         </span>
                       )}
@@ -1590,9 +1575,9 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
       </Card>
 
       <Dialog open={!!detail} onOpenChange={(v) => !v && setDetail(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto rounded-[2rem]">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
               <HistoryIcon className="h-5 w-5 text-primary" />
               Рассылка
             </DialogTitle>
@@ -1621,7 +1606,7 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
 
               <div>
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Сообщение</p>
-                <pre className="whitespace-pre-wrap break-words text-sm p-4 rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] max-h-72 overflow-y-auto leading-relaxed">{detail.message}</pre>
+                <pre className="whitespace-pre-wrap break-words text-sm p-4 rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] max-h-72 overflow-y-auto leading-relaxed">{detail.message}</pre>
               </div>
 
               {(detail.buttonText || detail.buttonUrl) && (
@@ -1637,12 +1622,12 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
               {detail.attachmentName && (
                 <div>
                   <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Вложение</p>
-                  <p className="text-xs inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-foreground/5 border border-white/10"><Paperclip className="h-3 w-3" /> {detail.attachmentName}</p>
+                  <p className="text-xs inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-foreground/5 border border-border"><Paperclip className="h-3 w-3" /> {detail.attachmentName}</p>
                 </div>
               )}
 
               {detail.error && (
-                <div className="p-4 rounded-2xl border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 text-xs flex gap-2">
+                <div className="p-4 rounded-xl border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 text-xs flex gap-2">
                   <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>
                     <p className="font-semibold">Фатальная ошибка</p>
@@ -1654,7 +1639,7 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
               {detail.errors && detail.errors.length > 0 && (
                 <div>
                   <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Ошибки доставки ({detail.errors.length})</p>
-                  <pre className="whitespace-pre-wrap text-xs p-3 rounded-2xl border bg-red-500/5 border-red-500/20 max-h-48 overflow-y-auto text-red-600 dark:text-red-400">{detail.errors.join("\n")}</pre>
+                  <pre className="whitespace-pre-wrap text-xs p-3 rounded-xl border bg-red-500/5 border-red-500/20 max-h-48 overflow-y-auto text-red-600 dark:text-red-400">{detail.errors.join("\n")}</pre>
                 </div>
               )}
 
@@ -1678,7 +1663,7 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
                   Если job живой в памяти api — graceful cancel. Если зомби после рестарта —
                   бэк помечает как cancelled в DB (zombie_cleanup). */}
               {detail.status === "running" && (
-                <div className="p-4 rounded-2xl border border-red-500/30 bg-red-500/[0.05] space-y-3">
+                <div className="p-4 rounded-xl border border-red-500/30 bg-red-500/[0.05] space-y-3">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-red-500" />
                     <p className="text-sm font-semibold text-red-600 dark:text-red-400">Остановить рассылку</p>
@@ -1705,9 +1690,9 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
               )}
 
               {/* 25.05.2026, WolfVPN — кнопка «Возобновить» для cancelled/error.
-                  Skip уже отправленных через broadcast_sent_log → почти 0 дублей. */}
+                  Skip уже отправленных через broadcast_sent_log  почти 0 дублей. */}
               {(detail.status === "cancelled" || detail.status === "error") && detail.channel !== "email" && (
-                <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.05] space-y-3">
+                <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.05] space-y-3">
                   <div className="flex items-center gap-2">
                     <RefreshCw className="h-4 w-4 text-emerald-500" />
                     <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Возобновить рассылку</p>
@@ -1715,7 +1700,7 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
                     Продолжит с того места где остановилась — {detail.sentTelegram} уже отправленных {detail.totalTelegram > 0 ? `из ${detail.totalTelegram}` : ""} получателей будут пропущены автоматически.
                     {detail.attachmentName && (
-                      <span className="block mt-1">⚠️ Файл-вложение нужно переаплоадить (бинарь не хранится в БД): <code className="text-foreground">{detail.attachmentName}</code></span>
+                      <span className="block mt-1"> Файл-вложение нужно переаплоадить (бинарь не хранится в БД): <code className="text-foreground">{detail.attachmentName}</code></span>
                     )}
                   </p>
                   <input
@@ -1763,19 +1748,19 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
 
 function HistoryStatCard({ icon: Icon, label, value, colorClass }: { icon: typeof Send; label: string; value: number; colorClass: string }) {
   return (
-    <Card className={cn("p-4 rounded-2xl border bg-gradient-to-br backdrop-blur-md", colorClass)}>
+    <Card className={cn("p-4 rounded-xl border ", colorClass)}>
       <div className="flex items-center justify-between">
         <p className="text-[11px] uppercase tracking-wide opacity-80 font-medium">{label}</p>
         <Icon className="h-4 w-4 opacity-70" />
       </div>
-      <p className="text-2xl font-bold mt-1.5">{value.toLocaleString("ru-RU")}</p>
+      <p className="text-[13.5px] font-bold mt-1.5">{value.toLocaleString("ru-RU")}</p>
     </Card>
   );
 }
 
 function DetailTile({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="p-3 rounded-xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02]">
+    <div className="p-3 rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02]">
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className={cn("font-medium mt-0.5", mono && "font-mono text-sm")}>{value}</p>
     </div>

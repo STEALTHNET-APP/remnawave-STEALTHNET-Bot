@@ -98,7 +98,7 @@ const SYSTEM_CONFIG_KEYS = [
   "default_referral_percent", "referral_percent_level_2", "referral_percent_level_3",
   "trial_days", "trial_squad_uuid", "trial_device_limit", "trial_traffic_limit",
   "service_name", "service_description", "logo", "logo_bot", "favicon", "remna_client_url",
-  // UI design selector for client cabinet/mini app: "classic" (default) | "stealth"
+  // UI design selector for client cabinet/mini app: "classic" (default) | "stealth" | "aurora"
   "cabinet_design",
   "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_password",
   "smtp_from_email", "smtp_from_name", "public_app_url",
@@ -222,7 +222,7 @@ const SYSTEM_CONFIG_KEYS = [
   "landing_feature_3_label", "landing_feature_3_sub", "landing_feature_4_label", "landing_feature_4_sub",
   "landing_feature_5_label", "landing_feature_5_sub",
   "video_instructions_enabled", "video_instructions",
-  "notification_topic_backups", "auto_backup_enabled", "auto_backup_cron",
+  "notification_topic_backups", "auto_backup_enabled", "auto_backup_cron", "backup_retention_days",
   "landing_benefits_title", "landing_benefits_subtitle",
   "landing_benefit_1_title", "landing_benefit_1_desc", "landing_benefit_2_title", "landing_benefit_2_desc",
   "landing_benefit_3_title", "landing_benefit_3_desc", "landing_benefit_4_title", "landing_benefit_4_desc",
@@ -612,7 +612,7 @@ async function loadSystemConfigFromDb() {
     logo: map.logo || null,
     logoBot: map.logo_bot || null,
     favicon: map.favicon || null,
-    cabinetDesign: (map.cabinet_design === "stealth" ? "stealth" : "classic") as "classic" | "stealth",
+    cabinetDesign: (["stealth", "aurora"].includes(map.cabinet_design ?? "") ? map.cabinet_design : "classic") as "classic" | "stealth" | "aurora",
     remnaClientUrl: map.remna_client_url || null,
     smtpHost: map.smtp_host || null,
     smtpPort: map.smtp_port != null && map.smtp_port !== "" ? parseInt(map.smtp_port, 10) : 587,
@@ -643,6 +643,16 @@ async function loadSystemConfigFromDb() {
     notificationTopicBackups: (map.notification_topic_backups ?? "").trim() || null,
     autoBackupEnabled: map.auto_backup_enabled === "true" || map.auto_backup_enabled === "1",
     autoBackupCron: (map.auto_backup_cron ?? "").trim() || null,
+    /// Сколько дней хранить бэкапы на диске. 0 = хранить вечно. По умолчанию 30:
+    /// без чистки папка росла бесконечно (~1 МБ на бэкап).
+    backupRetentionDays: (() => {
+      const raw = (map.backup_retention_days ?? "").trim();
+      // ⚠️ Number("") === 0, а не NaN — без явной проверки на пустую строку
+      // незаданная настройка означала бы «хранить вечно» вместо дефолта.
+      if (!raw) return 30;
+      const v = Number(raw);
+      return Number.isFinite(v) && v >= 0 ? v : 30;
+    })(),
     plategaMerchantId: map.platega_merchant_id || null,
     plategaWebhookSecret: map.platega_webhook_secret || null,
     plategaSecret: map.platega_secret || null,
@@ -690,8 +700,8 @@ async function loadSystemConfigFromDb() {
     onboardingEmailRequired: map.onboarding_email_required === "true" || map.onboarding_email_required === "1",
     stealthAccent: (map.stealth_accent ?? "").trim() || null,
     stealthHeroImage: map.stealth_hero_image || null,
-    // Default TRUE (текущее поведение — мульти-подписки). Выкл только если явно "false".
-    multiSubscriptionsEnabled: (map.multi_subscriptions_enabled ?? "true").trim() !== "false",
+    // Default FALSE: по умолчанию одна подписка (hard-replace); мульти — только если явно "true".
+    multiSubscriptionsEnabled: (map.multi_subscriptions_enabled ?? "false").trim() !== "false",
     passwordResetEnabled: map.password_reset_enabled === "true" || map.password_reset_enabled === "1",
     /** Master switch для антибот-фильтра. По умолчанию включён. */
     signupProtectionEnabled: (map.signup_protection_enabled ?? "true").trim() !== "false",
@@ -1295,7 +1305,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     onboardingEmailRequired: full.onboardingEmailRequired ?? false,
     stealthAccent: full.stealthAccent ?? null,
     stealthHeroImage: full.stealthHeroImage ?? null,
-    multiSubscriptionsEnabled: full.multiSubscriptionsEnabled ?? true,
+    multiSubscriptionsEnabled: full.multiSubscriptionsEnabled ?? false,
     passwordResetEnabled: full.passwordResetEnabled ?? false,
     // фронту нужен флаг — настроен ли SMTP.
     // Если SMTP не настроен или skipEmailVerification=true → email привязывается

@@ -22,7 +22,7 @@ function TicketAttachments({ items }: { items: TicketAttachmentDto[] }) {
           href={a.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="block overflow-hidden rounded-lg border border-white/10 bg-black/10 hover:opacity-90 transition-opacity"
+          className="block overflow-hidden rounded-lg border border-border bg-black/10 hover:opacity-90 transition-opacity"
         >
           <img src={a.url} alt={a.name ?? "attachment"} className="w-full max-h-44 object-cover" loading="lazy" />
         </a>
@@ -45,7 +45,7 @@ function getInitialAiMessage(serviceName: string): Message[] {
   return [
     {
       id: "a1",
-      text: `Привет! Я AI-ассистент ${name} ✨ Готов помочь с настройкой VPN, тарифами и любыми другими вопросами. Что вас интересует?`,
+      text: `Привет! Я AI-ассистент ${name}  Готов помочь с настройкой VPN, тарифами и любыми другими вопросами. Что вас интересует?`,
       from: "bot",
       time: "10:00",
     },
@@ -58,8 +58,8 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
       <div className={cn(
         "relative flex p-1 w-full sm:w-auto sm:min-w-[200px]",
         isFloating
-          ? "bg-black/20 dark:bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 shadow-lg pointer-events-auto"
-          : "bg-black/20 backdrop-blur-sm border border-white/5 rounded-xl"
+          ? "bg-black/20 dark:bg-card rounded-xl border border-border pointer-events-auto"
+          : "bg-black/20 border border-border rounded-xl"
       )}>
         <button
           onClick={() => setActiveChat("support")}
@@ -79,14 +79,14 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
   <div className={cn(
     "relative flex p-1 w-full sm:w-auto sm:min-w-[320px]",
     isFloating 
-      ? "bg-black/20 dark:bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 shadow-lg pointer-events-auto" 
-      : "bg-black/20 backdrop-blur-sm border border-white/5 rounded-xl"
+      ? "bg-black/20 dark:bg-card rounded-xl border border-border pointer-events-auto" 
+      : "bg-black/20 border border-border rounded-xl"
   )}>
     <button
       onClick={() => setActiveChat("ai")}
       className={cn(
         "flex-1 sm:flex-none sm:w-[160px] flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all duration-300 relative z-10",
-        activeChat === "ai" ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+        activeChat === "ai" ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-card"
       )}
     >
       <Sparkles className="w-4 h-4" /> AI Чат
@@ -100,7 +100,7 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
       onClick={() => setActiveChat("support")}
       className={cn(
         "flex-1 sm:flex-none sm:w-[160px] flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all duration-300 relative z-10",
-        activeChat === "support" ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+        activeChat === "support" ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-card"
       )}
     >
       <Headset className="w-4 h-4" /> Поддержка
@@ -112,7 +112,7 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
     </button>
     {/* Sliding Background */}
     <div
-      className="absolute top-1 bottom-1 bg-primary shadow-md rounded-lg transition-all duration-300 ease-out z-0 w-[calc(50%-4px)] sm:w-[160px]"
+      className="absolute top-1 bottom-1 bg-primary rounded-lg transition-all duration-300 ease-out z-0 w-[calc(50%-4px)] sm:w-[160px]"
       style={{
         transform: activeChat === "ai" ? "translateX(0)" : "translateX(100%)",
         left: "4px",
@@ -124,11 +124,11 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
 
 const ChatHeader = ({ activeChat, setActiveChat, isExpanded, setIsExpanded, setIsOpen, aiUnread, supportUnread, showAiTab = true }: any) => (
   <>
-    <div className="px-4 py-3 sm:py-4 border-b border-white/5 bg-black/5 dark:bg-white/5 shrink-0 relative overflow-hidden pt-[max(env(safe-area-inset-top),16px)] sm:pt-4">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent pointer-events-none" />
+    <div className="px-4 py-3 sm:py-4 border-b border-border bg-black/5 dark:bg-card shrink-0 relative overflow-hidden pt-[max(env(safe-area-inset-top),16px)] sm:pt-4">
+      <div className="absolute inset-0 bg-transparent pointer-events-none" />
       <div className="relative flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary shadow-inner">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary">
             {activeChat === "ai" ? <Sparkles className="h-5 w-5" /> : <Headset className="h-5 w-5" />}
           </div>
           <div>
@@ -147,13 +147,13 @@ const ChatHeader = ({ activeChat, setActiveChat, isExpanded, setIsExpanded, setI
         <div className="flex items-center gap-1 sm:gap-2">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="hidden sm:flex rounded-full p-2 hover:bg-black/10 dark:hover:bg-white/10 transition-colors text-muted-foreground hover:text-foreground"
+            className="hidden sm:flex rounded-full p-2 hover:bg-black/10 dark:hover:bg-card transition-colors text-muted-foreground hover:text-foreground"
           >
             {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
           <button
             onClick={() => setIsOpen(false)}
-            className="rounded-full p-2 hover:bg-black/10 dark:hover:bg-white/10 transition-colors text-muted-foreground hover:text-foreground"
+            className="rounded-full p-2 hover:bg-black/10 dark:hover:bg-card transition-colors text-muted-foreground hover:text-foreground"
           >
             <X className="h-6 w-6 sm:h-5 sm:w-5" />
           </button>
@@ -163,7 +163,7 @@ const ChatHeader = ({ activeChat, setActiveChat, isExpanded, setIsExpanded, setI
 
     {/* Chat Switcher */}
     {showAiTab && (
-      <div className="flex sm:justify-center px-4 py-3 sm:py-4 shrink-0 bg-black/5 dark:bg-white/5 border-b border-white/5">
+      <div className="flex sm:justify-center px-4 py-3 sm:py-4 shrink-0 bg-black/5 dark:bg-card border-b border-border">
         <ChatSwitcher activeChat={activeChat} setActiveChat={setActiveChat} aiUnread={aiUnread} supportUnread={supportUnread} showAiTab={showAiTab} />
       </div>
     )}
@@ -319,11 +319,11 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
     return (
       <div className="flex flex-col flex-1 min-h-0 w-full">
         {/* Scrollable Area */}
-        <div className="flex-1 overflow-y-auto min-h-0 bg-gradient-to-b from-transparent to-black/5 scroll-smooth custom-scrollbar flex flex-col">
+        <div className="flex-1 overflow-y-auto min-h-0 bg-transparent scroll-smooth custom-scrollbar flex flex-col">
           <ChatHeader {...headerProps} />
           
           {/* Header */}
-          <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-black/5 dark:border-white/5 bg-background/90 backdrop-blur-md shrink-0">
+          <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-black/5 dark:border-border bg-card shrink-0">
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full" onClick={() => setDetailId(null)}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -358,7 +358,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
                       <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-sm mt-1", isUser ? "bg-primary/20 text-primary" : "bg-blue-500/20 text-blue-400")}>
                         {isUser ? <User className="h-4 w-4" /> : <Headset className="h-4 w-4" />}
                       </div>
-                      <div className={cn("rounded-2xl px-4 py-2.5 text-[14px] leading-relaxed shadow-sm backdrop-blur-md", isUser ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-card/60 border border-white/5 text-foreground rounded-tl-sm")}>
+                      <div className={cn("rounded-xl px-4 py-2.5 text-[14px] leading-relaxed shadow-sm", isUser ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-card/60 border border-border text-foreground rounded-tl-sm")}>
                         {m.content && <p className="whitespace-pre-wrap break-words">{m.content}</p>}
                         <TicketAttachments items={m.attachments ?? []} />
                         <p className={cn("text-[10px] mt-1.5 opacity-60 font-medium", isUser ? "text-right" : "text-left text-muted-foreground")}>
@@ -376,13 +376,13 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
 
         {/* Input area */}
         {detail?.status === "open" && (
-          <div className="p-3 sm:p-4 border-t border-black/5 dark:border-white/5 bg-background/80 sm:bg-background/50 backdrop-blur-xl shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4">
+          <div className="p-3 sm:p-4 border-t border-black/5 dark:border-border bg-card sm:bg-card shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4">
             {replyFiles.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {replyFiles.map((f, i) => (
                   <div
                     key={`${f.name}-${i}`}
-                    className="relative flex items-center gap-1.5 rounded-lg border border-white/10 bg-background/60 px-1.5 py-1 backdrop-blur-md"
+                    className="relative flex items-center gap-1.5 rounded-lg border border-border bg-card px-1.5 py-1"
                   >
                     <img
                       src={URL.createObjectURL(f)}
@@ -394,7 +394,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
                     <button
                       type="button"
                       onClick={() => setReplyFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                      className="flex h-4 w-4 items-center justify-center rounded-full bg-background/80 text-muted-foreground hover:text-foreground"
+                      className="flex h-4 w-4 items-center justify-center rounded-full bg-card text-muted-foreground hover:text-foreground"
                       aria-label="Удалить"
                     >
                       <XIcon className="h-3 w-3" />
@@ -406,7 +406,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
             {uploadError && (
               <p className="mb-1.5 text-[10px] text-destructive text-center font-semibold">{uploadError}</p>
             )}
-            <div className="relative flex items-end gap-2 bg-black/5 dark:bg-black/20 p-1.5 rounded-2xl border border-black/5 dark:border-white/10 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/50 transition-all">
+            <div className="relative flex items-end gap-2 bg-black/5 dark:bg-black/20 p-1.5 rounded-xl border border-black/5 dark:border-border focus-within:border-border focus-within:ring-1 focus-within:ring-primary/50 transition-all">
               <input
                 ref={replyInputRef}
                 type="file"
@@ -442,7 +442,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
               />
               <Button
                 size="icon"
-                className="h-10 w-10 rounded-xl shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform active:scale-95 mb-0.5 mr-0.5"
+                className="h-10 w-10 rounded-xl shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground transition-transform active:scale-95 mb-0.5 mr-0.5"
                 onClick={sendReply}
                 disabled={replySending || (!replyText.trim() && replyFiles.length === 0)}
               >
@@ -460,7 +460,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
     return (
       <div className="flex flex-col flex-1 min-h-0 w-full overflow-y-auto scroll-smooth custom-scrollbar">
         <ChatHeader {...headerProps} />
-        <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-3 border-b border-black/5 dark:border-white/5 bg-background/90 backdrop-blur-md shrink-0">
+        <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-3 border-b border-black/5 dark:border-border bg-card shrink-0">
           <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full -ml-2" onClick={() => setShowNewForm(false)}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -470,7 +470,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
           <div className="space-y-1.5">
             <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Тема</label>
             <input
-              className="w-full rounded-2xl h-12 bg-black/5 dark:bg-black/20 border border-black/5 dark:border-white/10 px-4 text-sm font-medium text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
+              className="w-full rounded-xl h-12 bg-black/5 dark:bg-black/20 border border-black/5 dark:border-border px-4 text-sm font-medium text-foreground focus:outline-none focus:border-border focus:ring-1 focus:ring-primary/50 transition-all"
               placeholder="Коротко о проблеме"
               value={newSubject}
               onChange={(e) => setNewSubject(e.target.value)}
@@ -479,7 +479,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
           <div className="space-y-1.5">
             <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Сообщение</label>
             <textarea
-              className="w-full resize-none rounded-2xl min-h-[120px] bg-black/5 dark:bg-black/20 border border-black/5 dark:border-white/10 p-4 text-sm font-medium text-foreground focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all custom-scrollbar"
+              className="w-full resize-none rounded-xl min-h-[120px] bg-black/5 dark:bg-black/20 border border-black/5 dark:border-border p-4 text-sm font-medium text-foreground focus:outline-none focus:border-border focus:ring-1 focus:ring-primary/50 transition-all custom-scrollbar"
               placeholder="Подробное описание..."
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
@@ -510,7 +510,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
               {newFiles.map((f, i) => (
                 <div
                   key={`${f.name}-${i}`}
-                  className="relative flex items-center gap-1.5 rounded-lg border border-white/10 bg-background/60 px-1.5 py-1 backdrop-blur-md"
+                  className="relative flex items-center gap-1.5 rounded-lg border border-border bg-card px-1.5 py-1"
                 >
                   <img
                     src={URL.createObjectURL(f)}
@@ -522,7 +522,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
                   <button
                     type="button"
                     onClick={() => setNewFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                    className="flex h-4 w-4 items-center justify-center rounded-full bg-background/80 text-muted-foreground hover:text-foreground"
+                    className="flex h-4 w-4 items-center justify-center rounded-full bg-card text-muted-foreground hover:text-foreground"
                     aria-label="Удалить"
                   >
                     <XIcon className="h-3 w-3" />
@@ -535,7 +535,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
             <p className="text-[11px] text-destructive font-semibold ml-1">{uploadError}</p>
           )}
           <Button
-            className="w-full h-11 rounded-xl shadow-md bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+            className="w-full h-9 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
             onClick={createTicket}
             disabled={createSending || !newSubject.trim() || (!newMessage.trim() && newFiles.length === 0)}
           >
@@ -551,12 +551,12 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
   return (
     <div className="flex flex-col flex-1 min-h-0 w-full overflow-y-auto custom-scrollbar">
       <ChatHeader {...headerProps} />
-      <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 shrink-0 border-b border-black/5 dark:border-white/5 bg-background/90 backdrop-blur-md">
+      <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 shrink-0 border-b border-black/5 dark:border-border bg-card">
         <h3 className="text-sm font-bold text-foreground">Мои обращения</h3>
         <Button 
           variant="outline" 
           size="sm" 
-          className="h-8 rounded-lg text-xs bg-background/50 border-white/10 dark:border-white/5"
+          className="h-8 rounded-lg text-xs bg-card border-border dark:border-border"
           onClick={() => setShowNewForm(true)}
         >
           <MessageSquarePlus className="h-3 w-3 mr-1.5" />
@@ -579,7 +579,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
               <div
                 key={t.id}
                 onClick={() => setDetailId(t.id)}
-                className="group relative flex flex-col gap-1.5 p-3.5 rounded-2xl border border-black/5 dark:border-white/10 bg-card/60 hover:bg-card/80 transition-all cursor-pointer shadow-sm hover:shadow-md"
+                className="group relative flex flex-col gap-1.5 p-3.5 rounded-xl border border-black/5 dark:border-border bg-card/60 hover:bg-card/80 transition-all cursor-pointer shadow-sm hover:shadow-md"
               >
                 <div className="flex items-start justify-between gap-3">
                   <h4 className="font-semibold text-[13px] text-foreground line-clamp-2 leading-tight group-hover:text-primary transition-colors">{t.subject}</h4>
@@ -784,8 +784,8 @@ export function FloatingChat() {
                 isExpanded
                   ? "sm:w-[calc(100vw-48px)] sm:h-[calc(100dvh-120px)]"
                   : "sm:w-[450px] sm:h-[650px] sm:max-h-[85vh]",
-                "sm:rounded-3xl border-0 sm:border border-white/10",
-                "bg-background/80 backdrop-blur-3xl sm:bg-background/60 sm:backdrop-blur-2xl sm:shadow-2xl sm:shadow-black/50",
+                "sm:rounded-xl border-0 sm:border border-border",
+                "bg-card sm:bg-card sm:shadow-2xl sm:shadow-black/50",
                 "flex flex-col overflow-hidden transition-all duration-500 ease-in-out"
               )}
             >
@@ -793,7 +793,7 @@ export function FloatingChat() {
                 <div className="flex flex-col flex-1 min-h-0 w-full">
                   {/* AI Messages */}
                   <div 
-                    className="flex-1 overflow-y-auto min-h-0 bg-gradient-to-b from-transparent to-black/5 scroll-smooth custom-scrollbar flex flex-col relative"
+                    className="flex-1 overflow-y-auto min-h-0 bg-transparent scroll-smooth custom-scrollbar flex flex-col relative"
                     onScroll={handleScroll}
                   >
                     <ChatHeader {...headerProps} />
@@ -837,10 +837,10 @@ export function FloatingChat() {
                               </div>
                               <div
                                 className={cn(
-                                  "rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed shadow-sm backdrop-blur-md",
+                                  "rounded-xl px-4 py-2.5 text-[15px] leading-relaxed shadow-sm",
                                   isUser
                                     ? "bg-primary text-primary-foreground rounded-tr-sm"
-                                    : "bg-card/60 border border-white/5 text-foreground rounded-tl-sm"
+                                    : "bg-card/60 border border-border text-foreground rounded-tl-sm"
                                 )}
                               >
                                 <p className="whitespace-pre-wrap break-words">{msg.text}</p>
@@ -862,8 +862,8 @@ export function FloatingChat() {
                   </div>
 
                   {/* AI Input Area */}
-                  <div className="p-3 sm:p-4 border-t border-black/5 dark:border-white/5 bg-background/80 sm:bg-background/50 backdrop-blur-xl shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4">
-                    <div className="relative flex items-end gap-2 bg-black/5 dark:bg-black/20 p-1.5 rounded-2xl border border-black/5 dark:border-white/10 focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/50 transition-all">
+                  <div className="p-3 sm:p-4 border-t border-black/5 dark:border-border bg-card sm:bg-card shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4">
+                    <div className="relative flex items-end gap-2 bg-black/5 dark:bg-black/20 p-1.5 rounded-xl border border-black/5 dark:border-border focus-within:border-border focus-within:ring-1 focus-within:ring-primary/50 transition-all">
                       <textarea
                         className={cn(
                           "flex-1 max-h-32 min-h-[40px] w-full resize-none bg-transparent px-3 py-2.5",
@@ -883,7 +883,7 @@ export function FloatingChat() {
                       />
                       <Button
                         size="icon"
-                        className="h-10 w-10 rounded-xl shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform active:scale-95 mb-0.5 mr-0.5"
+                        className="h-10 w-10 rounded-xl shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground transition-transform active:scale-95 mb-0.5 mr-0.5"
                         onClick={handleSendAi}
                         disabled={!aiInput.trim() || aiLoading}
                       >
@@ -906,8 +906,8 @@ export function FloatingChat() {
             whileTap={{ scale: 0.95 }}
             onClick={() => setIsOpen((v) => !v)}
             className={cn(
-              "relative flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full z-10",
-              "bg-card/60 backdrop-blur-2xl border border-border/50 text-foreground transition-colors hover:bg-card/80",
+              "relative flex h-9 w-9 sm:h-16 sm:w-16 items-center justify-center rounded-full z-10",
+              "bg-card/60 border border-border/50 text-foreground transition-colors hover:bg-card/80",
               !isOpen ? "shadow-[0_8px_32px_rgba(0,0,0,0.12)]" : "shadow-lg"
             )}
           >
@@ -942,7 +942,7 @@ export function FloatingChat() {
                   initial={{ scale: 0, y: 10 }}
                   animate={{ scale: 1, y: 0 }}
                   exit={{ scale: 0, opacity: 0 }}
-                  className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-destructive text-[11px] font-bold text-white shadow-md"
+                  className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-destructive text-[11px] font-bold text-white"
                 >
                   {aiUnread + supportUnread}
                 </motion.span>

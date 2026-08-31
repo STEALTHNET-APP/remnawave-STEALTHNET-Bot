@@ -79,8 +79,8 @@ export function ClientSubscriptionsTab({ clientId, token, onChanged }: Props) {
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-destructive/30 bg-destructive/[0.06] p-4 text-sm text-destructive">
-        ⚠️ {error}
+      <div className="rounded-xl border border-destructive/30 bg-destructive/[0.06] p-4 text-sm text-destructive">
+         {error}
         <Button size="sm" variant="ghost" className="ml-2" onClick={reload}>
           Повторить
         </Button>
@@ -103,7 +103,7 @@ export function ClientSubscriptionsTab({ clientId, token, onChanged }: Props) {
         return (
           <div
             key={sub.id}
-            className="rounded-2xl border border-white/10 bg-foreground/[0.02] dark:bg-white/[0.02] overflow-hidden"
+            className="rounded-xl border border-border bg-foreground/[0.02] dark:bg-white/[0.02] overflow-hidden"
           >
             <button
               onClick={() => toggle(sub.id)}
@@ -119,8 +119,8 @@ export function ClientSubscriptionsTab({ clientId, token, onChanged }: Props) {
                   <span
                     className={
                       sub.isPrimary
-                        ? "inline-flex items-center rounded-full bg-primary/10 border border-primary/30 px-2 py-0.5 text-[11px] font-semibold text-primary"
-                        : "inline-flex items-center rounded-full bg-white/5 border border-white/10 px-2 py-0.5 text-[11px] font-semibold text-muted-foreground"
+                        ? "inline-flex items-center rounded-full bg-primary/10 border border-border px-2 py-0.5 text-[11px] font-semibold text-primary"
+                        : "inline-flex items-center rounded-full bg-card border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground"
                     }
                   >
                     {sub.isPrimary ? "Главная" : `#${sub.subscriptionIndex}`}
@@ -129,10 +129,10 @@ export function ClientSubscriptionsTab({ clientId, token, onChanged }: Props) {
                     {sub.tariffName ?? "— без тарифа —"}
                   </span>
                   {sub.giftStatus && (
-                    <span className="text-[11px] text-amber-400">🎁 {sub.giftStatus}</span>
+                    <span className="text-[11px] text-amber-400"> {sub.giftStatus}</span>
                   )}
                   {sub.autoRenewEnabled && (
-                    <span className="text-[11px] text-green-400">🔄 auto-renew</span>
+                    <span className="text-[11px] text-green-400"> auto-renew</span>
                   )}
                 </div>
               </div>
@@ -144,14 +144,14 @@ export function ClientSubscriptionsTab({ clientId, token, onChanged }: Props) {
                 )}
                 {!sub.remnawaveUuid && (
                   <span className="text-yellow-400" title="Подписка не привязана к Remna">
-                    ⚠️ нет Remna
+                     нет Remna
                   </span>
                 )}
               </div>
             </button>
 
             {isOpen && (
-              <div className="border-t border-white/5 p-4 bg-background/40">
+              <div className="border-t border-border p-4 bg-card">
                 <SubscriptionRemnaPanel
                   subscription={sub}
                   token={token}

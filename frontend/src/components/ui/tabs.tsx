@@ -57,7 +57,7 @@ export function TabsTrigger({
       onClick={() => ctx.onValueChange(value)}
       className={cn(
         "inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-        isActive ? "bg-background text-foreground shadow-md" : "hover:bg-background/60 hover:text-foreground",
+        isActive ? "bg-background text-foreground" : "hover:bg-card hover:text-foreground",
         className
       )}
     >
