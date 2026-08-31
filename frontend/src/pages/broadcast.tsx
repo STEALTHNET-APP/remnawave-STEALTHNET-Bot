@@ -315,13 +315,26 @@ export function BroadcastPage() {
   }
 
   async function pollBroadcastJob(jobId: string): Promise<BroadcastResult> {
-    const deadline = Date.now() + 30 * 60 * 1000;
+    const startedAt = Date.now();
+    const deadline = startedAt + 30 * 60 * 1000;
     while (Date.now() < deadline) {
       try {
         const s = await api.broadcastStatus(token, jobId);
         if (s.progress) setBroadcastProgress(s.progress);
         if (s.cancelRequested) setBroadcastCancelRequested(true);
-        if (s.status === "completed" && s.result) return s.result;
+        // Выходим на завершении ВСЕГДА — даже если result почему-то не пришёл.
+        // Раньше условие требовало и то и другое, и одно пустое поле подвешивало
+        // опрос на все 30 минут, выжигая общий лимит запросов на весь /api.
+        if (s.status === "completed") {
+          return s.result ?? {
+            ok: true,
+            sentTelegram: s.progress?.sentTelegram ?? 0,
+            sentEmail: s.progress?.sentEmail ?? 0,
+            failedTelegram: s.progress?.failedTelegram ?? 0,
+            failedEmail: s.progress?.failedEmail ?? 0,
+            errors: [],
+          };
+        }
         if (s.status === "cancelled") {
           // 19.05.2026, WolfVPN — рассылка прервана админом, возвращаем то что успели.
           return {
@@ -347,7 +360,11 @@ export function BroadcastPage() {
       } catch {
         // network blip — retry
       }
-      await new Promise((r) => setTimeout(r, 1500));
+      // Первые две минуты опрашиваем часто (почти все рассылки укладываются
+      // в секунды), дальше реже: длинная рассылка на 1.5 с съедала бы ~1200
+      // запросов и в одиночку упиралась в лимит /api.
+      const elapsed = Date.now() - startedAt;
+      await new Promise((r) => setTimeout(r, elapsed < 2 * 60 * 1000 ? 1500 : 5000));
     }
     return {
       ok: false,

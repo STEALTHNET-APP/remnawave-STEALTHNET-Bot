@@ -20,6 +20,7 @@ import { yoomoneyWebhooksRouter } from "./modules/webhooks/yoomoney.webhooks.rou
 import { yookassaWebhooksRouter } from "./modules/webhooks/yookassa.webhooks.routes.js";
 import { cryptopayWebhooksRouter } from "./modules/webhooks/cryptopay.webhooks.routes.js";
 import { heleketWebhooksRouter } from "./modules/webhooks/heleket.webhooks.routes.js";
+import { rollypayWebhooksRouter } from "./modules/webhooks/rollypay.webhooks.routes.js";
 import { lavaWebhooksRouter } from "./modules/webhooks/lava.webhooks.routes.js";
 import { lavatopWebhooksRouter } from "./modules/webhooks/lavatop.webhooks.routes.js";
 import { botAdminRouter } from "./modules/bot-admin/bot-admin.routes.js";
@@ -132,6 +133,8 @@ app.use(cors({
 // Crypto Pay, Heleket и Lava webhooks нужен raw body для проверки подписи (до express.json)
 app.use("/api/webhooks/cryptopay", express.raw({ type: "application/json" }), cryptopayWebhooksRouter);
 app.use("/api/webhooks/heleket", express.raw({ type: "application/json" }), heleketWebhooksRouter);
+// RollyPay подписывает СЫРОЕ тело — express.raw обязателен, иначе подпись не сойдётся.
+app.use("/api/webhooks/rollypay", express.raw({ type: "application/json" }), rollypayWebhooksRouter);
 app.use("/api/webhooks/lava", express.raw({ type: "application/json" }), lavaWebhooksRouter);
 // Platega — HMAC проверяет raw body. Apply path-specific raw middleware ДО express.json,
 // чтобы плательщик мог проверить подпись над оригинальными байтами. Сам router смонтирован
@@ -294,6 +297,23 @@ app.get("/_spa", renderSpaIndex);
 app.use("/api/uploads", express.static(path.join("/app/uploads"), {
   maxAge: "30d",
   immutable: true,
+  setHeaders: (res, filePath) => {
+    // ⚠️ Хранимый XSS. Пользователь может приложить к тикету .svg — это XML,
+    // и внутрь вкладывается <script>. Файл отдаётся с домена панели, поэтому
+    // при открытии ссылки скрипт выполняется в её origin и читает токен
+    // из localStorage. Так у одной установки увели админскую сессию.
+    //
+    // sandbox без allow-scripts запрещает выполнение чего угодно в документе,
+    // nosniff не даёт браузеру угадать тип в обход заголовка.
+    res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    // SVG не отдаём как изображение вовсе: даже с CSP это лишний риск.
+    // Картинки в интерфейсе не ломаются — там растровые форматы.
+    if (/\.svgz?$/i.test(filePath)) {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Content-Disposition", "attachment");
+    }
+  },
 }));
 
 // Маркетплейс между админами: всегда монтируем, но хаб-роуты включаются только

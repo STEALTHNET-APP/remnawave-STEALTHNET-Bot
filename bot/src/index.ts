@@ -2398,7 +2398,7 @@ async function showPaymentMethodsForTariff(ctx: any, userId: number, tariff: Tar
   if (trialsCount <= 1) trialReplaceChoice.delete(userId);
   // convNote добавляется СУФФИКСОМ: префикс сместил бы offsets pay.entities (custom emoji).
   const finalText = `${desc && opts.length === 1 ? `${desc}\n\n${pay.text}` : pay.text}${convNote}`;
-  const markup = tariffPaymentMethodButtons(tariff.id, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, balanceLabel, !!config?.yoomoneyEnabled, !!config?.yookassaEnabled, !!config?.cryptopayEnabled, tariff.currency, !!config?.heleketEnabled, !!config?.lavaEnabled, !!config?.lavatopEnabled, config?.botEmojis ?? null);
+  const markup = tariffPaymentMethodButtons(tariff.id, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, balanceLabel, !!config?.yoomoneyEnabled, !!config?.yookassaEnabled, !!config?.cryptopayEnabled, tariff.currency, !!config?.heleketEnabled, !!config?.rollypayEnabled, !!config?.lavaEnabled, !!config?.lavatopEnabled, config?.botEmojis ?? null);
   for (let i = extraRows.length - 1; i >= 0; i--) markup.inline_keyboard.unshift(extraRows[i]!);
   await editMessageContent(ctx, finalText, markup, pay.entities);
 }
@@ -2474,7 +2474,7 @@ async function showGiftPaymentConfirm(ctx: any, userId: number, tariff: TariffIt
     !!config?.yookassaEnabled,
     !!config?.yoomoneyEnabled,
     !!config?.cryptopayEnabled,
-    !!config?.heleketEnabled,
+    !!config?.heleketEnabled, !!config?.rollypayEnabled,
     !!config?.lavaEnabled,
     tariff.currency,
   ));
@@ -4560,6 +4560,80 @@ composer.on("callback_query:data", async (ctx) => {
       }
       return;
     }
+if (data.startsWith("pay_tariff_rollypay:")) {
+      const tariffId = data.slice("pay_tariff_rollypay:".length);
+      const { items } = await api.getPublicTariffs();
+      const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
+      if (!tariff) {
+        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      try {
+        const discountInfo = activeDiscountCode.get(userId);
+        const promoCode = discountInfo?.code;
+        const sel = selectedTariffOption.get(userId);
+        const opts = sortedPriceOptions(tariff.priceOptions);
+        const eff = sel?.tariffId === tariff.id ? sel.option : (opts.length === 1 ? opts[0]! : null);
+        const unitPrice = eff?.price ?? tariff.price;
+        const effectiveDays = eff?.durationDays ?? tariff.durationDays;
+        const extraDevices = sel?.tariffId === tariff.id ? sel.extraDevices : 0;
+        const { extrasTotal } = applyExtraDevicesPriceBot(tariff.pricePerExtraDevice ?? 0, extraDevices, tariff.deviceDiscountTiers, effectiveDays);
+        const effectivePrice = unitPrice + extrasTotal;
+        // см. yoomoney handler.
+        const asAdditional = addsubPending.get(userId) === tariff.id;
+        const extPairT = extendingSecondaryPending.get(userId);
+        const extendsSecondarySubId = extPairT && extPairT.tariffId === tariff.id ? extPairT.secondaryId : undefined;
+        // юзер выбрал «продлить без устройств».
+        // Флаг прокидываем в backend — там после успешной активации helper удалит устройства.
+        // НЕ удаляем здесь — юзер может закрыть экран оплаты и устройства останутся при нём.
+        const removeExtrasOnActivate = !!(extendsSecondarySubId && pendingDropExtras.get(userId) === extendsSecondarySubId) || (!extendsSecondarySubId && convDropExtras.has(userId));
+        const replaceTrialSubId = !extendsSecondarySubId ? trialReplaceChoice.get(userId) : undefined;
+        let subExtrasForPeriod = 0;
+        if (extendsSecondarySubId && !removeExtrasOnActivate) {
+          try {
+            const allSubs = await api.getAllSubscriptions(token);
+            const target = allSubs.items?.find((it) => it.id === extendsSecondarySubId);
+            const monthly = target?.extraDevicesMonthlyPrice ?? 0;
+            if (monthly > 0 && effectiveDays > 0) {
+              subExtrasForPeriod = Math.round(monthly * (effectiveDays / 30) * 100) / 100;
+            }
+          } catch { /* ignore */ }
+        }
+        const totalPrice = effectivePrice + subExtrasForPeriod;
+        // см. yoomoney handler.
+        const meHeleket = await api.getMe(token);
+        const pdHeleket = meHeleket?.personalDiscountPercent ?? 0;
+        const { discountArg, finalPrice: priceWithDiscountHeleket } = buildTariffDiscountArg(totalPrice, pdHeleket, discountInfo, tariff.currency);
+        const payment = await api.createRollypayPayment(token, {
+          amount: totalPrice,
+          currency: tariff.currency,
+          tariffId: tariff.id,
+          tariffPriceOptionId: eff?.id,
+          deviceCount: extraDevices,
+          promoCode,
+          asAdditional: asAdditional || undefined,
+          extendsSecondarySubId,
+          removeExtrasOnActivate,
+          replaceTrialSubId,
+        });
+        if (promoCode) activeDiscountCode.delete(userId);
+        selectedTariffOption.delete(userId);
+        if (extendsSecondarySubId && removeExtrasOnActivate) extendingSecondaryPending.delete(userId);
+        if (asAdditional) addsubPending.delete(userId);
+        if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
+        convDropExtras.delete(userId);
+        trialReplaceChoice.delete(userId);
+        const nameWithDays = (opts.length > 1 || (sel?.tariffId === tariff.id))
+          ? `${tariff.name} · ${formatRuDays(effectiveDays)}`
+          : tariff.name;
+        const msg = buildPaymentMessage(config, { name: nameWithDays, price: formatMoney(priceWithDiscountHeleket, tariff.currency), amount: String(priceWithDiscountHeleket), currency: tariff.currency, action: "Нажмите кнопку ниже для оплаты:" }, discountArg);
+        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
+      } catch (e: unknown) {
+        const m = e instanceof Error ? e.message : "Ошибка создания платежа RollyPay";
+        await editMessageContent(ctx, `❌ ${m}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
 
     if (data === "menu:extra_options") {
       const options = config?.sellOptions ?? [];
@@ -6266,6 +6340,24 @@ composer.on("callback_query:data", async (ctx) => {
       }
       return;
     }
+if (data.startsWith("topup_rollypay:")) {
+      const amountStr = data.slice("topup_rollypay:".length);
+      const amount = Number(amountStr);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      const client = await api.getMe(token);
+      try {
+        const payment = await api.createRollypayPayment(token, { amount, currency: client.preferredCurrency ?? "RUB" });
+        const rpTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
+        await editMessageContent(ctx, rpTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), rpTopup.entities);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка создания платежа RollyPay";
+        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
 
     if (data.startsWith("topup:")) {
       const rest = data.slice("topup:".length);
@@ -6305,6 +6397,7 @@ composer.on("callback_query:data", async (ctx) => {
       const yookassaEnabled = !!config?.yookassaEnabled;
       const cryptopayEnabled = !!config?.cryptopayEnabled;
       const heleketEnabled = !!config?.heleketEnabled;
+      const rollypayEnabled = !!config?.rollypayEnabled;
       const lavaEnabled = !!config?.lavaEnabled;
       const lavatopEnabled = !!config?.lavatopEnabled;
       // Если есть >1 способа любого типа — показываем выбор

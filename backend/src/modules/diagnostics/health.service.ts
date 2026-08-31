@@ -16,6 +16,7 @@ import os from "node:os";
 import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { env } from "../../config/index.js";
+import { remnaSecretCookieHeader } from "../remna/remna.client.js";
 
 const exec = promisify(execCb);
 
@@ -53,14 +54,12 @@ async function checkRemna(): Promise<HealthCheck> {
     // /api/system/stats — лёгкий и стабильный эндпоинт, проверяющий и URL, и токен.
     // Если он отсутствует на старых версиях — fallback на /api/users?size=1.
     const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-    if (env.REMNA_SECRET_KEY) {
-      const colonIdx = env.REMNA_SECRET_KEY.indexOf(":");
-      if (colonIdx > 0) {
-        const cookieName = env.REMNA_SECRET_KEY.slice(0, colonIdx);
-        const cookieValue = env.REMNA_SECRET_KEY.slice(colonIdx + 1);
-        headers["Cookie"] = `${cookieName}=${cookieValue}`;
-      }
-    }
+    // Куку строим тем же кодом, что и боевой клиент. Своя копия здесь ставила
+    // её только при наличии двоеточия в ключе, а на формате `имя=значение`
+    // молча пропускала — caddy обрывал запрос, и виджет показывал
+    // «TypeError: fetch failed» на полностью исправной Remnawave.
+    const secretCookie = remnaSecretCookieHeader();
+    if (secretCookie) headers["Cookie"] = secretCookie;
     const tryHit = async (path: string) => fetch(`${url}${path}`, {
       headers,
       signal: AbortSignal.timeout(5_000),

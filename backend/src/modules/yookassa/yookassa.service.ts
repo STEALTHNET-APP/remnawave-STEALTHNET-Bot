@@ -324,3 +324,37 @@ export async function createYookassaAutopayment(params: AutopaymentParams): Prom
     return { ok: false, error: message };
   }
 }
+
+
+/**
+ * Статус платежа по данным самой ЮKassa.
+ *
+ * Нужен, когда уведомление пришло без Basic Auth: вместо того чтобы верить
+ * телу запроса, спрашиваем кассу напрямую. Возвращает статус (`succeeded`,
+ * `canceled`, `pending`…) либо null, если платёж не найден или касса недоступна.
+ */
+export async function getYookassaPaymentStatus(
+  shopId: string,
+  secretKey: string,
+  yookassaPaymentId: string,
+): Promise<{ status: string | null; amount: string | null }> {
+  if (!shopId?.trim() || !secretKey?.trim() || !yookassaPaymentId?.trim()) {
+    return { status: null, amount: null };
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12_000);
+  try {
+    const auth = Buffer.from(`${shopId.trim()}:${secretKey.trim()}`).toString("base64");
+    const res = await fetch(`https://api.yookassa.ru/v3/payments/${encodeURIComponent(yookassaPaymentId.trim())}`, {
+      headers: { Authorization: `Basic ${auth}` },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return { status: null, amount: null };
+    const data = (await res.json()) as { status?: string; amount?: { value?: string } };
+    return { status: data?.status ?? null, amount: data?.amount?.value ?? null };
+  } catch {
+    return { status: null, amount: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}

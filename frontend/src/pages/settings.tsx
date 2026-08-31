@@ -839,6 +839,9 @@ export function SettingsPage() {
         cryptopayTestnet: settings.cryptopayTestnet ?? false,
         heleketMerchantId: settings.heleketMerchantId ?? null,
         heleketApiKey: settings.heleketApiKey && settings.heleketApiKey !== "********" ? settings.heleketApiKey : undefined,
+        rollypayApiKey: settings.rollypayApiKey && settings.rollypayApiKey !== "********" ? settings.rollypayApiKey : undefined,
+        rollypaySigningSecret: settings.rollypaySigningSecret && settings.rollypaySigningSecret !== "********" ? settings.rollypaySigningSecret : undefined,
+        rollypayTestMode: settings.rollypayTestMode === true,
         lavaShopId: settings.lavaShopId ?? null,
         lavaSecretKey: settings.lavaSecretKey && settings.lavaSecretKey !== "********" ? settings.lavaSecretKey : undefined,
         lavaAdditionalKey: settings.lavaAdditionalKey && settings.lavaAdditionalKey !== "********" ? settings.lavaAdditionalKey : undefined,
@@ -3459,6 +3462,86 @@ export function SettingsPage() {
                         />
                         <p className="text-xs text-muted-foreground">{t("admin.settings.heleket_key_hint")}</p>
                       </div>
+                    </div>
+                    <div className="pt-2 border-t">
+                      <Button type="submit" disabled={saving} className="min-w-[140px]">
+                        {saving ? t("admin.settings.saving") : t("admin.settings.save")}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Collapsible>
+              {/* RollyPay — приём рублей (СБП/карты/крипта) с конвертацией в USDT.
+                  Кнопка у клиента появляется только когда заполнены ОБА поля: без секрета
+                  подписи вебхук всё равно будет отвергнут. */}
+              <Collapsible defaultOpen={false} className="group mt-4">
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
+                      <div className="flex items-center justify-between pr-2">
+                        <div className="flex items-center gap-2">
+                          <Wallet className="h-5 w-5 text-primary" />
+                          <CardTitle>RollyPay</CardTitle>
+                          <span className="text-xs font-normal text-muted-foreground">СБП, карты, криптовалюта</span>
+                        </div>
+                        <ChevronDown className="chevron h-5 w-5 shrink-0 text-muted-foreground" />
+                      </div>
+                    </CardHeader>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Приём рублёвых платежей с автоматической конвертацией в USDT. Ключи выдаются при
+                      создании кассы в личном кабинете RollyPay. Способ оплаты (СБП, карта, криптовалюта)
+                      клиент выбирает уже на странице RollyPay — у нас одна кнопка.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>API-ключ кассы</Label>
+                        <Input
+                          type="password"
+                          value={settings.rollypayApiKey ?? ""}
+                          onChange={(e) => setSettings((s) => (s ? { ...s, rollypayApiKey: e.target.value || null } : s))}
+                          placeholder="rpk_live_…"
+                        />
+                        <p className="text-xs text-muted-foreground">Уходит в заголовке X-API-Key.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Секрет подписи</Label>
+                        <Input
+                          type="password"
+                          value={settings.rollypaySigningSecret ?? ""}
+                          onChange={(e) => setSettings((s) => (s ? { ...s, rollypaySigningSecret: e.target.value || null } : s))}
+                          placeholder="whsec_…"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Проверка подписи вебхуков. Без него уведомления об оплате отвергаются — платежи не зачтутся.
+                        </p>
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.rollypayTestMode === true}
+                        onChange={(e) => setSettings((s) => (s ? { ...s, rollypayTestMode: e.target.checked } : s))}
+                        className="rounded border w-4 h-4"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium">Тестовый режим (sandbox)</span>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Платежи создаются с флагом test — реальные деньги не списываются.
+                        </p>
+                      </div>
+                    </label>
+                    <div className="rounded-xl bg-muted/40 border border-border p-3.5">
+                      <p className="text-xs text-muted-foreground">
+                        Адрес для вебхука задаётся в личном кабинете RollyPay — в запросе его передать нельзя:
+                      </p>
+                      <code className="text-xs break-all">{`${window.location.origin}/api/webhooks/rollypay`}</code>
                     </div>
                     <div className="pt-2 border-t">
                       <Button type="submit" disabled={saving} className="min-w-[140px]">

@@ -75,6 +75,7 @@ export function ClientSingboxPage() {
   const [yookassaEnabled, setYookassaEnabled] = useState(false);
   const [cryptopayEnabled, setCryptopayEnabled] = useState(false);
   const [heleketEnabled, setHeleketEnabled] = useState(false);
+  const [rollypayEnabled, setRollypayEnabled] = useState(false);
   const [lavaEnabled, setLavaEnabled] = useState(false);
   const [overpayEnabled, setOverpayEnabled] = useState(false);
   const [paymentProviders, setPaymentProviders] = useState<{ id: string; label: string; sortOrder: number }[]>([]);
@@ -102,6 +103,7 @@ export function ClientSingboxPage() {
       setYookassaEnabled(Boolean(c.yookassaEnabled));
       setCryptopayEnabled(Boolean(c.cryptopayEnabled));
       setHeleketEnabled(Boolean(c.heleketEnabled));
+      setRollypayEnabled(Boolean(c.rollypayEnabled));
       setLavaEnabled(Boolean(c.lavaEnabled));
       setOverpayEnabled(Boolean(c.overpayEnabled));
       setPaymentProviders(c.paymentProviders ?? []);
@@ -215,6 +217,24 @@ export function ClientSingboxPage() {
         singboxTariffId: tariff.id,
       });
       if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "Heleket" });
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setPayLoading(false);
+    }
+  }
+
+  async function startRollypayPayment(tariff: SingboxTariff) {
+    if (!token) return;
+    setPayError(null);
+    setPayLoading(true);
+    try {
+      const res = await api.rollypayCreatePayment(token, {
+        amount: tariff.price,
+        currency: tariff.currency,
+        singboxTariffId: tariff.id,
+      });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "RollyPay" });
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка");
     } finally {
@@ -392,6 +412,7 @@ export function ClientSingboxPage() {
               const colorMap: Record<string, { bg10: string; bg20: string; text: string }> = {
                 cryptopay: { bg10: "bg-yellow-500/10", bg20: "group-hover:bg-yellow-500/20", text: "text-yellow-500" },
                 heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
+                rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 yookassa: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
                 yoomoney: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
                 lava: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
@@ -402,6 +423,7 @@ export function ClientSingboxPage() {
               const providers: ProviderEntry[] = [
                 { id: "cryptopay", enabled: cryptopayEnabled, onClick: () => startCryptopayPayment(payModal), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
                 { id: "heleket", enabled: heleketEnabled, onClick: () => startHeleketPayment(payModal), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
+                { id: "rollypay", enabled: rollypayEnabled, onClick: () => startRollypayPayment(payModal), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
                 { id: "yookassa", enabled: yookassaEnabled && payModal.currency.toUpperCase() === "RUB", onClick: () => startYookassaPayment(payModal), label: providerLabel("yookassa", "СБП / Карты РФ"), icon: "card" },
                 { id: "yoomoney", enabled: yoomoneyEnabled && payModal.currency.toUpperCase() === "RUB", onClick: () => startYoomoneyPayment(payModal), label: providerLabel("yoomoney", "ЮMoney / Карты"), icon: "card" },
                 { id: "lava", enabled: lavaEnabled && payModal.currency.toUpperCase() === "RUB", onClick: () => startLavaPayment(payModal), label: providerLabel("lava", "LAVA"), icon: "card" },

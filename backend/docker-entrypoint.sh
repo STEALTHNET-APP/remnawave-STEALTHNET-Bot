@@ -221,6 +221,35 @@ if command -v psql >/dev/null 2>&1; then
   fi
 fi
 
+# ─── Сценарий 0: ЧИСТАЯ БАЗА (первая установка) ──────────────────────────
+# В истории миграций НЕТ начальной схемы — 29 таблиц из 57 (subscriptions,
+# tariffs, tickets, system_settings…) не создаёт ни одна миграция. Поэтому на
+# пустой БД migrate deploy доходит до 20250220_add_proxy_tariff_nodes, которая
+# вешает внешний ключ на proxy_tariffs, и падает с P3018 «relation does not
+# exist». После этого Prisma блокирует все миграции: api не становится healthy,
+# bot и nginx не стартуют по зависимости.
+#
+# Поэтому пустую БД создаём напрямую из schema.prisma и помечаем все миграции
+# применёнными. На непустой БД ветка не срабатывает — поведение не меняется.
+if command -v psql >/dev/null 2>&1; then
+  TABLES_PRESENT="$(psql "$DATABASE_URL" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'" 2>/dev/null || echo "")"
+  if [ "$TABLES_PRESENT" = "0" ]; then
+    log "БД пустая — создаю схему из schema.prisma и помечаю миграции применёнными"
+    if npx prisma db push --skip-generate --accept-data-loss >/tmp/dbpush.log 2>&1; then
+      for MIG_DIR in prisma/migrations/*/; do
+        MIG_NAME="$(basename "$MIG_DIR")"
+        [ "$MIG_NAME" = "*" ] && continue
+        npx prisma migrate resolve --applied "$MIG_NAME" >/dev/null 2>&1 || true
+      done
+      log "чистая БД подготовлена: схема создана, миграции baseline-нуты"
+    else
+      log "ОШИБКА: не удалось создать схему на пустой БД"
+      tail -20 /tmp/dbpush.log
+      exit 1
+    fi
+  fi
+fi
+
 if npx prisma migrate deploy >"$MIGRATE_LOG" 2>&1; then
   cat "$MIGRATE_LOG" || true
   log "migrate deploy: OK"

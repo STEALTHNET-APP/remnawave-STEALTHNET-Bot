@@ -115,6 +115,7 @@ export async function getPublicConfig(): Promise<{
   yookassaEnabled?: boolean;
   cryptopayEnabled?: boolean;
   heleketEnabled?: boolean;
+  rollypayEnabled?: boolean;
   lavaEnabled?: boolean;
   lavatopEnabled?: boolean;
   botWelcomeEnabled?: boolean;
@@ -549,6 +550,14 @@ export async function createHeleketPayment(
   body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
 ): Promise<{ paymentId: string; payUrl: string }> {
   return fetchJson("/api/client/heleket/create-payment", { method: "POST", body, token });
+}
+
+/** RollyPay — создать платёж (СБП/карта/крипта), вернуть ссылку на оплату */
+export async function createRollypayPayment(
+  token: string,
+  body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
+): Promise<{ paymentId: string; payUrl: string }> {
+  return fetchJson("/api/client/rollypay/create-payment", { method: "POST", body, token });
 }
 
 /** LAVA Business — создать счёт (RUB: СБП / Карты / СберPay) */

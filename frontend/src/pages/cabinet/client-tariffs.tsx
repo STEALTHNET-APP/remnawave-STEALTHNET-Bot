@@ -113,6 +113,7 @@ function ClassicTariffsPage() {
   const [yookassaEnabled, setYookassaEnabled] = useState(false);
   const [cryptopayEnabled, setCryptopayEnabled] = useState(false);
   const [heleketEnabled, setHeleketEnabled] = useState(false);
+  const [rollypayEnabled, setRollypayEnabled] = useState(false);
   const [lavaEnabled, setLavaEnabled] = useState(false);
   const [lavatopEnabled, setLavatopEnabled] = useState(false);
   const [overpayEnabled, setOverpayEnabled] = useState(false);
@@ -267,6 +268,7 @@ function ClassicTariffsPage() {
       setYookassaEnabled(Boolean(c.yookassaEnabled));
       setCryptopayEnabled(Boolean(c.cryptopayEnabled));
       setHeleketEnabled(Boolean(c.heleketEnabled));
+      setRollypayEnabled(Boolean(c.rollypayEnabled));
       setLavaEnabled(Boolean(c.lavaEnabled));
       setLavatopEnabled(Boolean(c.lavatopEnabled));
       setOverpayEnabled(Boolean(c.overpayEnabled));
@@ -589,6 +591,28 @@ function ClassicTariffsPage() {
         ...purchaseExtra(),
       });
       if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "Heleket", paymentId: res.paymentId });
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
+    } finally {
+      setPayLoading(false);
+    }
+  }
+
+  async function startRollypayPayment(tariff: TariffForPay) {
+    if (!token) return;
+    setPayError(null);
+    setPayLoading(true);
+    try {
+      const res = await api.rollypayCreatePayment(token, {
+        amount: tariff.price,
+        currency: tariff.currency,
+        tariffId: tariff.id,
+        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
+        deviceCount: selectedExtraDevices,
+        promoCode: promoResult ? promoInput.trim() : undefined,
+        ...purchaseExtra(),
+      });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "RollyPay", paymentId: res.paymentId });
     } catch (e) {
       setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
     } finally {
@@ -1148,6 +1172,7 @@ function ClassicTariffsPage() {
               const colorMap: Record<string, { bg10: string; bg20: string; text: string }> = {
                 cryptopay: { bg10: "bg-yellow-500/10", bg20: "group-hover:bg-yellow-500/20", text: "text-yellow-500" },
                 heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
+                rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 yookassa: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
                 yoomoney: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
                 lava: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
@@ -1158,6 +1183,7 @@ function ClassicTariffsPage() {
               const providers: ProviderEntry[] = [
                 { id: "cryptopay", enabled: cryptopayEnabled, onClick: () => startCryptopayPayment(tariff), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
                 { id: "heleket", enabled: heleketEnabled, onClick: () => startHeleketPayment(tariff), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
+                { id: "rollypay", enabled: rollypayEnabled, onClick: () => startRollypayPayment(tariff), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
                 { id: "yookassa", enabled: yookassaEnabled && isRub, onClick: () => startYookassaPayment(tariff), label: providerLabel("yookassa", t("cabinet.tariffs.sbp_cards_ru")), icon: "card" },
                 { id: "yoomoney", enabled: yoomoneyEnabled && isRub, onClick: () => startYoomoneyPayment(tariff), label: providerLabel("yoomoney", t("cabinet.tariffs.yoomoney_cards")), icon: "card" },
                 { id: "lava", enabled: lavaEnabled && isRub, onClick: () => startLavaPayment(tariff), label: providerLabel("lava", "LAVA"), icon: "card" },

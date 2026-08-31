@@ -18,13 +18,27 @@ function getHeaders(): Record<string, string> {
     "Content-Type": "application/json",
     Authorization: `Bearer ${REMNA_ADMIN_TOKEN}`,
   };
-  if (REMNA_SECRET_KEY) {
-    const colonIdx = REMNA_SECRET_KEY.indexOf(":");
-    const cookieName = colonIdx > 0 ? REMNA_SECRET_KEY.slice(0, colonIdx) : REMNA_SECRET_KEY;
-    const cookieValue = colonIdx > 0 ? REMNA_SECRET_KEY.slice(colonIdx + 1) : REMNA_SECRET_KEY;
-    h["Cookie"] = `${cookieName}=${cookieValue}`;
-  }
+  const cookie = remnaSecretCookieHeader();
+  if (cookie) h["Cookie"] = cookie;
   return h;
+}
+
+/**
+ * Кука секретного ключа Remnawave — та, которой caddy перед панелью отличает
+ * своих от чужих: запрос без неё он обрывает через `abort`, без ответа вообще.
+ *
+ * В .env встречаются обе записи: `имя:значение` и уже готовая пара
+ * `имя=значение`. Раньше эту логику продублировали в проверке здоровья, но там
+ * куку ставили ТОЛЬКО при наличии двоеточия — и на установках со вторым
+ * форматом виджет показывал «remna: TypeError: fetch failed», хотя сама панель
+ * работала. Поэтому построение куки живёт здесь в одном месте.
+ */
+export function remnaSecretCookieHeader(): string | null {
+  if (!REMNA_SECRET_KEY) return null;
+  const colonIdx = REMNA_SECRET_KEY.indexOf(":");
+  const name = colonIdx > 0 ? REMNA_SECRET_KEY.slice(0, colonIdx) : REMNA_SECRET_KEY;
+  const value = colonIdx > 0 ? REMNA_SECRET_KEY.slice(colonIdx + 1) : REMNA_SECRET_KEY;
+  return `${name}=${value}`;
 }
 
 export async function remnaFetch<T>(
@@ -635,12 +649,6 @@ export async function remnaEncryptHappLink(linkToEncrypt: string): Promise<strin
   if (!trimmed) return null;
   // Уже crypt — возвращаем как есть
   if (trimmed.startsWith("happ://")) return trimmed;
-
-  // В Remnawave 3.x ручки /api/system/tools/happ/encrypt больше нет —
-  // без этой проверки каждый вызов уходил бы в 404. Ссылка вернётся
-  // как есть (уже зашифровано либо шифрование недоступно).
-  const { getRemnaCapabilities } = await import("./remna-capabilities.js");
-  if (!(await getRemnaCapabilities()).happCrypt) return null;
 
   const cached = _happCryptCache.get(trimmed);
   if (cached && Date.now() - cached.ts < HAPP_CRYPT_TTL_MS) {

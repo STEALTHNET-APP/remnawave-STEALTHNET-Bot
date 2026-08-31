@@ -2929,6 +2929,9 @@ const updateSettingsSchema = z.object({
   cryptopayTestnet: z.boolean().optional(),
   heleketMerchantId: z.string().max(500).nullable().optional(),
   heleketApiKey: z.string().max(500).nullable().optional(),
+  rollypayApiKey: z.string().max(500).nullable().optional(),
+  rollypaySigningSecret: z.string().max(500).nullable().optional(),
+  rollypayTestMode: z.boolean().optional(),
   lavaShopId: z.string().max(200).nullable().optional(),
   lavaSecretKey: z.string().max(500).nullable().optional(),
   lavaAdditionalKey: z.string().max(500).nullable().optional(),
@@ -3511,6 +3514,18 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.heleketMerchantId !== undefined) {
     const val = updates.heleketMerchantId ?? "";
     await prisma.systemSetting.upsert({ where: { key: "heleket_merchant_id" }, create: { key: "heleket_merchant_id", value: val }, update: { value: val } });
+  }
+  if (updates.rollypayApiKey !== undefined) {
+    const val = updates.rollypayApiKey ?? "";
+    await prisma.systemSetting.upsert({ where: { key: "rollypay_api_key" }, create: { key: "rollypay_api_key", value: val }, update: { value: val } });
+  }
+  if (updates.rollypaySigningSecret !== undefined) {
+    const val = updates.rollypaySigningSecret ?? "";
+    await prisma.systemSetting.upsert({ where: { key: "rollypay_signing_secret" }, create: { key: "rollypay_signing_secret", value: val }, update: { value: val } });
+  }
+  if (updates.rollypayTestMode !== undefined) {
+    const val = updates.rollypayTestMode ? "true" : "false";
+    await prisma.systemSetting.upsert({ where: { key: "rollypay_test_mode" }, create: { key: "rollypay_test_mode", value: val }, update: { value: val } });
   }
   if (updates.heleketApiKey !== undefined) {
     const val = updates.heleketApiKey ?? "";
