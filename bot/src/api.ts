@@ -1,19 +1,23 @@
 /**
- * STEALTHNET 3.0 — API клиент бота (вызовы бэкенда).
+ * STEALTHNET 3.0 - API клиент бота (вызовы бэкенда).
  */
 
 const API_URL = (process.env.API_URL || "").replace(/\/$/, "");
 if (!API_URL) {
-  console.warn("API_URL not set in .env — bot API calls will fail");
+  console.warn("API_URL not set in .env - bot API calls will fail");
 }
+
+let cachedConfig: any = null;
+let configCacheTime = 0;
+
+let cachedTariffs: any = null;
+let tariffsCacheTime = 0;
+
+const CACHE_TTL = 60 * 1000; // Кэш на 60 секунд
 
 function getHeaders(token?: string): HeadersInit {
   const h: Record<string, string> = { "Content-Type": "application/json" };
   if (token) h["Authorization"] = `Bearer ${token}`;
-  // Идентифицируем все вызовы из бота через X-Telegram-Bot-Token, чтобы:
-  // 1) бэкенд знал какому клону принадлежит запрос (resolveBotForClientRequest)
-  // 2) IP-rate-limit'ы пропускали бот-трафик (skip-условие в app.ts).
-  // Без этого заголовка все регистрации через /start блокируются по IP бот-контейнера.
   const botToken = process.env.BOT_TOKEN || "";
   if (botToken) h["X-Telegram-Bot-Token"] = botToken;
   return h;
@@ -28,7 +32,6 @@ async function fetchJson<T>(path: string, opts?: { method?: string; body?: unkno
   const data = (await res.json().catch(() => ({}))) as T | { message?: string; code?: string };
   if (!res.ok) {
     const msg = typeof (data as { message?: string }).message === "string" ? (data as { message: string }).message : `HTTP ${res.status}`;
-    // T-tariff-restriction (портировано из WolfVPN): прокидываем code (напр. TARIFF_RESTRICTED) для бота.
     const err = new Error(msg) as Error & { code?: string };
     const code = (data as { code?: string }).code;
     if (typeof code === "string") err.code = code;
@@ -56,7 +59,7 @@ export async function linkTelegramFromBot(code: string, telegramId: number, tele
   return data as { message: string };
 }
 
-/** Подтверждение deep-link авторизации (бот → API) */
+/** Подтверждение deep-link авторизации (бот -> API) */
 export async function confirmTelegramAuth(token: string, telegramId: number, telegramUsername?: string): Promise<{ ok: boolean }> {
   const botToken = process.env.BOT_TOKEN || "";
   const res = await fetch(`${API_URL}/api/client/auth/telegram-login-confirm`, {
@@ -102,14 +105,12 @@ export async function getPublicConfig(): Promise<{
   serviceName?: string | null;
   logo?: string | null;
   logoBot?: string | null;
-  /** Telegram ID пользователей, которым показывается кнопка «Панель админа» в боте */
   botAdminTelegramIds?: string[] | null;
   publicAppUrl?: string | null;
   defaultCurrency?: string;
   trialEnabled?: boolean;
   trialDays?: number;
   plategaMethods?: { id: number; label: string }[];
-  /** кастомные названия и порядок платёжных провайдеров из админки. */
   paymentProviders?: { id: string; label: string; sortOrder: number }[];
   yoomoneyEnabled?: boolean;
   yookassaEnabled?: boolean;
@@ -123,13 +124,9 @@ export async function getPublicConfig(): Promise<{
   botWelcomeImage?: string | null;
   botWelcomeShowOnce?: boolean;
   botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; emojiKey?: string }[] | null;
-  /** Кнопок в ряд в главном меню: 1 или 2 */
   botButtonsPerRow?: 1 | 2;
-  /** Тексты меню с уже подставленными эмодзи ({{BALANCE}} → unicode из bot_emojis) */
   resolvedBotMenuTexts?: Record<string, string>;
-  /** Для каких ключей текста меню в начале стоит премиум-эмодзи: key → custom_emoji_id (для entities) */
   menuTextCustomEmojiIds?: Record<string, string>;
-  /** Эмодзи по ключам: unicode и tgEmojiId (премиум) — для кнопок и подстановки в текст */
   botEmojis?: Record<string, { unicode?: string; tgEmojiId?: string }>;
   botBackLabel?: string | null;
   botMenuTexts?: Record<string, string> | null;
@@ -147,52 +144,33 @@ export async function getPublicConfig(): Promise<{
   agreementLink?: string | null;
   offerLink?: string | null;
   instructionsLink?: string | null;
-  // T11+T13+T14 (11.05.2026) — кастомизация бота
   refundLink?: string | null;
   supportHoursFrom?: string | null;
   supportHoursTo?: string | null;
   tgProxyText?: string | null;
   tgProxyUrlPrimary?: string | null;
   tgProxyUrlBackup?: string | null;
-  // динамический список прокси-серверов для бота.
   tgProxyServers?: { flag: string; name: string; url: string }[];
   reissueWarningText?: string | null;
   installSecondDeviceText?: string | null;
   helpIntroText?: string | null;
   giftIntroText?: string | null;
-  /** редактируемый текст шапки «📱 Мои устройства». */
   botDevicesText?: string | null;
-  /** подсказка «если инструкция не открылась». */
   botInstructionFallbackText?: string | null;
-  /** редактируемый текст экрана «📦 Дополнительные опции». */
   botExtraOptionsText?: string | null;
-  /** приписка под ссылкой подписки при активации подарка. */
   botGiftUrlNote?: string | null;
-  /** подсказка внизу экрана «💼 Мой баланс». */
   botBalanceText?: string | null;
-  /** текст экрана «💳 Пополнить баланс». */
   botTopupText?: string | null;
-  /** рефералка: строка под заголовком. */
   botReferralIntroText?: string | null;
-  /** рефералка: подсказка «💡 …» внизу экрана. */
   botReferralFooterText?: string | null;
-  /** текст шаринга реферальной ссылки (кнопка «📢 Поделиться»). */
   botReferralShareText?: string | null;
-  /** заголовок экрана выбора пробной подписки. */
   botTrialText?: string | null;
-  /** сообщение «все триалы использованы». */
   botTrialUsedText?: string | null;
-  /** экран выбора тарифа для подарка. */
   botGiftBuyText?: string | null;
-  /** приглашение ввести промокод. */
   botPromocodeText?: string | null;
-  /** показывать кнопку «➕ Докупить устройство» на экране Тарифов (default true). */
   botTariffsShowExtraDevicesButton?: boolean;
-  /** показывать кнопку «💼 Мой баланс» на экране Тарифов (default true). */
   botTariffsShowBalanceButton?: boolean;
-  /** показывать меню выбора категорий перед списком тарифов (default true). */
   botShowTariffCategories?: boolean;
-  /** заявки на вывод реф. баланса: вкл/выкл + мин. сумма. */
   withdrawalsEnabled?: boolean;
   withdrawalMinAmount?: number;
   videoInstructionsEnabled?: boolean;
@@ -212,26 +190,28 @@ export async function getPublicConfig(): Promise<{
   proxyUrl?: string | null;
   proxyTelegram?: boolean;
   proxyPayments?: boolean;
-  /** Авто-удаление нераспознанных сообщений (стикеры, случайный текст и т.п.) */
   botAutoDeleteUnknownMessages?: boolean;
-  /** Кастомный информационный блок (главное меню бота + кабинет). Пустая строка = скрыто. */
   botInfoBlock?: string | null;
   giftSubscriptionsEnabled?: boolean;
   defaultLanguage?: string;
   translations?: Record<string, Record<string, unknown>>;
 } | null> {
+  const now = Date.now();
+  if (cachedConfig && now - configCacheTime < CACHE_TTL) {
+    return cachedConfig;
+  }
+
   const cfg = await fetchJson<{
     paymentProviders?: { id: string; label: string; sortOrder: number }[];
   } | null>("/api/public/config");
-  // синхронизируем кастомные названия платёжек с keyboard.ts —
-  // module-level state используется во всех функциях кнопок выбора оплаты.
+
   try {
     const { setProviderLabels } = await import("./keyboard.js");
     setProviderLabels(cfg?.paymentProviders ?? null);
-  } catch {
-    // Если динамический импорт упал — кнопки используют дефолтные хардкоды.
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch {}
+
+  cachedConfig = cfg;
+  configCacheTime = now;
   return cfg as any;
 }
 
@@ -278,16 +258,10 @@ export async function getMe(token: string): Promise<{
   referralPercent?: number | null;
   trialUsed?: boolean;
   autoRenewEnabled?: boolean;
-  // нужны для category-aware диалога в pay_tariff handler.
-  // currentTariffId/currentTariff может быть null если у клиента ещё нет основной подписки.
   currentTariffId?: string | null;
   currentTariff?: { id: string; name: string; categoryId: string | null } | null;
-  // для предупреждения юзера при включении автосписания
-  // что есть YooKassa-recurring fallback с сохранённой карты.
   yookassaPaymentMethodTitle?: string | null;
-  // персональная скидка клиента (%)
   personalDiscountPercent?: number | null;
-  // для 54-ФЗ-чека: подставляем сохранённый email в receipt prompt.
   email?: string | null;
 }> {
   return fetchJson("/api/client/auth/me", { token });
@@ -306,10 +280,7 @@ export async function getSubscriptionByUuid(
   return fetchJson("/api/client/subscription/by-uuid/" + encodeURIComponent(uuid), { token });
 }
 
-/**
- * доступные клиенту триалы (которые он ещё не активировал).
- * Если массив пустой — кнопка «🎁 Получить пробную» в главном меню скрывается.
- */
+/** доступные клиенту триалы */
 export async function getAvailableTrials(token: string): Promise<{
   items: { id: string; name: string; tariffId: string; tariffName: string | null; durationDays: number; description: string | null; sortOrder: number }[];
   hasAnyEnabled: boolean;
@@ -359,7 +330,7 @@ export async function getReferralStats(token: string): Promise<{
   return fetchJson("/api/client/referral-stats", { token });
 }
 
-/** T15: активация конкретного триала по ID. */
+/** активация конкретного триала по ID. */
 export async function activateTrialById(
   token: string,
   trialId: string,
@@ -368,20 +339,14 @@ export async function activateTrialById(
   subscriptionId: string;
   trialId: string;
   durationDays: number;
-  // для кнопки «🌐 Локации» на экране активации.
   tariffId: string;
   tariffHasLocations: boolean;
-  /** T-unify (12.05.2026) — URL подписки для кнопки «📲 Инструкции по установке». */
   subscriptionUrl?: string | null;
 }> {
   return fetchJson(`/api/client/trials/${encodeURIComponent(trialId)}/activate`, { token, method: "POST" });
 }
 
-/**
- * Перевыпуск subscription URL.
- * Под капотом — Remnawave POST /api/users/{uuid}/actions/revoke (новый shortUuid).
- * type: "root" → id == clientId; type: "secondary" → id == secondarySubscription.id.
- */
+/** Перевыпуск subscription URL. */
 export async function reissueSubscription(
   token: string,
   type: "root" | "secondary",
@@ -395,18 +360,13 @@ export async function getClientDevices(token: string): Promise<{ total: number; 
   return fetchJson("/api/client/devices", { token });
 }
 
-/**
- * все устройства всех подписок клиента (root + secondary),
- * с пометкой откуда. Используется в меню «📱 Мои Устройства» — показывает
- * единый список с подписью «Подписка #N — тариф».
- */
+/** все устройства всех подписок клиента */
 export async function getAllDevices(token: string): Promise<{
   total: number;
   items: {
     hwid: string;
     platform?: string;
     deviceModel?: string;
-    /** приложение (Hiddify / v2rayN / Streisand …). */
     appName?: string;
     createdAt?: string;
     subscriptionType: "root" | "secondary";
@@ -418,10 +378,7 @@ export async function getAllDevices(token: string): Promise<{
   return fetchJson("/api/client/devices/all", { token });
 }
 
-/** Удалить устройство по HWID.
- *  добавили опциональные subscriptionType / subscriptionId —
- *  чтобы устройство удалялось именно из той подписки откуда оно показалось в UI (раньше
- *  endpoint удалял только из root, и для secondary получали «HWID device not found»). */
+/** Удалить устройство по HWID */
 export async function postClientDeviceDelete(
   token: string,
   hwid: string,
@@ -456,21 +413,20 @@ export async function getPublicSingboxTariffs(): Promise<{
   return fetchJson("/api/public/singbox-tariffs");
 }
 
-/** Активные Sing-box слоты клиента (с subscriptionLink) */
+/** Активные Sing-box слоты клиента */
 export async function getSingboxSlots(token: string): Promise<{
   slots: { id: string; subscriptionLink: string; expiresAt: string; protocol: string }[];
 }> {
   return fetchJson("/api/client/singbox-slots", { token });
 }
 
-/** Публичный список тарифов по категориям (emoji из админки по коду ordinary/premium) */
+/** Публичный список тарифов по категориям с кэшированием */
 export async function getPublicTariffs(): Promise<{
   items: {
     id: string;
     name: string;
     emojiKey: string | null;
     emoji: string;
-    /** «одна подписка на категорию» — покупка конвертирует/продлевает существующую. */
     singleSubscriptionMode?: boolean;
     tariffs: {
       id: string;
@@ -486,10 +442,39 @@ export async function getPublicTariffs(): Promise<{
     }[];
   }[];
 }> {
-  return fetchJson("/api/public/tariffs");
+  const now = Date.now();
+  if (cachedTariffs && now - tariffsCacheTime < CACHE_TTL) {
+    return cachedTariffs;
+  }
+
+  const res = await fetchJson<{
+    items: {
+      id: string;
+      name: string;
+      emojiKey: string | null;
+      emoji: string;
+      singleSubscriptionMode?: boolean;
+      tariffs: {
+        id: string;
+        name: string;
+        description?: string | null;
+        durationDays: number;
+        trafficLimitBytes?: number | null;
+        trafficResetMode?: string;
+        deviceLimit?: number | null;
+        price: number;
+        currency: string;
+        priceOptions: { id: string; durationDays: number; price: number; sortOrder: number }[];
+      }[];
+    }[];
+  }>("/api/public/tariffs");
+
+  cachedTariffs = res;
+  tariffsCacheTime = now;
+  return res;
 }
 
-/** Создать платёж Platega (возвращает paymentUrl). Для опции — extraOption. Для прокси — proxyTariffId. */
+/** Создать платёж Platega */
 export async function createPlategaPayment(
   token: string,
   body: {
@@ -504,20 +489,16 @@ export async function createPlategaPayment(
     singboxTariffId?: string;
     promoCode?: string;
     extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string; targetSubscriptionId?: string };
-    /** купить тариф как ДОП. подписку — backend пометит Payment.metadata. */
     asAdditional?: boolean;
-    /** продление существующей secondary (вместо создания новой) */
     extendsSecondarySubId?: string;
-    /** удалить доп. устройства после активации подписки в бэке */
     removeExtrasOnActivate?: boolean;
-    /** заменить конкретный триал при покупке (если триалов несколько) */
     replaceTrialSubId?: string;
   }
 ): Promise<{ paymentUrl: string; orderId: string; paymentId: string }> {
   return fetchJson("/api/client/payments/platega", { method: "POST", body, token });
 }
 
-/** Создать платёж ЮMoney (оплата картой). Для тарифа — tariffId, для прокси — proxyTariffId, для опции — extraOption. */
+/** Создать платёж ЮMoney */
 export async function createYoomoneyPayment(
   token: string,
   body: { amount?: number; paymentType: "PC" | "AC"; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string; targetSubscriptionId?: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
@@ -525,9 +506,7 @@ export async function createYoomoneyPayment(
   return fetchJson("/api/client/yoomoney/create-form-payment", { method: "POST", body, token });
 }
 
-/** Создать платёж ЮKassa (карта, СБП). Только RUB. Для тарифа — tariffId, для прокси — proxyTariffId, для опции — extraOption.
- *  19.05.2026 — receiptEmail: 54-ФЗ. Если передан валидный email — ЮКасса пришлёт чек на эту почту,
- *  и email сохраняется в client.email для будущих покупок. Если пусто/невалидно — placeholder (без чека юзеру). */
+/** Создать платёж ЮKassa */
 export async function createYookassaPayment(
   token: string,
   body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string; targetSubscriptionId?: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string; receiptEmail?: string }
@@ -535,7 +514,7 @@ export async function createYookassaPayment(
   return fetchJson("/api/client/yookassa/create-payment", { method: "POST", body, token });
 }
 
-/** Crypto Pay (Crypto Bot) — создать инвойс, вернуть ссылку на оплату */
+/** Crypto Pay (Crypto Bot) */
 export async function createCryptopayPayment(
   token: string,
   body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string; targetSubscriptionId?: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
@@ -544,7 +523,7 @@ export async function createCryptopayPayment(
   return { paymentId: res.paymentId, payUrl: res.payUrl };
 }
 
-/** Heleket — создать инвойс на крипту, вернуть ссылку на оплату */
+/** Heleket */
 export async function createHeleketPayment(
   token: string,
   body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
@@ -552,7 +531,7 @@ export async function createHeleketPayment(
   return fetchJson("/api/client/heleket/create-payment", { method: "POST", body, token });
 }
 
-/** RollyPay — создать платёж (СБП/карта/крипта), вернуть ссылку на оплату */
+/** RollyPay */
 export async function createRollypayPayment(
   token: string,
   body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
@@ -560,7 +539,7 @@ export async function createRollypayPayment(
   return fetchJson("/api/client/rollypay/create-payment", { method: "POST", body, token });
 }
 
-/** LAVA Business — создать счёт (RUB: СБП / Карты / СберPay) */
+/** LAVA Business */
 export async function createLavaPayment(
   token: string,
   body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
@@ -568,12 +547,12 @@ export async function createLavaPayment(
   return fetchJson("/api/client/lava/create-payment", { method: "POST", body, token });
 }
 
-/** Помечает что онбординг (приветствие в боте) завершён — `client.onboardingCompleted=true` */
+/** Помечает что онбординг завершён */
 export async function completeOnboarding(token: string): Promise<{ message: string }> {
   return fetchJson("/api/client/complete-onboarding", { method: "POST", token });
 }
 
-/** Lava.top — создать invoice через product/offer модель (RUB/USD/EUR) */
+/** Lava.top */
 export async function createLavatopPayment(
   token: string,
   body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; email?: string; offerId?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
@@ -581,7 +560,7 @@ export async function createLavatopPayment(
   return fetchJson("/api/client/lavatop/create-payment", { method: "POST", body, token });
 }
 
-/** Обновить профиль (язык, валюта) */
+/** Обновить профиль */
 export async function updateProfile(
   token: string,
   body: { preferredLang?: string; preferredCurrency?: string }
@@ -602,14 +581,12 @@ export async function activateTrial(token: string): Promise<{ message: string }>
   return fetchJson("/api/client/trial", { method: "POST", body: {}, token });
 }
 
-/** Превью конвертации (режим «одна подписка из категории»):
- * узнаём до оплаты, обновит ли покупка существующую подписку. */
+/** Превью конвертации */
 export async function tariffConversionPreview(
   token: string,
   params: { tariffId: string; priceOptionId?: string }
 ): Promise<{
   willConvert: boolean;
-  /** extend — тот же тариф (продление, дни складываются); convert — смена тарифа. */
   mode?: "extend" | "convert" | "replace";
   othersToRemove?: number;
   subscription?: { id: string; index: number; tariffName: string | null; expireAt: string | null; isTrial: boolean };
@@ -617,7 +594,6 @@ export async function tariffConversionPreview(
   convertedDays?: number;
   purchasedDays?: number;
   totalDays?: number;
-  /** расклад по доп. устройствам (сохранить/убрать). */
   extras?: {
     extraDevices: number;
     extraDevicesMonthlyPrice: number;
@@ -631,7 +607,7 @@ export async function tariffConversionPreview(
   return fetchJson(`/api/client/tariff-conversion-preview?${q.toString()}`, { token });
 }
 
-/** Оплата тарифа или прокси-тарифа балансом */
+/** Оплата тарифа балансом */
 export async function payByBalance(
   token: string,
   opts: { tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extendsSecondarySubId?: string; asAdditional?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
@@ -639,8 +615,7 @@ export async function payByBalance(
   return fetchJson("/api/client/payments/balance", { method: "POST", body: opts, token });
 }
 
-/** Оплата опции (доп. трафик/устройства/сервер) с баланса.
- * targetSubscriptionId — к какой подписке применить опцию (для secondary). */
+/** Оплата опции с баланса */
 export async function payOptionByBalance(
   token: string,
   args: { kind: "traffic" | "devices" | "servers"; productId: string; targetSubscriptionId?: string }
@@ -653,12 +628,12 @@ export async function payOptionByBalance(
   });
 }
 
-/** Активировать промо-ссылку (PromoGroup) */
+/** Активировать промо-ссылку */
 export async function activatePromo(token: string, code: string): Promise<{ message: string }> {
   return fetchJson("/api/client/promo/activate", { method: "POST", body: { code }, token });
 }
 
-/** Проверить промокод (PromoCode — скидка / бесплатные дни) */
+/** Проверить промокод */
 export async function checkPromoCode(token: string, code: string): Promise<{ type: string; discountPercent?: number | null; discountFixed?: number | null; durationDays?: number | null; name: string }> {
   return fetchJson("/api/client/promo-code/check", { method: "POST", body: { code }, token });
 }
@@ -668,7 +643,7 @@ export async function activatePromoCode(token: string, code: string): Promise<{ 
   return fetchJson("/api/client/promo-code/activate", { method: "POST", body: { code }, token });
 }
 
-// ——— Bot Admin API (X-Telegram-Bot-Token + telegramId в query/body) ———
+// - Bot Admin API -
 
 const BOT_ADMIN_BASE = "/api/bot-admin";
 
@@ -1023,7 +998,7 @@ export async function postBotAdminClientRemnaSquadRemove(telegramId: number, cli
   return data as { ok: boolean; activeInternalSquads: string[] };
 }
 
-// ——— Gift / Secondary Subscriptions API ———
+// - Gift / Secondary Subscriptions API -
 
 /** Купить дополнительную подписку (оплата балансом) */
 export async function buyGiftSubscription(
@@ -1049,7 +1024,6 @@ export async function createGiftCode(
   code: string;
   expiresAt: string;
   tariffName: string | null;
-  /** T-unify (12.05.2026) — для отображения формата подарка. */
   durationDays: number | null;
   trafficLimitBytes: number | null;
 }> {
@@ -1067,7 +1041,6 @@ export async function redeemGiftCode(
   giftMessage: string | null;
   creatorTelegramId: string | null;
   tariffName: string | null;
-  /** T-unify (12.05.2026) — для текста получателю. */
   durationDays: number | null;
   trafficLimitBytes: number | null;
   subscriptionUrl: string | null;
@@ -1085,11 +1058,7 @@ export async function cancelGiftCode(
   return fetchJson("/api/client/gift/cancel/" + encodeURIComponent(codeOrId), { method: "DELETE", token });
 }
 
-/**
- * получить активный подарочный код для подписки.
- * Используется когда юзер вернулся в «Мои подарки» к подписке с GIFT_RESERVED статусом —
- * чтобы снова показать share-UI для уже созданного кода.
- */
+/** получить активный подарочный код для подписки */
 export async function getActiveGiftCodeForSubscription(
   token: string,
   secondarySubId: string,
@@ -1104,7 +1073,7 @@ export async function getGiftCodes(
   return fetchJson("/api/client/gift/codes", { token });
 }
 
-/** Активировать подписку на себя (снять GIFT_RESERVED) */
+/** Активировать подписку на себя */
 export async function activateGiftForSelf(
   token: string,
   subscriptionId: string
@@ -1128,50 +1097,28 @@ export async function getGiftSubscriptionUrl(
   return fetchJson("/api/client/gift/subscription-url/" + encodeURIComponent(subscriptionId), { token });
 }
 
-// ——— My subscriptions (root + secondary) ———
+// - My subscriptions (root + secondary) -
 
-/**
- * Унифицированный список подписок клиента: root (Client.remnawaveUuid) +
- * secondary (купленные доп. + полученные в подарок). Эндпоинт
- * `/api/client/subscription/all` уже возвращает оба типа в одном массиве —
- * бот использует это в меню «📋 Мои подписки» вместо двух отдельных запросов.
- */
 export type SubscriptionListItem = {
   type: "root" | "secondary";
-  /** Для root — clientId, для secondary — subscriptionId */
   id: string;
   subscriptionIndex: number | null;
-  /** Сырой Remnawave user (для извлечения subscriptionUrl/expireAt) */
   subscription: unknown;
   tariffDisplayName: string;
   remnawaveUuid: string | null;
-  /** id текущего тарифа подписки — для кнопки «Продлить» (быстрая оплата
-   *  того же тарифа без выбора). null если тариф удалён или не определён. */
   tariffId: string | null;
-  /** T15.4 (11.05.2026): id триала, если подписка была создана через активацию пробного.
-   *  Бот рисует пометку «🎁 Пробная» и кнопку «🔄 Конвертировать в платную». null = обычная sub. */
   trialId: string | null;
-  /** включено ли индивидуальное автосписание для этой подписки. */
   autoRenewEnabled?: boolean;
-  /** эмодзи-префикс из админки (Tariff.menuEmoji) для главного меню бота.
-   *  Если null — бот применяет fallback по типу подписки (root → 🌐, secondary → 🔒). */
   tariffMenuEmoji?: string | null;
-  /** кол-во докупленных доп. устройств. */
   extraDevices?: number;
-  /** цена за все доп. устройства на 30 дней. */
   extraDevicesMonthlyPrice?: number;
-  /** для триальных — тарифы, в которые можно конвертировать
-   *  (переход на их сквады). Пусто — только тариф триала. */
   convertTariffIds?: string[];
-  /** имя триала (показывается вместо тарифа). */
   trialName?: string | null;
-  /** false → у триала нет кнопок продления/конвертации вовсе. */
   trialConvertEnabled?: boolean;
-  /** конвертация триала разрешена в любой тариф. */
   trialConvertAllTariffs?: boolean;
 };
 
-/** Убрать ВСЕ доп. устройства с подписки (extraDevices=0, hwid kick в Remna). */
+/** Убрать ВСЕ доп. устройства с подписки */
 export async function removeExtraDevices(
   token: string,
   subType: "root" | "secondary",
@@ -1182,16 +1129,14 @@ export async function removeExtraDevices(
     token,
   });
 }
+
 export async function getAllSubscriptions(
   token: string
 ): Promise<{ items: SubscriptionListItem[] }> {
   return fetchJson("/api/client/subscription/all", { token });
 }
 
-/**
- * pre-check кулдауна продления для конкретной подписки.
- * Бот зовёт перед открытием экрана продления — если blocked, сразу показывает сообщение.
- */
+/** pre-check кулдауна продления */
 export async function checkSubscriptionCooldown(
   token: string,
   subscriptionId: string,
@@ -1199,16 +1144,10 @@ export async function checkSubscriptionCooldown(
   return fetchJson(`/api/client/subscription/${encodeURIComponent(subscriptionId)}/cooldown`, { token });
 }
 
-/**
- * batch-проверка для списка подписок (renew_pick экран).
- * Возвращает массив с blocked-флагами для отрисовки 🚫 на заблокированных подписках.
- */
+/** batch-проверка для списка подписок */
 export async function checkSubscriptionsCooldownBatch(
   token: string,
   ids: string[],
 ): Promise<{ items: Array<{ subscriptionId: string; blocked: boolean; daysLeft?: number; message?: string; tariffName?: string; cooldownDays?: number }> }> {
   return fetchJson("/api/client/subscriptions/cooldown-check", { token, method: "POST", body: { ids } });
 }
-
-// (v5.0.0) Удалены fetchInternalBotsList / reportBotMeUsername — клоны бота больше
-// не поддерживаются, бот один, его токен живёт в process.env.BOT_TOKEN.
