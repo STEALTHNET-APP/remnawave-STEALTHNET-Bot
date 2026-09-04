@@ -6,9 +6,37 @@ import { remnaGetUser, isRemnaConfigured } from "../remna/remna.client.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { createYookassaAutopayment } from "../yookassa/yookassa.service.js";
 import { applyPercent } from "../client/personal-discount.js";
+import {
+  notifyAutoRenewSuccess,
+  notifyAutoRenewFailed,
+  notifyAutoRenewUpcoming,
+  notifyAutoRenewRetry,
+  notifyAutoRenewYookassaSuccess,
+  notifyAutoRenewYookassaFailed,
+  notifyAdminsAboutAutoRenewFailed,
+} from "../notification/telegram-notify.service.js";
+import { dispatchAutoRenewNotification, tryMarkSubDedup } from "../notification/auto-renew-notifications.service.js";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Считает базовую сумму автопродления для клиента: priceOption.price + extras * pricePerExtra * scaling * discount.
+ * Проверка на неустранимые ошибки Remnawave.
+ * Если пользователя нет в базе панели или UUID поврежден, ретраить бессмысленно.
+ */
+function isFatalRemnaError(error: unknown): boolean {
+  const s = String(error).toLowerCase();
+  return (
+    s.includes("validation") ||
+    s.includes("not found") ||
+    s.includes("404") ||
+    s.includes("does not exist") ||
+    s.includes("invalid uuid") ||
+    s.includes("bad request")
+  );
+}
+
+/**
+ * Расчет базовой стоимости автопродления для клиента.
  */
 async function computeAutoRenewBaseAmount(client: {
   id: string;
@@ -45,17 +73,9 @@ async function computeAutoRenewBaseAmount(client: {
   };
 }
 
-import {
-  notifyAutoRenewSuccess,
-  notifyAutoRenewFailed,
-  notifyAutoRenewUpcoming,
-  notifyAutoRenewRetry,
-  notifyAutoRenewYookassaSuccess,
-  notifyAutoRenewYookassaFailed,
-  notifyAdminsAboutAutoRenewFailed,
-} from "../notification/telegram-notify.service.js";
-import { dispatchAutoRenewNotification, tryMarkSubDedup } from "../notification/auto-renew-notifications.service.js";
-
+/**
+ * Валидация и применение промокода для автопродления.
+ */
 async function tryApplyPromoForAutoRenew(
   clientId: string,
   code: string | null,
@@ -90,6 +110,9 @@ async function tryApplyPromoForAutoRenew(
   return { finalPrice, promoCodeId: promo.id };
 }
 
+/**
+ * Планировщик автопродления. Запуск раз в минуту для точности UPCOMING-уведомлений.
+ */
 export function startAutoRenewScheduler() {
   cron.schedule("* * * * *", async () => {
     try {
@@ -100,8 +123,9 @@ export function startAutoRenewScheduler() {
   });
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
+/**
+ * Обработка автопродления основных клиентов (legacy cycle).
+ */
 export async function processAutoRenewals() {
   if (!isRemnaConfigured()) {
     console.warn("[auto-renew] Remna is not configured. Skipping.");
@@ -133,6 +157,7 @@ export async function processAutoRenewals() {
   for (const client of clients) {
     if (!client.remnawaveUuid || !client.autoRenewTariff) continue;
 
+    // Дедуп: если subscription[0] управляется новым циклом подписок, пропускаем клиентский цикл
     const primaryHasAutoRenew = await prisma.subscription.findUnique({
       where: { ownerId_subscriptionIndex: { ownerId: client.id, subscriptionIndex: 0 } },
       select: { autoRenewEnabled: true },
@@ -144,13 +169,16 @@ export async function processAutoRenewals() {
     try {
       const remnaUser = await remnaGetUser(client.remnawaveUuid);
       if (remnaUser.error) {
-        console.error(`[auto-renew] Failed to fetch remna user ${client.remnawaveUuid}:`, remnaUser.error);
         const errStr = String(remnaUser.error);
-        if (errStr.includes("Validation") || errStr.includes("not found") || errStr.includes("404")) {
+        console.error(`[auto-renew] Failed to fetch remna user ${client.remnawaveUuid}:`, errStr);
+
+        // Фатальная ошибка: выключаем автосписание, чтобы не спамить Remnawave каждую минуту
+        if (isFatalRemnaError(errStr)) {
           await prisma.client.update({
             where: { id: client.id },
-            data: { autoRenewEnabled: false },
+            data: { autoRenewEnabled: false, autoRenewRetryCount: 0 },
           }).catch(() => {});
+          console.warn(`[auto-renew] Client ${client.id}: пользователь не найден в Remnawave. Автопродление отключено.`);
         }
         continue;
       }
@@ -166,6 +194,7 @@ export async function processAutoRenewals() {
       const timeLeft = expireAtDate.getTime() - now;
       const renewBase = await computeAutoRenewBaseAmount(client);
 
+      // Фаза 1: Уведомление о скором списании
       if (timeLeft > 0 && timeLeft <= notifyThreshold) {
         const shouldNotify =
           !client.autoRenewNotifiedAt ||
@@ -191,6 +220,7 @@ export async function processAutoRenewals() {
         }
       }
 
+      // Кастомные UPCOMING уведомления из конструктора
       if (timeLeft > 0) {
         await dispatchAutoRenewNotification(client.id, "UPCOMING", {
           tariffName: client.autoRenewTariff.name,
@@ -204,7 +234,14 @@ export async function processAutoRenewals() {
         }).catch(() => {});
       }
 
-      if (timeLeft <= renewThreshold && timeLeft >= -(3 * DAY_MS)) {
+      // Фаза 2: Попытка продления
+      if (timeLeft <= renewThreshold && timeLeft >= -gracePeriod) {
+        // Троттлинг: не пытаемся проводить списание чаще 1 раза в час
+        const attemptAllowed = await tryMarkSubDedup(client.id, "client_renew_attempt", 60 * 60 * 1000);
+        if (!attemptAllowed) {
+          continue;
+        }
+
         const baseTariffPrice = renewBase.amount;
         const personalPct = typeof client.personalDiscountPercent === "number" && client.personalDiscountPercent > 0
           ? Math.min(100, client.personalDiscountPercent)
@@ -314,6 +351,7 @@ export async function processAutoRenewals() {
             balance: Math.max(0, client.balance - tariffPrice),
           }).catch(() => {});
         } else {
+          // Недостаточно баланса: пробуем автоплатеж ЮKassa
           let yookassaPaid = false;
 
           if (
@@ -460,7 +498,7 @@ export async function processAutoRenewals() {
               const newRetryCount = currentRetryCount + 1;
               await prisma.client.update({
                 where: { id: client.id },
-                data: { autoRenewRetryCount: newRetryCount },
+                data: { autoRenewRetryCount: newRetryCount, autoRenewNotifiedAt: new Date() },
               });
 
               await notifyAutoRenewRetry(
@@ -539,14 +577,20 @@ export async function processAutoRenewals() {
   await processSecondaryAutoRenewals();
 }
 
+/**
+ * Обработка автопродления вторичных и объединенных подписок (Subscription table).
+ */
 async function processSecondaryAutoRenewals(): Promise<void> {
   const config = await getSystemConfig();
   const daysBeforeExpiry = config.autoRenewDaysBeforeExpiry ?? 1;
   const gracePeriodDays = config.autoRenewGracePeriodDays ?? 2;
+  const maxRetries = config.autoRenewMaxRetries ?? 3;
+
   const renewThreshold = daysBeforeExpiry * DAY_MS;
   const gracePeriod = gracePeriodDays * DAY_MS;
   const now = Date.now();
 
+  // Очистка подписок с удаленными тарифами
   const orphans = await prisma.subscription.findMany({
     where: { autoRenewEnabled: true, tariffId: null, autoRenewTariffId: null },
     select: { id: true, ownerId: true, subscriptionIndex: true, owner: { select: { balance: true } } },
@@ -589,6 +633,7 @@ async function processSecondaryAutoRenewals(): Promise<void> {
 
   for (const sec of secondaries) {
     if (!sec.remnawaveUuid || !sec.owner || sec.owner.isBlocked) continue;
+
     let tariffForRenewal = sec.tariff;
     if (!tariffForRenewal && sec.autoRenewTariffId) {
       tariffForRenewal = await prisma.tariff.findUnique({ where: { id: sec.autoRenewTariffId } });
@@ -596,20 +641,28 @@ async function processSecondaryAutoRenewals(): Promise<void> {
     if (!tariffForRenewal) {
       continue;
     }
+
     try {
       const remnaUser = await remnaGetUser(sec.remnawaveUuid);
       if (remnaUser.error) {
-        console.warn(`[auto-renew/sec] Failed to fetch remna user ${sec.remnawaveUuid}:`, remnaUser.error);
-        // Отключаем автопродление для несуществующих / битых в Remnawave пользователей
-        await prisma.subscription.update({
-          where: { id: sec.id },
-          data: { autoRenewEnabled: false },
-        }).catch(() => {});
+        const errStr = String(remnaUser.error);
+        console.warn(`[auto-renew/sec] Failed to fetch remna user ${sec.remnawaveUuid}:`, errStr);
+
+        // Отключаем автопродление только при фатальных ошибках Remnawave
+        if (isFatalRemnaError(errStr)) {
+          await prisma.subscription.update({
+            where: { id: sec.id },
+            data: { autoRenewEnabled: false, autoRenewRetryCount: 0 },
+          }).catch(() => {});
+          console.warn(`[auto-renew/sec] sub ${sec.id}: пользователь не найден в Remnawave. Автосписание выключено.`);
+        }
         continue;
       }
+
       const userData = (remnaUser.data as Record<string, unknown>)?.response ?? remnaUser.data;
       const expireAtRaw = (userData as Record<string, unknown> | null)?.expireAt;
       if (!expireAtRaw) continue;
+
       const expireAtDate = new Date(expireAtRaw as string);
       if (Number.isNaN(expireAtDate.getTime())) continue;
       const timeLeft = expireAtDate.getTime() - now;
@@ -629,6 +682,7 @@ async function processSecondaryAutoRenewals(): Promise<void> {
         : priceBeforeDiscount;
       const price = Math.round(priceRaw * 100) / 100;
 
+      // UPCOMING уведомления отправляются раз в минуту через встроенный dedup
       if (timeLeft > 0) {
         const minutesLeft = Math.round(timeLeft / 60000);
         await dispatchAutoRenewNotification(sec.owner.id, "UPCOMING", {
@@ -643,9 +697,17 @@ async function processSecondaryAutoRenewals(): Promise<void> {
         }).catch(() => {});
       }
 
-      if (timeLeft > renewThreshold || timeLeft < -7 * DAY_MS) continue;
+      // Списываем только при приближении к порогу и до окончания льготного периода
+      if (timeLeft > renewThreshold || timeLeft < -gracePeriod) continue;
       if (price <= 0) continue;
 
+      // Троттлинг попыток списания: не чаще одного раза в 60 минут на одну подписку
+      const attemptAllowed = await tryMarkSubDedup(sec.id, "sec_renew_attempt", 60 * 60 * 1000);
+      if (!attemptAllowed) {
+        continue;
+      }
+
+      // Дедуп платежа ЮKassa за последние 2 часа
       const recentYkPayment = await prisma.payment.findFirst({
         where: {
           clientId: sec.owner.id,
@@ -657,9 +719,10 @@ async function processSecondaryAutoRenewals(): Promise<void> {
         },
         orderBy: { paidAt: "desc" },
       });
+
       if (recentYkPayment) {
         const { extendSecondarySubscription } = await import("../tariff/tariff-activation.service.js");
-        await extendSecondarySubscription(
+        const retryResult = await extendSecondarySubscription(
           sec.id,
           {
             id: tariffForRenewal.id,
@@ -676,6 +739,12 @@ async function processSecondaryAutoRenewals(): Promise<void> {
           undefined,
           0,
         );
+        if (retryResult.ok) {
+          await prisma.subscription.update({
+            where: { id: sec.id },
+            data: { autoRenewRetryCount: 0, autoRenewNotifiedAt: null },
+          }).catch(() => {});
+        }
         continue;
       }
 
@@ -685,6 +754,7 @@ async function processSecondaryAutoRenewals(): Promise<void> {
       let yookassaPaymentId: string | null = null;
       let success = false;
 
+      // Фаза А: списание с баланса
       const balanceDebit = await prisma.client.updateMany({
         where: { id: sec.owner.id, balance: { gte: price - 0.01 } },
         data: { balance: { decrement: price } },
@@ -694,39 +764,104 @@ async function processSecondaryAutoRenewals(): Promise<void> {
         paidViaBalance = price;
         success = true;
       } else {
+        // Фаза Б: fallback на рекуррент ЮKassa
         const ykEnabled =
           config.yookassaRecurringEnabled === true &&
           !!sec.owner.yookassaPaymentMethodId &&
           !!config.yookassaShopId?.trim() &&
           !!config.yookassaSecretKey?.trim();
 
-        if (!ykEnabled) {
-          // Если льготный период истек - выключаем автосписание
-          const expiredSince = timeLeft < 0 ? Math.abs(timeLeft) : 0;
-          if (expiredSince >= gracePeriod) {
-            await prisma.subscription.update({
-              where: { id: sec.id },
-              data: { autoRenewEnabled: false },
-            }).catch(() => {});
-            console.log(`[auto-renew/sec] sec ${sec.id} failed: grace period over. Auto-renew disabled.`);
-            await dispatchAutoRenewNotification(sec.owner.id, "EXPIRED", {
-              tariffName: tariffForRenewal.name,
-              amount: price,
-              currency: tariffForRenewal.currency,
-              expireAt: expireAtDate,
-              subIndex: sec.subscriptionIndex,
-              balance: balanceForUser,
-            }).catch(() => {});
-            continue;
-          }
+        if (ykEnabled) {
+          const ykAttemptAllowed = await tryMarkSubDedup(sec.id, "yk_attempt", 60 * 60 * 1000);
+          if (ykAttemptAllowed) {
+            const balancePortion = Math.min(Math.max(0, balanceForUser), price);
+            const cardPortion = price - balancePortion;
 
-          // Троттлинг: проверяем подписку с нулевым балансом не чаще 1 раза в час
-          const checkAllowed = await tryMarkSubDedup(sec.id, "sec_nobal_check", 60 * 60 * 1000);
-          if (!checkAllowed) {
-            continue;
-          }
+            if (balancePortion > 0) {
+              const partialDebit = await prisma.client.updateMany({
+                where: { id: sec.owner.id, balance: { gte: balancePortion } },
+                data: { balance: { decrement: balancePortion } },
+              });
+              if (partialDebit.count > 0) {
+                paidViaBalance = balancePortion;
+              }
+            }
 
-          console.log(`[auto-renew/sec] Insufficient balance for sec ${sec.id} (need ${price}, have ${balanceForUser}); YK fallback disabled. Skipping.`);
+            try {
+              const orderIdForYk = randomUUID();
+              const tgIdSuffix = sec.owner.telegramId ? ` tg:${sec.owner.telegramId}` : "";
+              const autopayResult = await createYookassaAutopayment({
+                shopId: config.yookassaShopId!.trim(),
+                secretKey: config.yookassaSecretKey!.trim(),
+                amount: cardPortion,
+                currency: tariffForRenewal.currency.toUpperCase(),
+                paymentMethodId: sec.owner.yookassaPaymentMethodId!,
+                description: `Автопродление #${sec.subscriptionIndex} (${tariffForRenewal.name})${tgIdSuffix}`,
+                metadata: {
+                  orderId: orderIdForYk,
+                  extendsSecondarySubId: sec.id,
+                  autoRenew: "true",
+                  clientId: sec.owner.id,
+                },
+                customerEmail: sec.owner.email,
+                customerTelegramUsername: sec.owner.telegramUsername ?? null,
+              });
+
+              if (autopayResult.ok) {
+                paidViaYookassa = cardPortion;
+                yookassaPaymentId = autopayResult.paymentId;
+                success = true;
+              } else {
+                if (paidViaBalance > 0) {
+                  await prisma.client.update({
+                    where: { id: sec.owner.id },
+                    data: { balance: { increment: paidViaBalance } },
+                  }).catch(() => {});
+                  paidViaBalance = 0;
+                }
+                console.error(`[auto-renew/sec] YK autopay failed for sec ${sec.id}: ${autopayResult.error}`);
+                const ykFailNoticeAllowed = await tryMarkSubDedup(sec.id, "yk_fail_notice", 24 * 60 * 60 * 1000);
+                if (ykFailNoticeAllowed) {
+                  await notifyAutoRenewYookassaFailed(sec.owner.id, tariffForRenewal.name, autopayResult.error).catch(() => {});
+                }
+              }
+            } catch (e) {
+              if (paidViaBalance > 0) {
+                await prisma.client.update({
+                  where: { id: sec.owner.id },
+                  data: { balance: { increment: paidViaBalance } },
+                }).catch(() => {});
+                paidViaBalance = 0;
+              }
+              console.error(`[auto-renew/sec] YK exception for sec ${sec.id}:`, e);
+            }
+          }
+        }
+      }
+
+      // Если оплата не удалась ни балансом, ни картой - запускаем цикл ретраев
+      if (!success) {
+        const currentRetryCount = sec.autoRenewRetryCount ?? 0;
+
+        if (currentRetryCount < maxRetries) {
+          const newRetryCount = currentRetryCount + 1;
+          await prisma.subscription.update({
+            where: { id: sec.id },
+            data: {
+              autoRenewRetryCount: newRetryCount,
+              autoRenewNotifiedAt: new Date(),
+            },
+          }).catch(() => {});
+
+          await notifyAutoRenewRetry(
+            sec.owner.id,
+            tariffForRenewal.name,
+            price,
+            tariffForRenewal.currency,
+            newRetryCount,
+            maxRetries,
+          ).catch(() => {});
+
           await dispatchAutoRenewNotification(sec.owner.id, "FAILED", {
             tariffName: tariffForRenewal.name,
             amount: price,
@@ -736,95 +871,39 @@ async function processSecondaryAutoRenewals(): Promise<void> {
             balance: balanceForUser,
             dedupKeyForSec: { secondarySubscriptionId: sec.id, ttlMs: 24 * 60 * 60 * 1000 },
           }).catch(() => {});
-          continue;
-        }
 
-        const ykAttemptAllowed = await tryMarkSubDedup(sec.id, "yk_attempt", 60 * 60 * 1000);
-        if (!ykAttemptAllowed) {
-          continue;
-        }
+          console.log(`[auto-renew/sec] sub ${sec.id} insufficient balance. Retry ${newRetryCount}/${maxRetries}.`);
+        } else {
+          const expiredSince = timeLeft < 0 ? Math.abs(timeLeft) : 0;
 
-        const balancePortion = Math.min(Math.max(0, balanceForUser), price);
-        const cardPortion = price - balancePortion;
+          if (expiredSince >= gracePeriod) {
+            await prisma.subscription.update({
+              where: { id: sec.id },
+              data: {
+                autoRenewEnabled: false,
+                autoRenewRetryCount: 0,
+                autoRenewNotifiedAt: null,
+              },
+            }).catch(() => {});
 
-        if (balancePortion > 0) {
-          const partialDebit = await prisma.client.updateMany({
-            where: { id: sec.owner.id, balance: { gte: balancePortion } },
-            data: { balance: { decrement: balancePortion } },
-          });
-          if (partialDebit.count > 0) {
-            paidViaBalance = balancePortion;
-          }
-        }
+            await notifyAutoRenewFailed(sec.owner.id, tariffForRenewal.name, "balance").catch(() => {});
 
-        try {
-          const orderIdForYk = randomUUID();
-          const tgIdSuffix = sec.owner.telegramId ? ` tg:${sec.owner.telegramId}` : "";
-          const autopayResult = await createYookassaAutopayment({
-            shopId: config.yookassaShopId!.trim(),
-            secretKey: config.yookassaSecretKey!.trim(),
-            amount: cardPortion,
-            currency: tariffForRenewal.currency.toUpperCase(),
-            paymentMethodId: sec.owner.yookassaPaymentMethodId!,
-            description: `Автопродление #${sec.subscriptionIndex} (${tariffForRenewal.name})${tgIdSuffix}`,
-            metadata: {
-              orderId: orderIdForYk,
-              extendsSecondarySubId: sec.id,
-              autoRenew: "true",
-              clientId: sec.owner.id,
-            },
-            customerEmail: sec.owner.email,
-            customerTelegramUsername: sec.owner.telegramUsername ?? null,
-          });
-
-          if (autopayResult.ok) {
-            paidViaYookassa = cardPortion;
-            yookassaPaymentId = autopayResult.paymentId;
-            success = true;
-          } else {
-            if (paidViaBalance > 0) {
-              await prisma.client.update({
-                where: { id: sec.owner.id },
-                data: { balance: { increment: paidViaBalance } },
-              }).catch(() => {});
-              paidViaBalance = 0;
-            }
-            console.error(`[auto-renew/sec] YK autopay failed for sec ${sec.id}: ${autopayResult.error}`);
-            const ykFailNoticeAllowed = await tryMarkSubDedup(sec.id, "yk_fail_notice", 24 * 60 * 60 * 1000);
-            if (ykFailNoticeAllowed) {
-              await notifyAutoRenewYookassaFailed(sec.owner.id, tariffForRenewal.name, autopayResult.error).catch(() => {});
-            }
-            await dispatchAutoRenewNotification(sec.owner.id, "FAILED", {
+            await dispatchAutoRenewNotification(sec.owner.id, "EXPIRED", {
               tariffName: tariffForRenewal.name,
               amount: price,
               currency: tariffForRenewal.currency,
               expireAt: expireAtDate,
               subIndex: sec.subscriptionIndex,
-              balance: sec.owner.balance ?? 0,
-              dedupKeyForSec: { secondarySubscriptionId: sec.id, ttlMs: 24 * 60 * 60 * 1000 },
+              balance: balanceForUser,
             }).catch(() => {});
-            continue;
+
+            console.log(`[auto-renew/sec] sub ${sec.id}: retries exhausted and grace period over. Auto-renew disabled.`);
           }
-        } catch (e) {
-          if (paidViaBalance > 0) {
-            await prisma.client.update({
-              where: { id: sec.owner.id },
-              data: { balance: { increment: paidViaBalance } },
-            }).catch(() => {});
-            paidViaBalance = 0;
-          }
-          const errMsg = e instanceof Error ? e.message : "unknown error";
-          console.error(`[auto-renew/sec] YK autopay exception for sec ${sec.id}:`, errMsg);
-          const ykExcNoticeAllowed = await tryMarkSubDedup(sec.id, "yk_fail_notice", 24 * 60 * 60 * 1000);
-          if (ykExcNoticeAllowed) {
-            await notifyAutoRenewYookassaFailed(sec.owner.id, tariffForRenewal.name, errMsg).catch(() => {});
-          }
-          continue;
         }
+        continue;
       }
 
-      if (!success) continue;
-
+      // Деньги списаны: фиксируем платеж в базе
       const payment = await prisma.payment.create({
         data: {
           clientId: sec.owner.id,
@@ -848,6 +927,7 @@ async function processSecondaryAutoRenewals(): Promise<void> {
         return null;
       });
 
+      // Активация продления в Remnawave
       const { extendSecondarySubscription } = await import("../tariff/tariff-activation.service.js");
       const result = await extendSecondarySubscription(
         sec.id,
@@ -883,6 +963,15 @@ async function processSecondaryAutoRenewals(): Promise<void> {
         continue;
       }
 
+      // Успех: сбрасываем счетчик ретраев
+      await prisma.subscription.update({
+        where: { id: sec.id },
+        data: {
+          autoRenewRetryCount: 0,
+          autoRenewNotifiedAt: null,
+        },
+      }).catch(() => {});
+
       if (paidViaYookassa > 0) {
         await notifyAutoRenewYookassaSuccess(
           sec.owner.id,
@@ -894,6 +983,7 @@ async function processSecondaryAutoRenewals(): Promise<void> {
           paidViaYookassa,
         ).catch(() => {});
       }
+
       await dispatchAutoRenewNotification(sec.owner.id, "SUCCESS", {
         tariffName: tariffForRenewal.name,
         amount: price,
