@@ -236,12 +236,6 @@ export async function processAutoRenewals() {
 
       // Фаза 2: Попытка продления
       if (timeLeft <= renewThreshold && timeLeft >= -gracePeriod) {
-        // Троттлинг: не пытаемся проводить списание чаще 1 раза в час
-        const attemptAllowed = await tryMarkSubDedup(client.id, "client_renew_attempt", 60 * 60 * 1000);
-        if (!attemptAllowed) {
-          continue;
-        }
-
         const baseTariffPrice = renewBase.amount;
         const personalPct = typeof client.personalDiscountPercent === "number" && client.personalDiscountPercent > 0
           ? Math.min(100, client.personalDiscountPercent)
