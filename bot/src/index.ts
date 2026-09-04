@@ -2485,7 +2485,7 @@ composer.on("callback_query:data", async (ctx) => {
   const data = ctx.callbackQuery.data;
   const userId = ctx.from?.id;
   if (!userId) return;
-  await ctx.answerCallbackQuery().catch(() => {});
+  void ctx.answerCallbackQuery().catch(() => {});
 
   // ─── 54-ФЗ-чек: prompt «нужен ли чек» перед ЮКасса-платежом ───
   // Каждый pay_*_yookassa-handler сохраняет builder+finalize в yk-receipt store и показывает
