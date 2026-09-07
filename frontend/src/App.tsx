@@ -1,3 +1,4 @@
+import { needsClientOnboarding } from "@/lib/client-onboarding";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
@@ -131,7 +132,7 @@ function RequireClientAuth({ children }: { children: React.ReactNode }) {
     return <Navigate to="/cabinet/login" replace />;
   }
   // Проверяем серверный флаг onboardingCompleted ИЛИ эфемерный isNewTelegramUser
-  const needsOnboarding = state.client?.onboardingCompleted === false || state.isNewTelegramUser;
+  const needsOnboarding = needsClientOnboarding(state.client, state.isNewTelegramUser);
   if (needsOnboarding && location.pathname !== "/cabinet/onboarding") {
     return <Navigate to="/cabinet/onboarding" replace />;
   }
@@ -140,7 +141,7 @@ function RequireClientAuth({ children }: { children: React.ReactNode }) {
 
 function RequireOnboarding({ children }: { children: React.ReactNode }) {
   const { state } = useClientAuth();
-  const needsOnboarding = state.client?.onboardingCompleted === false || state.isNewTelegramUser;
+  const needsOnboarding = needsClientOnboarding(state.client, state.isNewTelegramUser);
   if (!needsOnboarding) {
     return <Navigate to="/cabinet/dashboard" replace />;
   }
@@ -204,6 +205,8 @@ function AppRoutes() {
       {/* Главная: лендинг (если включён в настройках) или редирект в кабинет */}
       <Route path="/" element={<RootRoute />} />
 
+      <Route path="/admin/landing-preview" element={<RequireAuth><ForceChangePassword><LandingPreviewPage /></ForceChangePassword></RequireAuth>} />
+      <Route path="/admin/landing-editor" element={<RequireAuth><ForceChangePassword><LandingEditorPage /></ForceChangePassword></RequireAuth>} />
       {/* Админка */}
       <Route path="/admin/login" element={state.accessToken ? <Navigate to="/admin" replace /> : <LoginPage />} />
       <Route
@@ -242,8 +245,8 @@ function AppRoutes() {
         {/* T-autorenew (12.05.2026) */}
         <Route path="auto-renew" element={<ForceChangePassword><AutoRenewPage /></ForceChangePassword>} />
         <Route path="settings" element={<ForceChangePassword><SettingsPage /></ForceChangePassword>} />
-        <Route path="landing-editor" element={<ForceChangePassword><LandingEditorPage /></ForceChangePassword>} />
-        <Route path="landing-preview" element={<ForceChangePassword><LandingPreviewPage /></ForceChangePassword>} />
+
+
         <Route path="audit" element={<ForceChangePassword><AdminAuditPage /></ForceChangePassword>} />
         <Route path="webhook-inbox" element={<ForceChangePassword><AdminWebhookInboxPage /></ForceChangePassword>} />
         <Route path="diagnostics" element={<ForceChangePassword><AdminDiagnosticsPage /></ForceChangePassword>} />
@@ -472,7 +475,7 @@ function TitleAndThemeSync() {
     let suffix = "";
     if (location.pathname.startsWith("/admin")) suffix = " — Admin";
     else if (location.pathname.startsWith("/cabinet")) suffix = " — Кабинет";
-    document.title = (base + suffix).trim() || suffix.replace(/^ — /, "").trim();
+    if (location.pathname !== "/") document.title = (base + suffix).trim() || suffix.replace(/^ — /, "").trim();
 
     // Custom favicon: убираем все статические <link rel="icon"> из index.html
     // (svg, 32px, 16px, apple-touch и иконки PWA-манифеста), потому что
@@ -483,7 +486,7 @@ function TitleAndThemeSync() {
     // Также подменяем <link rel="manifest"> на динамический эндпоинт
     // /api/public/manifest.webmanifest когда есть custom favicon — иначе
     // PWA install/Add-to-home-screen покажет дефолтную иконку сборки.
-    if (config.serviceDescription) {
+    if (config.serviceDescription && location.pathname !== "/") {
       let meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
       if (!meta) {
         meta = document.createElement("meta");

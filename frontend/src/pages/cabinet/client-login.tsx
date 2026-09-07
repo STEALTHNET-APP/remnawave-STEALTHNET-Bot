@@ -485,7 +485,7 @@ export function ClientLoginPage() {
                   required
                   autoComplete="off"
                   data-form-type="other"
-                   className={cn("h-12 rounded-xl bg-background/50 backdrop-blur-sm border-white/10 focus-visible:ring-primary/50 transition-all", emailError ? "border-destructive focus-visible:ring-destructive" : "")}
+                   className={cn("h-12 rounded-xl bg-card border-muted-foreground/75 text-base shadow-sm dark:bg-background/50 dark:border-white/15 focus-visible:ring-primary/50 transition-all", emailError ? "border-destructive dark:border-destructive focus-visible:ring-destructive" : "")}
                 />
                 {emailError && <p className="text-xs text-destructive">{emailError}</p>}
               </div>
@@ -494,7 +494,7 @@ export function ClientLoginPage() {
                   <Label htmlFor="password">{t("cabinet.login.password_label")}</Label>
                   {passwordResetEnabled && <Link to="/cabinet/forgot-password" className="text-xs text-primary hover:underline">{t("cabinet.login.forgot_password", "Забыли пароль?")}</Link>}
                 </div>
-                <Input id="password" type="password" name="login_password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="off" data-form-type="other" className="h-12 rounded-xl bg-background/50 backdrop-blur-sm border-white/10 focus-visible:ring-primary/50 transition-all" />
+                <Input id="password" type="password" name="login_password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="off" data-form-type="other" className="h-12 rounded-xl bg-card border-muted-foreground/75 text-base shadow-sm dark:bg-background/50 dark:border-white/15 focus-visible:ring-primary/50 transition-all" />
               </div>
               <Button type="submit" className="w-full h-14 rounded-2xl text-base font-bold shadow-xl hover:scale-[1.02] transition-all gap-2" disabled={loading}>
                 {loading ? t("cabinet.login.submit_loading") : t("cabinet.login.submit")}

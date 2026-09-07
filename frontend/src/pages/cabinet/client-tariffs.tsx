@@ -1,12 +1,14 @@
+import { ClassicTariffCatalog } from "./classic-tariff-catalog";
+import "./classic-payment.css";
+import { AuroraTariffs } from "./aurora/aurora-tariffs";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
-import { Package, Calendar, Wifi, Smartphone, CreditCard, Loader2, Gift, Tag, Check, Wallet, ChevronDown, Shield, Zap, ArrowLeft, Sparkles, RefreshCw } from "lucide-react";
+import { Package, Calendar, Wifi, Smartphone, CreditCard, Loader2, Gift, Tag, Check, Wallet, Shield, Zap, ArrowLeft, Sparkles, RefreshCw } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthTariffs } from "@/pages/cabinet/stealth/stealth-tariffs";
-import { AuroraTariffs } from "@/pages/cabinet/aurora/aurora-tariffs";
 import { api } from "@/lib/api";
 import type { PublicTariffCategory, TariffConversionPreview } from "@/lib/api";
 import { formatRuDays } from "@/lib/i18n";
@@ -14,7 +16,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/components/ui/toast";
 import {
@@ -35,11 +36,11 @@ function formatMoney(amount: number, currency: string) {
     style: "currency",
     currency: currency.toUpperCase() === "USD" ? "USD" : currency.toUpperCase() === "RUB" ? "RUB" : "USD",
     minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 
-// Цена за день — всегда с копейками (2 знака), в отличие от полной цены тарифа.
+// Цена за день — всегда с двумя знаками; полная цена сохраняет копейки, если они есть.
 function formatMoneyPerDay(amount: number, currency: string) {
   return new Intl.NumberFormat("ru-RU", {
     style: "currency",
@@ -96,8 +97,8 @@ function hasExtras(t: TariffForPay): boolean {
 
 export function ClientTariffsPage() {
   const design = useCabinetDesign();
-  if (design === "stealth") return <StealthTariffs />;
   if (design === "aurora") return <AuroraTariffs />;
+  if (design === "stealth") return <StealthTariffs />;
   return <ClassicTariffsPage />;
 }
 
@@ -108,12 +109,14 @@ function ClassicTariffsPage() {
   const client = state.client;
   const [tariffs, setTariffs] = useState<PublicTariffCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState(false);
   const [plategaMethods, setPlategaMethods] = useState<{ id: number; label: string }[]>([]);
   const [yoomoneyEnabled, setYoomoneyEnabled] = useState(false);
   const [yookassaEnabled, setYookassaEnabled] = useState(false);
   const [cryptopayEnabled, setCryptopayEnabled] = useState(false);
   const [heleketEnabled, setHeleketEnabled] = useState(false);
   const [rollypayEnabled, setRollypayEnabled] = useState(false);
+  const [paritypayEnabled, setParitypayEnabled] = useState(false);
   const [lavaEnabled, setLavaEnabled] = useState(false);
   const [lavatopEnabled, setLavatopEnabled] = useState(false);
   const [overpayEnabled, setOverpayEnabled] = useState(false);
@@ -201,12 +204,12 @@ function ClassicTariffsPage() {
   // T-extend-devices (WolfVPN): доплата за СОХРАНЯЕМЫЕ доп.устройства при продлении подписки.
   // extraDevicesMonthlyPrice хранится за 30 дней → масштабируем на длительность опции.
   // Возвращает 0 если не продление / устройства удаляются / у подписки нет доп.устройств / тариф не тот.
-  function extendExtraCost(tf: { id?: string; durationDays?: number; priceOptions?: TariffPriceOption[] }): number {
+  function extendExtraCost(tf: { id?: string; durationDays?: number; priceOptions?: TariffPriceOption[] }, previewDays?: number): number {
     if (!extendTarget || removeExtrasOnExtend || (extendTarget.extraDevices ?? 0) <= 0) return 0;
     if (extendTarget.tariffId && tf.id && extendTarget.tariffId !== tf.id) return 0;
     const opts = tf.priceOptions ?? [];
     const opt = (selectedPriceOptionId ? opts.find((o) => o.id === selectedPriceOptionId) : null) ?? opts[0];
-    const days = opt?.durationDays ?? tf.durationDays ?? EXTRA_DEVICE_BASE_DAYS;
+    const days = previewDays ?? opt?.durationDays ?? tf.durationDays ?? EXTRA_DEVICE_BASE_DAYS;
     return Math.round((extendTarget.extraDevicesMonthlyPrice ?? 0) * (Math.max(1, days) / EXTRA_DEVICE_BASE_DAYS));
   }
 
@@ -239,27 +242,15 @@ function ClassicTariffsPage() {
   const showTrial = trialConfig.trialEnabled && !client?.trialUsed && !activeSubInfo.hasActive;
 
   const isMobileOrMiniapp = useCabinetMiniapp();
-  const useCategoryCardLayout = isMobileOrMiniapp;
-  const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
-
-  // Раскрываем категорию по умолчанию (мобильный аккордеон), чтобы сразу была видна
-  // карточка тарифа с кнопкой оплаты. При продлении (?extend) раскрываем ИМЕННО категорию
-  // продлеваемого тарифа — иначе единственная видимая категория осталась бы свёрнутой.
-  useEffect(() => {
-    if (!useCategoryCardLayout || tariffs.length === 0) return;
-    const visible = extendTarget?.tariffId
-      ? tariffs.filter((c) => c.tariffs.some((tf) => tf.id === extendTarget.tariffId))
-      : tariffs;
-    if (visible.length === 0) return;
-    setExpandedCategoryId((prev) => (prev && visible.some((c) => c.id === prev) ? prev : visible[0].id));
-  }, [useCategoryCardLayout, tariffs, extendTarget?.tariffId]);
-
-  useEffect(() => {
+  const loadCatalog = useCallback(() => {
+    setLoading(true);
+    setCatalogError(false);
     api.getPublicTariffs().then((r) => {
       setTariffs(r.items ?? []);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => setCatalogError(true)).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { loadCatalog(); }, [loadCatalog]);
 
   useEffect(() => {
     api.getPublicConfig().then((c) => {
@@ -269,6 +260,7 @@ function ClassicTariffsPage() {
       setCryptopayEnabled(Boolean(c.cryptopayEnabled));
       setHeleketEnabled(Boolean(c.heleketEnabled));
       setRollypayEnabled(Boolean(c.rollypayEnabled));
+      setParitypayEnabled(Boolean(c.paritypayEnabled));
       setLavaEnabled(Boolean(c.lavaEnabled));
       setLavatopEnabled(Boolean(c.lavatopEnabled));
       setOverpayEnabled(Boolean(c.overpayEnabled));
@@ -362,9 +354,9 @@ function ClassicTariffsPage() {
   }, [payModal, token, buyMode.kind]);
 
   // Запрос на покупку тарифа: открываем единую модалку.
-  function requestBuy(tariff: TariffForPay) {
+  function requestBuy(tariff: TariffForPay, preferredOptionId?: string) {
     const opts = tariff.priceOptions ?? [];
-    const defaultOpt = opts[0] ?? null;
+    const defaultOpt = opts.find((option) => option.id === preferredOptionId) ?? opts[0] ?? null;
     setSelectedPriceOptionId(defaultOpt?.id ?? null);
     setSelectedExtraDevices(0);
     setPurchaseModal({ tariff });
@@ -619,6 +611,27 @@ function ClassicTariffsPage() {
       setPayLoading(false);
     }
   }
+async function startParitypayPayment(tariff: TariffForPay) {
+    if (!token) return;
+    setPayError(null);
+    setPayLoading(true);
+    try {
+      const res = await api.paritypayCreatePayment(token, {
+        amount: tariff.price,
+        currency: tariff.currency,
+        tariffId: tariff.id,
+        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
+        deviceCount: selectedExtraDevices,
+        promoCode: promoResult ? promoInput.trim() : undefined,
+        ...purchaseExtra(),
+      });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "ParityPay", paymentId: res.paymentId });
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
+    } finally {
+      setPayLoading(false);
+    }
+  }
 
   async function startLavaPayment(tariff: TariffForPay) {
     if (!token) return;
@@ -729,7 +742,8 @@ function ClassicTariffsPage() {
     }
 
     return (
-      <div className="space-y-6">
+      <div className={isMobileOrMiniapp ? "space-y-6" : "classic-payment-layout"}>
+        <div className={isMobileOrMiniapp ? "space-y-6" : "classic-payment-summary"}>
         {/* Карточка с инфой о тарифе */}
         <div className={cn("rounded-2xl relative overflow-hidden", isMobileOrMiniapp ? "bg-card/40 border border-white/5 p-5" : "bg-background/50 border border-border/50 p-4")}>
           <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1119,8 +1133,10 @@ function ClassicTariffsPage() {
           </AnimatePresence>
         </div>
 
+        </div>
+
         {/* Способы оплаты */}
-        <div className={cn("space-y-3")}>
+        <div className={cn("space-y-3", !isMobileOrMiniapp && "classic-payment-methods")}>
           <div className="flex items-center gap-2 pt-2 pb-1">
             <Wallet className={cn("text-primary", isMobileOrMiniapp ? "h-5 w-5" : "h-4 w-4")} />
             <span className={cn("font-bold", isMobileOrMiniapp ? "text-lg" : "text-sm")}>{t("cabinet.tariffs.payment_method")}</span>
@@ -1132,13 +1148,13 @@ function ClassicTariffsPage() {
             </div>
           )}
 
-          <div className="space-y-3">
+          <div className={isMobileOrMiniapp ? "space-y-3" : "classic-payment-method-grid"}>
             {client && (
               <Button
                 size="lg"
                 onClick={() => payByBalance(tariff)}
                 disabled={payLoading || !hasBalance}
-                className={cn("w-full shadow-lg border-0 group relative overflow-hidden", isMobileOrMiniapp ? "justify-between px-6 h-16 rounded-2xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400" : "gap-2 h-14 rounded-xl bg-gradient-to-r from-primary to-primary/80 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300")}
+                className={cn("w-full shadow-lg border-0 group relative overflow-hidden", isMobileOrMiniapp ? "justify-between px-6 h-16 rounded-2xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400" : "classic-payment-balance gap-2 rounded-xl bg-gradient-to-r from-primary to-primary/80 hover:shadow-xl transition-all duration-300")}
               >
                 {!isMobileOrMiniapp && <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />}
                 
@@ -1167,12 +1183,13 @@ function ClassicTariffsPage() {
             {(() => {
               const providerLabel = (id: string, fallback: string) => paymentProviders.find((p) => p.id === id)?.label || fallback;
               const isRub = tariff.currency.toUpperCase() === "RUB";
-              const btnCls = cn("w-full", isMobileOrMiniapp ? "justify-start gap-4 px-6 h-16 rounded-2xl border-white/5 bg-card/40 hover:bg-card/60" : "gap-3 hover:bg-background/80 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-xl h-14 border-border/50 group justify-center px-6 relative");
+              const btnCls = cn("w-full", isMobileOrMiniapp ? "justify-start gap-4 px-6 h-16 rounded-2xl border-white/5 bg-card/40 hover:bg-card/60" : "classic-payment-method gap-3 hover:bg-background/80 hover:shadow-md transition-all duration-300 rounded-xl border-border/50 group justify-start relative");
 
               const colorMap: Record<string, { bg10: string; bg20: string; text: string }> = {
                 cryptopay: { bg10: "bg-yellow-500/10", bg20: "group-hover:bg-yellow-500/20", text: "text-yellow-500" },
                 heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
                 rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                paritypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 yookassa: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
                 yoomoney: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
                 lava: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
@@ -1184,6 +1201,7 @@ function ClassicTariffsPage() {
                 { id: "cryptopay", enabled: cryptopayEnabled, onClick: () => startCryptopayPayment(tariff), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
                 { id: "heleket", enabled: heleketEnabled, onClick: () => startHeleketPayment(tariff), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
                 { id: "rollypay", enabled: rollypayEnabled, onClick: () => startRollypayPayment(tariff), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
+                { id: "paritypay", enabled: paritypayEnabled, onClick: () => startParitypayPayment(tariff), label: providerLabel("paritypay", "ParityPay"), icon: "card" },
                 { id: "yookassa", enabled: yookassaEnabled && isRub, onClick: () => startYookassaPayment(tariff), label: providerLabel("yookassa", t("cabinet.tariffs.sbp_cards_ru")), icon: "card" },
                 { id: "yoomoney", enabled: yoomoneyEnabled && isRub, onClick: () => startYoomoneyPayment(tariff), label: providerLabel("yoomoney", t("cabinet.tariffs.yoomoney_cards")), icon: "card" },
                 { id: "lava", enabled: lavaEnabled && isRub, onClick: () => startLavaPayment(tariff), label: providerLabel("lava", "LAVA"), icon: "card" },
@@ -1210,10 +1228,10 @@ function ClassicTariffsPage() {
                         </>
                       ) : (
                         <>
-                          <div className={cn("absolute left-6 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20)}>
+                          <div className={cn("shrink-0 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20)}>
                             {payLoading ? <Loader2 className={cn("h-5 w-5 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-5 w-5", c.text)} /> : <CreditCard className={cn("h-5 w-5", c.text)} />}
                           </div>
-                          <span className="text-base font-medium">{p.label}</span>
+                          <span className="text-sm font-medium">{p.label}</span>
                         </>
                       )}
                     </Button>
@@ -1230,10 +1248,10 @@ function ClassicTariffsPage() {
                         </>
                       ) : (
                         <>
-                          <div className="absolute left-6 p-1.5 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
+                          <div className="shrink-0 p-1.5 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
                             {payLoading ? <Loader2 className="h-5 w-5 animate-spin text-green-500" /> : <CreditCard className="h-5 w-5 text-green-500" />}
                           </div>
-                          <span className="text-base font-medium">{m.label}</span>
+                          <span className="text-sm font-medium">{m.label}</span>
                         </>
                       )}
                     </Button>
@@ -1288,12 +1306,12 @@ function ClassicTariffsPage() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
             transition={{ duration: 0.2 }}
-            className="space-y-8 max-w-6xl mx-auto"
+            className="space-y-8 max-w-7xl mx-auto"
           >
             <div className="flex flex-col gap-2">
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">{t("cabinet.tariffs.title")}</h1>
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">{t("cabinet.tariffs.title")}</h1>
               <p className="text-muted-foreground text-[15px] font-medium max-w-2xl">
-                {t("cabinet.tariffs.subtitle")}
+                {t("cabinet.tariffs.catalog.subtitle")}
               </p>
             </div>
 
@@ -1382,221 +1400,35 @@ function ClassicTariffsPage() {
             )}
 
             <div data-tour="tariff-list">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-primary/50" />
-              </div>
-            ) : displayTariffs.length === 0 ? (
-              <Card className="rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-sm">
-                <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-4">
-                  <Package className="h-12 w-12 opacity-20" />
-                  <p className="text-base font-medium text-center">{t("cabinet.tariffs.empty")}</p>
-                </CardContent>
-              </Card>
-            ) : useCategoryCardLayout ? (
-              <div className="space-y-1">
-                {displayTariffs.map((cat, catIndex) => (
-                  <Collapsible
-                    key={cat.id}
-                    // При продлении (?extend) видимая категория единственная — раскрываем её
-                    // принудительно, без зависимости от тайминга загрузки userSubs/tariffs.
-                    open={displayTariffs.length === 1 || expandedCategoryId === cat.id}
-                    onOpenChange={(open) => setExpandedCategoryId(open ? cat.id : null)}
-                  >
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.25, delay: catIndex * 0.03 }}
-                      className="rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg overflow-hidden transition-all duration-300"
-                    >
-                      <CollapsibleTrigger asChild>
-                        <button
-                          type="button"
-                          className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-muted/20 active:bg-muted/30 transition-colors"
-                        >
-                          <span className="flex items-center gap-3 font-bold text-[16px] text-foreground">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20 text-primary shadow-inner shrink-0">
-                              <Package className="h-4 w-4" />
-                            </div>
-                            {cat.name}
-                          </span>
-                          <ChevronDown
-                            className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-300 ${expandedCategoryId === cat.id ? "rotate-180" : ""}`}
-                          />
-                        </button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="px-3 pb-4 pt-1 flex flex-col gap-3">
-                          {cat.tariffs.map((tf) => (
-                            <Card key={tf.id} className="rounded-2xl border border-border/50 bg-background/50 backdrop-blur-md shadow-sm hover:shadow-md transition-all duration-300">
-                              <CardContent className="flex flex-row items-center gap-4 py-4 px-4 min-h-0 min-w-0">
-                                <div className="flex-1 min-w-0 space-y-1.5">
-                                  <p className="text-[15px] font-bold leading-tight truncate text-foreground">{tf.name}</p>
-                                  {tf.description?.trim() ? (
-                                    <p className="text-xs text-muted-foreground font-medium line-clamp-2">{tf.description}</p>
-                                  ) : null}
-                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                                    <span className="flex items-center gap-1.5 bg-background/50 px-2 py-1 rounded-md border border-border/50">
-                                      <Calendar className="h-3 w-3 text-primary" />
-                                      {(() => {
-                                        const opts = tf.priceOptions ?? [];
-                                        if (opts.length > 1) {
-                                          const minDays = opts.reduce((min, o) => Math.min(min, o.durationDays), opts[0].durationDays);
-                                          return <>от {minDays} {t("cabinet.tariffs.days_short")}</>;
-                                        }
-                                        return <>{tf.durationDays} {t("cabinet.tariffs.days_short")}</>;
-                                      })()}
-                                    </span>
-                                    <span className="flex items-center gap-1.5 bg-background/50 px-2 py-1 rounded-md border border-border/50">
-                                      <Wifi className="h-3 w-3 text-primary" />
-                                      {tf.trafficLimitBytes != null && tf.trafficLimitBytes > 0 ? `${(tf.trafficLimitBytes / 1024 / 1024 / 1024).toFixed(1)} ${t("cabinet.tariffs.gb_unit")}${tf.trafficResetMode === "monthly" || tf.trafficResetMode === "monthly_rolling" ? t("cabinet.tariffs.per_month") : ""}` : "∞"}
-                                    </span>
-                                    <span className="flex items-center gap-1.5 bg-background/50 px-2 py-1 rounded-md border border-border/50">
-                                      <Smartphone className="h-3 w-3 text-primary" />
-                                      {tf.deviceLimit != null && tf.deviceLimit > 0 ? `${tf.deviceLimit}` : "∞"}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="flex flex-col items-center justify-center gap-2.5 shrink-0 min-w-[90px]">
-                                  <span className="text-lg font-bold tabular-nums whitespace-nowrap text-foreground" title={formatMoney(tf.price, tf.currency)}>
-                                    {(() => {
-                                      const opts = tf.priceOptions ?? [];
-                                      const dev = extendExtraCost(tf);
-                                      if (opts.length > 1) {
-                                        const min = opts.reduce((a, b) => (a.price < b.price ? a : b));
-                                        return <>{t("cabinet.tariffs.from_price", { defaultValue: "от" })} {formatMoney(min.price + dev, tf.currency)}</>;
-                                      }
-                                      return formatMoney(tf.price + dev, tf.currency);
-                                    })()}
-                                  </span>
-                                  {token ? (
-                                    <Button
-                                      size="sm"
-                                      className="w-full h-9 rounded-xl shadow-md text-xs font-semibold gap-1.5 hover:scale-105 transition-transform"
-                                      onClick={() => requestBuy({ ...tf })}
-                                    >
-                                      <CreditCard className="h-3.5 w-3.5 shrink-0" />
-                                      {t("cabinet.tariffs.pay")}
-                                    </Button>
-                                  ) : (
-                                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">{t("cabinet.tariffs.in_bot")}</span>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      </CollapsibleContent>
-                    </motion.div>
-                  </Collapsible>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-8">
-                {displayTariffs.map((cat, catIndex) => (
-                  <motion.section
-                    key={cat.id}
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: catIndex * 0.05 }}
-                  >
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-3 text-foreground">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20 text-primary shadow-inner shrink-0">
-                        <Package className="h-5 w-5" />
-                      </div>
-                      {cat.name}
-                    </h2>
-                    <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                      {cat.tariffs.map((tf) => (
-                        <Card key={tf.id} className="rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col group hover:-translate-y-1">
-                          <CardContent className="flex-1 flex flex-col p-5 min-h-0 min-w-0">
-                            <div className="mb-4">
-                              <p className="text-lg font-bold leading-tight line-clamp-2 text-foreground group-hover:text-primary transition-colors">{tf.name}</p>
-                              {tf.description?.trim() ? (
-                                <p className="text-sm text-muted-foreground font-medium mt-1.5 line-clamp-2">{tf.description}</p>
-                              ) : null}
-                            </div>
-
-                            <div className="flex flex-col gap-2.5 mt-auto mb-5 text-sm font-semibold text-muted-foreground">
-                              <div className="flex items-center gap-3 bg-background/50 px-3 py-2 rounded-xl border border-border/50">
-                                <div className="bg-primary/20 p-1.5 rounded-lg text-primary">
-                                  <Calendar className="h-4 w-4 shrink-0" />
-                                </div>
-                                <span>
-                                  {(() => {
-                                    const opts = tf.priceOptions ?? [];
-                                    if (opts.length > 1) {
-                                      const minDays = opts.reduce((min, o) => Math.min(min, o.durationDays), opts[0].durationDays);
-                                      return <>от {minDays} {t("cabinet.tariffs.days_label")}</>;
-                                    }
-                                    return <>{tf.durationDays} {t("cabinet.tariffs.days_label")}</>;
-                                  })()}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-3 bg-background/50 px-3 py-2 rounded-xl border border-border/50">
-                                <div className="bg-primary/20 p-1.5 rounded-lg text-primary">
-                                  <Wifi className="h-4 w-4 shrink-0" />
-                                </div>
-                                <span>
-                                  {tf.trafficLimitBytes != null && tf.trafficLimitBytes > 0
-                                    ? `${(tf.trafficLimitBytes / 1024 / 1024 / 1024).toFixed(1)} ${t("cabinet.tariffs.gb_unit")}${tf.trafficResetMode === "monthly" || tf.trafficResetMode === "monthly_rolling" ? t("cabinet.tariffs.per_month") : ""}`
-                                    : t("cabinet.tariffs.unlimited_traffic")}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-3 bg-background/50 px-3 py-2 rounded-xl border border-border/50">
-                                <div className="bg-primary/20 p-1.5 rounded-lg text-primary">
-                                  <Smartphone className="h-4 w-4 shrink-0" />
-                                </div>
-                                <span>{tf.deviceLimit != null && tf.deviceLimit > 0 ? `${tf.deviceLimit}` : "∞"} {t("cabinet.tariffs.devices")}</span>
-                              </div>
-                            </div>
-
-                            <div className="pt-4 border-t border-border/50 mt-auto flex flex-col gap-3 min-w-0">
-                              <span className="text-2xl font-black tabular-nums truncate min-w-0 text-foreground text-center" title={formatMoney(tf.price, tf.currency)}>
-                                {(() => {
-                                  const opts = tf.priceOptions ?? [];
-                                  const dev = extendExtraCost(tf);
-                                  if (opts.length > 1) {
-                                    const min = opts.reduce((a, b) => (a.price < b.price ? a : b));
-                                    return <>{t("cabinet.tariffs.from_price", { defaultValue: "от" })} {formatMoney(min.price + dev, tf.currency)}</>;
-                                  }
-                                  return formatMoney(tf.price + dev, tf.currency);
-                                })()}
-                              </span>
-                              {token ? (
-                                <Button
-                                  size="lg"
-                                  className="w-full h-12 rounded-xl shadow-md text-[15px] font-bold gap-2 hover:scale-[1.02] transition-transform"
-                                  onClick={() => requestBuy({ ...tf })}
-                                >
-                                  <CreditCard className="h-5 w-5 shrink-0" />
-                                  {t("cabinet.tariffs.pay")}
-                                </Button>
-                              ) : (
-                                <div className="w-full h-12 rounded-xl bg-muted/50 border border-border/50 flex items-center justify-center">
-                                  <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("cabinet.tariffs.in_bot")}</span>
-                                </div>
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </motion.section>
-                ))}
-              </div>
-            )}
+              {loading ? (
+                <div className="flex justify-center py-20" role="status">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
+                  <span className="sr-only">{t("cabinet.tariffs.catalog.loading")}</span>
+                </div>
+              ) : catalogError ? (
+                <Card className="p-8 text-center" role="alert">
+                  <p className="mb-4 text-muted-foreground">{t("cabinet.tariffs.catalog.load_error")}</p>
+                  <Button variant="outline" onClick={loadCatalog}><RefreshCw className="h-4 w-4" />{t("cabinet.tariffs.catalog.retry")}</Button>
+                </Card>
+              ) : !displayTariffs.some((category) => category.tariffs.length > 0) ? (
+                <Card className="p-12 text-center">
+                  <Package className="mx-auto mb-4 h-8 w-8 text-muted-foreground" aria-hidden="true" />
+                  <p className="whitespace-pre-line text-muted-foreground">{t("cabinet.tariffs.empty")}</p>
+                </Card>
+              ) : (
+                <ClassicTariffCatalog categories={displayTariffs} canBuy={!!token} onChoose={requestBuy} getExtraCost={extendExtraCost} />
+              )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* DESKTOP VIEW: DIALOG БЕЗ СКРОЛЛИНГА */}
+      {/* Desktop checkout keeps its controls visible while the body scrolls. */}
       {!isMobileOrMiniapp && (
         <Dialog open={!!payModal} onOpenChange={(open) => { if (!open && !payLoading) closePayment(); }}>
-          <DialogContent className="w-full max-w-md mx-auto sm:rounded-3xl p-5 sm:p-6 border border-border/50 bg-card/60 backdrop-blur-3xl shadow-2xl" showCloseButton={!payLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
-            <DialogHeader className="mb-4 text-center sm:text-left">
-              <DialogTitle className="text-2xl font-bold flex items-center justify-center sm:justify-start gap-2">
+          <DialogContent className={cn("classic-payment-dialog border-border/50 bg-card/60 shadow-2xl", readyUrl && "classic-payment-dialog-ready")} showCloseButton={!payLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
+            <DialogHeader className="classic-payment-header text-left">
+              <DialogTitle className="text-2xl font-bold flex items-center gap-3">
                 <div className="p-2 bg-primary/10 rounded-xl">
                   <Shield className="h-6 w-6 text-primary" />
                 </div>
@@ -1605,9 +1437,11 @@ function ClassicTariffsPage() {
               <DialogDescription className="hidden" />
             </DialogHeader>
 
-            {PaymentContent()}
+            <div className="classic-payment-body">
+              {PaymentContent()}
+            </div>
 
-            <DialogFooter className="mt-4 sm:justify-center border-t border-border/50 pt-4">
+            <DialogFooter className="classic-payment-footer border-t border-border/50">
               <Button variant="ghost" onClick={closePayment} disabled={payLoading} className="rounded-xl hover:bg-background/50 hover:text-foreground text-muted-foreground transition-colors">
                 {t("cabinet.tariffs.cancel")}
               </Button>

@@ -116,6 +116,7 @@ export async function getPublicConfig(): Promise<{
   cryptopayEnabled?: boolean;
   heleketEnabled?: boolean;
   rollypayEnabled?: boolean;
+  paritypayEnabled?: boolean;
   lavaEnabled?: boolean;
   lavatopEnabled?: boolean;
   botWelcomeEnabled?: boolean;
@@ -558,6 +559,12 @@ export async function createRollypayPayment(
   body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
 ): Promise<{ paymentId: string; payUrl: string }> {
   return fetchJson("/api/client/rollypay/create-payment", { method: "POST", body, token });
+}
+export async function createParitypayPayment(
+  token: string,
+  body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
+): Promise<{ paymentId: string; payUrl: string }> {
+  return fetchJson("/api/client/paritypay/create-payment", { method: "POST", body, token });
 }
 
 /** LAVA Business — создать счёт (RUB: СБП / Карты / СберPay) */

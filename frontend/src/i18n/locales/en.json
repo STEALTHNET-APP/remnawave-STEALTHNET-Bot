@@ -1804,6 +1804,27 @@
       "payment_failed": "Payment failed. Please try again."
     },
     "tariffs": {
+      "catalog": {
+        "subtitle": "Choose a category, compare plans and make your subscription fit.",
+        "categories": "Categories",
+        "plan_count_one": "{{count}} plan",
+        "plan_count_other": "{{count}} plans",
+        "day_count_one": "{{count}} day",
+        "day_count_other": "{{count}} days",
+        "device_count_one": "{{count}} device",
+        "device_count_other": "{{count}} devices",
+        "unlimited_devices": "Unlimited devices",
+        "for_duration": "for {{duration}}",
+        "per_day": "{{price}} per day",
+        "extras_included": "Includes {{price}} for retained extra devices",
+        "devices_included": "Included in your subscription",
+        "extra_devices": "Add up to {{count}} extra devices at checkout",
+        "choose": "Choose plan",
+        "choose_named": "Choose {{name}} plan",
+        "loading": "Loading plans",
+        "load_error": "Could not load plans. Please try again.",
+        "retry": "Retry"
+      },
       "title": "Tariffs",
       "subtitle": "Choose a suitable plan and pay.",
       "free_trial": "Free Trial",

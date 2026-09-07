@@ -126,6 +126,7 @@ const SYSTEM_CONFIG_KEYS = [
   "yookassa_webhook_basic_user", "yookassa_webhook_basic_password",
   "cryptopay_api_token", "cryptopay_testnet",
   "heleket_merchant_id", "heleket_api_key",
+  "paritypay_shop_id", "paritypay_api_key", "paritypay_signing_secret", "paritypay_enabled",
   "rollypay_api_key", "rollypay_signing_secret", "rollypay_test_mode",
   "lava_shop_id", "lava_secret_key", "lava_additional_key",
   "lavatop_api_key", "lavatop_default_offer_id",
@@ -672,6 +673,10 @@ async function loadSystemConfigFromDb() {
     cryptopayTestnet: map.cryptopay_testnet === "true" || map.cryptopay_testnet === "1",
     heleketMerchantId: (map.heleket_merchant_id ?? "").trim() || null,
     heleketApiKey: (map.heleket_api_key ?? "").trim() || null,
+    paritypayShopId: (map.paritypay_shop_id ?? "").trim() || null,
+    paritypayApiKey: (map.paritypay_api_key ?? "").trim() || null,
+    paritypaySigningSecret: (map.paritypay_signing_secret ?? "").trim() || null,
+    paritypayEnabled: map.paritypay_enabled === "true",
     rollypayApiKey: (map.rollypay_api_key ?? "").trim() || null,
     rollypaySigningSecret: (map.rollypay_signing_secret ?? "").trim() || null,
     rollypayTestMode: (map.rollypay_test_mode ?? "false") === "true",
@@ -1008,6 +1013,7 @@ export type PaymentProviderConfig = { id: string; label: string; sortOrder: numb
 const DEFAULT_PAYMENT_PROVIDERS: PaymentProviderConfig[] = [
   { id: "cryptopay", label: "Crypto Bot", sortOrder: 0 },
   { id: "heleket", label: "Heleket", sortOrder: 1 },
+  { id: "paritypay", label: "ParityPay", sortOrder: 10 },
   { id: "rollypay", label: "RollyPay", sortOrder: 1 },
   { id: "yookassa", label: "ЮKassa (СБП / Карты)", sortOrder: 2 },
   { id: "yoomoney", label: "ЮMoney (Карты)", sortOrder: 3 },
@@ -1299,6 +1305,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     heleketEnabled: Boolean((full as { heleketMerchantId?: string | null }).heleketMerchantId?.trim() && (full as { heleketApiKey?: string | null }).heleketApiKey?.trim()),
     // RollyPay считаем настроенным, когда есть и ключ кассы, и секрет подписи:
     // без секрета вебхук всё равно будет отвергнут, кнопка была бы обманом.
+    paritypayEnabled: Boolean(full.paritypayEnabled && full.paritypayShopId && full.paritypayApiKey && full.paritypaySigningSecret),
     rollypayEnabled: Boolean((full as { rollypayApiKey?: string | null }).rollypayApiKey?.trim() && (full as { rollypaySigningSecret?: string | null }).rollypaySigningSecret?.trim()),
     lavaEnabled: Boolean((full as { lavaShopId?: string | null }).lavaShopId?.trim() && (full as { lavaSecretKey?: string | null }).lavaSecretKey?.trim()),
     lavatopEnabled: Boolean((full as { lavatopApiKey?: string | null }).lavatopApiKey?.trim()),

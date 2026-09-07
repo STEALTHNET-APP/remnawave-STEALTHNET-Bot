@@ -1,3 +1,4 @@
+import "./classic-cabinet.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -198,7 +199,8 @@ function ThemePopover() {
       <Button
         variant="ghost"
         size="sm"
-        className="h-8 w-8 p-0 bg-background/20 hover:bg-background/40 transition-all duration-300"
+        aria-label={resolvedMode === "dark" ? "Включить светлую тему" : "Включить тёмную тему"}
+        className="h-10 w-10 p-0 bg-background/20 hover:bg-background/40 transition-all duration-300"
         onClick={() => setMode(resolvedMode === "dark" ? "light" : "dark")}
       >
         <span className="relative h-4 w-4">
@@ -210,16 +212,16 @@ function ThemePopover() {
   }
 
   return (
-    <div className="relative" ref={popoverRef}>
-      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 bg-background/20 hover:bg-background/40" onClick={() => setShow(!show)}>
+    <div className="relative" ref={popoverRef} onKeyDown={(e) => { if (e.key === "Escape") { setShow(false); popoverRef.current?.querySelector("button")?.focus(); } }}>
+      <Button variant="ghost" size="sm" aria-label="Оформление" aria-expanded={show} aria-controls="cabinet-theme-panel" className="h-10 w-10 p-0 bg-background/20 hover:bg-background/40" onClick={() => setShow(!show)}>
         <Palette className="h-3.5 w-3.5" />
       </Button>
-      <div
+      <div id="cabinet-theme-panel"
         className={cn(
           "absolute -right-2 sm:right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[320px] max-w-[320px] rounded-[2rem] border border-white/40 dark:border-white/10 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-[32px] p-5 shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)] transition-all duration-300 origin-top-right",
           show
-            ? "opacity-100 scale-100 pointer-events-auto translate-y-0"
-            : "opacity-0 scale-95 pointer-events-none -translate-y-2"
+            ? "visible opacity-100 scale-100 pointer-events-auto translate-y-0"
+            : "invisible opacity-0 scale-95 pointer-events-none -translate-y-2"
         )}
       >
         <div className="mb-5">
@@ -343,13 +345,13 @@ function SettingsPopover() {
 
   return (
     <div className="relative" ref={popoverRef} data-tour="language-currency">
-      <Button variant="ghost" size="sm" className="gap-1.5 text-xs h-8 px-2 bg-background/20 hover:bg-background/40" onClick={() => setShow(!show)}>
+      <Button aria-label="Настройки кабинета" aria-expanded={show} aria-controls="cabinet-settings-panel" variant="ghost" size="sm" className="gap-1.5 text-xs h-8 px-2 bg-background/20 hover:bg-background/40" onClick={() => setShow(!show)}>
         <Settings className="h-3.5 w-3.5" />
       </Button>
-      <div
+      <div id="cabinet-settings-panel"
         className={cn(
           "absolute -right-2 sm:right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[260px] max-w-[260px] rounded-[2rem] border border-white/40 dark:border-white/10 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-[32px] p-5 shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)] transition-all duration-300 origin-top-right",
-          show ? "opacity-100 scale-100 pointer-events-auto translate-y-0" : "opacity-0 scale-95 pointer-events-none -translate-y-2"
+          show ? "visible opacity-100 scale-100 pointer-events-auto translate-y-0" : "invisible opacity-0 scale-95 pointer-events-none -translate-y-2"
         )}
       >
         <div className="flex items-center gap-3 mb-5">
@@ -449,12 +451,12 @@ function MobileCabinetShell() {
   const logo = config?.logo && !logoError ? config.logo : null;
 
   return (
-    <div className="tg-fs-pad min-h-svh flex flex-col bg-transparent min-w-0 overflow-x-hidden pb-36 relative">
+    <div className="classic-cabinet tg-fs-pad min-h-svh flex flex-col bg-transparent min-w-0 overflow-x-hidden pb-36 relative">
       <FloatingChat />
       <header className="sticky top-0 z-50 border-b border-border shrink-0 transition-all duration-300" style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="absolute inset-0 bg-card/40 backdrop-blur-xl -z-10 pointer-events-none" />
         <div className="relative flex h-14 items-center justify-between gap-3 px-4 min-w-0 w-full max-w-7xl mx-auto">
-          <Link to="/cabinet/dashboard" className="flex items-center gap-2.5 font-semibold text-base tracking-tight shrink-0 min-w-0">
+          <Link to="/cabinet/dashboard" className="flex items-center gap-2.5 font-semibold text-base tracking-tight min-w-0">
             {logo ? (
               <span className="flex items-center justify-center h-8 px-1.5 rounded-lg shrink-0">
                 <img src={logo} alt="" className="h-6 max-w-[100px] object-contain" onError={() => setLogoError(true)} />
@@ -572,11 +574,13 @@ function CabinetShell() {
   const navItems = useMemo(() => resolveNavItems(allNavItems, config), [allNavItems, config?.sellOptionsEnabled, config?.showProxyEnabled, config?.showSingboxEnabled, config?.ticketsEnabled, config?.customBuildConfig, config?.giftSubscriptionsEnabled]);
   const isMiniapp = useIsMiniapp();
   const isMobile = useIsMobile();
+  const isNarrowDesktop = useIsMobile(1280);
   const [logoError, setLogoError] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
-  const visibleNav = navItems.slice(0, MAX_VISIBLE_DESKTOP);
-  const moreNav = navItems.slice(MAX_VISIBLE_DESKTOP);
+  const visibleCount = isNarrowDesktop ? 3 : MAX_VISIBLE_DESKTOP;
+  const visibleNav = navItems.slice(0, visibleCount);
+  const moreNav = navItems.slice(visibleCount);
 
   // Tour integration: open overflow menu programmatically
   useEffect(() => {
@@ -605,13 +609,11 @@ function CabinetShell() {
   }
 
   return (
-    <div className="tg-fs-pad min-h-svh flex flex-col bg-transparent">
+    <div className="classic-cabinet tg-fs-pad min-h-svh flex flex-col bg-transparent">
       <FloatingChat />
-      {/* левитирующая glass-капсула: отступ сверху, скруглённые
-          края, контейнер шире (100rem против прежних 80rem) — лого уезжает левее,
-          правый блок правее, в центре больше места под пункты навигации. */}
+      {/* Navigation and page content share the same width. Theme styling is preserved. */}
       <header className="sticky top-2 sm:top-3 z-50 px-2 sm:px-4 transition-all duration-300">
-        <div className="relative w-full max-w-[100rem] mx-auto flex h-16 items-center justify-between gap-4 px-3 sm:px-5 rounded-2xl border border-border/60 bg-card/55 backdrop-blur-xl shadow-lg shadow-black/5">
+        <div className="cabinet-desktop-bar relative w-full max-w-7xl mx-auto flex h-16 items-center justify-between gap-4 px-3 sm:px-5 rounded-2xl border border-border/60 bg-card/55 backdrop-blur-xl shadow-lg shadow-black/5">
           <Link to="/cabinet/dashboard" className="flex items-center gap-2.5 font-semibold text-lg tracking-tight shrink-0 hover:opacity-80 transition-opacity">
             {logo ? (
               <span className="flex items-center justify-center h-9 px-2 rounded-lg shrink-0">
@@ -622,17 +624,16 @@ function CabinetShell() {
                 <Shield className="h-5 w-5" />
               </span>
             )}
-            {serviceName ? <span className="hidden sm:inline truncate">{serviceName}</span> : null}
+            {serviceName ? <span className="hidden sm:inline max-w-[160px] truncate">{serviceName}</span> : null}
           </Link>
-          <nav className="flex items-center gap-1 flex-wrap justify-center flex-1">
+          <nav aria-label="Основная навигация" className="flex items-center gap-1 justify-center flex-1 min-w-0">
             {visibleNav.map(({ to, label, icon: Icon }) => {
               const active = location.pathname === to;
               const dataTourMap = ROUTE_TOUR_MAP;
               const tourAttr = dataTourMap[to];
 
               return (
-                <Link key={to} to={to} data-tour={tourAttr}>
-                  <Button
+                <Button key={to} asChild
                     variant={active ? "secondary" : "ghost"}
                     size="sm"
                     className={cn(
@@ -640,14 +641,15 @@ function CabinetShell() {
                       active ? "bg-primary/20 hover:bg-primary/30 text-primary shadow-sm scale-105" : "hover:scale-105 hover:bg-background/40"
                     )}
                   >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    {label}
+                    <Link to={to} data-tour={tourAttr} aria-current={active ? "page" : undefined}>
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {label}
+                    </Link>
                   </Button>
-                </Link>
               );
             })}
             {moreNav.length > 0 && (
-              <div className="relative inline-block" ref={moreRef}>
+              <div className="relative inline-block" ref={moreRef} onKeyDown={(e) => { if (e.key === "Escape") { setMoreOpen(false); moreRef.current?.querySelector("button")?.focus(); } }}>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -655,13 +657,15 @@ function CabinetShell() {
                     "inline-flex items-center gap-2 whitespace-nowrap transition-all duration-300 hover:scale-105 hover:bg-background/40",
                     moreNav.some((i) => location.pathname === i.to) ? "bg-primary/20 text-primary" : ""
                   )}
+                  aria-expanded={moreOpen}
+                  aria-controls="cabinet-more-links"
                   onClick={() => setMoreOpen(!moreOpen)}
                 >
                   {t("cabinet.nav.more")}
                   <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", moreOpen && "rotate-180")} />
                 </Button>
                 {moreOpen && (
-                  <div className="absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border bg-card py-1.5 shadow-lg">
+                  <div id="cabinet-more-links" className="absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border bg-card py-1.5 shadow-lg">
                     {moreNav.map(({ to, label, icon: Icon }) => {
                       const active = location.pathname === to;
                       return (
@@ -688,22 +692,22 @@ function CabinetShell() {
           <div className="flex items-center gap-2 shrink-0">
             <ThemePopover />
             <SettingsPopover />
-            <div className="hidden lg:flex h-9 items-center gap-3 rounded-full border border-border/60 bg-background/35 px-4 shadow-sm backdrop-blur-xl transition-all hover:bg-background/50">
+            <Link to="/cabinet/profile#topup" aria-label={`Баланс: ${headerBalance ?? "—"}. Пополнить баланс`} className="hidden xl:flex h-10 items-center gap-3 rounded-full border border-border/60 bg-background/35 px-4 shadow-sm backdrop-blur-xl transition-all hover:bg-background/50">
               <span className="max-w-[120px] xl:max-w-[160px] truncate text-sm font-medium text-muted-foreground" title={state.client?.email?.trim() || (state.client?.telegramUsername ? `@${state.client.telegramUsername}` : "")}>
                 {state.client?.email?.trim() ? state.client.email : state.client?.telegramUsername ? `@${state.client.telegramUsername}` : "—"}
               </span>
               <div className="w-[1px] h-4 bg-border/80" />
               <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground/90">
                 <Wallet className="h-4 w-4 text-primary" />
-                <span>{headerBalance ?? "—"}</span>
+                <span className="tabular-nums">{headerBalance ?? "—"}</span>
               </div>
-            </div>
+            </Link>
             <Button
               variant="outline"
               className="group h-9 rounded-full border-border/60 bg-background/35 p-0 shadow-sm backdrop-blur-xl transition-all duration-300 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive"
               asChild
             >
-              <Link to="/cabinet/login" onClick={() => logout()} className="flex h-full items-center">
+              <Link to="/cabinet/login" onClick={() => logout()} aria-label={t("cabinet.nav.logout")} className="flex h-full items-center">
                 <div className="flex h-full w-9 shrink-0 items-center justify-center">
                   <LogOut className="h-[18px] w-[18px]" />
                 </div>
@@ -749,7 +753,7 @@ export function CabinetLayout() {
   // Как и Stealth, применяется только к «внутренним» страницам: экраны входа
   // и 2FA остаются классическими.
   if (design === "aurora" && isLoggedIn && !needs2FA && !isAuthPage) {
-    return <AuroraLayout />;
+    return <CabinetConfigProvider><AuroraLayout /></CabinetConfigProvider>;
   }
 
   return (

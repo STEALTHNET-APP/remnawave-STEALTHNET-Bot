@@ -45,10 +45,10 @@ function formatPaymentStatus(status: string, t: (key: string) => string): string
 export function ClientProfilePage() {
   const design = useCabinetDesign();
   if (design === "stealth") return <StealthProfile />;
-  return <ClassicProfilePage />;
+  return <ClassicProfilePage aurora={design === "aurora"} />;
 }
 
-function ClassicProfilePage() {
+function ClassicProfilePage({ aurora = false }: { aurora?: boolean }) {
   const { t } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
   const [payments, setPayments] = useState<ClientPayment[]>([]);
@@ -59,6 +59,7 @@ function ClassicProfilePage() {
   const [cryptopayEnabled, setCryptopayEnabled] = useState(false);
   const [heleketEnabled, setHeleketEnabled] = useState(false);
   const [rollypayEnabled, setRollypayEnabled] = useState(false);
+  const [paritypayEnabled, setParitypayEnabled] = useState(false);
   const [lavaEnabled, setLavaEnabled] = useState(false);
   // Lava.top removed from balance top-up — оставлен только для тарифов (см. client-tariffs.tsx)
   const [overpayEnabled, setOverpayEnabled] = useState(false);
@@ -312,6 +313,7 @@ function ClassicProfilePage() {
       setCryptopayEnabled(Boolean(c.cryptopayEnabled));
       setHeleketEnabled(Boolean(c.heleketEnabled));
       setRollypayEnabled(Boolean(c.rollypayEnabled));
+      setParitypayEnabled(Boolean(c.paritypayEnabled));
       setLavaEnabled(Boolean(c.lavaEnabled));
       setOverpayEnabled(Boolean(c.overpayEnabled));
       setPaymentProviders(c.paymentProviders ?? []);
@@ -323,7 +325,7 @@ function ClassicProfilePage() {
 
   useEffect(() => {
     const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-    if (params.get("yoomoney") === "connected" || params.get("yoomoney_form") === "success" || params.get("yookassa") === "success" || params.get("heleket") === "success" || params.get("rollypay") === "success") {
+    if (params.get("yoomoney") === "connected" || params.get("yoomoney_form") === "success" || params.get("yookassa") === "success" || params.get("heleket") === "success" || params.get("rollypay") === "success" || params.get("paritypay") === "success") {
       refreshProfile().catch(() => { });
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -447,6 +449,24 @@ function ClassicProfilePage() {
     try {
       const res = await api.rollypayCreatePayment(token, { amount, currency });
       if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "RollyPay", paymentId: res.paymentId });
+    } catch (e) {
+      setTopUpError(e instanceof Error ? e.message : t("cabinet.profile.top_up_error"));
+    } finally {
+      setTopUpLoading(false);
+    }
+  }
+async function startTopUpParitypay() {
+    if (!token || !client) return;
+    const amount = Number(topUpAmount?.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setTopUpError(t("cabinet.profile.top_up_enter_amount"));
+      return;
+    }
+    setTopUpError(null);
+    setTopUpLoading(true);
+    try {
+      const res = await api.paritypayCreatePayment(token, { amount, currency });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "ParityPay", paymentId: res.paymentId });
     } catch (e) {
       setTopUpError(e instanceof Error ? e.message : t("cabinet.profile.top_up_error"));
     } finally {
@@ -587,6 +607,28 @@ function ClassicProfilePage() {
 
   return (
     <div className="space-y-6 w-full min-w-0 pb-10">
+      {aurora ? <div className="au-profile">
+        <div className="au-profile-title"><div className="au-avatar"><User size={26}/></div><div><h1>Мой профиль</h1><p>{client.telegramUsername ? `@${client.telegramUsername}` : client.email || "Личный кабинет"}</p></div></div>
+        <section id="topup" className="au-balance-card" aria-label="Баланс">
+          <div className="au-balance-heading"><Wallet size={21}/><span>Мой баланс</span></div>
+          <strong className="au-balance-amount">{formatMoney(client.balance, client.preferredCurrency)}</strong>
+          <label className="au-amount-label" htmlFor="au-topup">Сумма пополнения, {currency.toUpperCase()}</label>
+          <input id="au-topup" type="number" inputMode="decimal" min="1" step="0.01" placeholder="Введите сумму" value={topUpAmount} onChange={e=>setTopUpAmount(e.target.value)}/>
+          <div className="au-amount-presets">{[100,300,500,1000].map(n=><button key={n} aria-pressed={topUpAmount===String(n)} onClick={()=>setTopUpAmount(String(n))}>{n}</button>)}</div>
+          <button className="au-balance-pay" onClick={()=>{const amount=Number(topUpAmount.replace(",","."));if(!Number.isFinite(amount)||amount<1){setTopUpError(t("cabinet.profile.top_up_min"));return;}setTopUpError(null);setTopUpModalOpen(true);}} disabled={!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled)}><CreditCard size={18}/>Пополнить баланс</button>
+          {topUpError&&<p role="alert">{topUpError}</p>}
+          {!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled)&&<p>Пополнение сейчас недоступно</p>}
+        </section>
+        <button className="au-profile-action" onClick={()=>setPaymentsHistoryOpen(true)}><Wallet size={20}/><span>История операций<small>{payments.length ? `${payments.length} операций` : "Платежей пока нет"}</small></span><span aria-hidden="true">→</span></button>
+        <section className="au-profile-section"><h2>Мои устройства <span>{devices.length}</span></h2>
+          {devicesLoading ? <p>Загружаем устройства…</p> : devicesError && devicesError!=="NO_SUBSCRIPTION" ? <p role="alert">{devicesError}</p> : !devices.length ? <div className="au-empty"><Monitor size={26}/><p>{t("cabinet.profile.no_devices_title")}</p><small>{t(devicesError==="NO_SUBSCRIPTION"?"cabinet.profile.devices_no_sub_hint":"cabinet.profile.devices_empty_hint")}</small></div> : devices.map(d=><div className="au-device" key={`${d.subscriptionId}:${d.hwid}`}><Monitor size={22}/><div><strong>{[d.platform,d.deviceModel].filter(Boolean).join(" · ") || d.hwid.slice(0,12)}</strong><small>{d.tariffName || `Подписка #${d.subscriptionIndex}`}{d.appName?` · ${d.appName}`:""}</small></div><button aria-label={`Отключить ${d.deviceModel || d.platform || "устройство"}`} disabled={deletingHwid===d.hwid} onClick={()=>deleteDevice(d.hwid,d.subscriptionType,d.subscriptionId)}>{deletingHwid===d.hwid?<Loader2 size={18} className="animate-spin"/>:<Trash2 size={18}/>}</button></div>)}
+        </section>
+        <section className="au-profile-section"><h2>Аккаунт</h2><dl className="au-account-data"><div><dt>ID</dt><dd>{client.id}</dd></div><div><dt>Email</dt><dd>{client.email || "Не привязан"}</dd></div><div><dt>Telegram</dt><dd>{client.telegramUsername?`@${client.telegramUsername}`:client.telegramId || "Не привязан"}</dd></div>{client.createdAt&&<div><dt>Регистрация</dt><dd>{new Date(client.createdAt).toLocaleDateString("ru-RU")}</dd></div>}</dl>
+          {!client.email&&<form className="au-link-form" onSubmit={sendLinkEmailRequest}><label htmlFor="au-email">Привязать email</label><Input id="au-email" type="email" placeholder="email@example.com" value={linkEmailValue} onChange={e=>setLinkEmailValue(e.target.value)} disabled={linkEmailLoading}/><button disabled={linkEmailLoading||!linkEmailValue.trim()}>{linkEmailLoading?"Отправляем…":"Отправить ссылку"}</button>{linkEmailSent&&<p role="status">{t("cabinet.profile.link_email_sent")}</p>}{linkEmailError&&<p role="alert">{linkEmailError}</p>}</form>}
+          {!client.telegramId&&<div className="au-link-form"><button disabled={linkTelegramLoading||!!linkTelegramCode} onClick={isTgMiniapp?linkTelegramFromMiniapp:requestLinkTelegramCode}>{linkTelegramLoading?"Подключаем…":"Привязать Telegram"}</button>{linkTelegramCode&&<><p>Код: <strong>{linkTelegramCode}</strong></p>{telegramBotUsername&&<a href={`https://t.me/${telegramBotUsername.replace(/^@/,"")}?start=link_${linkTelegramCode}`} target="_blank" rel="noopener noreferrer">Открыть бота</a>}<p>{t("cabinet.profile.link_code_expires")}</p></>}{linkTelegramError&&<p role="alert">{linkTelegramError}</p>}</div>}
+        </section>
+        <section className="au-profile-section"><h2>Безопасность</h2><button className="au-profile-action" onClick={client.totpEnabled?openTwoFaDisable:openTwoFaEnable}><Shield size={20}/><span>Двухэтапная защита<small>{client.totpEnabled?"Включена · отключить":"Отключена · включить"}</small></span><span aria-hidden="true">→</span></button><button className="au-profile-action" onClick={()=>client.hasPassword===false&&client.email?setSetPasswordOpen(true):setChangePasswordOpen(true)}><KeyRound size={20}/><span>{client.hasPassword===false&&client.email?"Установить пароль":"Изменить пароль"}</span><span aria-hidden="true">→</span></button>{yookassaRecurringEnabled&&client.yookassaPaymentMethodTitle&&<button className="au-profile-action" disabled={unlinkingPayment} onClick={handleUnlinkPaymentMethod}><CreditCard size={20}/><span>Отвязать способ оплаты<small>{client.yookassaPaymentMethodTitle}</small></span></button>}</section>
+      </div> : <>
       <div className="min-w-0">
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">{t("cabinet.profile.title")}</h1>
         <p className="text-muted-foreground text-sm mt-1 truncate">{t("cabinet.profile.subtitle")}</p>
@@ -999,7 +1041,7 @@ function ClassicProfilePage() {
         transition={{ duration: 0.3, delay: 0.1 }}
         className={`grid gap-6 ${isMiniapp ? "grid-cols-1" : "lg:grid-cols-2"} min-w-0`}
       >
-        {(plategaMethods.length > 0 || yoomoneyEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || lavaEnabled || overpayEnabled) && (
+        {(plategaMethods.length > 0 || yoomoneyEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled) && (
           <div id="topup" className="relative flex flex-col rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)]">
             <div className="absolute inset-0 overflow-hidden rounded-[2rem] border border-white/10 dark:border-white/5 bg-background/40 backdrop-blur-2xl">
               <div className="absolute -top-32 -left-32 h-64 w-64 rounded-full bg-primary/20 blur-[80px] pointer-events-none" />
@@ -1146,6 +1188,8 @@ function ClassicProfilePage() {
         </div>
       </motion.div>
 
+      </>}
+
       <Dialog open={paymentsHistoryOpen} onOpenChange={setPaymentsHistoryOpen}>
         <DialogContent className="max-w-md max-h-[85vh] flex flex-col" showCloseButton>
           <DialogHeader>
@@ -1253,6 +1297,7 @@ function ClassicProfilePage() {
                 cryptopay: { bg10: "bg-yellow-500/10", bg20: "group-hover:bg-yellow-500/20", text: "text-yellow-500" },
                 heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
                 rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                paritypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 yookassa: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
                 yoomoney: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
                 lava: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
@@ -1264,6 +1309,7 @@ function ClassicProfilePage() {
                 { id: "cryptopay", enabled: cryptopayEnabled, onClick: () => startTopUpCryptopay(), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
                 { id: "heleket", enabled: heleketEnabled, onClick: () => startTopUpHeleket(), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
                 { id: "rollypay", enabled: rollypayEnabled, onClick: () => startTopUpRollypay(), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
+                { id: "paritypay", enabled: paritypayEnabled, onClick: () => startTopUpParitypay(), label: providerLabel("paritypay", "ParityPay"), icon: "card" },
                 { id: "yookassa", enabled: yookassaEnabled, onClick: () => startTopUpYookassa(), label: providerLabel("yookassa", t("cabinet.tariffs.sbp_cards_ru")), icon: "card" },
                 { id: "yoomoney", enabled: yoomoneyEnabled, onClick: () => startTopUpYoomoneyForm("AC"), label: providerLabel("yoomoney", t("cabinet.tariffs.yoomoney_cards")), icon: "card" },
                 { id: "lava", enabled: lavaEnabled && currency.toLowerCase() === "rub", onClick: () => startTopUpLava(), label: providerLabel("lava", "LAVA"), icon: "card" },
