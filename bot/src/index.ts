@@ -233,11 +233,16 @@ function subscribeKeyboard(channelInput: string, lang = "ru"): InlineMarkup {
 async function enforceSubscription(
   ctx: {
     from?: { id: number };
+    // #78: тип чата нужен, чтобы не проверять подписку для сообщений не из лички
+    chat?: { type?: string };
     reply: (text: string, opts?: { reply_markup?: InlineMarkup }) => Promise<unknown>;
     api: Api;
   },
   config: Awaited<ReturnType<typeof api.getPublicConfig>>,
 ): Promise<boolean> {
+  // #78: бот для пользователей работает только в личке — сообщения из каналов/групп
+  // (например, ответы админа в «Сообщения каналу») не проверяем
+  if (ctx.chat && ctx.chat.type !== "private") return false;
   if (!config?.forceSubscribeEnabled) return false;
   const channelId = config.forceSubscribeChannelId?.trim();
   if (!channelId) return false;
@@ -8285,6 +8290,9 @@ composer.on("message:photo", async (ctx) => {
 
 // Сообщения с текстом — промокод или число для пополнения
 composer.on("message:text", async (ctx) => {
+  // #78: бот для пользователей работает только в личке — игнорируем сообщения из групп/каналов
+  // (иначе ответы админа в «Сообщения каналу» и цифровые посты трактуются как ввод пользователя)
+  if (ctx.chat && ctx.chat.type !== "private") return;
   if (ctx.message.text?.startsWith("/")) return;
   const userId = ctx.from?.id;
   if (!userId) return;

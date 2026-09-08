@@ -447,13 +447,16 @@ build_and_start() {
 
   # Сборка фронтенда
   info "Сборка фронтенда..."
-  docker compose up frontend 2>&1 | tail -3
+  # --no-deps (issue #87): frontend — одноразовый контейнер сборки. Без флага
+  # `docker compose up frontend` подтягивает свои depends_on (api/bot) и
+  # пересоздаёт их контейнеры — выглядит как «двойной запуск API».
+  docker compose up --no-deps frontend 2>&1 | tail -3
 
   # Nginx
   if [ "$USE_BUILTIN_NGINX" = "true" ]; then
     info "Запуск Nginx..."
     docker compose $PROFILES up -d nginx
-    
+
     info "Запуск Certbot (авто-обновление)..."
     docker compose $PROFILES up -d certbot
   else
@@ -464,6 +467,17 @@ build_and_start() {
       # Fallback: копируем из volume
       docker run --rm -v stealthnet_frontend_dist:/src -v /var/www/stealthnet:/dst alpine sh -c "cp -r /src/* /dst/"
     }
+    # issue #111: в статическом index.html захардкорен description «STEALTHNET — …».
+    # При внешнем nginx api-подстановка бренда (/_spa) недоступна → перезаписываем index.html
+    # отрендеренным api-вариантом (title/description/og из настроек брендинга).
+    API_PORT="${API_PORT:-5000}"
+    BRANDED=$(curl -sf --max-time 10 "http://127.0.0.1:${API_PORT}/_spa" 2>/dev/null)
+    if [ -n "$BRANDED" ]; then
+      printf '%s' "$BRANDED" > /var/www/stealthnet/index.html
+      success "index.html подставлен с брендингом из настроек (issue #111)"
+    else
+      warn "Не удалось получить /_spa от api — в index.html останется дефолтный description (issue #111). Обновится при повторном запуске install.sh."
+    fi
     success "Фронтенд скопирован в /var/www/stealthnet/"
   fi
 }
