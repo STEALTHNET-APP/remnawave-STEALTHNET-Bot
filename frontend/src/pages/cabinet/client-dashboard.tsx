@@ -4,6 +4,10 @@ import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthDashboard } from "@/pages/cabinet/stealth/stealth-dashboard";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query-client";
+import { useStaggerReveal } from "@/lib/gsap-utils";
+import { useClientSubscription, useClientAllSubscriptions, useClientPayments, useReferralStats, useAvailableTrials, useInvalidateClientData } from "@/lib/queries";
 import {
   
   Package,
@@ -40,7 +44,6 @@ import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
 import { api } from "@/lib/api";
 import { formatRuDays } from "@/lib/i18n";
-import type { ClientPayment, ClientReferralStats } from "@/lib/api";
 import { TrialsPickerDialog } from "@/components/cabinet/trials-picker-dialog";
 import { ExtendSubscriptionDialog } from "@/components/payment/extend-subscription-dialog";
 import { Button } from "@/components/ui/button";
@@ -152,8 +155,8 @@ function LinkTelegramPrompt() {
   const { t } = useTranslation();
   const { state } = useClientAuth();
   const config = useCabinetConfig();
-  const isMiniapp = useCabinetMiniapp();
   const token = state.token;
+  const isMiniapp = useCabinetMiniapp();
   const client = state.client;
   const botUsername = (config?.telegramBotUsername ?? "").replace(/^@/, "");
 
@@ -221,18 +224,65 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   const { t } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
   const config = useCabinetConfig();
+  const token = state.token;
   const [searchParams, setSearchParams] = useSearchParams();
-  const [subscription, setSubscription] = useState<unknown>(null);
-  const [secondarySubscriptions, setSecondarySubscriptions] = useState<Array<{ type: string; id: string; subscriptionIndex: number | null; subscription: unknown; tariffDisplayName: string; remnawaveUuid: string | null; trialId?: string | null; trialName?: string | null; trialConvertEnabled?: boolean }>>([]);
+  const pageRef = useStaggerReveal<HTMLDivElement>([], { y: 12, stagger: 0.07 });
+
+  const subQuery = useClientSubscription(token);
+  const allSubQuery = useClientAllSubscriptions(token);
+  const payQuery = useClientPayments(token);
+  const devicesQuery = useQuery({
+    queryKey: qk.client.devices(token),
+    queryFn: () => api.getClientDevices(token!),
+    enabled: !!token,
+  });
+  const allDevicesQuery = useQuery({
+    queryKey: qk.client.myDevices(token),
+    queryFn: () => api.getMyAllDevices(token!),
+    enabled: !!token,
+  });
+  const referralQuery = useReferralStats(token);
+  const trialsQuery = useAvailableTrials(token);
+  const queryLoading =
+    subQuery.isLoading || allSubQuery.isLoading || payQuery.isLoading;
+
+  const deviceCount: number | null = devicesQuery.data?.total ?? null;
+  const devicesBySubId = (allDevicesQuery.data?.items ?? []).reduce<Record<string, number>>((acc, d) => {
+    acc[d.subscriptionId] = (acc[d.subscriptionId] || 0) + 1;
+    return acc;
+  }, {});
+  const subscription = subQuery.data?.subscription ?? null;
+  const subscriptionError = (subQuery.data?.message as string | undefined) ?? (subQuery.error instanceof Error ? subQuery.error.message : null);
+  const tariffDisplayName = subQuery.data?.tariffDisplayName ?? null;
+  const autoRenewNext = {
+    amount: subQuery.data?.autoRenewNextChargeAmount ?? null,
+    at: subQuery.data?.autoRenewNextChargeAt ?? null,
+    currency: subQuery.data?.autoRenewCurrency ?? null,
+  };
+  // issue #118: при multiSubscriptionsEnabled=false сервер всё равно может отдать подписки с index>0
+  // (legacy/консолидация) — не показываем их как secondary в single-режиме.
+  const secondarySubscriptions = config?.multiSubscriptionsEnabled === false
+    ? []
+    : (allSubQuery.data?.items ?? []).filter((s) => s.type === "secondary");
+  const rootItem = (allSubQuery.data?.items ?? []).find((s) => s.type === "root");
+  const rootSubId = rootItem?.id ?? null;
+  const rootTrial = { isTrial: Boolean(rootItem?.trialId), convertEnabled: rootItem?.trialConvertEnabled ?? true };
+  const autoRenewSubs = (allSubQuery.data?.items ?? [])
+    .filter((s) => !s.trialId)
+    .map((s) => ({
+      type: s.type,
+      id: s.id,
+      name: s.tariffDisplayName?.trim() || `Подписка #${(s.subscriptionIndex ?? 0) + 1}`,
+      enabled: s.autoRenewEnabled ?? false,
+    }));
+  const referralStats = referralQuery.data ?? null;
+  const hasMultiTrials: boolean | null = trialsQuery.isLoading ? null : (trialsQuery.data?.items.length ?? 0) > 0;
+  const loading = queryLoading;
+  const invalidateData = useInvalidateClientData();
+  const queryClient = useQueryClient();
+
   // root-подписка — триал: лейбл TRIAL + «Конвертировать» (или ничего).
-  const [rootTrial, setRootTrial] = useState<{ isTrial: boolean; convertEnabled: boolean }>({ isTrial: false, convertEnabled: true });
   // T-unify-cabinet (30.05.2026, WolfVPN): id главной подписки (#0) — для кнопки «Продлить» → /cabinet/tariffs?extend=
-  const [rootSubId, setRootSubId] = useState<string | null>(null);
-  const [tariffDisplayName, setTariffDisplayName] = useState<string | null>(null);
-  const [autoRenewNext, setAutoRenewNext] = useState<{ amount: number | null; at: string | null; currency: string | null }>({ amount: null, at: null, currency: null });
-  const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
-  const [_payments, setPayments] = useState<ClientPayment[]>([]);
-  const [loading, setLoading] = useState(true);
   const [paymentMessage, setPaymentMessage] = useState<"success_topup" | "success_tariff" | "success" | "failed" | null>(null);
   // T-pay-success-modal (WolfVPN): модалка успеха при возврате с оплаты (ЮKassa/Platega/Lava/и др.)
   const [paySuccessModal, setPaySuccessModal] = useState<null | "topup" | "tariff" | "generic">(null);
@@ -240,22 +290,14 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   const [trialError, setTrialError] = useState<string | null>(null);
   // T15 (26.05.2026, WolfVPN): новая мульти-триал система.
   // hasMultiTrials=null → ещё не загружали; true → открываем модалку; false → legacy /trial.
-  const [hasMultiTrials, setHasMultiTrials] = useState<boolean | null>(null);
   const [trialsPickerOpen, setTrialsPickerOpen] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   // красивая модалка продления вместо редиректа в каталог
   // (?extend=...). Открывается для ЛЮБОЙ подписки — единый механизм.
   const [extendSubId, setExtendSubId] = useState<string | null>(null);
-  const [referralStats, setReferralStats] = useState<ClientReferralStats | null>(null);
-  const [deviceCount, setDeviceCount] = useState<number | null>(null);
-  // T-sec-devices (WolfVPN): кол-во устройств по каждой подписке (subscriptionId → count) — для доп.подписок.
-  const [devicesBySubId, setDevicesBySubId] = useState<Record<string, number>>({});
   // ♻️ Пер-подписочное автосписание (вместо одного глобального Switch в карточке «Баланс»).
   // Триальные подписки сюда не попадают — автосписание на них не имеет смысла.
-  const [autoRenewSubs, setAutoRenewSubs] = useState<Array<{ type: "root" | "secondary"; id: string; name: string; enabled: boolean }>>([]);
   const [autoRenewTogglingId, setAutoRenewTogglingId] = useState<string | null>(null);
 
-  const token = state.token;
   const isMiniapp = useCabinetMiniapp();
   const client = state.client;
   const trialDays = config?.trialDays ?? 0;
@@ -288,66 +330,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
     }
   }, [searchParams, setSearchParams, token, refreshProfile]);
 
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    setLoading(true);
-    setSubscriptionError(null);
-    Promise.all([
-      api.clientSubscription(token),
-      api.clientPayments(token),
-      api.getClientDevices(token).catch(() => ({ total: 0 })),
-      api.clientAllSubscriptions(token).catch(() => ({ items: [] })),
-      api.getMyAllDevices(token).catch(() => ({ total: 0, items: [] })),
-    ])
-      .then(([subRes, payRes, devRes, allSubRes, allDevRes]) => {
-        if (cancelled) return;
-        setSubscription(subRes.subscription ?? null);
-        setTariffDisplayName(subRes.tariffDisplayName ?? null);
-        setAutoRenewNext({
-          amount: subRes.autoRenewNextChargeAmount ?? null,
-          at: subRes.autoRenewNextChargeAt ?? null,
-          currency: subRes.autoRenewCurrency ?? null,
-        });
-        if (subRes.message) setSubscriptionError(subRes.message);
-        setPayments(payRes.items ?? []);
-        setDeviceCount(devRes.total ?? null);
-        setSecondarySubscriptions((allSubRes.items || []).filter(s => s.type === "secondary"));
-        // ♻️ Список подписок для блока «Автосписание по подпискам» (без триальных).
-        setAutoRenewSubs(
-          (allSubRes.items || [])
-            .filter((s) => !s.trialId)
-            .map((s) => ({
-              type: s.type,
-              id: s.id,
-              name: s.tariffDisplayName?.trim() || `Подписка #${(s.subscriptionIndex ?? 0) + 1}`,
-              enabled: s.autoRenewEnabled ?? false,
-            })),
-        );
-        const rootItem = (allSubRes.items || []).find(s => s.type === "root");
-        setRootSubId(rootItem?.id ?? null);
-        setRootTrial({
-          isTrial: Boolean(rootItem?.trialId),
-          convertEnabled: rootItem?.trialConvertEnabled ?? true,
-        });
-        // T-sec-devices (WolfVPN): счётчик устройств по subscriptionId — для отображения «использовано/лимит» на доп.подписках.
-        const devCounts: Record<string, number> = {};
-        for (const d of (allDevRes.items || [])) devCounts[d.subscriptionId] = (devCounts[d.subscriptionId] || 0) + 1;
-        setDevicesBySubId(devCounts);
-      })
-      .catch((e) => {
-        if (!cancelled) setSubscriptionError(e instanceof Error ? e.message : t("cabinet.dashboard.error_loading"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [token, refreshKey]);
 
-  useEffect(() => {
-    if (!token) return;
-    api.getClientReferralStats(token).then(setReferralStats).catch(() => {});
-  }, [token]);
 
   // Auto-redeem pending gift code (saved by /gift/:code page before redirect to login/register)
   const [giftRedeemMessage, setGiftRedeemMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -360,7 +343,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
     api.giftRedeemCode(token, pendingCode)
       .then((res) => {
         setGiftRedeemMessage({ type: "success", text: res.message || "Подарок активирован!" });
-        setRefreshKey((k) => k + 1);
+        invalidateData();
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : "Не удалось активировать подарок";
@@ -372,13 +355,17 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   async function toggleSubAutoRenew(sub: { type: "root" | "secondary"; id: string }, enabled: boolean) {
     if (!token) return;
     setAutoRenewTogglingId(sub.id);
-    setAutoRenewSubs((prev) => prev.map((s) => (s.id === sub.id ? { ...s, enabled } : s)));
+    // Optimistic: правим кеш TanStack напрямую (autoRenewSubs — derived от allSubscriptions).
+    const allSubs = allSubQuery.data?.items ?? [];
+    const patch = (on: boolean) =>
+      allSubs.map((s) => (s.id === sub.id ? { ...s, autoRenewEnabled: on } : s));
+    queryClient.setQueryData(qk.client.allSubscriptions(token), { items: patch(enabled) });
     try {
       await api.clientSetSubscriptionAutoRenew(token, sub.type, sub.id, enabled);
       refreshProfile().catch(() => {});
     } catch (err) {
       console.error("Failed to toggle subscription auto-renew", err);
-      setAutoRenewSubs((prev) => prev.map((s) => (s.id === sub.id ? { ...s, enabled: !enabled } : s)));
+      queryClient.setQueryData(qk.client.allSubscriptions(token), { items: patch(!enabled) });
     } finally {
       setAutoRenewTogglingId(null);
     }
@@ -416,20 +403,6 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   // Если их > 0 → кнопка «Бесплатный Тест» откроет модалку выбора.
   // Если бэк вернул items=[] AND hasAnyEnabled=false → нет новых триалов вообще, fallback на legacy /trial.
   // Если items=[] AND hasAnyEnabled=true → юзер уже всё использовал, модалку показывать не надо.
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    api.getClientAvailableTrials(token)
-      .then((res) => {
-        if (cancelled) return;
-        setHasMultiTrials(res.items.length > 0);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setHasMultiTrials(false); // не смогли загрузить → не блокируем legacy
-      });
-    return () => { cancelled = true; };
-  }, [token, refreshKey]);
 
   async function activateTrial() {
     if (!token) return;
@@ -445,7 +418,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
     try {
       await api.clientActivateTrial(token);
       await refreshProfile();
-      setRefreshKey((k) => k + 1);
+      invalidateData();
     } catch (e) {
       setTrialError(e instanceof Error ? e.message : t("cabinet.dashboard.trial_error"));
     } finally {
@@ -456,7 +429,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   async function handleTrialActivated() {
     // После активации триала через модалку — обновляем профиль и подписку.
     await refreshProfile();
-    setRefreshKey((k) => k + 1);
+    invalidateData();
   }
 
   if (!client) return null;
@@ -657,7 +630,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
       subId={extendSubId}
       open
       onClose={() => setExtendSubId(null)}
-      onPaidByBalance={() => setRefreshKey((k) => k + 1)}
+      onPaidByBalance={() => invalidateData()}
     />
   ) : null;
 
@@ -868,7 +841,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                   <span className="inline-flex p-1.5 bg-indigo-500/20 rounded-lg shrink-0">
                     <Package className="h-4 w-4 shrink-0 text-indigo-400" />
                   </span>
-                  <span className="truncate">Подписка #{sec.subscriptionIndex ?? ""}</span>
+                  <span className="truncate">{sec.tariffDisplayName?.trim() || `Подписка #${(sec.subscriptionIndex ?? 0) + 1}`}</span>
                 </span>
                 {secActionNode(
                   sec,
@@ -1107,7 +1080,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   // DESKTOP LAYOUT
   return (
     <>
-    <div className="classic-dashboard flex flex-col gap-6 w-full min-w-0 mx-auto">
+    <div ref={pageRef} className="classic-dashboard flex flex-col gap-6 w-full min-w-0 mx-auto">
       {/* Hero + CTA */}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
@@ -1531,7 +1504,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                         <div className="p-2.5 bg-indigo-500/20 rounded-xl shrink-0">
                           <Package className="h-5 w-5 text-indigo-400" />
                         </div>
-                        <span className="truncate">Подписка #{sec.subscriptionIndex ?? ""}</span>
+                        <span className="truncate">{sec.tariffDisplayName?.trim() || `Подписка #${(sec.subscriptionIndex ?? 0) + 1}`}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {secHasActive ? (

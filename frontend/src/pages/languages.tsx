@@ -1,8 +1,9 @@
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
-import type { LanguageInfo } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,33 +96,31 @@ function LanguageEditor({
   onBack: () => void;
   token: string;
 }) {
-  const [masterKeys, setMasterKeys] = useState<Record<string, string>>({});
-  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterMode>("all");
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [saveOk, setSaveOk] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const editorQuery = useQuery({
+    queryKey: [qk.admin.languageKeys(), qk.admin.languagePack(code)] as const,
+    queryFn: async () => {
       const [keysRes, packRes] = await Promise.all([
-        api.getLanguageKeys(token),
-        api.getLanguagePack(token, code),
+        api.getLanguageKeys(token).catch(() => ({ ok: false, keys: {} as Record<string, string> })),
+        api.getLanguagePack(token, code).catch(() => ({ ok: false, code, data: {} as Record<string, unknown> })),
       ]);
-      if (keysRes.ok) setMasterKeys(keysRes.keys);
-      if (packRes.ok) setTranslations(flattenObj(packRes.data));
-    } finally {
-      setLoading(false);
-    }
-  }, [token, code]);
+      return {
+        masterKeys: keysRes.ok ? keysRes.keys : {},
+        translations: packRes.ok ? flattenObj(packRes.data) : {},
+      };
+    },
+    enabled: !!token && !!code,
+  });
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
+  const masterKeys = editorQuery.data?.masterKeys ?? {};
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const loading = editorQuery.isLoading;
   const allKeys = useMemo(() => Object.keys(masterKeys).sort(), [masterKeys]);
 
   const groups = useMemo(() => {
@@ -161,6 +160,8 @@ function LanguageEditor({
     try {
       const nested = nestObj(translations);
       await api.saveLanguagePack(token, code, nested);
+      void queryClient.invalidateQueries({ queryKey: qk.admin.languagePack(code), exact: false });
+      void queryClient.invalidateQueries({ queryKey: qk.admin.languages(), exact: false });
       setSaveOk(true);
       setTimeout(() => setSaveOk(false), 2000);
     } finally {
@@ -175,7 +176,8 @@ function LanguageEditor({
       const text = await file.text();
       const data = JSON.parse(text);
       await api.importLanguagePack(token, code, data);
-      await load();
+      void queryClient.invalidateQueries({ queryKey: [qk.admin.languageKeys(), qk.admin.languagePack(code)] as const, exact: false });
+      setTranslations({});
     } catch {
       /* ignore parse errors */
     }
@@ -425,10 +427,16 @@ export default function LanguagesPage() {
   const { t } = useTranslation();
   const { state } = useAuth();
   const token = state.accessToken!;
+  const queryClient = useQueryClient();
 
-  const [languages, setLanguages] = useState<LanguageInfo[]>([]);
-  const [totalKeys, setTotalKeys] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const languagesQuery = useQuery({
+    queryKey: qk.admin.languages(),
+    queryFn: () => api.getLanguages(token),
+    enabled: !!token,
+  });
+  const languages = languagesQuery.data?.ok ? languagesQuery.data.languages : [];
+  const totalKeys = languagesQuery.data?.ok ? languagesQuery.data.totalKeys : 0;
+  const loading = languagesQuery.isLoading;
   const [editing, setEditing] = useState<string | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -438,22 +446,9 @@ export default function LanguagesPage() {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const loadLanguages = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.getLanguages(token);
-      if (res.ok) {
-        setLanguages(res.languages);
-        setTotalKeys(res.totalKeys);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    loadLanguages();
-  }, [loadLanguages]);
+  const loadLanguages = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.admin.languages(), exact: false });
+  };
 
   const handleAdd = async () => {
     const code = addCode.trim().toLowerCase();
@@ -463,7 +458,7 @@ export default function LanguagesPage() {
       await api.saveLanguagePack(token, code, {});
       setAddOpen(false);
       setAddCode("");
-      await loadLanguages();
+      loadLanguages();
       setEditing(code);
     } finally {
       setAddLoading(false);
@@ -476,7 +471,7 @@ export default function LanguagesPage() {
     try {
       await api.deleteLanguage(token, deleteTarget);
       setDeleteTarget(null);
-      await loadLanguages();
+      loadLanguages();
     } finally {
       setDeleteLoading(false);
     }

@@ -50,6 +50,12 @@
     --input: 228 22% 89%;
     --ring: 226 61% 22%;
     --brand: 344 90% 50%;           /* бренд-розовый, приглушён для белого фона */
+
+    /* ═══ Premium glass layer (светлая версия) ═══ */
+    --glass-tint: 228 40% 100%;
+    --glass-opacity: 0.72;
+    --glass-border: 228 30% 30%;
+    --glass-highlight: 0 0% 100%;
   }
 
   .dark {
@@ -69,6 +75,14 @@
     --input: 222 14% 16%;
     --ring: 344 100% 57%;
     --brand: 344 100% 60%;          /* бренд-розовый (KPI/подсветка) */
+
+    /* ═══ Premium glass layer (редизайн 2026-09) ═══
+       Полупрозрачные поверхности с размытием поверх тёмного фона.
+       Потребители: .glass-surface (панели/шапки/сайдбары), .glass-card (карточки). */
+    --glass-tint: 222 30% 12%;      /* базовый оттенок стекла */
+    --glass-opacity: 0.55;          /* прозрачность стекла */
+    --glass-border: 222 40% 80%;    /* белый край по верхней границе */
+    --glass-highlight: 0 0% 100%;   /* внутренний блик */
   }
 }
 
@@ -149,16 +163,65 @@
   }
 }
 
-/* ── Карточка — вне @layer, чтобы гарантированно побить Tailwind utilities.
-   Плотная поверхность вместо стекла (редизайн 2026). ── */
+/* ── Premium glass surfaces (редизайн 2026-09) — вне @layer, чтобы гарантированно
+   побить Tailwind utilities. Полупрозрачная плёнка + размытие + световой кант. ── */
 .glass-card {
-  background-color: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 2px rgba(2, 6, 23, 0.04), 0 1px 3px rgba(2, 6, 23, 0.06);
+  position: relative;
+  background-color: hsl(var(--glass-tint) / var(--glass-opacity));
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid hsl(var(--border) / 0.8);
+  border-radius: 1rem;
+  box-shadow:
+    inset 0 1px 0 0 hsl(var(--glass-highlight) / 0.06),
+    0 8px 32px -8px rgba(0, 0, 0, 0.45),
+    0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
 }
-.dark .glass-card {
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset, 0 2px 8px rgba(0, 0, 0, 0.35);
+.glass-card::before {
+  /* световой кант по верхней границе — эффект «подсветки сверху» */
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(var(--glass-border) / 0.25), transparent);
+  pointer-events: none;
+  border-radius: inherit;
+}
+.glass-card-hover:hover {
+  border-color: hsl(var(--glass-border) / 0.22);
+  box-shadow:
+    inset 0 1px 0 0 hsl(var(--glass-highlight) / 0.08),
+    0 12px 40px -8px rgba(0, 0, 0, 0.55),
+    0 2px 4px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+/* Панели (шапки, сайдбары, поповеры) — стекло без тени карточки. */
+.glass-surface {
+  background-color: hsl(var(--glass-tint) / 0.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  backdrop-filter: blur(24px) saturate(1.5);
+  border: 1px solid hsl(var(--border) / 0.7);
+}
+.glass-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(var(--glass-border) / 0.18), transparent);
+  pointer-events: none;
+}
+
+/* Светлая тема: стекло плотнее, тени мягче (без «черноты»). */
+:root:not(.dark) .glass-card {
+  box-shadow:
+    inset 0 1px 0 0 hsl(var(--glass-highlight) / 0.8),
+    0 8px 32px -12px rgba(15, 23, 42, 0.12),
+    0 1px 2px rgba(15, 23, 42, 0.06);
+}
+:root:not(.dark) .glass-surface {
+  background-color: hsl(var(--glass-tint) / 0.72);
 }
 
 /* Пока открыта нижняя шторка Aurora — убираем стеклянное меню из отрисовки.
@@ -169,6 +232,37 @@
   visibility: hidden;
 }
 
+/* Цена «К оплате» на тарифах: при смене срока/тарифа элемент перемонтируется
+   (key=totalPrice) — CSS-анимация вместо framer-motion не трогает слой JS-ом
+   и не мерцает на мобильном WebKit. */
+.au-price-pop {
+  animation: au-price-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes au-price-pop {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Панель инлайн-шторки оплаты (в tariffs, не общий AuroraSheet): выезд снизу
+   CSS-ом — один кадр transform, без JS-драйвера и пересборок слоя. */
+.au-sheet-slide {
+  animation: au-sheet-slide 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes au-sheet-slide {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
 /* Полноэкранный режим Telegram (Bot API 8.0+): шапка клиента с крестиком
    ложится ПОВЕРХ контента, поэтому сдвигаем вниз всё приложение целиком.
    Величину считает lib/telegram-viewport.ts по safe-area от Telegram.
@@ -177,4 +271,156 @@
    (тёмная тема) — под светлым Aurora получалась чёрная полоса сверху. */
 html[data-tg-fullscreen="1"] .tg-fs-pad {
   padding-top: var(--app-tg-top, 0px);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   transitions-dev — universal :root (семантические тайминги всех переходов).
+   Каждый t-* переход читает отсюда; менять настройки — в одном месте.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  /* Card resize */
+  --resize-dur: 300ms;
+  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Number pop-in */
+  --digit-dur: 500ms;
+  --digit-distance: 8px;
+  --digit-stagger: 70ms;
+  --digit-blur: 2px;
+  --digit-ease: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --digit-dir-x: 0;
+  --digit-dir-y: 1;
+  /* Notification badge */
+  --badge-slide-dur: 260ms;
+  --badge-pop-dur: 500ms;
+  --badge-pop-close-dur: 180ms;
+  --badge-fade-dur: 400ms;
+  --badge-fade-close-dur: 180ms;
+  --badge-blur: 2px;
+  --badge-offset-x: -8.2px;
+  --badge-offset-y: 12.4px;
+  --badge-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --badge-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --badge-close-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  /* Text states swap */
+  --text-swap-dur: 150ms;
+  --text-swap-translate-y: 4px;
+  --text-swap-blur: 2px;
+  --text-swap-ease: ease-in-out;
+  /* Menu dropdown */
+  --dropdown-open-dur: 250ms;
+  --dropdown-close-dur: 150ms;
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Modal open / close */
+  --modal-open-dur: 250ms;
+  --modal-close-dur: 150ms;
+  --modal-scale: 0.96;
+  --modal-scale-close: 0.96;
+  --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Panel reveal */
+  --panel-open-dur: 400ms;
+  --panel-close-dur: 350ms;
+  --panel-translate-y: 100px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Page side-by-side */
+  --page-slide-dur: 200ms;
+  --page-fade-dur: 200ms;
+  --page-slide-distance: 8px;
+  --page-blur: 3px;
+  --page-stagger: 0ms;
+  --page-exit-enabled: 1;
+  --page-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --page-fade-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Icon swap */
+  --icon-swap-dur: 200ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+  /* Success check */
+  --check-opacity-dur: 550ms;
+  --check-rotate-dur: 550ms;
+  --check-rotate-from: 80deg;
+  --check-bob-dur: 450ms;
+  --check-y-amount: 40px;
+  --check-blur-dur: 500ms;
+  --check-blur-from: 10px;
+  --check-path-dur: 550ms;
+  --check-path-delay: 80ms;
+  --check-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-opacity: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-rotate: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-bob: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --check-ease-path: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Avatar group hover */
+  --avatar-lift: -4px;
+  --avatar-dur: 320ms;
+  --avatar-scale: 1.05;
+  --avatar-falloff: 0.45;
+  --avatar-ease-in: cubic-bezier(0.22, 1, 0.36, 1);
+  --avatar-ease-out: cubic-bezier(0.34, 3.85, 0.64, 1);
+  /* Error state shake */
+  --shake-distance: 6px;
+  --shake-overshoot: 4px;
+  --shake-dur-a: 80ms;
+  --shake-dur-b: 60ms;
+  --shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --revert-hold: 3000ms;
+  --revert-dur: 280ms;
+}
+
+/* ── Page enter (t-page) — переход между страницами кабинета/админки.
+   Используется вместо animate-in классов: контент плавно подъезжает, без мерцания. ── */
+.t-page-enter > * {
+  opacity: 0;
+  transform: translateY(var(--page-slide-distance));
+  filter: blur(var(--page-blur));
+}
+.t-page-enter.t-ready > * {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+  transition:
+    transform var(--page-slide-dur) var(--page-slide-ease),
+    opacity   var(--page-fade-dur) var(--page-fade-ease),
+    filter    var(--page-fade-dur) var(--page-fade-ease);
+}
+/* Стабильный layout: контент, который появится позже (загрузка данных),
+   резервирует место СРАЗУ — кнопки не «допрыгивают» после ответа API. */
+.t-stable {
+  min-height: var(--stable-h, 0px);
+}
+
+/* Shimmer-полоса скелетона (stealth-tariffs) — CSS вместо gsap/framer:
+   бесконечный проезд x с задержками по индексу. */
+.shimmer-bar {
+  animation: shimmer-x 1.4s linear infinite;
+}
+.shimmer-bar-lg {
+  animation: shimmer-x-lg 1.6s linear infinite;
+}
+@keyframes shimmer-x {
+  from { transform: translate3d(-100%, 0, 0); }
+  to { transform: translate3d(250%, 0, 0); }
+}
+@keyframes shimmer-x-lg {
+  from { transform: translate3d(-100%, 0, 0); }
+  to { transform: translate3d(400%, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-bar,
+  .shimmer-bar-lg {
+    animation: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-page-enter > *,
+  .t-page-enter.t-ready > * {
+    transition: none !important;
+    transform: none !important;
+    filter: none !important;
+    opacity: 1 !important;
+  }
 }

@@ -4982,6 +4982,8 @@ export type PublicTariff = {
   pricePerExtraDevice: number;
   maxExtraDevices: number;
   deviceDiscountTiers: DeviceDiscountTier[];
+  /** Эмодзи-бейдж тарифа (админ задаёт в /admin/tariffs → menu_emoji). */
+  menuEmoji?: string | null;
   priceOptions: TariffPriceOption[];
 };
 

@@ -3,11 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Shield, KeyRound, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
-import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 export function LoginPage() {
   const [email, setEmail] = useState("");
@@ -24,8 +24,7 @@ export function LoginPage() {
   const pending2FA = Boolean(state.pending2FAToken);
 
   useEffect(() => {
-    api
-      .getPublicConfig()
+    getPublicConfigCached()
       .then((cfg) => {
         setBrand({
           serviceName: cfg.serviceName ?? "",

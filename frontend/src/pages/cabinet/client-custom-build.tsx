@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Layers, CreditCard, Wallet, Loader2, Calendar, Smartphone, Wifi, Zap, Tag } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api } from "@/lib/api";
+import { getPublicConfigCached } from "@/lib/public-config";
 import type { PublicConfig } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,7 @@ export function ClientCustomBuildPage() {
   const maxDevices = cb?.maxDevices ?? 10;
 
   useEffect(() => {
-    api.getPublicConfig().then((c) => {
+    getPublicConfigCached().then((c) => {
       setConfig(c);
       setPaymentProviders(c.paymentProviders ?? []);
       if (c.customBuildConfig) {

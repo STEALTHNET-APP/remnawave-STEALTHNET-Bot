@@ -11,7 +11,6 @@ import { ClientAuthProvider, useClientAuth } from "@/contexts/client-auth";
 import { ThemeProvider } from "@/contexts/theme";
 import { AnimatedBackground } from "@/components/animated-background";
 import { PwaUpdatePrompt } from "@/components/pwa/pwa-update-prompt";
-import { api } from "@/lib/api";
 import { LoginPage } from "@/pages/login";
 import { ChangePasswordPage } from "@/pages/change-password";
 import { DashboardPage } from "@/pages/dashboard";
@@ -92,9 +91,13 @@ import { ClientSingboxPage } from "@/pages/cabinet/client-singbox";
 import { ClientTicketsPage } from "@/pages/cabinet/client-tickets";
 import { ClientCustomBuildPage } from "@/pages/cabinet/client-custom-build";
 import { ClientGiftsPage } from "@/pages/cabinet/client-gifts";
+import { ClientLegalDocsPage } from "@/pages/cabinet/client-legal-docs";
 import { GiftActivatePage } from "@/pages/gift-activate";
 import { LandingPage } from "@/pages/landing";
 import type { PublicConfig } from "@/lib/api";
+import { getPublicConfigCached } from "@/lib/public-config";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/query-client";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { state } = useAuth();
@@ -165,14 +168,20 @@ function CabinetIndexRedirect() {
 
 function RootRoute() {
   const [config, setConfig] = useState<PublicConfig | null>(null);
+  // Лендинг грузим ПАРАЛЛЕЛЬНО с конфигом: два последовательных лоадера
+  // (сначала «Загрузка…» из-за config, потом слейтовый спиннер из-за landing) выглядели как «два лоадера подряд».
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api
-      .getPublicConfig()
-      .then((c) => setConfig(c))
-      .catch(() => setConfig(null))
-      .finally(() => setLoading(false));
+    let alive = true;
+    // Язык лендинга неизвестен до конфига — грузим с дефолтом «ru»; если дефолт другой,
+    // LandingPage перезагрузит контент внутри себя (старое поведение, редкий кейс).
+    // Module-level promise: StrictMode (mount→cleanup→mount) не порождает второй fetch.
+    getPublicConfigCached()
+      .then((c) => { if (alive) setConfig(c); })
+      .catch(() => { if (alive) setConfig(null); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
   }, []);
 
   if (loading) {
@@ -334,6 +343,10 @@ function AppRoutes() {
         <Route path="forgot-password" element={<ClientForgotPasswordPage />} />
         <Route path="reset-password" element={<ClientResetPasswordPage />} />
         <Route path="verify-email" element={<ClientVerifyEmailPage />} />
+        {/* issue #112/#127: legal-документы — публичные (до auth-гейта), redirect на external link из настроек */}
+        <Route path="documents/privacy" element={<ClientLegalDocsPage kind="privacy" />} />
+        <Route path="documents/offer" element={<ClientLegalDocsPage kind="offer" />} />
+        <Route path="documents/refund" element={<ClientLegalDocsPage kind="refund" />} />
         <Route path="verify-link-email" element={<ClientVerifyLinkEmailPage />} />
         <Route
           path="dashboard"
@@ -451,21 +464,24 @@ function TitleAndThemeSync() {
   const location = useLocation();
   const [config, setConfig] = useState<{ serviceName: string; serviceDescription: string | null; favicon: string | null } | null>(null);
 
-  // Подтягиваем конфиг при смене маршрута (в т.ч. после сохранения настроек), чтобы favicon обновился
+  // Подтягиваем конфиг при смене маршрута (в т.ч. после сохранения настроек), чтобы favicon обновился.
+  // Кеш: повторные переходы НЕ дёргают HTTP — берём тот же закешированный promise.
   useEffect(() => {
-    api
-      .getPublicConfig()
+    let alive = true;
+    getPublicConfigCached()
       .then((cfg) => {
+        if (!alive) return;
         setConfig({
           serviceName: cfg.serviceName ?? "",
           serviceDescription: cfg.serviceDescription ?? null,
-          favicon: (cfg as { favicon?: string | null }).favicon ?? null,
+          favicon: cfg.favicon ?? null,
         });
         // Глобальная тема из настроек
       })
       .catch(() => {
-        setConfig({ serviceName: "", serviceDescription: null, favicon: null });
+        if (alive) setConfig({ serviceName: "", serviceDescription: null, favicon: null });
       });
+    return () => { alive = false; };
   }, [location.pathname]);
 
   // Title и favicon
@@ -568,15 +584,17 @@ function TitleAndThemeSync() {
 export default function App() {
 
   return (
-    <ThemeProvider >
-      <AuthProvider>
-        <BrowserRouter future={routerFutureFlags}>
-          <AnimatedBackground />
-          <TitleAndThemeSync  />
-          <AppRoutes />
-          <PwaUpdatePrompt />
-        </BrowserRouter>
-      </AuthProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider >
+        <AuthProvider>
+          <BrowserRouter future={routerFutureFlags}>
+            <AnimatedBackground />
+            <TitleAndThemeSync  />
+            <AppRoutes />
+            <PwaUpdatePrompt />
+          </BrowserRouter>
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }

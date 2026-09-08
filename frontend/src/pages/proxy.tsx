@@ -1,6 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { api, type ProxyNodeListItem, type CreateProxyNodeResponse, type ProxySlotAdminItem } from "@/lib/api";
+import { useProxyNodes, useProxyCategories, useProxySlotsAdmin } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,11 +110,9 @@ function formatPrice(amount: number, currency: string) {
 
 export function ProxyPage() {
   const { state } = useAuth();
-  const [nodes, setNodes] = useState<ProxyNodeListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [newNodeName, setNewNodeName] = useState("");
-  const [creating, setCreating] = useState(false);
   const [addResult, setAddResult] = useState<CreateProxyNodeResponse | null>(null);
   const [copied, setCopied] = useState<"compose" | "token" | "script" | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -121,43 +122,23 @@ export function ProxyPage() {
   const [editCapacity, setEditCapacity] = useState<string>("");
   const [editSocksPort, setEditSocksPort] = useState<string>("1080");
   const [editHttpPort, setEditHttpPort] = useState<string>("8080");
-  const [saving, setSaving] = useState(false);
   const [nodeToDelete, setNodeToDelete] = useState<ProxyNodeListItem | null>(null);
-  const [deleting, setDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState("nodes");
-  const [categories, setCategories] = useState<ProxyCategoryItem[]>([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categoryModal, setCategoryModal] = useState<"add" | { edit: ProxyCategoryItem } | null>(null);
   const [tariffModal, setTariffModal] = useState<{ kind: "add"; categoryId: string } | { kind: "edit"; category: ProxyCategoryItem; tariff: ProxyTariffItem } | null>(null);
-  const [slots, setSlots] = useState<ProxySlotAdminItem[]>([]);
-  const [slotsLoading, setSlotsLoading] = useState(false);
   const [editSlot, setEditSlot] = useState<ProxySlotAdminItem | null>(null);
   const [slotForm, setSlotForm] = useState({ login: "", password: "", connectionLimit: "", status: "" });
 
-  const token = state.accessToken;
-  if (!token) return null;
+  const token = state.accessToken ?? null;
 
-  async function loadNodes() {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const res = await api.getProxyNodes(token);
-      setNodes(res.items);
-    } catch {
-      setNodes([]);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const nodesQ = useProxyNodes(token);
+  const categoriesQ = useProxyCategories(token);
+  const slotsQ = useProxySlotsAdmin(token, "{}", activeTab === "slots");
 
-  useEffect(() => { loadNodes(); }, [token]);
-
-  async function loadCategories() {
-    if (!token) return;
-    setCategoriesLoading(true);
-    try {
-      const res = await api.getProxyCategories(token);
-      const items = res.items.map((c) => ({
+  const nodes = useMemo(() => nodesQ.data?.items ?? [], [nodesQ.data]);
+  const categories = useMemo(
+    () =>
+      (categoriesQ.data?.items ?? []).map((c) => ({
         id: c.id,
         name: c.name,
         sortOrder: c.sortOrder,
@@ -175,107 +156,126 @@ export function ProxyPage() {
           enabled: t.enabled ?? true,
           nodeIds: t.nodeIds ?? [],
         })),
-      }));
-      setCategories(items);
-    } catch { setCategories([]); } finally { setCategoriesLoading(false); }
-  }
+      })),
+    [categoriesQ.data],
+  );
+  const slots = useMemo(() => slotsQ.data?.items ?? [], [slotsQ.data]);
 
-  async function handleDeleteCategory(id: string) {
-    if (!token || !confirm("Удалить категорию и все тарифы в ней?")) return;
-    try {
-      await api.deleteProxyCategory(token, id);
-      await loadCategories();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    }
-  }
+  if (!token) return null;
 
-  async function handleDeleteTariff(id: string) {
-    if (!token || !confirm("Удалить тариф?")) return;
-    try {
-      await api.deleteProxyTariff(token, id);
-      await loadCategories();
+  const invalidateNodes = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.admin.proxyNodes(), exact: false });
+  };
+  const invalidateTariffData = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.admin.proxyCategories(), exact: false });
+    void queryClient.invalidateQueries({ queryKey: qk.admin.proxyTariffs(), exact: false });
+  };
+  const invalidateSlots = () => {
+    void queryClient.invalidateQueries({ queryKey: ["admin", "proxy-slots"] as const, exact: false });
+  };
+
+  const createNodeMut = useMutation({
+    mutationFn: (name: string) => api.createProxyNode(token, { name }),
+    onSuccess: (res) => {
+      setAddResult(res);
+      invalidateNodes();
+    },
+  });
+
+  const updateNodeMut = useMutation({
+    mutationFn: (vars: { id: string; name: string; status: string; capacity: number | null; socksPort: number; httpPort: number }) =>
+      api.updateProxyNode(token, vars.id, {
+        name: vars.name,
+        status: vars.status,
+        capacity: vars.capacity,
+        socksPort: vars.socksPort,
+        httpPort: vars.httpPort,
+      }),
+    onSuccess: () => {
+      invalidateNodes();
+      setEditOpen(false);
+      setEditingNode(null);
+    },
+  });
+
+  const deleteNodeMut = useMutation({
+    mutationFn: (id: string) => api.deleteProxyNode(token, id),
+    onSuccess: () => {
+      invalidateNodes();
+      setNodeToDelete(null);
+    },
+  });
+
+  const deleteCategoryMut = useMutation({
+    mutationFn: (id: string) => api.deleteProxyCategory(token, id),
+    onSuccess: invalidateTariffData,
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+  });
+
+  const deleteTariffMut = useMutation({
+    mutationFn: (id: string) => api.deleteProxyTariff(token, id),
+    onSuccess: () => {
+      invalidateTariffData();
       setTariffModal(null);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    }
-  }
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+  });
 
-  async function handleToggleTariffEnabled(t: ProxyTariffItem) {
-    if (!token) return;
-    try {
-      await api.updateProxyTariff(token, t.id, { enabled: !t.enabled });
-      await loadCategories();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
-    }
-  }
+  const toggleTariffMut = useMutation({
+    mutationFn: (t: ProxyTariffItem) => api.updateProxyTariff(token, t.id, { enabled: !t.enabled }),
+    onSuccess: invalidateTariffData,
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+  });
 
-  async function loadSlots() {
-    if (!token) return;
-    setSlotsLoading(true);
-    try {
-      const res = await api.getProxySlotsAdmin(token);
-      setSlots(res.items);
-    } catch { setSlots([]); } finally { setSlotsLoading(false); }
-  }
+  const saveSlotMut = useMutation({
+    mutationFn: (vars: { id: string; login: string; password: string; connectionLimit: number | null; status: string }) =>
+      api.updateProxySlotAdmin(token, vars.id, {
+        login: vars.login,
+        password: vars.password,
+        connectionLimit: vars.connectionLimit,
+        status: vars.status,
+      }),
+    onSuccess: () => {
+      invalidateSlots();
+      setEditSlot(null);
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+  });
 
+  const revokeSlotMut = useMutation({
+    mutationFn: (id: string) => api.updateProxySlotAdmin(token, id, { status: "REVOKED" }),
+    onSuccess: invalidateSlots,
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+  });
+
+  const deleteSlotMut = useMutation({
+    mutationFn: (id: string) => api.deleteProxySlotAdmin(token, id),
+    onSuccess: invalidateSlots,
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+  });
   function openSlotEdit(s: ProxySlotAdminItem) {
     setEditSlot(s);
     setSlotForm({ login: s.login, password: s.password, connectionLimit: s.connectionLimit != null ? String(s.connectionLimit) : "", status: s.status });
   }
 
-  async function handleSaveSlot() {
-    if (!token || !editSlot) return;
-    setSaving(true);
-    try {
-      await api.updateProxySlotAdmin(token, editSlot.id, {
-        login: slotForm.login.trim() || editSlot.login,
-        password: slotForm.password || editSlot.password,
-        connectionLimit: slotForm.connectionLimit.trim() === "" ? null : parseInt(slotForm.connectionLimit, 10),
-        status: slotForm.status as "ACTIVE" | "EXPIRED" | "REVOKED",
-      });
-      await loadSlots();
-      setEditSlot(null);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
-    } finally { setSaving(false); }
+  function handleDeleteCategory(id: string) {
+    if (!confirm("Удалить категорию и все тарифы в ней?")) return;
+    deleteCategoryMut.mutate(id);
   }
 
-  async function handleRevokeSlot(id: string) {
-    if (!token || !confirm("Отозвать доступ? Слот станет REVOKED.")) return;
-    try {
-      await api.updateProxySlotAdmin(token, id, { status: "REVOKED" });
-      await loadSlots();
-    } catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+  function handleDeleteTariff(id: string) {
+    if (!confirm("Удалить тариф?")) return;
+    deleteTariffMut.mutate(id);
   }
 
-  async function handleDeleteSlot(id: string) {
-    if (!token || !confirm("Удалить слот? Это нельзя отменить.")) return;
-    try {
-      await api.deleteProxySlotAdmin(token, id);
-      await loadSlots();
-    } catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+  function handleToggleTariffEnabled(t: ProxyTariffItem) {
+    toggleTariffMut.mutate(t);
   }
 
-  useEffect(() => {
-    if (activeTab === "categories" || activeTab === "tariffs") loadCategories();
-    if (activeTab === "slots") loadSlots();
-  }, [activeTab, token]);
-
-  async function handleAddNode() {
-    if (!token || !newNodeName.trim()) return;
-    setCreating(true);
+  function handleAddNode() {
+    if (!newNodeName.trim()) return;
     setAddResult(null);
-    try {
-      const res = await api.createProxyNode(token, { name: newNodeName.trim() });
-      setAddResult(res);
-      await loadNodes();
-    } catch {
-      setAddResult(null);
-    } finally {
-      setCreating(false);
-    }
+    createNodeMut.mutate(newNodeName.trim());
   }
 
   function openEdit(node: ProxyNodeListItem) {
@@ -288,35 +288,42 @@ export function ProxyPage() {
     setEditOpen(true);
   }
 
-  async function handleSaveEdit() {
-    if (!token || !editingNode) return;
-    setSaving(true);
-    try {
-      await api.updateProxyNode(token, editingNode.id, {
-        name: editName.trim() || editingNode.name,
-        status: editStatus,
-        capacity: editCapacity.trim() === "" ? null : parseInt(editCapacity, 10) || null,
-        socksPort: parseInt(editSocksPort, 10) || 1080,
-        httpPort: parseInt(editHttpPort, 10) || 8080,
-      });
-      await loadNodes();
-      setEditOpen(false);
-      setEditingNode(null);
-    } finally {
-      setSaving(false);
-    }
+  function handleSaveEdit() {
+    if (!editingNode) return;
+    updateNodeMut.mutate({
+      id: editingNode.id,
+      name: editName.trim() || editingNode.name,
+      status: editStatus,
+      capacity: editCapacity.trim() === "" ? null : parseInt(editCapacity, 10) || null,
+      socksPort: parseInt(editSocksPort, 10) || 1080,
+      httpPort: parseInt(editHttpPort, 10) || 8080,
+    });
   }
 
-  async function handleDelete() {
-    if (!token || !nodeToDelete) return;
-    setDeleting(true);
-    try {
-      await api.deleteProxyNode(token, nodeToDelete.id);
-      await loadNodes();
-      setNodeToDelete(null);
-    } finally {
-      setDeleting(false);
-    }
+  function handleDelete() {
+    if (!nodeToDelete) return;
+    deleteNodeMut.mutate(nodeToDelete.id);
+  }
+
+  function handleSaveSlot() {
+    if (!editSlot) return;
+    saveSlotMut.mutate({
+      id: editSlot.id,
+      login: slotForm.login.trim() || editSlot.login,
+      password: slotForm.password || editSlot.password,
+      connectionLimit: slotForm.connectionLimit.trim() === "" ? null : parseInt(slotForm.connectionLimit, 10),
+      status: slotForm.status as "ACTIVE" | "EXPIRED" | "REVOKED",
+    });
+  }
+
+  function handleRevokeSlot(id: string) {
+    if (!confirm("Отозвать доступ? Слот станет REVOKED.")) return;
+    revokeSlotMut.mutate(id);
+  }
+
+  function handleDeleteSlot(id: string) {
+    if (!confirm("Удалить слот? Это нельзя отменить.")) return;
+    deleteSlotMut.mutate(id);
   }
 
   function closeAddDialog() {
@@ -437,15 +444,15 @@ cd /opt/proxy-node && docker compose up -d --build`
               size="sm"
               className="gap-1.5 rounded-xl"
               onClick={() => { setAddOpen(true); setAddResult(null); }}
-              disabled={creating}
+              disabled={createNodeMut.isPending}
             >
-              {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {createNodeMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               Добавить прокси
             </Button>
           </div>
         </div>
         <div>
-          {loading ? (
+          {nodesQ.isLoading ? (
             <div className="flex flex-col items-center justify-center gap-3 py-10">
               <Loader2 className="h-7 w-7 animate-spin text-primary" />
               <p className="text-sm text-muted-foreground">Загрузка…</p>
@@ -520,7 +527,7 @@ cd /opt/proxy-node && docker compose up -d --build`
             <p className="text-xs text-muted-foreground">Все выданные слоты. Меняйте логин/пароль, лимит, отзывайте.</p>
           </div>
         </div>
-        {slotsLoading ? (
+        {slotsQ.isLoading ? (
           <p className="text-muted-foreground py-8 text-center">Загрузка...</p>
         ) : slots.length === 0 ? (
           <p className="text-muted-foreground py-8 text-center">Нет выданных слотов.</p>
@@ -604,7 +611,7 @@ cd /opt/proxy-node && docker compose up -d --build`
             <Plus className="h-4 w-4" /> Добавить категорию
           </Button>
         </div>
-        {categoriesLoading ? (
+        {categoriesQ.isLoading ? (
           <p className="text-muted-foreground py-8 text-center">Загрузка…</p>
         ) : categories.length === 0 ? (
           <Card className="bg-card border-border rounded-2xl py-12 flex flex-col items-center text-center">
@@ -719,8 +726,8 @@ cd /opt/proxy-node && docker compose up -d --build`
                 <Button variant="outline" onClick={closeAddDialog}>
                   Отмена
                 </Button>
-                <Button onClick={handleAddNode} disabled={creating || !newNodeName.trim()}>
-                  {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                <Button onClick={handleAddNode} disabled={createNodeMut.isPending || !newNodeName.trim()}>
+                  {createNodeMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Сгенерировать токен и docker-compose
                 </Button>
               </DialogFooter>
@@ -837,8 +844,8 @@ cd /opt/proxy-node && docker compose up -d --build`
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>Отмена</Button>
-            <Button onClick={handleSaveEdit} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            <Button onClick={handleSaveEdit} disabled={updateNodeMut.isPending}>
+              {updateNodeMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Сохранить
             </Button>
           </DialogFooter>
@@ -855,8 +862,8 @@ cd /opt/proxy-node && docker compose up -d --build`
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNodeToDelete(null)}>Отмена</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            <Button variant="destructive" onClick={handleDelete} disabled={deleteNodeMut.isPending}>
+              {deleteNodeMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Удалить
             </Button>
           </DialogFooter>
@@ -868,9 +875,8 @@ cd /opt/proxy-node && docker compose up -d --build`
           token={token}
           modal={categoryModal}
           onClose={() => setCategoryModal(null)}
-          onSaved={() => { setCategoryModal(null); loadCategories(); }}
-          saving={saving}
-          setSaving={setSaving}
+          onSaved={() => setCategoryModal(null)}
+          invalidate={invalidateTariffData}
         />
       )}
 
@@ -908,8 +914,8 @@ cd /opt/proxy-node && docker compose up -d --build`
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditSlot(null)}>Отмена</Button>
-            <Button onClick={handleSaveSlot} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            <Button onClick={handleSaveSlot} disabled={saveSlotMut.isPending}>
+              {saveSlotMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Сохранить
             </Button>
           </DialogFooter>
@@ -923,9 +929,8 @@ cd /opt/proxy-node && docker compose up -d --build`
           categories={categories}
           modal={tariffModal}
           onClose={() => setTariffModal(null)}
-          onSaved={() => { setTariffModal(null); loadCategories(); }}
-          saving={saving}
-          setSaving={setSaving}
+          onSaved={() => setTariffModal(null)}
+          invalidate={invalidateTariffData}
         />
       )}
     </div>
@@ -937,15 +942,13 @@ function ProxyCategoryModal({
   modal,
   onClose,
   onSaved,
-  saving,
-  setSaving,
+  invalidate,
 }: {
   token: string | null;
   modal: "add" | { edit: ProxyCategoryItem };
   onClose: () => void;
   onSaved: () => void;
-  saving: boolean;
-  setSaving: (v: boolean) => void;
+  invalidate: () => void;
 }) {
   const isEdit = modal !== "add";
   const editCat = isEdit ? modal.edit : null;
@@ -955,22 +958,22 @@ function ProxyCategoryModal({
     setName(isEdit && editCat ? editCat.name : "");
   }, [modal, isEdit, editCat?.name]);
 
-  const submit = async (e: React.FormEvent) => {
+  const mut = useMutation({
+    mutationFn: (nameValue: string) =>
+      isEdit && editCat
+        ? api.updateProxyCategory(token!, editCat.id, { name: nameValue })
+        : api.createProxyCategory(token!, { name: nameValue }),
+    onSuccess: () => {
+      onSaved();
+      invalidate();
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+  });
+
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!token || !name.trim()) return;
-    setSaving(true);
-    try {
-      if (isEdit && editCat) {
-        await api.updateProxyCategory(token, editCat.id, { name: name.trim() });
-      } else {
-        await api.createProxyCategory(token, { name: name.trim() });
-      }
-      onSaved();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setSaving(false);
-    }
+    mut.mutate(name.trim());
   };
 
   return (
@@ -996,8 +999,8 @@ function ProxyCategoryModal({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Отмена</Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            <Button type="submit" disabled={mut.isPending}>
+              {mut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {isEdit ? "Сохранить" : "Создать"}
             </Button>
           </DialogFooter>
@@ -1016,8 +1019,7 @@ function ProxyTariffModal({
   modal,
   onClose,
   onSaved,
-  saving,
-  setSaving,
+  invalidate,
 }: {
   token: string | null;
   nodes: ProxyNodeListItem[];
@@ -1025,8 +1027,7 @@ function ProxyTariffModal({
   modal: { kind: "add"; categoryId: string } | { kind: "edit"; category: ProxyCategoryItem; tariff: ProxyTariffItem };
   onClose: () => void;
   onSaved: () => void;
-  saving: boolean;
-  setSaving: (v: boolean) => void;
+  invalidate: () => void;
 }) {
   const isEdit = modal.kind === "edit";
   const tariff = isEdit ? modal.tariff : null;
@@ -1039,6 +1040,7 @@ function ProxyTariffModal({
   const [currency, setCurrency] = useState((tariff?.currency ?? "RUB").toUpperCase());
   const [enabled, setEnabled] = useState(tariff?.enabled ?? true);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>(tariff?.nodeIds ?? []);
+  const toggleNode = (id: string) => setSelectedNodeIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   useEffect(() => {
     if (isEdit && tariff) {
@@ -1060,13 +1062,45 @@ function ProxyTariffModal({
     }
   }, [modal, isEdit, tariff]);
 
-  const toggleNode = (nodeId: string) => {
-    setSelectedNodeIds((prev) =>
-      prev.includes(nodeId) ? prev.filter((id) => id !== nodeId) : [...prev, nodeId]
-    );
-  };
+  const mut = useMutation({
+    mutationFn: (vars: {
+      kind: "create" | "update";
+      name: string;
+      proxyCount: number;
+      durationDays: number;
+      price: number;
+      currency: string;
+      enabled: boolean;
+      nodeIds: string[];
+    }) =>
+      vars.kind === "update" && tariff
+        ? api.updateProxyTariff(token!, tariff.id, {
+            name: vars.name,
+            proxyCount: vars.proxyCount,
+            durationDays: vars.durationDays,
+            price: vars.price,
+            currency: vars.currency,
+            enabled: vars.enabled,
+            nodeIds: vars.nodeIds,
+          })
+        : api.createProxyTariff(token!, {
+            categoryId,
+            name: vars.name,
+            proxyCount: vars.proxyCount,
+            durationDays: vars.durationDays,
+            price: vars.price,
+            currency: vars.currency,
+            enabled: vars.enabled,
+            nodeIds: vars.nodeIds.length > 0 ? vars.nodeIds : undefined,
+          }),
+    onSuccess: () => {
+      onSaved();
+      invalidate();
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+  });
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!token || !name.trim()) return;
     const priceNum = parseFloat(price);
@@ -1074,36 +1108,16 @@ function ProxyTariffModal({
       alert("Введите корректную цену");
       return;
     }
-    setSaving(true);
-    try {
-      if (isEdit && tariff) {
-        await api.updateProxyTariff(token, tariff.id, {
-          name: name.trim(),
-          proxyCount,
-          durationDays,
-          price: priceNum,
-          currency,
-          enabled,
-          nodeIds: selectedNodeIds,
-        });
-      } else {
-        await api.createProxyTariff(token, {
-          categoryId,
-          name: name.trim(),
-          proxyCount,
-          durationDays,
-          price: priceNum,
-          currency,
-          enabled: enabled ?? true,
-          nodeIds: selectedNodeIds.length > 0 ? selectedNodeIds : undefined,
-        });
-      }
-      onSaved();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setSaving(false);
-    }
+    mut.mutate({
+      kind: isEdit ? "update" : "create",
+      name: name.trim(),
+      proxyCount,
+      durationDays,
+      price: priceNum,
+      currency,
+      enabled: enabled ?? true,
+      nodeIds: selectedNodeIds,
+    });
   };
 
   const cat = categories.find((c) => c.id === categoryId);
@@ -1207,8 +1221,8 @@ function ProxyTariffModal({
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Отмена</Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            <Button type="submit" disabled={mut.isPending}>
+              {mut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {isEdit ? "Сохранить" : "Создать"}
             </Button>
           </DialogFooter>

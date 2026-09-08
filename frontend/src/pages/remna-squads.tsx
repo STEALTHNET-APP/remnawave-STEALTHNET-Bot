@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
 import type { RemnaConfigProfile, TariffRecord } from "@/lib/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRemnaSquadsInternal, useRemnaConfigProfiles, useAdminTariffs } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,47 +37,49 @@ function plural(n: number, forms: [string, string, string]): string {
   if (last >= 2 && last <= 4) return `${n} ${forms[1]}`;
   return `${n} ${forms[2]}`;
 }
-
 export function RemnaSquadsPage() {
   const { state } = useAuth();
-  const token = state.accessToken!;
+  const token = state.accessToken ?? null;
+  const qc = useQueryClient();
   const navigate = useNavigate();
 
-  const [squads, setSquads] = useState<InternalSquad[]>([]);
-  const [profiles, setProfiles] = useState<RemnaConfigProfile[]>([]);
-  const [tariffs, setTariffs] = useState<TariffRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
+  const squadsQuery = useRemnaSquadsInternal(token);
+  const profilesQuery = useRemnaConfigProfiles(token);
+  // тарифы — чтобы показать связность «какие тарифы выдают этот сквад».
+  const tariffsQuery = useAdminTariffs(token);
+
+  const loading = squadsQuery.isLoading || profilesQuery.isLoading || tariffsQuery.isLoading;
+  const error = squadsQuery.error instanceof Error ? squadsQuery.error.message : null;
+
+  const squads: InternalSquad[] = (squadsQuery.data as { response?: { internalSquads?: InternalSquad[] } } | null | undefined)
+    ?.response?.internalSquads ?? [];
+  const profiles: RemnaConfigProfile[] = profilesQuery.data?.response?.configProfiles ?? [];
+  const tariffs: TariffRecord[] = tariffsQuery.data?.items ?? [];
+
   const [copiedUuid, setCopiedUuid] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [editingUuid, setEditingUuid] = useState<string | null>(null);
   const [form, setForm] = useState<{ name: string; inbounds: string[] }>({ name: "", inbounds: [] });
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [squadsRaw, profRes, tariffsRes] = await Promise.all([
-        api.getRemnaSquadsInternal(token),
-        api.getRemnaConfigProfiles(token),
-        // тарифы — чтобы показать связность «какие тарифы выдают этот сквад».
-        api.getTariffs(token).catch(() => ({ items: [] as TariffRecord[] })),
-      ]);
-      const sr = squadsRaw as { response?: { internalSquads?: InternalSquad[] } };
-      setSquads(sr.response?.internalSquads ?? []);
-      setProfiles(profRes.response?.configProfiles ?? []);
-      setTariffs(tariffsRes.items ?? []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
+  const invalidateSquads = () => {
+    void qc.invalidateQueries({ queryKey: qk.admin.remnaSquads(), exact: false });
   };
 
-  useEffect(() => { load(); }, [token]);
+  const saveMutation = useMutation({
+    mutationFn: ({ uuid, body }: { uuid: string | null; body: { name: string; inbounds: string[] } }) =>
+      uuid ? api.remnaSquadUpdate(token!, uuid, body) : api.remnaSquadCreate(token!, body),
+    onSuccess: () => {
+      setShowForm(false);
+      invalidateSquads();
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (uuid: string) => api.remnaSquadDelete(token!, uuid),
+    onSuccess: () => invalidateSquads(),
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+  });
 
   /** uuid инбаунда  {tag,type,port} из config-профилей (для чипов). */
   const inboundByUuid = useMemo(() => {
@@ -131,38 +136,17 @@ export function RemnaSquadsPage() {
     }));
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      if (editingUuid) {
-        await api.remnaSquadUpdate(token, editingUuid, { name: form.name.trim(), inbounds: form.inbounds });
-      } else {
-        await api.remnaSquadCreate(token, { name: form.name.trim(), inbounds: form.inbounds });
-      }
-      setShowForm(false);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setSaving(false);
-    }
+  const handleSave = () => {
+    saveMutation.mutate({ uuid: editingUuid, body: { name: form.name.trim(), inbounds: form.inbounds } });
   };
 
-  const handleDelete = async (s: InternalSquad) => {
+  const handleDelete = (s: InternalSquad) => {
     const linked = tariffsBySquad.get(s.uuid) ?? [];
     const warn = linked.length
       ? `\n\n Сквад выдают ${plural(linked.length, ["тариф", "тарифа", "тарифов"])}: ${linked.map((t) => t.name).join(", ")} — они потеряют его.`
       : "";
     if (!confirm(`Удалить сквад «${s.name}»?${warn}`)) return;
-    setBusy(s.uuid);
-    try {
-      await api.remnaSquadDelete(token, s.uuid);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    } finally {
-      setBusy(null);
-    }
+    deleteMutation.mutate(s.uuid);
   };
 
   if (loading) {
@@ -276,8 +260,8 @@ export function RemnaSquadsPage() {
                       <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Редактировать" onClick={() => openEdit(s)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10" title="Удалить" disabled={busy === s.uuid} onClick={() => handleDelete(s)}>
-                        {busy === s.uuid ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10" title="Удалить" disabled={deleteMutation.isPending && deleteMutation.variables === s.uuid} onClick={() => handleDelete(s)}>
+                        {deleteMutation.isPending && deleteMutation.variables === s.uuid ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                       </Button>
                     </div>
                   </div>
@@ -329,8 +313,8 @@ export function RemnaSquadsPage() {
             </div>
             <DialogFooter className="mt-2 gap-2">
               <Button variant="outline" onClick={() => setShowForm(false)} className="rounded-xl">Отмена</Button>
-              <Button onClick={handleSave} disabled={saving || !form.name.trim() || form.inbounds.length === 0} className="gap-2 rounded-xl">
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              <Button onClick={handleSave} disabled={saveMutation.isPending || !form.name.trim() || form.inbounds.length === 0} className="gap-2 rounded-xl">
+                {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {editingUuid ? "Сохранить" : "Создать"}
               </Button>
             </DialogFooter>

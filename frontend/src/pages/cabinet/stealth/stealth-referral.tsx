@@ -9,10 +9,11 @@
  *   4. Accordion «Правила и бонусы» — 2-3 TipCard'а с цветовой кодировкой
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Gift, Send, Copy, Check, Users, ChevronDown, Award, Repeat, AlertTriangle, ChevronRight } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
-import { api, type ClientReferralStats, type PublicConfig } from "@/lib/api";
+import { useCabinetConfig } from "@/contexts/cabinet-config";
+import { useReferralStats } from "@/lib/queries";
 import { StadiumButton } from "@/components/stealth/stadium-button";
 import { TipCard } from "@/components/stealth/tip-card";
 import { cn } from "@/lib/utils";
@@ -24,26 +25,13 @@ function fmtMoney(n: number, currency: string) {
 
 export function StealthReferral() {
   const { state } = useClientAuth();
-  const [stats, setStats] = useState<ClientReferralStats | null>(null);
-  const [config, setConfig] = useState<PublicConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Данные через кеш: рефералка + публичный конфиг (единые с другими экранами).
+  const statsQuery = useReferralStats(state.token);
+  const stats = statsQuery.data ?? null;
+  const config = useCabinetConfig();
+  const loading = statsQuery.isLoading;
   const [copied, setCopied] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
-
-  useEffect(() => {
-    if (!state.token) return;
-    let alive = true;
-    setLoading(true);
-    Promise.all([
-      api.getClientReferralStats(state.token).catch(() => null),
-      api.getPublicConfig().catch(() => null),
-    ]).then(([s, c]) => {
-      if (!alive) return;
-      setStats(s);
-      setConfig(c);
-    }).finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
-  }, [state.token]);
 
   const link = useMemo(() => {
     if (!stats?.referralCode) return null;

@@ -32,7 +32,7 @@ export function VideoEmbed({ block }: { block: LandingApiBlock }) {
 
   if (!url) {
     return (
-      <section className={`container mx-auto px-4 py-12 ${SECTION_SCROLL_OFFSET}`}>
+      <section className={`max-w-7xl mx-auto px-4 py-12 ${SECTION_SCROLL_OFFSET}`}>
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-border bg-card dark:bg-card p-8 text-center text-sm text-slate-500 dark:text-slate-400">
           Укажите URL видео в props.url (YouTube, Vimeo или прямой mp4).
         </div>
@@ -43,7 +43,7 @@ export function VideoEmbed({ block }: { block: LandingApiBlock }) {
   const { embed, isExternal } = toEmbedUrl(url);
 
   return (
-    <section className={`container mx-auto px-4 py-12 md:py-16 ${SECTION_SCROLL_OFFSET}`}>
+    <section className={`max-w-7xl mx-auto px-4 py-12 md:py-16 ${SECTION_SCROLL_OFFSET}`}>
       {title ? (
         <h2 className="mb-6 text-center text-3xl font-black tracking-[-0.04em] text-slate-950 md:text-4xl dark:text-white">
           {title}

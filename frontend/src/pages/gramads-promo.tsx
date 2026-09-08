@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Megaphone, Wallet, RefreshCw, Plus, Loader2, KeyRound, Eye, EyeOff, Power, Archive, Star, Send, Clock, TrendingUp, X, Check, AlertCircle, ExternalLink } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
-import { api, type GramadsPostDto, type GramadsBalanceDto, type GramadsPostPageDto, type GramadsDepositPageDto, type GramadsIncomesExpensesDto } from "@/lib/api";
+import { api, type GramadsPostDto } from "@/lib/api";
+import { useGramadsStatus, useGramadsPosts, useGramadsPostStats } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -87,24 +90,31 @@ export function GramadsPromoPage() {
   const { t } = useTranslation();
   const token = useAuth().state.accessToken!;
 
+  const queryClient = useQueryClient();
+
   // Статус ключа
-  const [statusLoading, setStatusLoading] = useState(true);
-  const [status, setStatus] = useState<{ configured: boolean; valid: boolean; error?: string } | null>(null);
+  const statusQuery = useGramadsStatus(token);
+  const status = statusQuery.data ?? null;
+  const statusLoading = statusQuery.isLoading;
 
   // Форма API ключа
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
-  const [savingKey, setSavingKey] = useState(false);
   const [keyMessage, setKeyMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  // Данные кабинета
-  const [balance, setBalance] = useState<GramadsBalanceDto | null>(null);
-  const [incomes, setIncomes] = useState<GramadsIncomesExpensesDto | null>(null);
-  const [topups, setTopups] = useState<GramadsDepositPageDto | null>(null);
-
-  const [posts, setPosts] = useState<GramadsPostPageDto | null>(null);
-  const [postsLoading, setPostsLoading] = useState(false);
   const [postFilter, setPostFilter] = useState<"active" | "archived" | "all">("active");
+  const postsQuery = useGramadsPosts(token, postFilter, !!status?.valid);
+  const posts = postsQuery.data ?? null;
+  const postsLoading = postsQuery.isLoading || postsQuery.isFetching;
+
+  // Кошелёк — три независимых запроса (вместо Promise.all-каскада).
+  const walletValid = !!status?.valid;
+  const balanceQuery = useQuery({ queryKey: ["admin", "gramads-balance"], queryFn: () => api.gramadsGetBalance(token!).catch(() => null), enabled: !!token && walletValid });
+  const incomesQuery = useQuery({ queryKey: ["admin", "gramads-incomes"], queryFn: () => api.gramadsGetIncomesAndExpenses(token!, 30).catch(() => null), enabled: !!token && walletValid });
+  const topupsQuery = useQuery({ queryKey: ["admin", "gramads-topups"], queryFn: () => api.gramadsGetMyTopups(token!, 10, 0).catch(() => null), enabled: !!token && walletValid });
+  const balance = balanceQuery.data ?? null;
+  const incomes = incomesQuery.data ?? null;
+  const topups = topupsQuery.data ?? null;
 
   // Модалка создания
   const [createOpen, setCreateOpen] = useState(false);
@@ -113,93 +123,48 @@ export function GramadsPromoPage() {
   // Активная вкладка
   const [activeTab, setActiveTab] = useState("wallet");
 
-  const loadStatus = useCallback(async () => {
-    setStatusLoading(true);
-    try {
-      const r = await api.gramadsStatus(token);
-      setStatus({ configured: r.configured, valid: r.valid, error: r.error });
-    } catch (e) {
-      setStatus({ configured: false, valid: false, error: e instanceof Error ? e.message : "error" });
-    } finally {
-      setStatusLoading(false);
-    }
-  }, [token]);
+  const refreshWallet = () => {
+    void queryClient.invalidateQueries({ queryKey: ["admin", "gramads-balance"] });
+    void queryClient.invalidateQueries({ queryKey: ["admin", "gramads-incomes"] });
+    void queryClient.invalidateQueries({ queryKey: ["admin", "gramads-topups"] });
+    void queryClient.invalidateQueries({ queryKey: qk.admin.gramadsPosts(postFilter) });
+  };
 
-  const loadWallet = useCallback(async () => {
-    if (!status?.valid) return;
-    try {
-      const [b, ie, tp] = await Promise.all([
-        api.gramadsGetBalance(token).catch(() => null),
-        api.gramadsGetIncomesAndExpenses(token, 30).catch(() => null),
-        api.gramadsGetMyTopups(token, 10, 0).catch(() => null),
-      ]);
-      setBalance(b);
-      setIncomes(ie);
-      setTopups(tp);
-    } catch {}
-  }, [token, status?.valid]);
-
-  const loadPosts = useCallback(async () => {
-    if (!status?.valid) return;
-    setPostsLoading(true);
-    try {
-      const args: Parameters<typeof api.gramadsGetMyPosts>[1] = { count: 100, pageIndex: 0 };
-      if (postFilter === "archived") args.isArchived = true;
-      else if (postFilter === "active") { args.isArchived = false; args.activeOnly = true; }
-      else args.isArchived = false;
-      const r = await api.gramadsGetMyPosts(token, args);
-      setPosts(r);
-    } catch {
-      setPosts(null);
-    } finally {
-      setPostsLoading(false);
-    }
-  }, [token, status?.valid, postFilter]);
-
-  useEffect(() => { loadStatus(); }, [loadStatus]);
-  useEffect(() => { loadWallet(); }, [loadWallet]);
-  useEffect(() => { loadPosts(); }, [loadPosts]);
+  // Обновить статус ключа (кнопки Refresh / Проверить).
+  const refreshStatus = () => {
+    void statusQuery.refetch();
+  };
 
   // Сохранение API-ключа (через /admin/settings)
-  const saveApiKey = async () => {
-    setSavingKey(true);
-    setKeyMessage(null);
-    try {
-      await api.updateSettings(token, { gramadsApiKey: apiKeyInput.trim() } as Partial<AdminSettings> as never);
+  const keyMutation = useMutation({
+    mutationFn: (gramadsApiKey: string) =>
+      api.updateSettings(token, { gramadsApiKey } as Partial<AdminSettings> as never),
+    onSuccess: (_r, gramadsApiKey) => {
       setApiKeyInput("");
-      await loadStatus();
-      // loadStatus() обновит status — если valid=false покажем баннер.
-      // Здесь сообщаем что save прошёл (Gramads validation — отдельная проверка ниже).
-      setKeyMessage({ type: "ok", text: "Ключ сохранён. Проверяем валидность…" });
-      setTimeout(() => setKeyMessage(null), 4000);
-    } catch (e) {
+      void queryClient.invalidateQueries({ queryKey: qk.admin.gramadsStatus() });
+      if (gramadsApiKey === "") {
+        void queryClient.invalidateQueries({ queryKey: ["admin", "gramads-balance"] });
+        void queryClient.invalidateQueries({ queryKey: ["admin", "gramads-incomes"] });
+        void queryClient.invalidateQueries({ queryKey: ["admin", "gramads-topups"] });
+        void queryClient.invalidateQueries({ queryKey: qk.admin.gramadsPosts(postFilter) });
+        setKeyMessage({ type: "ok", text: "Ключ удалён" });
+        setTimeout(() => setKeyMessage(null), 3000);
+      } else {
+        // Валидность ключа проверитGramads — обновлённый status покажет баннер, если невалиден.
+        setKeyMessage({ type: "ok", text: "Ключ сохранён. Проверяем валидность…" });
+        setTimeout(() => setKeyMessage(null), 4000);
+      }
+    },
+    onError: (e) => {
       setKeyMessage({ type: "err", text: e instanceof Error ? e.message : "Ошибка сохранения" });
-    } finally {
-      setSavingKey(false);
-    }
-  };
+    },
+  });
+  const savingKey = keyMutation.isPending;
 
-  const clearApiKey = async () => {
-    setSavingKey(true);
-    setKeyMessage(null);
-    try {
-      await api.updateSettings(token, { gramadsApiKey: "" } as Partial<AdminSettings> as never);
-      setApiKeyInput("");
-      setStatus({ configured: false, valid: false });
-      setBalance(null);
-      setIncomes(null);
-      setTopups(null);
-      setPosts(null);
-      setKeyMessage({ type: "ok", text: "Ключ удалён" });
-      setTimeout(() => setKeyMessage(null), 3000);
-    } catch (e) {
-      setKeyMessage({ type: "err", text: e instanceof Error ? e.message : "Ошибка" });
-    } finally {
-      setSavingKey(false);
-    }
-  };
+  const saveApiKey = () => keyMutation.mutate(apiKeyInput.trim());
+  const clearApiKey = () => keyMutation.mutate("");
 
-  const onPostAction = useCallback(async (action: "switchEnabled" | "switchFavourite" | "switchPremium" | "switchGroups" | "switchGAlity", postId: number) => {
+  const onPostAction = async (action: "switchEnabled" | "switchFavourite" | "switchPremium" | "switchGroups" | "switchGAlity", postId: number) => {
     try {
       // Gramads API ожидает полный PostDto в теле — и берёт из него целевое значение
       // переключаемого флага (а не «инвертирует» по id). Если прислать `{id}`, все булевы
@@ -227,7 +192,6 @@ export function GramadsPromoPage() {
 
       // Немедленно отразим ответ в UI.
       if (detailPost?.id === postId) setDetailPost(updated);
-      setPosts((prev) => (prev ? { ...prev, items: prev.items.map((p) => (p.id === postId ? updated : p)) } : prev));
 
       // Диагностика: действие не применилось.
       const expl = updated.notSuccessExplanation ?? 0;
@@ -238,9 +202,10 @@ export function GramadsPromoPage() {
         else alert("Gramads не применил действие. Проверьте, что на балансе есть показы и что кампания одобрена.");
       }
 
-      void loadPosts();
+      void queryClient.invalidateQueries({ queryKey: qk.admin.gramadsPosts(postFilter) });
     } catch (e) { alert(e instanceof Error ? e.message : String(e)); }
-  }, [token, loadPosts, detailPost, posts]);
+  };
+
 
   // === Render ===
 
@@ -265,7 +230,7 @@ export function GramadsPromoPage() {
         </div>
         <div className="flex items-center gap-2">
           {status?.configured && (
-            <Button variant="outline" onClick={() => { loadStatus(); loadWallet(); loadPosts(); }} disabled={postsLoading}>
+            <Button variant="outline" onClick={() => { refreshStatus(); void postsQuery.refetch(); refreshWallet(); }} disabled={postsLoading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${postsLoading ? "animate-spin" : ""}`} />
               {t("admin.common.refresh")}
             </Button>
@@ -488,7 +453,7 @@ export function GramadsPromoPage() {
                     <Button onClick={saveApiKey} disabled={!apiKeyInput.trim() || savingKey}>
                       {savingKey ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> {t("admin.settings.saving")}</> : <><Check className="h-4 w-4 mr-2" /> Сохранить новый</>}
                     </Button>
-                    <Button variant="outline" onClick={loadStatus}>
+                    <Button variant="outline" onClick={refreshStatus}>
                       <RefreshCw className="h-4 w-4 mr-2" />
                       {t("admin.gramads.recheck")}
                     </Button>
@@ -519,21 +484,20 @@ export function GramadsPromoPage() {
         <CreateCampaignDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
-          onCreated={() => { setCreateOpen(false); loadPosts(); }}
+          onCreated={() => { setCreateOpen(false); void postsQuery.refetch(); }}
           token={token}
         />
       )}
-
-      {/* Модалка деталей кампании */}
       {detailPost && (
         <CampaignDetailDialog
           post={detailPost}
           onClose={() => setDetailPost(null)}
           onAction={(a) => onPostAction(a, detailPost.id)}
           onRefresh={async () => {
+            if (!detailPost) return;
             const u = await api.gramadsGetMyPost(token, detailPost.id);
             setDetailPost(u);
-            loadPosts();
+            void postsQuery.refetch();
           }}
           token={token}
         />
@@ -571,11 +535,6 @@ function CampaignCard({ post, onOpen, onAction }: {
               {post.isFavourite && <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />}
             </div>
             <p className="mt-2 text-sm text-foreground/90 whitespace-pre-wrap break-words">{preview}</p>
-          </div>
-          <div className="text-right text-xs text-muted-foreground shrink-0 space-y-0.5">
-            <div>{t("admin.gramads.shows")}: <span className="text-foreground font-semibold">{(post.totalShows ?? 0).toLocaleString()}</span></div>
-            <div title={t("admin.gramads.paid_hint")}>{t("admin.gramads.paid_label")}: <span className="text-foreground font-semibold">{formatPaid(post.paid)}</span></div>
-            <div>{t("admin.gramads.limit")}: <span className="text-foreground font-semibold">{formatLimit(post.limit, t("admin.gramads.unlimited"))}</span></div>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
@@ -956,20 +915,9 @@ function CampaignDetailDialog({ post, onClose, onAction, onRefresh, token }: {
 //  Статистика по кампании 
 function PostStats({ token, postId, createdAt }: { token: string; postId: number; createdAt?: string }) {
   const { t } = useTranslation();
-  const [loading, setLoading] = useState(false);
-  const [raw, setRaw] = useState<unknown>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const s = await api.gramadsGetStatistics(token, postId, 30);
-      setRaw(s);
-    } catch {
-      setRaw(null);
-    } finally { setLoading(false); }
-  }, [token, postId]);
-
-  useEffect(() => { load(); }, [load]);
+  const statsQuery = useGramadsPostStats(token, postId);
+  const raw = statsQuery.data;
+  const loading = statsQuery.isLoading;
 
   const series = useMemo(() => {
     if (!raw || !Array.isArray(raw)) return [];

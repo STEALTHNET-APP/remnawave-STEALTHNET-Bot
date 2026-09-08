@@ -8124,6 +8124,7 @@ function tariffToJson(
     price: number;
     currency: string;
     locations?: string | null; // T11+T12 (11.05.2026): rich-text список локаций
+    menuEmoji?: string | null; // T16: эмодзи-префикс для витрины кабинета (задаётся в /admin/tariffs)
     priceOptions?: { id: string; durationDays: number; price: number; sortOrder: number }[];
   },
   markupPercent = 0,
@@ -8145,6 +8146,8 @@ function tariffToJson(
       : [],
     price: m(t.price),
     currency: t.currency,
+    // Эмодзи тарифа для витрины кабинета (админ задаёт в /admin/tariffs).
+    menuEmoji: (t.menuEmoji ?? "").trim() || null,
     // локации тарифа отдаются клиенту/боту.
     locations: t.locations ?? null,
     priceOptions: (t.priceOptions ?? []).map((o) => ({

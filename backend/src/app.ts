@@ -326,7 +326,10 @@ async function requireHubRole(_req: express.Request, res: express.Response, next
   if (rt.role !== "hub") return res.status(404).json({ message: "This installation is not the marketplace hub" });
   next();
 }
-async function requireMarketplaceEnabled(_req: express.Request, res: express.Response, next: express.NextFunction) {
+async function requireMarketplaceEnabled(req: express.Request, res: express.Response, next: express.NextFunction) {
+  // issue #129: PATCH /settings должен быть доступен и при выключенном маркетплейсе,
+  // иначе тоггл нельзя выключить повторно (guard отдаёт 404 на весь роутер).
+  if (req.path === "/settings") return next();
   const rt = await getMarketplaceRuntime();
   if (!rt.enabled) return res.status(404).json({ message: "Marketplace disabled" });
   next();

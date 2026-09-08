@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import gsap from "gsap";
+import { reducedMotion } from "@/lib/gsap-utils";
 import {
   Shield, LayoutDashboard, Users, CreditCard, Settings, LogOut, KeyRound,
   Search, Megaphone, Tag, BarChart3, FileText, ExternalLink, Sun, Moon, Monitor,
@@ -156,14 +157,15 @@ function NavItems({ onClick }: { onClick?: () => void }) {
                   to={item.to}
                   onClick={onClick}
                   className={cn(
-                    "flex items-center gap-2.5 py-[7px] px-2.5 rounded-lg transition-colors duration-150 relative",
+                    "group flex items-center gap-2.5 py-[7px] px-2.5 rounded-lg transition-all duration-200 relative",
                     isActive
-                      ? "bg-primary/12 text-primary font-semibold"
-                      : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"
+                      ? "bg-primary/[0.14] text-primary font-semibold shadow-[inset_0_1px_0_0_hsl(0_0%_100%/0.06)]"
+                      : "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06]"
                   )}
                 >
-                  <item.icon className={cn("h-[15px] w-[15px] shrink-0", isActive ? "text-primary" : "text-muted-foreground/70")} />
+                  <item.icon className={cn("h-[15px] w-[15px] shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground/90")} />
                   <span className="text-[12.8px] leading-tight tracking-normal">{item.label}</span>
+                  {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-full bg-primary" />}
                 </Link>
               );
             })}
@@ -194,8 +196,64 @@ export function DashboardLayout() {
   const lastCountersRef = useRef<AdminNotificationCounters | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(true);
 
-  useEffect(() => { setMobileMenuOpen(false); }, [location.pathname]);
+  const [mobileSidebarVisible, setMobileSidebarVisible] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const sidebarOverlayRef = useRef<HTMLDivElement>(null);
+  const sidebarCloseTimer = useRef<number | null>(null);
+  // gsap-шторка: open → slide-in; close → slide-out, потом unmount (двухфазный mount-паттерн).
+  useEffect(() => {
+    if (sidebarCloseTimer.current !== null) {
+      window.clearTimeout(sidebarCloseTimer.current);
+      sidebarCloseTimer.current = null;
+    }
+    if (mobileMenuOpen) {
+      setMobileSidebarVisible(true);
+    } else if (mobileSidebarVisible) {
+      if (reducedMotion()) {
+        setMobileSidebarVisible(false);
+        return;
+      }
+      const panel = sidebarRef.current;
+      const overlay = sidebarOverlayRef.current;
+      if (!panel) {
+        setMobileSidebarVisible(false);
+        return;
+      }
+      const ctx = gsap.context(() => {
+        gsap.to(panel, { x: -290, duration: 0.25, ease: "power2.in", overwrite: "auto" });
+        if (overlay) gsap.to(overlay, { opacity: 0, duration: 0.2, ease: "power2.in" });
+      }, panel);
+      sidebarCloseTimer.current = window.setTimeout(() => {
+        sidebarCloseTimer.current = null;
+        ctx.revert();
+        gsap.set(panel, { clearProps: "all" });
+        setMobileSidebarVisible(false);
+      }, 260);
+      return () => {
+        window.clearTimeout(sidebarCloseTimer.current ?? 0);
+        ctx.revert();
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mobileMenuOpen]);
 
+  // Вход шторки после монтирования.
+  useLayoutEffect(() => {
+    const panel = sidebarRef.current;
+    const overlay = sidebarOverlayRef.current;
+    if (!panel || !mobileSidebarVisible || !mobileMenuOpen) return;
+    if (reducedMotion()) {
+      gsap.set(panel, { clearProps: "all" });
+      return;
+    }
+    const ctx = gsap.context(() => {
+      gsap.fromTo(panel, { x: -290 }, { x: 0, duration: 0.3, ease: "power2.out", overwrite: "auto" });
+      if (overlay) gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power2.out" });
+    }, panel);
+    return () => ctx.revert();
+  }, [mobileSidebarVisible, mobileMenuOpen]);
+
+  // Редирект менеджера, если он открыл недоступный раздел.
   useEffect(() => {
     const admin = state.admin;
     if (!admin || admin.role !== "MANAGER") return;
@@ -271,7 +329,7 @@ export function DashboardLayout() {
       </div>
 
       {/*  Desktop sidebar  */}
-      <aside className="hidden md:flex flex-col shrink-0 fixed left-0 top-0 bottom-0 w-[230px] z-30 border-r border-border bg-card overflow-hidden">
+      <aside className="glass-surface hidden md:flex flex-col shrink-0 fixed left-0 top-0 bottom-0 w-[240px] z-30 border-r border-border/70 overflow-hidden">
         <div className="flex h-[52px] items-center gap-2.5 px-4 border-b border-border relative z-10">
           <div className="absolute bottom-0 left-6 right-6 h-[1px] bg-transparent"></div>
           {brand.logo ? (
@@ -311,62 +369,57 @@ export function DashboardLayout() {
         </div>
       </aside>
 
-      {/*  Mobile sidebar overlay  */}
-      <AnimatePresence>
-        {mobileMenuOpen && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[69] bg-card md:hidden" onClick={() => setMobileMenuOpen(false)} />
-            <motion.aside
-              initial={{ x: -290 }} animate={{ x: 0 }} exit={{ x: -290 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="fixed left-0 top-0 bottom-0 z-[70] w-[290px] flex flex-col md:hidden bg-primary/20 dark:bg-primary/30 border-r border-border dark:border-border overflow-hidden"
-            >
-              <div className="flex h-16 items-center justify-center px-4 relative z-10">
-                <div className="absolute bottom-0 left-6 right-6 h-[1px] bg-transparent"></div>
-                <div className="flex items-center gap-3 min-w-0">
-                  {brand.logo ? <img src={brand.logo} alt="" className="h-8 w-auto object-contain" /> : <Shield className="h-6 w-6 text-primary shrink-0" />}
-                  {brand.serviceName ? <span className="font-bold text-[14.5px] tracking-wide truncate">{brand.serviceName}</span> : null}
-                </div>
-                <Button variant="ghost" size="icon" className="absolute right-4 shrink-0" onClick={() => setMobileMenuOpen(false)}>
-                  <X className="h-5 w-5" />
-                </Button>
+      {/*  Mobile sidebar overlay — gsap-шторка (замена AnimatePresence): mount-двухфазный паттерн как в floating-chat  */}
+      {mobileSidebarVisible && (
+        <>
+          <div ref={sidebarOverlayRef} data-sidebar="overlay"
+            className="fixed inset-0 z-[69] bg-card md:hidden" onClick={() => setMobileMenuOpen(false)} />
+          <aside ref={sidebarRef} data-sidebar="panel"
+            className="fixed left-0 top-0 bottom-0 z-[70] w-[290px] flex flex-col md:hidden bg-primary/20 dark:bg-primary/30 border-r border-border dark:border-border overflow-hidden"
+          >
+            <div className="flex h-16 items-center justify-center px-4 relative z-10">
+              <div className="absolute bottom-0 left-6 right-6 h-[1px] bg-transparent"></div>
+              <div className="flex items-center gap-3 min-w-0">
+                {brand.logo ? <img src={brand.logo} alt="" className="h-8 w-auto object-contain" /> : <Shield className="h-6 w-6 text-primary shrink-0" />}
+                {brand.serviceName ? <span className="font-bold text-[14.5px] tracking-wide truncate">{brand.serviceName}</span> : null}
               </div>
-              <nav className="flex-1 space-y-0.5 p-2.5 overflow-y-auto relative z-10 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-card [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-card">
-                <NavItems onClick={() => setMobileMenuOpen(false)} />
-              </nav>
-              <div className="border-t border-border p-3 space-y-1 relative z-10">
-                <div className="text-[11px] font-semibold text-emerald-500 px-2.5 py-0.5 mb-0.5 flex items-center gap-2">
-                  <span className="relative flex h-2 w-2">
-                    
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  {t("admin.header.online")}
-                </div>
-                <div className="text-[11.5px] text-muted-foreground truncate px-2.5 pb-2">{state.admin?.email}</div>
-                <Link to="/admin/change-password" className="block" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-[12.8px]">
-                    <KeyRound className="h-4 w-4" />
-                    {t("admin.header.change_password")}
-                  </Button>
-                </Link>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="w-full justify-start gap-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors text-[12.8px] mt-0.5" 
-                  onClick={handleLogout}
-                >
-                  <LogOut className="h-4 w-4" />
-                  {t("admin.header.logout")}
-                </Button>
+              <Button variant="ghost" size="icon" className="absolute right-4 shrink-0" onClick={() => setMobileMenuOpen(false)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <nav className="flex-1 space-y-0.5 p-2.5 overflow-y-auto relative z-10 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-card [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent hover:[&::-webkit-scrollbar-thumb]:bg-card">
+              <NavItems onClick={() => setMobileMenuOpen(false)} />
+            </nav>
+            <div className="border-t border-border p-3 space-y-1 relative z-10">
+              <div className="text-[11px] font-semibold text-emerald-500 px-2.5 py-0.5 mb-0.5 flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                {t("admin.header.online")}
               </div>
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
+              <div className="text-[11.5px] text-muted-foreground truncate px-2.5 pb-2">{state.admin?.email}</div>
+              <Link to="/admin/change-password" className="block" onClick={() => setMobileMenuOpen(false)}>
+                <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-[12.8px]">
+                  <KeyRound className="h-4 w-4" />
+                  {t("admin.header.change_password")}
+                </Button>
+              </Link>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors text-[12.8px] mt-0.5"
+                onClick={handleLogout}
+              >
+                <LogOut className="h-4 w-4" />
+                {t("admin.header.logout")}
+              </Button>
+            </div>
+          </aside>
+        </>
+      )}
 
       {/*  Main content  */}
-      <main className="flex-1 min-w-0 flex flex-col md:pl-[230px] w-full relative z-10">
+      <main className="flex-1 min-w-0 flex flex-col md:pl-[240px] w-full relative z-10">
         <header className="sticky top-0 z-20 flex h-[52px] shrink-0 items-center justify-between gap-3 px-5 border-b border-border bg-card">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <Button variant="ghost" size="icon" className="md:hidden shrink-0 rounded-xl" onClick={() => setMobileMenuOpen(true)}>

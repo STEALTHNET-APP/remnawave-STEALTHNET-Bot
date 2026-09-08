@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
@@ -19,6 +19,8 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/auth";
 import { api, type ApiKeyListItem, type ApiKeyUsageItem } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,8 +68,21 @@ function presetExpiry(preset: "30d" | "90d" | "180d" | "365d" | "never"): string
 
 export function ApiKeysPage() {
   const token = useAuth().state.accessToken!;
-  const [items, setItems] = useState<ApiKeyListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const keysQuery = useQuery({
+    queryKey: qk.admin.apiKeys(),
+    queryFn: () => api.getApiKeys(token).catch(() => [] as ApiKeyListItem[]),
+    enabled: !!token,
+  });
+  const items = keysQuery.data ?? [];
+  const loading = keysQuery.isLoading;
+  const [usageId, setUsageId] = useState<string | null>(null);
+
+  const usageQuery = useQuery({
+    queryKey: qk.admin.apiKeyUsage(usageId ?? ""),
+    queryFn: () => api.getApiKeyUsage(token, usageId!, 100),
+    enabled: !!token && !!usageId,
+  });
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [expiryPreset, setExpiryPreset] = useState<"30d" | "90d" | "180d" | "365d" | "never">("never");
@@ -77,25 +92,11 @@ export function ApiKeysPage() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [usageId, setUsageId] = useState<string | null>(null);
-  const [usageItems, setUsageItems] = useState<ApiKeyUsageItem[]>([]);
-  const [usageLoading, setUsageLoading] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await api.getApiKeys(token);
-      setItems(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки ключей");
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
+  const load = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.admin.apiKeys(), exact: false });
+  };
 
-  useEffect(() => {
-    load();
-  }, [load]);
 
   const parseIpList = (raw: string): string[] => {
     return raw
@@ -121,7 +122,7 @@ export function ApiKeysPage() {
       setDescription("");
       setAllowedIpsRaw("");
       setExpiryPreset("never");
-      await load();
+      load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка создания ключа");
     } finally {
@@ -136,17 +137,8 @@ export function ApiKeysPage() {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const openUsage = async (id: string) => {
+  const openUsage = (id: string) => {
     setUsageId(id);
-    setUsageLoading(true);
-    try {
-      const data = await api.getApiKeyUsage(token, id, 100);
-      setUsageItems(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось загрузить лог");
-    } finally {
-      setUsageLoading(false);
-    }
   };
 
   return (
@@ -315,8 +307,8 @@ export function ApiKeysPage() {
         {usageId && (
           <UsageModal
             keyName={items.find((k) => k.id === usageId)?.name ?? ""}
-            items={usageItems}
-            loading={usageLoading}
+            items={usageQuery.data ?? []}
+            loading={usageQuery.isLoading}
             onClose={() => setUsageId(null)}
           />
         )}

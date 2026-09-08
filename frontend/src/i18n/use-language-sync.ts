@@ -1,14 +1,14 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { loadLanguagePack } from "./init";
-import { api } from "@/lib/api";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 const loadedPackCodes = new Set<string>();
 let packsFetchedPromise: Promise<Record<string, Record<string, unknown>>> | null = null;
 
 function ensureTranslationsLoaded(): Promise<Record<string, Record<string, unknown>>> {
   if (!packsFetchedPromise) {
-    packsFetchedPromise = api.getPublicConfig()
+    packsFetchedPromise = getPublicConfigCached()
       .then((c) => {
         const packs = c.translations ?? {};
         for (const [code, pack] of Object.entries(packs)) {

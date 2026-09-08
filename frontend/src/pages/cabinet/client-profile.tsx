@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { User, Wallet, Copy, Check, CreditCard, Loader2, Link2, Mail, Fingerprint, CalendarDays, Shield, KeyRound, Monitor, Trash2, Zap, Send } from "lucide-react";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthProfile } from "@/pages/cabinet/stealth/stealth-profile";
+import { AuroraProfile } from "@/pages/cabinet/aurora/aurora-profile";
 import { QRCodeSVG } from "qrcode.react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
@@ -15,6 +16,7 @@ import type { ClientPayment } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getPublicConfigCached } from "@/lib/public-config";
 function formatDate(s: string | null) {
   if (!s) return "—";
   try {
@@ -45,7 +47,8 @@ function formatPaymentStatus(status: string, t: (key: string) => string): string
 export function ClientProfilePage() {
   const design = useCabinetDesign();
   if (design === "stealth") return <StealthProfile />;
-  return <ClassicProfilePage aurora={design === "aurora"} />;
+  if (design === "aurora") return <AuroraProfile />;
+  return <ClassicProfilePage />;
 }
 
 function ClassicProfilePage({ aurora = false }: { aurora?: boolean }) {
@@ -306,7 +309,7 @@ function ClassicProfilePage({ aurora = false }: { aurora?: boolean }) {
   }
 
   useEffect(() => {
-    api.getPublicConfig().then((c) => {
+    getPublicConfigCached().then((c) => {
       setPlategaMethods(c.plategaMethods ?? []);
       setYoomoneyEnabled(Boolean(c.yoomoneyEnabled));
       setYookassaEnabled(Boolean(c.yookassaEnabled));

@@ -10,12 +10,17 @@
  *     стробит и проваливается в прозрачность;
  *   • на время показа меню прячется (атрибут `data-au-sheet` на <html>,
  *     правило в index.css) — по той же причине.
- * Плюс фон не скроллится, пока шторка открыта.
+ * Плюс фон не скроллит, пока шторка открыта.
+ *
+ * Анимация въезда/выезда — gsap (yPercent 100 ↔ 0): шторка остаётся в DOM,
+ * пока играет exit (onComplete убирает её через ~300 мс), поэтому закрытие
+ * плавное, как раньше с AnimatePresence.
  */
 
-import { useEffect, type ReactNode } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import gsap from "gsap";
 import { X } from "lucide-react";
+import { EASE_OUT, reducedMotion } from "@/lib/gsap-utils";
 
 interface Props {
   open: boolean;
@@ -27,6 +32,15 @@ interface Props {
 }
 
 export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
+  // Шторка смонтирована, пока открыта И пока играет анимация выхода.
+  const [mounted, setMounted] = useState(open);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open) setMounted(true);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -38,19 +52,60 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
     };
   }, [open]);
 
-  if (!open) return null;
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    const panel = panelRef.current;
+    if (!overlay || !panel) return;
+    if (reducedMotion()) {
+      // Без анимаций: мгновенно в финальное состояние, размонтируем сразу.
+      gsap.set(panel, { yPercent: open ? 0 : 100 });
+      gsap.set(overlay, { opacity: open ? 1 : 0 });
+      if (!open) setMounted(false);
+      return;
+    }
+    const ctx = gsap.context(() => {
+      if (open) {
+        gsap.fromTo(
+          overlay,
+          { opacity: 0 },
+          { opacity: 1, duration: 0.35, ease: EASE_OUT },
+        );
+        gsap.fromTo(
+          panel,
+          { yPercent: 100 },
+          { yPercent: 0, duration: 0.35, ease: EASE_OUT },
+        );
+      } else {
+        gsap.to(overlay, { opacity: 0, duration: 0.3, ease: EASE_OUT });
+        gsap.to(panel, {
+          yPercent: 100,
+          duration: 0.3,
+          ease: EASE_OUT,
+          // убираем из DOM сразу по завершении выхода (~300 мс)
+          onComplete: () => setMounted(false),
+        });
+      }
+    }, overlay);
+    return () => ctx.revert();
+  }, [open, mounted]);
+
+  if (!mounted) return null;
 
   return (
     <div
+      ref={overlayRef}
       className="fixed inset-0 z-[55] flex items-end justify-center bg-black/45"
+      style={{ opacity: 0 }}
       onClick={onClose}
     >
-      <motion.div
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        transition={{ type: "spring", stiffness: 340, damping: 34 }}
+      <div
+        ref={panelRef}
         className="flex max-h-[88vh] w-full max-w-md flex-col rounded-t-[28px] bg-[var(--au-bg)] pt-3 text-[var(--au-ink)] [backface-visibility:hidden] [isolation:isolate]"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+        style={{
+          // стартовое состояние до первого твина — без вспышки на 1 кадр
+          transform: "translate3d(0, 100%, 0)",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* «ручка» шторки */}
@@ -73,7 +128,7 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
         <div className="min-h-0 flex-1 overflow-y-auto px-5">{children}</div>
 
         {footer && <div className="shrink-0 px-5 pt-3">{footer}</div>}
-      </motion.div>
+      </div>
     </div>
   );
 }

@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
 import type { RemnaConfigProfile } from "@/lib/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRemnaConfigProfiles } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -160,20 +163,20 @@ const TEMPLATES: { name: string; config: string }[] = [
     { "protocol": "blackhole", "tag": "BLOCK" }
   ],
   "routing": { "rules": [] }
-}`,
+`,
   },
 ];
-
 export function RemnaProfilesPage() {
   const { state } = useAuth();
-  const token = state.accessToken!;
+  const token = state.accessToken ?? null;
+  const qc = useQueryClient();
   const navigate = useNavigate();
 
-  const [profiles, setProfiles] = useState<RemnaConfigProfile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
+  const profilesQuery = useRemnaConfigProfiles(token);
+  const loading = profilesQuery.isLoading;
+  const error = profilesQuery.error instanceof Error ? profilesQuery.error.message : null;
+  const profiles: RemnaConfigProfile[] = profilesQuery.data?.response?.configProfiles ?? [];
+
   const [copiedUuid, setCopiedUuid] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
@@ -191,20 +194,24 @@ export function RemnaProfilesPage() {
     }
   }, [configText]);
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await api.getRemnaConfigProfiles(token);
-      setProfiles(res.response?.configProfiles ?? []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
+  const invalidateProfiles = () => {
+    void qc.invalidateQueries({ queryKey: qk.admin.remnaConfigProfiles(), exact: false });
   };
 
-  useEffect(() => { load(); }, [token]);
+  const saveMutation = useMutation({
+    mutationFn: ({ uuid, body }: { uuid: string | null; body: { name: string; config: unknown } }) =>
+      uuid ? api.remnaConfigProfileUpdate(token!, uuid, body) : api.remnaConfigProfileCreate(token!, body),
+    onSuccess: () => {
+      setShowForm(false);
+      invalidateProfiles();
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (uuid: string) => api.remnaConfigProfileDelete(token!, uuid),
+    onSuccess: () => invalidateProfiles(),
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+  });
 
   const openCreate = () => {
     setEditingUuid(null);
@@ -253,39 +260,18 @@ export function RemnaProfilesPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!configValidation.valid) {
       alert("Config не является корректным JSON.");
       return;
     }
     const config = JSON.parse(configText);
-    setSaving(true);
-    try {
-      if (editingUuid) {
-        await api.remnaConfigProfileUpdate(token, editingUuid, { name: name.trim(), config });
-      } else {
-        await api.remnaConfigProfileCreate(token, { name: name.trim(), config });
-      }
-      setShowForm(false);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setSaving(false);
-    }
+    saveMutation.mutate({ uuid: editingUuid, body: { name: name.trim(), config } });
   };
 
-  const handleDelete = async (p: RemnaConfigProfile) => {
+  const handleDelete = (p: RemnaConfigProfile) => {
     if (!confirm(`Удалить профиль «${p.name}»? Ноды и хосты, привязанные к нему, потеряют конфигурацию.`)) return;
-    setBusy(p.uuid);
-    try {
-      await api.remnaConfigProfileDelete(token, p.uuid);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    } finally {
-      setBusy(null);
-    }
+    deleteMutation.mutate(p.uuid);
   };
 
   if (loading) {
@@ -370,8 +356,8 @@ export function RemnaProfilesPage() {
                     <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Редактировать Xray-конфиг" onClick={() => openEdit(p)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10" title="Удалить" disabled={busy === p.uuid} onClick={() => handleDelete(p)}>
-                      {busy === p.uuid ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10" title="Удалить" disabled={deleteMutation.isPending && deleteMutation.variables === p.uuid} onClick={() => handleDelete(p)}>
+                      {deleteMutation.isPending && deleteMutation.variables === p.uuid ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                     </Button>
                   </div>
                 </div>
@@ -435,8 +421,8 @@ export function RemnaProfilesPage() {
 
             <DialogFooter className="mt-2 gap-2">
               <Button variant="outline" onClick={() => setShowForm(false)} className="rounded-xl">Отмена</Button>
-              <Button onClick={handleSave} disabled={saving || !name.trim() || !configValidation.valid} className="gap-2 rounded-xl">
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              <Button onClick={handleSave} disabled={saveMutation.isPending || !name.trim() || !configValidation.valid} className="gap-2 rounded-xl">
+                {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {editingUuid ? "Сохранить" : "Создать"}
               </Button>
             </DialogFooter>
