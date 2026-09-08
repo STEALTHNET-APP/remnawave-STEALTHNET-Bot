@@ -36,7 +36,7 @@ function statusLabel(status: string): string {
 /** Открытому обращению — зелёный, закрытому — серый, остальным — янтарный. */
 function statusCls(status: string): string {
   if (status === "open") return "bg-[#E7F6EE] text-[#0F7A45]";
-  if (status === "closed") return "bg-white text-[var(--au-muted)]";
+  if (status === "closed") return "bg-[var(--au-bg)] text-[var(--au-muted)]";
   return "bg-[#FFF7E8] text-[#7A4E00]";
 }
 
@@ -101,7 +101,7 @@ export function AuroraTickets() {
         </div>
       ) : !items || items.length === 0 ? (
         <section className="rounded-[26px] bg-[var(--au-surface)] p-8 text-center">
-          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white">
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--au-bg)]">
             <MessageCircle className="h-6 w-6 text-[var(--au-muted)]" />
           </span>
           <p className="mt-3 text-[15px] font-semibold">Обращений пока нет</p>
@@ -118,7 +118,7 @@ export function AuroraTickets() {
               onClick={() => setChatTicketId(t.id)}
               className="flex w-full items-center gap-3 rounded-[20px] bg-[var(--au-surface)] p-4 text-left transition-transform active:scale-[0.99]"
             >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--au-bg)]">
                 <MessageCircle className="h-5 w-5 text-[var(--au-muted)]" />
               </span>
               <div className="min-w-0 flex-1">

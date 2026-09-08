@@ -1,13 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { motion } from "framer-motion";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthDashboard } from "@/pages/cabinet/stealth/stealth-dashboard";
-import { AuroraDashboard } from "@/pages/cabinet/aurora/aurora-dashboard";
-import gsap from "gsap";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-client";
-import { useStaggerReveal, reducedMotion } from "@/lib/gsap-utils";
+import { useStaggerReveal } from "@/lib/gsap-utils";
 import { useClientSubscription, useClientAllSubscriptions, useClientPayments, useReferralStats, useAvailableTrials, useInvalidateClientData } from "@/lib/queries";
 import {
   
@@ -136,7 +135,7 @@ export function ClientDashboardPage() {
   return (
     <>
       <LinkTelegramPrompt />
-      {design === "stealth" ? <StealthDashboard /> : design === "aurora" ? <AuroraDashboard /> : <ClassicDashboardPage />}
+      {design === "stealth" ? <StealthDashboard /> : <ClassicDashboardPage compact={design === "aurora"} />}
     </>
   );
 }
@@ -156,8 +155,8 @@ function LinkTelegramPrompt() {
   const { t } = useTranslation();
   const { state } = useClientAuth();
   const config = useCabinetConfig();
-  const isMiniapp = useCabinetMiniapp();
   const token = state.token;
+  const isMiniapp = useCabinetMiniapp();
   const client = state.client;
   const botUsername = (config?.telegramBotUsername ?? "").replace(/^@/, "");
 
@@ -221,23 +220,14 @@ function LinkTelegramPrompt() {
   );
 }
 
-function ClassicDashboardPage() {
+function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   const { t } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
   const config = useCabinetConfig();
   const token = state.token;
-  const isMiniapp = useCabinetMiniapp();
-  const client = state.client;
   const [searchParams, setSearchParams] = useSearchParams();
-  const [trialLoading, setTrialLoading] = useState(false);
-  const [trialError, setTrialError] = useState<string | null>(null);
-  const [trialsPickerOpen, setTrialsPickerOpen] = useState(false);
-  const [extendSubId, setExtendSubId] = useState<string | null>(null);
-  const [paySuccessModal, setPaySuccessModal] = useState<null | "topup" | "tariff" | "generic">(null);
-
   const pageRef = useStaggerReveal<HTMLDivElement>([], { y: 12, stagger: 0.07 });
 
-  const successWrapRef = useRef<HTMLDivElement>(null);
   const subQuery = useClientSubscription(token);
   const allSubQuery = useClientAllSubscriptions(token);
   const payQuery = useClientPayments(token);
@@ -284,11 +274,28 @@ function ClassicDashboardPage() {
   const referralStats = referralQuery.data ?? null;
   const hasMultiTrials: boolean | null = trialsQuery.isLoading ? null : (trialsQuery.data?.items.length ?? 0) > 0;
   const loading = queryLoading;
+  const invalidateData = useInvalidateClientData();
+  const queryClient = useQueryClient();
 
-  // Локальные UI-состояния, не связанные с сетью
+  // root-подписка — триал: лейбл TRIAL + «Конвертировать» (или ничего).
+  // T-unify-cabinet (30.05.2026, WolfVPN): id главной подписки (#0) — для кнопки «Продлить» → /cabinet/tariffs?extend=
   const [paymentMessage, setPaymentMessage] = useState<"success_topup" | "success_tariff" | "success" | "failed" | null>(null);
+  // T-pay-success-modal (WolfVPN): модалка успеха при возврате с оплаты (ЮKassa/Platega/Lava/и др.)
+  const [paySuccessModal, setPaySuccessModal] = useState<null | "topup" | "tariff" | "generic">(null);
+  const [trialLoading, setTrialLoading] = useState(false);
+  const [trialError, setTrialError] = useState<string | null>(null);
+  // T15 (26.05.2026, WolfVPN): новая мульти-триал система.
+  // hasMultiTrials=null → ещё не загружали; true → открываем модалку; false → legacy /trial.
+  const [trialsPickerOpen, setTrialsPickerOpen] = useState(false);
+  // красивая модалка продления вместо редиректа в каталог
+  // (?extend=...). Открывается для ЛЮБОЙ подписки — единый механизм.
+  const [extendSubId, setExtendSubId] = useState<string | null>(null);
+  // ♻️ Пер-подписочное автосписание (вместо одного глобального Switch в карточке «Баланс»).
+  // Триальные подписки сюда не попадают — автосписание на них не имеет смысла.
   const [autoRenewTogglingId, setAutoRenewTogglingId] = useState<string | null>(null);
 
+  const isMiniapp = useCabinetMiniapp();
+  const client = state.client;
   const trialDays = config?.trialDays ?? 0;
 
   useEffect(() => {
@@ -302,7 +309,7 @@ function ClassicDashboardPage() {
       searchParams.get("yoomoney_form") === "success" ||
       searchParams.get("yookassa") === "success" ||
       searchParams.get("heleket") === "success" ||
-      searchParams.get("rollypay") === "success" ||
+      searchParams.get("rollypay") === "success" || searchParams.get("paritypay") === "success" ||
       searchParams.get("lava") === "success" ||
       searchParams.get("lavatop") === "success" ||
       searchParams.get("overpay") === "return";
@@ -318,6 +325,7 @@ function ClassicDashboardPage() {
       if (token) refreshProfile().catch(() => {});
     }
   }, [searchParams, setSearchParams, token, refreshProfile]);
+
 
 
   // Auto-redeem pending gift code (saved by /gift/:code page before redirect to login/register)
@@ -339,6 +347,25 @@ function ClassicDashboardPage() {
       });
   }, [token, loading]);
 
+  // ♻️ Тоггл автосписания у конкретной подписки: optimistic-обновление с откатом при ошибке.
+  async function toggleSubAutoRenew(sub: { type: "root" | "secondary"; id: string }, enabled: boolean) {
+    if (!token) return;
+    setAutoRenewTogglingId(sub.id);
+    // Optimistic: правим кеш TanStack напрямую (autoRenewSubs — derived от allSubscriptions).
+    const allSubs = allSubQuery.data?.items ?? [];
+    const patch = (on: boolean) =>
+      allSubs.map((s) => (s.id === sub.id ? { ...s, autoRenewEnabled: on } : s));
+    queryClient.setQueryData(qk.client.allSubscriptions(token), { items: patch(enabled) });
+    try {
+      await api.clientSetSubscriptionAutoRenew(token, sub.type, sub.id, enabled);
+      refreshProfile().catch(() => {});
+    } catch (err) {
+      console.error("Failed to toggle subscription auto-renew", err);
+      queryClient.setQueryData(qk.client.allSubscriptions(token), { items: patch(!enabled) });
+    } finally {
+      setAutoRenewTogglingId(null);
+    }
+  }
 
   const [autoRenewPromoInput, setAutoRenewPromoInput] = useState("");
   const [autoRenewPromoLoading, setAutoRenewPromoLoading] = useState(false);
@@ -367,7 +394,12 @@ function ClassicDashboardPage() {
       setAutoRenewPromoLoading(false);
     }
   }
-  const invalidateData = useInvalidateClientData();
+
+  // T15 (26.05.2026, WolfVPN): при заходе грузим список доступных триалов.
+  // Если их > 0 → кнопка «Бесплатный Тест» откроет модалку выбора.
+  // Если бэк вернул items=[] AND hasAnyEnabled=false → нет новых триалов вообще, fallback на legacy /trial.
+  // Если items=[] AND hasAnyEnabled=true → юзер уже всё использовал, модалку показывать не надо.
+
   async function activateTrial() {
     if (!token) return;
     // Новый флоу: открываем модалку выбора.
@@ -391,25 +423,12 @@ function ClassicDashboardPage() {
   }
 
   async function handleTrialActivated() {
-    // После активации триала через модалку — обновляем профиль и данные.
+    // После активации триала через модалку — обновляем профиль и подписку.
     await refreshProfile();
     invalidateData();
   }
 
-  function toggleSubAutoRenew(sub: { type: "root" | "secondary"; id: string }, enabled: boolean) {
-    if (!token) return;
-    setAutoRenewTogglingId(sub.id);
-    api.clientSetSubscriptionAutoRenew(token, sub.type, sub.id, enabled)
-      .then(() => refreshProfile().catch(() => {}))
-      .catch((err) => console.error("Failed to toggle subscription auto-renew", err))
-      .finally(() => {
-        setAutoRenewTogglingId(null);
-        invalidateData();
-      });
-  }
-
   if (!client) return null;
-
 
   const subParsed = parseSubscription(subscription);
   const hasActiveSubscription =
@@ -495,6 +514,7 @@ function ClassicDashboardPage() {
             <span className="flex items-center gap-2 shrink-0">
               {autoRenewTogglingId === sub.id && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
               <Switch
+                aria-label={`Автосписание: ${sub.name}`}
                 checked={sub.enabled}
                 disabled={autoRenewTogglingId === sub.id}
                 onCheckedChange={(v) => toggleSubAutoRenew(sub, v)}
@@ -613,17 +633,17 @@ function ClassicDashboardPage() {
   // T-pay-success-modal (WolfVPN): модалка успешной оплаты при возврате с платёжки — общая для mobile/desktop.
   const paySuccessModalNode = (
     <Dialog open={paySuccessModal !== null} onOpenChange={(o) => !o && setPaySuccessModal(null)}>
-      <DialogContent ref={successWrapRef} className="sm:max-w-sm rounded-3xl border-white/10 bg-background/90 backdrop-blur-3xl overflow-hidden">
+      <DialogContent className="sm:max-w-sm rounded-3xl border-white/10 bg-background/90 backdrop-blur-3xl overflow-hidden">
         <div className="absolute -top-16 left-1/2 -translate-x-1/2 h-40 w-40 rounded-full bg-emerald-500/25 blur-3xl pointer-events-none" />
         <div className="relative flex flex-col items-center gap-4 py-3 text-center">
-          <div
+          <motion.div
+            initial={{ scale: 0, rotate: -25 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 260, damping: 16 }}
             className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-green-600 shadow-xl shadow-emerald-500/40"
-            data-gsap="success-check"
           >
-            <svg viewBox="0 0 24 24" className="h-10 w-10 text-white" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 6L9 17l-5-5" />
-            </svg>
-          </div>
+            <Check className="h-10 w-10 text-white" strokeWidth={3} />
+          </motion.div>
           <DialogTitle className="text-2xl font-black tracking-tight text-foreground">Оплата прошла! ✨</DialogTitle>
           <DialogDescription className="text-sm leading-relaxed text-muted-foreground px-2">
             {paySuccessModal === "topup"
@@ -642,29 +662,8 @@ function ClassicDashboardPage() {
       </DialogContent>
     </Dialog>
   );
-  useEffect(() => {
-    const wrap = successWrapRef.current;
-    if (!wrap) return;
-    const target = wrap.querySelector('[data-gsap="success-check"]');
-    const path = wrap.querySelector('svg path');
-    if (!target || reducedMotion()) return;
-    const ctx = gsap.context(() => {
-      if (path instanceof SVGPathElement) {
-        const len = Math.ceil(path.getTotalLength()) + 1;
-        path.style.strokeDasharray = String(len);
-        path.style.strokeDashoffset = String(len);
-        gsap.to(path, { strokeDashoffset: 0, duration: 0.55, delay: 0.08, ease: "power2.out" });
-      }
-      gsap.fromTo(
-        target,
-        { opacity: 0, rotate: 80, y: 40, filter: "blur(10px)" },
-        { opacity: 1, rotate: 0, y: 0, filter: "blur(0px)", duration: 0.55, ease: "power2.out", clearProps: "filter,transform" },
-      );
-    }, wrap);
-    return () => ctx.revert();
-  }, [paySuccessModal]);
 
-  if (isMiniapp) {
+  if (isMiniapp || compact) {
     return (
       <>
       <div className="w-full min-w-0 overflow-hidden flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -695,7 +694,7 @@ function ClassicDashboardPage() {
         )}
 
         {/* 1. Статус, срок, тариф, трафик, устройства — с иконками */}
-        <section data-tour="subscription" className="order-1 glass-card rounded-3xl p-5 overflow-hidden transition-all duration-300">
+        <section data-tour="subscription" className="order-1 rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl p-5 shadow-sm overflow-hidden transition-all duration-300">
           <h2 className="flex items-center justify-between gap-2 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground/80 mb-5">
             <span className="flex items-center gap-2 min-w-0">
               <span className="inline-flex p-1.5 bg-primary/20 rounded-lg shrink-0">
@@ -832,7 +831,7 @@ function ClassicDashboardPage() {
           const secTrafficPercent = secParsed.trafficLimitBytes && secParsed.trafficLimitBytes > 0 && secParsed.trafficUsed != null ? Math.min(100, Math.round((secParsed.trafficUsed / secParsed.trafficLimitBytes) * 100)) : null;
 
           return (
-            <section key={sec.id} className="order-3 glass-card rounded-3xl border border-indigo-500/30 p-5 overflow-hidden transition-all duration-300">
+            <section key={sec.id} className="order-3 rounded-3xl border border-indigo-500/30 bg-card/40 backdrop-blur-xl p-5 shadow-sm overflow-hidden transition-all duration-300">
               <h2 className="flex items-center justify-between gap-2 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground/80 mb-4">
                 <span className="flex items-center gap-2 min-w-0">
                   <span className="inline-flex p-1.5 bg-indigo-500/20 rounded-lg shrink-0">
@@ -959,7 +958,7 @@ function ClassicDashboardPage() {
         {/* 2. Как подключиться — показываем ТОЛЬКО когда нет активной ссылки (триал/выбор тарифа)
             или есть доп.пробники. При активной подписке блок скрыт — подключение уже в её карточке. */}
         {(!vpnUrl || showMultiTrials) && (
-        <section className="order-first glass-card rounded-3xl p-5 overflow-hidden transition-all duration-300">
+        <section className="order-first rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl p-5 shadow-sm overflow-hidden transition-all duration-300">
           <h2 className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground/80 mb-4">
              <div className="p-1.5 bg-primary/20 rounded-lg">
               <Wifi className="h-4 w-4 shrink-0 text-primary" />
@@ -1009,7 +1008,7 @@ function ClassicDashboardPage() {
         )}
 
         {/* 3. Баланс — order-2: сразу под основной подпиской (mobile) */}
-        <section data-tour="balance" className="order-2 glass-card rounded-3xl p-5 overflow-hidden transition-all duration-300 flex flex-col gap-4">
+        <section data-tour="balance" className="order-2 rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl p-5 shadow-sm overflow-hidden transition-all duration-300 flex flex-col gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-primary/20 rounded-xl">
               <Wallet className="h-5 w-5 text-primary" />
@@ -1077,64 +1076,88 @@ function ClassicDashboardPage() {
   // DESKTOP LAYOUT
   return (
     <>
-    <div ref={pageRef} className="space-y-6 max-w-7xl mx-auto">
-      {/* Hero: компактная строка приветствия + одна контекстная кнопка (без дублей с карточками) */}
-      <section className="glass-surface relative overflow-hidden rounded-2xl px-6 py-5">
-        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-56 h-56 rounded-full bg-primary/15 blur-[80px] pointer-events-none" />
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground truncate">
+    <div ref={pageRef} className="classic-dashboard flex flex-col gap-6 w-full min-w-0 mx-auto">
+      {/* Hero + CTA */}
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="dashboard-welcome relative overflow-hidden rounded-3xl bg-card/40 backdrop-blur-2xl border border-border/50 p-8 sm:p-10 shadow-xl"
+      >
+        {/* Декоративное свечение */}
+        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full bg-primary/20 blur-[80px] pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+          <div className="flex-1 min-w-0">
+            <h1 className="dashboard-welcome-title text-3xl font-bold tracking-tight text-foreground">
               {t("cabinet.dashboard.welcome")}{client.email ? `, ${client.email.split("@")[0]}` : client.telegramUsername ? `, @${client.telegramUsername}` : ""}
             </h1>
-            <p className="mt-1 text-[14px] text-muted-foreground">
-              {hasActiveSubscription ? t("cabinet.dashboard.sub_active_desc") : t("cabinet.dashboard.sub_inactive_desc")}
+            <p className="mt-3 text-[16px] text-muted-foreground max-w-xl leading-relaxed">
+              {hasActiveSubscription
+                ? t("cabinet.dashboard.sub_active_desc")
+                : t("cabinet.dashboard.sub_inactive_desc")}
             </p>
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            {/* Стабильный layout: пока триалы/подписка грузятся — placeholder той же геометрии,
-                чтобы кнопка не «допрыгивала» после ответа API (мерцание hero). */}
-            {hasMultiTrials === null && !hasActiveSubscription ? (
-              <div className="h-11 w-[176px] rounded-xl bg-foreground/[0.04] border border-border/40 animate-pulse" aria-hidden />
-            ) : showAnyTrial ? (
-              <Button className="gap-2 h-11 px-5 rounded-xl bg-green-600 hover:bg-green-700 text-white [&_svg]:self-center [&_span]:leading-none" onClick={activateTrial} disabled={trialLoading}>
-                {trialLoading ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <Gift className="h-4 w-4 shrink-0" />}
-                <span className="inline-flex items-center text-sm font-semibold leading-none">{t("cabinet.dashboard.free_trial")}</span>
-              </Button>
-            ) : !vpnUrl ? (
-              <Button size="lg" className="gap-2 h-11 px-5 rounded-xl [&_svg]:self-center [&_span]:leading-none" asChild>
-                <Link to="/cabinet/tariffs" className="inline-flex items-center justify-center gap-2 leading-none">
-                  <Package className="h-4 w-4 shrink-0" />
-                  <span className="inline-flex items-center text-sm font-semibold leading-none">{t("cabinet.dashboard.choose_tariff")}</span>
-                </Link>
-              </Button>
-            ) : null}
-            {paymentMessage === "success" && (
-              <span className="inline-flex items-center gap-2 bg-green-500/15 border border-green-500/30 px-3 py-2 rounded-xl text-green-700 dark:text-green-400 font-medium text-xs">
-                <Check className="h-3.5 w-3.5" />
+            
+            {(paymentMessage === "success" || paymentMessage === "success_topup" || paymentMessage === "success_tariff") && (
+              <div className="mt-4 inline-flex items-center gap-2 bg-green-500/15 border border-green-500/30 px-4 py-2 rounded-xl text-green-700 dark:text-green-400 font-medium text-sm">
+                <Check className="h-4 w-4" />
                 {t("cabinet.dashboard.payment_success")}
-              </span>
+              </div>
             )}
             {paymentMessage === "failed" && (
-              <span className="inline-flex items-center gap-2 bg-destructive/15 border border-destructive/30 px-3 py-2 rounded-xl text-destructive font-medium text-xs">
-                <AlertCircle className="h-3.5 w-3.5" />
+              <div className="mt-4 inline-flex items-center gap-2 bg-destructive/15 border border-destructive/30 px-4 py-2 rounded-xl text-destructive font-medium text-sm">
+                <AlertCircle className="h-4 w-4" />
                 {t("cabinet.dashboard.payment_failed")}
-              </span>
+              </div>
             )}
             {giftRedeemMessage && (
-              <span className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl font-medium text-xs ${giftRedeemMessage.type === "success" ? "bg-green-500/15 border border-green-500/30 text-green-700 dark:text-green-400" : "bg-destructive/15 border border-destructive/30 text-destructive"}`}>
+              <div className={`mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm ${giftRedeemMessage.type === "success" ? "bg-green-500/15 border border-green-500/30 text-green-700 dark:text-green-400" : "bg-destructive/15 border border-destructive/30 text-destructive"}`}>
                 {giftRedeemMessage.type === "success" ? "🎁" : "❌"} {giftRedeemMessage.text}
-              </span>
+              </div>
             )}
+            {trialError && <p className="mt-3 text-sm text-destructive font-medium">{trialError}</p>}
+          </div>
+
+          <div className="flex flex-col sm:flex-row md:flex-col gap-3 shrink-0 min-w-[240px]">
+            {/* T-trial-coexist (27.05.2026, WolfVPN): «Бесплатный Тест» (мульти-триал) и
+                «Подключиться» могут показываться ВМЕСТЕ. Legacy single-trial — только когда нет подписки. */}
+            {/* T-main-connect (WolfVPN): кнопка «Подключиться к VPN» убрана из hero — теперь она в карточке основной подписки (со ссылкой) */}
+            {showAnyTrial && (
+              <Button size="lg" className="w-full gap-2 shadow-xl bg-green-600 hover:bg-green-700 text-white rounded-xl h-14 hover:scale-105 transition-transform [&_svg]:self-center [&_span]:leading-none" onClick={activateTrial} disabled={trialLoading}>
+                {trialLoading ? <Loader2 className="h-5 w-5 shrink-0 animate-spin" /> : <Gift className="h-5 w-5 shrink-0" />}
+                <span className="inline-flex items-center text-base font-medium leading-none">{t("cabinet.dashboard.free_trial")}</span>
+              </Button>
+            )}
+            {!vpnUrl && !showAnyTrial && (
+              <Button size="lg" variant="default" className="w-full gap-2 shadow-xl rounded-xl h-14 hover:scale-105 transition-transform [&_svg]:self-center [&_span]:leading-none" asChild>
+                <Link to="/cabinet/tariffs" className="inline-flex items-center justify-center gap-2 leading-none">
+                  <Package className="h-5 w-5 shrink-0" />
+                  <span className="inline-flex items-center text-base font-medium leading-none">{t("cabinet.dashboard.choose_tariff")}</span>
+                </Link>
+              </Button>
+            )}
+            <Button variant="secondary" size="lg" className="w-full gap-2 rounded-xl h-14 hover:scale-105 transition-transform bg-background/50 hover:bg-background/80 border border-border/50 [&_svg]:self-center [&_span]:leading-none" asChild>
+              <Link to="/cabinet/profile#topup" className="inline-flex items-center justify-center gap-2 leading-none">
+                <PlusCircle className="h-5 w-5 shrink-0 text-foreground/70" />
+                <span className="inline-flex items-center text-base font-medium leading-none">{t("cabinet.dashboard.top_up")}</span>
+              </Link>
+            </Button>
           </div>
         </div>
-      </section>
+      </motion.section>
 
-      {/* Cards grid: подписка 7/12 + баланс 5/12; рефералы — широкая полоса ниже */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-12">
+      {config?.botInfoBlock?.trim() && (
+        <div className="rounded-2xl border border-primary/30 bg-primary/5 backdrop-blur-md px-5 py-4 text-sm whitespace-pre-line shadow-sm">
+          {config.botInfoBlock.trim()}
+        </div>
+      )}
+
+      {/* Cards grid */}
+      <div className="dashboard-grid grid gap-6">
         {/* Подписка / тариф */}
-        <Card data-tour="subscription" className="glass-card glass-card-hover rounded-3xl shadow-lg transition-all duration-300 lg:col-span-7 flex flex-col">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center justify-between gap-2 text-xl text-foreground">
+        <Card data-tour="subscription" className="dashboard-card dashboard-subscription rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 sm:col-span-2 lg:col-span-1 flex flex-col">
+          <CardHeader className="dashboard-card-header pb-4">
+            <CardTitle className="dashboard-subscription-heading flex items-center justify-between gap-2 text-xl text-foreground">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="p-2.5 bg-primary/20 rounded-xl shrink-0">
                   <Package className="h-6 w-6 text-primary" />
@@ -1148,13 +1171,13 @@ function ClassicDashboardPage() {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col justify-center">
+          <CardContent className="dashboard-subscription-body flex-1 flex flex-col">
             {loading ? (
               <div className="flex justify-center py-6"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
             ) : subscriptionError || !subscription || typeof subscription !== "object" ? (
               <NoSubscriptionState />
             ) : (
-              <div className="space-y-4">
+              <div className="dashboard-subscription-details space-y-4">
                 <div className="flex items-center gap-2 flex-wrap mb-2">
                   {hasActiveSubscription ? (
                     <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-semibold bg-green-500/15 text-green-700 dark:text-green-400 border border-green-500/20">
@@ -1169,7 +1192,7 @@ function ClassicDashboardPage() {
                   )}
                   {daysLeft != null && (
                     <span className="text-sm font-semibold text-foreground bg-foreground/5 px-3 py-1.5 rounded-full border border-border/50 shadow-sm">
-                      {daysLeft} {daysLeft === 1 ? t("cabinet.common.day_one") : daysLeft < 5 ? t("cabinet.common.day_few") : t("cabinet.common.day_many")}
+                      {formatRuDays(daysLeft)}
                     </span>
                   )}
                   {subParsed.hwidDeviceLimit != null && subParsed.hwidDeviceLimit > 0 && deviceCount != null && (
@@ -1179,38 +1202,38 @@ function ClassicDashboardPage() {
                   )}
                 </div>
                 {((tariffDisplayName ?? subParsed.productName) || client?.trialUsed) && (
-                  <div className="flex items-center gap-4 bg-background/40 p-4 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <div className="flex items-center gap-3 bg-background/40 p-3.5 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <Package className="h-6 w-6" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">{rootTrial.isTrial ? "TRIAL" : t("cabinet.dashboard.tariff_label")}</p>
-                      <p className="text-[15px] font-semibold truncate text-foreground">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{rootTrial.isTrial ? "TRIAL" : t("cabinet.dashboard.tariff_label")}</p>
+                      <p className="text-base font-semibold break-words text-foreground">
                         {((tariffDisplayName ?? subParsed.productName?.trim() ?? "").trim()) || t("cabinet.dashboard.test_label")}
                       </p>
                     </div>
                   </div>
                 )}
                 {subParsed.expireAt && (
-                  <div className="flex items-center gap-4 bg-background/40 p-4 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <div className="flex items-center gap-3 bg-background/40 p-3.5 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <Calendar className="h-6 w-6" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">{t("cabinet.dashboard.valid_until")}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{t("cabinet.dashboard.valid_until")}</p>
                       <p className="text-[15px] font-semibold text-foreground">
                         {formatDate(subParsed.expireAt)}
                       </p>
                     </div>
                   </div>
                 )}
-                <div className="bg-background/40 p-4 rounded-2xl border border-border/50 space-y-3 transition-colors hover:bg-background/60 shadow-sm">
+                <div className="bg-background/40 p-3.5 rounded-2xl border border-border/50 space-y-3 transition-colors hover:bg-background/60 shadow-sm">
                   <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <Wifi className="h-6 w-6" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">{t("cabinet.dashboard.traffic")}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{t("cabinet.dashboard.traffic")}</p>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[15px] font-semibold text-foreground">
                           {subParsed.trafficLimitBytes != null && subParsed.trafficLimitBytes > 0
@@ -1234,7 +1257,7 @@ function ClassicDashboardPage() {
                       <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={vpnUrl}>
                         {vpnUrl}
                       </code>
-                      <Button size="icon" variant="outline" className="shrink-0 h-auto w-11 rounded-xl bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { navigator.clipboard.writeText(vpnUrl || ""); }}>
+                      <Button size="icon" variant="outline" aria-label="Скопировать ссылку подписки" className="shrink-0 h-auto min-h-11 w-11 rounded-xl bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { navigator.clipboard.writeText(vpnUrl || ""); }}>
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>
@@ -1259,13 +1282,13 @@ function ClassicDashboardPage() {
         </Card>
 
         {/* Баланс + пополнение */}
-        <Card data-tour="balance" className="group relative overflow-hidden glass-card glass-card-hover rounded-3xl border border-primary/15 shadow-lg hover:border-primary/30 transition-all duration-500 lg:col-span-5 flex flex-col justify-between">
+        <Card data-tour="balance" className="dashboard-card dashboard-balance group relative overflow-hidden rounded-3xl border border-primary/15 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl hover:border-primary/30 transition-all duration-500 flex flex-col justify-between">
           {/* декоративные блобы */}
           <div className="pointer-events-none absolute -top-20 -right-16 h-48 w-48 rounded-full bg-primary/15 blur-3xl transition-opacity duration-700 group-hover:opacity-100 opacity-60" aria-hidden />
           <div className="pointer-events-none absolute -bottom-24 -left-16 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" aria-hidden />
           {/* градиентный хайлайт по верхней кромке */}
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" aria-hidden />
-          <CardHeader className="relative pb-4">
+          <CardHeader className="dashboard-card-header relative pb-4">
             <CardTitle className="flex items-center gap-3 text-xl text-foreground">
               <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/25 to-violet-500/20 ring-1 ring-primary/25 shadow-[0_0_20px_-6px] shadow-primary/40">
                 <Wallet className="h-6 w-6 text-primary" />
@@ -1273,9 +1296,9 @@ function ClassicDashboardPage() {
               {t("cabinet.dashboard.balance")}
             </CardTitle>
           </CardHeader>
-          <CardContent className="relative space-y-6 flex-1 flex flex-col justify-center text-center">
+          <CardContent className="dashboard-balance-body relative flex-1 flex flex-col gap-5">
             <div>
-              <p className="bg-gradient-to-br from-foreground via-foreground to-primary bg-clip-text text-transparent text-5xl font-extrabold tracking-tight tabular-nums drop-shadow-sm">
+              <p className="dashboard-balance-amount bg-gradient-to-br from-foreground via-foreground to-primary bg-clip-text text-transparent text-5xl font-extrabold tracking-tight tabular-nums drop-shadow-sm">
                 {formatMoney(client.balance, client.preferredCurrency)}
               </p>
               <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-background/40 border border-border/40 px-3 py-1 text-[12px] text-muted-foreground">
@@ -1335,13 +1358,13 @@ function ClassicDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Широкая полоса: Рефералы или Подключение (span-12, горизонтальная компоновка) */}
-        <Card className="group relative overflow-hidden glass-card glass-card-hover rounded-3xl shadow-lg hover:border-violet-500/25 transition-all duration-500 lg:col-span-12">
+        {/* Справа от баланса: Рефералы или Подключение */}
+        <Card className="dashboard-card dashboard-referral flex flex-col group relative overflow-hidden rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl hover:border-violet-500/25 transition-all duration-500 sm:col-span-2 lg:col-span-1">
           {/* декоративные блобы */}
           <div className="pointer-events-none absolute -top-20 -left-16 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" aria-hidden />
           <div className="pointer-events-none absolute -bottom-24 -right-16 h-48 w-48 rounded-full bg-primary/10 blur-3xl" aria-hidden />
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-violet-500/40 to-transparent" aria-hidden />
-          <CardHeader className="relative pb-4">
+          <CardHeader className="dashboard-card-header relative pb-4">
             <CardTitle className="flex items-center gap-3 text-xl text-foreground">
               <div className="p-2.5 rounded-xl bg-gradient-to-br from-violet-500/25 to-primary/20 ring-1 ring-violet-500/25 shadow-[0_0_20px_-6px] shadow-violet-500/40">
                 {hasReferralLinks ? <Users className="h-6 w-6 text-primary" /> : <Wifi className="h-6 w-6 text-primary" />}
@@ -1349,48 +1372,39 @@ function ClassicDashboardPage() {
               {hasReferralLinks ? t("cabinet.dashboard.referrals") : t("cabinet.dashboard.connection")}
             </CardTitle>
           </CardHeader>
-          <CardContent className="relative pt-2">
+          <CardContent className="dashboard-referral-body relative flex-1 flex flex-col gap-5">
             {hasReferralLinks ? (
-              <div className="grid gap-6 lg:grid-cols-12 items-start">
-                {/* Левая колонка: описание + статы */}
-                <div className="lg:col-span-5 space-y-4">
-                  <p className="text-[14px] text-muted-foreground leading-relaxed">Делитесь ссылкой и получайте <strong className="bg-gradient-to-r from-primary to-violet-400 bg-clip-text text-transparent font-bold">бонус на баланс</strong> за каждого приглашённого друга!</p>
-                  {referralStats && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { label: "Приглашено", value: referralStats.referralCount.toLocaleString("ru-RU"), icon: UserPlus, tint: "text-primary", ring: "ring-primary/20", glow: "shadow-primary/25", bg: "from-primary/10" },
-                        { label: "Заработано", value: `${referralStats.totalEarnings.toLocaleString("ru-RU")} ₽`, icon: Coins, tint: "text-emerald-500 dark:text-emerald-400", ring: "ring-emerald-500/20", glow: "shadow-emerald-500/25", bg: "from-emerald-500/10" },
-                        { label: "Ваш %", value: `${referralStats.referralPercent}%`, icon: Percent, tint: "text-violet-500 dark:text-violet-400", ring: "ring-violet-500/20", glow: "shadow-violet-500/25", bg: "from-violet-500/10" },
-                      ].map((tile) => (
-                        <div key={tile.label} className={`rounded-2xl bg-gradient-to-b ${tile.bg} to-background/40 border border-border/40 ring-1 ${tile.ring} backdrop-blur-xl px-2 py-3.5 text-center shadow-[0_0_24px_-12px] ${tile.glow} hover:-translate-y-0.5 transition-transform duration-300`}>
-                          <tile.icon className={`h-4 w-4 mx-auto mb-1.5 ${tile.tint}`} />
-                          <p className="text-lg font-extrabold tracking-tight text-foreground leading-none tabular-nums">{tile.value}</p>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5">{tile.label}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <Button variant="outline" className="group/btn w-full rounded-xl h-11 text-sm font-medium bg-background/30 hover:bg-gradient-to-r hover:from-primary/10 hover:to-violet-500/10 hover:border-primary/30 transition-all duration-300 border-border/50 [&_svg]:self-center [&_span]:leading-none" asChild>
-                     <Link to="/cabinet/referral" className="inline-flex items-center justify-center gap-2 leading-none">
-                       <span className="inline-flex items-center leading-none">Подробная статистика</span>
-                       <ArrowRight className="h-4 w-4 shrink-0 group-hover/btn:translate-x-1 transition-transform duration-300" />
-                     </Link>
-                  </Button>
-                </div>
-                {/* Правая колонка: ссылки для копирования */}
-                <div className="lg:col-span-7 rounded-2xl border border-border/40 bg-background/30 backdrop-blur-xl divide-y divide-border/40 overflow-hidden">
+              <>
+                <p className="text-[14px] text-muted-foreground leading-relaxed">Делитесь ссылкой и получайте <strong className="bg-gradient-to-r from-primary to-violet-400 bg-clip-text text-transparent font-bold">бонус на баланс</strong> за каждого приглашённого друга!</p>
+                {referralStats && (
+                  <div className="dashboard-referral-stats grid grid-cols-3 gap-2">
+                    {[
+                      { label: "Приглашено", value: referralStats.referralCount.toLocaleString("ru-RU"), icon: UserPlus, tint: "text-primary", ring: "ring-primary/20", glow: "shadow-primary/25", bg: "from-primary/10" },
+                      { label: "Заработано", value: `${referralStats.totalEarnings.toLocaleString("ru-RU")} ₽`, icon: Coins, tint: "text-emerald-500 dark:text-emerald-400", ring: "ring-emerald-500/20", glow: "shadow-emerald-500/25", bg: "from-emerald-500/10" },
+                      { label: "Ваш %", value: `${referralStats.referralPercent}%`, icon: Percent, tint: "text-violet-500 dark:text-violet-400", ring: "ring-violet-500/20", glow: "shadow-violet-500/25", bg: "from-violet-500/10" },
+                    ].map((tile) => (
+                      <div key={tile.label} className={`rounded-2xl bg-gradient-to-b ${tile.bg} to-background/40 border border-border/40 ring-1 ${tile.ring} backdrop-blur-xl px-2 py-3.5 text-center shadow-[0_0_24px_-12px] ${tile.glow} hover:-translate-y-0.5 transition-transform duration-300`}>
+                        <tile.icon className={`h-4 w-4 mx-auto mb-1.5 ${tile.tint}`} />
+                        <p className="text-lg font-extrabold tracking-tight text-foreground leading-none tabular-nums">{tile.value}</p>
+                        <p className="text-xs text-muted-foreground mt-1.5">{tile.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="rounded-2xl border border-border/40 bg-background/30 backdrop-blur-xl divide-y divide-border/40 overflow-hidden">
                   {referralLinkSite && (
                     <button
                       type="button"
                       onClick={() => copyReferral("site")}
                       title={referralLinkSite}
+                      aria-label={referralCopied === "site" ? "Ссылка на сайт скопирована" : "Скопировать реферальную ссылку на сайт"}
                       className="group/row w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-primary/[0.06] transition-colors"
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
                         <Globe className="h-4 w-4 text-primary" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Сайт</span>
+                        <span className="block text-xs font-semibold text-muted-foreground">Сайт</span>
                         <span className="block truncate font-mono text-[13px] text-foreground/85">{referralLinkSite}</span>
                       </span>
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-background/40 text-foreground/60 group-hover/row:text-primary group-hover/row:border-primary/30 group-hover/row:scale-105 transition-all">
@@ -1403,13 +1417,14 @@ function ClassicDashboardPage() {
                       type="button"
                       onClick={() => copyReferral("bot")}
                       title={referralLinkBot}
+                      aria-label={referralCopied === "bot" ? "Ссылка на бота скопирована" : "Скопировать реферальную ссылку на бота"}
                       className="group/row w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-violet-500/[0.06] transition-colors"
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
                         <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Бот</span>
+                        <span className="block text-xs font-semibold text-muted-foreground">Бот</span>
                         <span className="block truncate font-mono text-[13px] text-foreground/85">{referralLinkBot}</span>
                       </span>
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-background/40 text-foreground/60 group-hover/row:text-violet-400 group-hover/row:border-violet-500/30 group-hover/row:scale-105 transition-all">
@@ -1418,36 +1433,40 @@ function ClassicDashboardPage() {
                     </button>
                   )}
                 </div>
-              </div>
-            ) : vpnUrl ? (
-              <div className="grid gap-6 lg:grid-cols-12 items-center">
-                <div className="lg:col-span-8">
-                  <p className="text-[15px] text-muted-foreground leading-relaxed">Ваша подписка готова к использованию. Перейдите к настройке приложения.</p>
-                </div>
-                <div className="lg:col-span-4">
-                  <Button variant="default" size="lg" className="w-full gap-2 rounded-xl shadow-lg h-12 text-[15px] hover:scale-[1.02] transition-transform [&_svg]:self-center [&_span]:leading-none" asChild>
-                    <Link to="/cabinet/subscribe" className="inline-flex items-center justify-center gap-2 leading-none">
-                      <Wifi className="h-5 w-5 shrink-0" />
-                      <span className="inline-flex items-center leading-none">Подключить VPN</span>
-                    </Link>
+                <div className="mt-auto pt-1">
+                  <Button variant="outline" className="group/btn w-full rounded-2xl h-12 text-[15px] font-medium bg-background/30 hover:bg-gradient-to-r hover:from-primary/10 hover:to-violet-500/10 hover:border-primary/30 transition-all duration-300 border-border/50 [&_svg]:self-center [&_span]:leading-none" asChild>
+                     <Link to="/cabinet/referral" className="inline-flex items-center justify-center gap-2 leading-none">
+                       <span className="inline-flex items-center leading-none">Подробная статистика</span>
+                       <ArrowRight className="h-4 w-4 shrink-0 group-hover/btn:translate-x-1 transition-transform duration-300" />
+                     </Link>
                   </Button>
                 </div>
+              </>
+            ) : vpnUrl ? (
+              <div className="flex flex-col h-full justify-between space-y-6">
+                <p className="text-[15px] text-muted-foreground leading-relaxed">Ваша подписка готова к использованию. Перейдите к настройке приложения.</p>
+                <div className="p-6 bg-primary/10 rounded-2xl border border-primary/20 text-center">
+                   <Wifi className="h-12 w-12 text-primary mx-auto mb-3 opacity-80" />
+                   <p className="text-[15px] text-foreground font-medium">Всё готово к работе</p>
+                </div>
+                <Button variant="default" size="lg" className="w-full gap-2 rounded-xl shadow-lg h-14 text-[16px] hover:scale-105 transition-transform [&_svg]:self-center [&_span]:leading-none" asChild>
+                  <Link to="/cabinet/subscribe" className="inline-flex items-center justify-center gap-2 leading-none">
+                    <Wifi className="h-5 w-5 shrink-0" />
+                    <span className="inline-flex items-center leading-none">Подключить VPN</span>
+                  </Link>
+                </Button>
               </div>
             ) : (
-              <div className="grid gap-6 lg:grid-cols-12 items-center">
-                <div className="lg:col-span-8 flex items-center gap-4">
-                  <div className="p-4 bg-background/30 rounded-2xl border border-border/50 shrink-0">
-                     <Package className="h-8 w-8 text-muted-foreground opacity-40" />
-                  </div>
-                  <p className="text-[15px] text-muted-foreground">Оплатите тариф, чтобы получить ссылку</p>
+              <div className="flex flex-col h-full justify-center space-y-6">
+                <div className="p-6 bg-background/30 rounded-2xl border border-border/50 text-center">
+                   <Package className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-40" />
+                   <p className="text-[15px] text-muted-foreground">Оплатите тариф, чтобы получить ссылку</p>
                 </div>
-                <div className="lg:col-span-4">
-                  <Button variant="outline" size="lg" className="w-full rounded-xl h-12 text-[15px] bg-background/30 hover:bg-background/60 border-border/50 transition-colors [&_span]:leading-none" asChild>
-                    <Link to="/cabinet/tariffs" className="inline-flex items-center justify-center leading-none">
-                      <span className="inline-flex items-center leading-none">Выбрать тариф</span>
-                    </Link>
-                  </Button>
-                </div>
+                <Button variant="outline" size="lg" className="w-full rounded-xl h-14 text-[16px] bg-background/30 hover:bg-background/60 border-border/50 transition-colors [&_span]:leading-none" asChild>
+                  <Link to="/cabinet/tariffs" className="inline-flex items-center justify-center leading-none">
+                    <span className="inline-flex items-center leading-none">Выбрать тариф</span>
+                  </Link>
+                </Button>
               </div>
             )}
           </CardContent>
@@ -1455,7 +1474,12 @@ function ClassicDashboardPage() {
       </div>
 
       {secondarySubscriptions.length > 0 && (
-        <section data-gsap="reveal-group" className="space-y-4 pt-4">
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="space-y-4 pt-4"
+        >
           <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight text-foreground ml-1">
             <Package className="h-6 w-6 text-indigo-400" />
             Остальные подписки
@@ -1469,8 +1493,8 @@ function ClassicDashboardPage() {
               const secTrafficPercent = secParsed.trafficLimitBytes && secParsed.trafficLimitBytes > 0 && secParsed.trafficUsed != null ? Math.min(100, Math.round((secParsed.trafficUsed / secParsed.trafficLimitBytes) * 100)) : null;
 
               return (
-                <Card key={sec.id} className="glass-card glass-card-hover rounded-3xl border border-indigo-500/30 shadow-lg transition-all duration-300 flex flex-col">
-                  <CardHeader className="pb-4">
+                <Card key={sec.id} className="dashboard-card dashboard-secondary rounded-3xl border border-indigo-500/30 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col">
+                  <CardHeader className="dashboard-card-header pb-4">
                     <CardTitle className="flex items-center justify-between gap-2 text-lg text-foreground">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="p-2.5 bg-indigo-500/20 rounded-xl shrink-0">
@@ -1499,12 +1523,12 @@ function ClassicDashboardPage() {
                       </div>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="flex-1 flex flex-col justify-center">
-                    <div className="space-y-4">
+                  <CardContent className="dashboard-subscription-body flex-1 flex flex-col">
+                    <div className="dashboard-subscription-details space-y-4">
                       <div className="flex items-center gap-2 flex-wrap mb-2">
                         {secDaysLeft != null && (
                           <span className="text-sm font-semibold text-foreground bg-foreground/5 px-3 py-1.5 rounded-full border border-border/50 shadow-sm">
-                            {secDaysLeft} {secDaysLeft === 1 ? t("cabinet.common.day_one") : secDaysLeft < 5 ? t("cabinet.common.day_few") : t("cabinet.common.day_many")}
+                            {formatRuDays(secDaysLeft)}
                           </span>
                         )}
                         {secParsed.hwidDeviceLimit != null && secParsed.hwidDeviceLimit > 0 && (
@@ -1515,13 +1539,13 @@ function ClassicDashboardPage() {
                       </div>
                       
                       {sec.tariffDisplayName && (
-                        <div className="flex items-center gap-4 bg-background/40 p-4 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
+                        <div className="flex items-center gap-3 bg-background/40 p-3.5 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
                             <Package className="h-6 w-6" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">{sec.trialId ? "TRIAL" : t("cabinet.dashboard.tariff_label")}</p>
-                            <p className="text-[15px] font-semibold truncate text-foreground">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{sec.trialId ? "TRIAL" : t("cabinet.dashboard.tariff_label")}</p>
+                            <p className="text-base font-semibold break-words text-foreground">
                               {sec.tariffDisplayName}
                             </p>
                           </div>
@@ -1529,12 +1553,12 @@ function ClassicDashboardPage() {
                       )}
                       
                       {secParsed.expireAt && (
-                        <div className="flex items-center gap-4 bg-background/40 p-4 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
+                        <div className="flex items-center gap-3 bg-background/40 p-3.5 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
                             <Calendar className="h-6 w-6" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">{t("cabinet.dashboard.valid_until")}</p>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{t("cabinet.dashboard.valid_until")}</p>
                             <p className="text-[15px] font-semibold text-foreground">
                               {formatDate(secParsed.expireAt)}
                             </p>
@@ -1542,13 +1566,13 @@ function ClassicDashboardPage() {
                         </div>
                       )}
                       
-                      <div className="bg-background/40 p-4 rounded-2xl border border-border/50 space-y-3 transition-colors hover:bg-background/60 shadow-sm">
+                      <div className="bg-background/40 p-3.5 rounded-2xl border border-border/50 space-y-3 transition-colors hover:bg-background/60 shadow-sm">
                         <div className="flex items-center gap-4">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
                             <Wifi className="h-6 w-6" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">{t("cabinet.dashboard.traffic")}</p>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{t("cabinet.dashboard.traffic")}</p>
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-[15px] font-semibold text-foreground">
                                 {secParsed.trafficLimitBytes != null && secParsed.trafficLimitBytes > 0
@@ -1572,7 +1596,7 @@ function ClassicDashboardPage() {
                           <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={secParsed.subscriptionUrl}>
                             {secParsed.subscriptionUrl}
                           </code>
-                          <Button size="icon" variant="outline" className="shrink-0 h-auto w-11 rounded-xl bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { navigator.clipboard.writeText(secParsed.subscriptionUrl || ""); window.Telegram?.WebApp?.showPopup?.({ title: t("cabinet.dashboard.copied_title"), message: t("cabinet.dashboard.copied_message") }); }}>
+                          <Button size="icon" variant="outline" aria-label="Скопировать ссылку подписки" className="shrink-0 h-auto min-h-11 w-11 rounded-xl bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { navigator.clipboard.writeText(secParsed.subscriptionUrl || ""); window.Telegram?.WebApp?.showPopup?.({ title: t("cabinet.dashboard.copied_title"), message: t("cabinet.dashboard.copied_message") }); }}>
                             <Copy className="h-4 w-4" />
                           </Button>
                         </div>
@@ -1599,7 +1623,7 @@ function ClassicDashboardPage() {
               );
             })}
           </div>
-        </section>
+        </motion.section>
       )}
     </div>
     {trialsPickerNode}

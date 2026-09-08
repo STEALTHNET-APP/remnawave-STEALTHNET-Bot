@@ -1,3 +1,4 @@
+import { AuroraReferral } from "./aurora/aurora-referral";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Users, Percent, Wallet, Link2, Copy, Check, Loader2, Globe, Send, Info, Banknote } from "lucide-react";
@@ -10,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthReferral } from "@/pages/cabinet/stealth/stealth-referral";
-import { AuroraReferral } from "@/pages/cabinet/aurora/aurora-referral";
 function formatMoney(amount: number, currency: string = "usd") {
   return new Intl.NumberFormat("ru-RU", {
     style: "currency",
@@ -23,11 +23,10 @@ function formatMoney(amount: number, currency: string = "usd") {
 export function ClientReferralPage() {
   const design = useCabinetDesign();
   if (design === "stealth") return <StealthReferral />;
-  if (design === "aurora") return <AuroraReferral />;
-  return <ClassicReferralPage />;
+  return <ClassicReferralPage aurora={design === "aurora"} />;
 }
 
-function ClassicReferralPage() {
+function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
   const { state } = useClientAuth();
   const config = useCabinetConfig();
   const token = state.token ?? null;
@@ -127,6 +126,7 @@ function ClassicReferralPage() {
 
   return (
     <div className="space-y-6 w-full min-w-0 pb-10">
+      {aurora ? <AuroraReferral/> : <>
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -337,13 +337,14 @@ function ClassicReferralPage() {
         </motion.div>
       </div>
 
+      </>}
       {/* Маленькая неприметная кнопка вывода реф.средств — в самом низу.
           скрывается тогглом «Заявки на вывод» из админки. */}
       {withdrawalsEnabled && (
       <div className="flex justify-center pt-2">
         <Dialog open={wOpen} onOpenChange={(o) => { setWOpen(o); if (!o) setWMsg(null); }}>
           <DialogTrigger asChild>
-            <button className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors underline underline-offset-4 decoration-dotted">
+            <button className={aurora ? "au-profile-action" : "inline-flex items-center gap-1.5 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors underline underline-offset-4 decoration-dotted"}>
               <Banknote className="h-3.5 w-3.5" />
               Заявка на вывод средств
             </button>

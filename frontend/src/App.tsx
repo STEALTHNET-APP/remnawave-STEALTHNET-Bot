@@ -1,3 +1,4 @@
+import { needsClientOnboarding } from "@/lib/client-onboarding";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 
@@ -93,14 +94,9 @@ import { ClientGiftsPage } from "@/pages/cabinet/client-gifts";
 import { GiftActivatePage } from "@/pages/gift-activate";
 import { LandingPage } from "@/pages/landing";
 import type { PublicConfig } from "@/lib/api";
-import { fetchLanding } from "@/lib/landing-api";
-import type { LandingApiResponse } from "@/components/landing-blocks/types";
 import { getPublicConfigCached } from "@/lib/public-config";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/query-client";
-
-/** Prefetch лендинга для RootRoute: один fetch на страницу даже в StrictMode. */
-let landingPromise: Promise<LandingApiResponse | null> | null = null;
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { state } = useAuth();
@@ -138,7 +134,7 @@ function RequireClientAuth({ children }: { children: React.ReactNode }) {
     return <Navigate to="/cabinet/login" replace />;
   }
   // Проверяем серверный флаг onboardingCompleted ИЛИ эфемерный isNewTelegramUser
-  const needsOnboarding = state.client?.onboardingCompleted === false || state.isNewTelegramUser;
+  const needsOnboarding = needsClientOnboarding(state.client, state.isNewTelegramUser);
   if (needsOnboarding && location.pathname !== "/cabinet/onboarding") {
     return <Navigate to="/cabinet/onboarding" replace />;
   }
@@ -147,7 +143,7 @@ function RequireClientAuth({ children }: { children: React.ReactNode }) {
 
 function RequireOnboarding({ children }: { children: React.ReactNode }) {
   const { state } = useClientAuth();
-  const needsOnboarding = state.client?.onboardingCompleted === false || state.isNewTelegramUser;
+  const needsOnboarding = needsClientOnboarding(state.client, state.isNewTelegramUser);
   if (!needsOnboarding) {
     return <Navigate to="/cabinet/dashboard" replace />;
   }
@@ -173,7 +169,6 @@ function RootRoute() {
   const [config, setConfig] = useState<PublicConfig | null>(null);
   // Лендинг грузим ПАРАЛЛЕЛЬНО с конфигом: два последовательных лоадера
   // (сначала «Загрузка…» из-за config, потом слейтовый спиннер из-за landing) выглядели как «два лоадера подряд».
-  const [landingData, setLandingData] = useState<LandingApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -181,9 +176,6 @@ function RootRoute() {
     // Язык лендинга неизвестен до конфига — грузим с дефолтом «ru»; если дефолт другой,
     // LandingPage перезагрузит контент внутри себя (старое поведение, редкий кейс).
     // Module-level promise: StrictMode (mount→cleanup→mount) не порождает второй fetch.
-    landingPromise ??= fetchLanding("ru").catch(() => null);
-    landingPromise
-      .then((d) => { if (alive && d) setLandingData(d); })
     getPublicConfigCached()
       .then((c) => { if (alive) setConfig(c); })
       .catch(() => { if (alive) setConfig(null); })
@@ -201,7 +193,7 @@ function RootRoute() {
   }
 
   if (config?.landingEnabled) {
-    return <LandingPage config={config} initialData={landingData} />;
+    return <LandingPage config={config} />;
   }
 
   return <Navigate to="/cabinet" replace />;
@@ -221,6 +213,8 @@ function AppRoutes() {
       {/* Главная: лендинг (если включён в настройках) или редирект в кабинет */}
       <Route path="/" element={<RootRoute />} />
 
+      <Route path="/admin/landing-preview" element={<RequireAuth><ForceChangePassword><LandingPreviewPage /></ForceChangePassword></RequireAuth>} />
+      <Route path="/admin/landing-editor" element={<RequireAuth><ForceChangePassword><LandingEditorPage /></ForceChangePassword></RequireAuth>} />
       {/* Админка */}
       <Route path="/admin/login" element={state.accessToken ? <Navigate to="/admin" replace /> : <LoginPage />} />
       <Route
@@ -259,8 +253,8 @@ function AppRoutes() {
         {/* T-autorenew (12.05.2026) */}
         <Route path="auto-renew" element={<ForceChangePassword><AutoRenewPage /></ForceChangePassword>} />
         <Route path="settings" element={<ForceChangePassword><SettingsPage /></ForceChangePassword>} />
-        <Route path="landing-editor" element={<ForceChangePassword><LandingEditorPage /></ForceChangePassword>} />
-        <Route path="landing-preview" element={<ForceChangePassword><LandingPreviewPage /></ForceChangePassword>} />
+
+
         <Route path="audit" element={<ForceChangePassword><AdminAuditPage /></ForceChangePassword>} />
         <Route path="webhook-inbox" element={<ForceChangePassword><AdminWebhookInboxPage /></ForceChangePassword>} />
         <Route path="diagnostics" element={<ForceChangePassword><AdminDiagnosticsPage /></ForceChangePassword>} />
@@ -492,7 +486,7 @@ function TitleAndThemeSync() {
     let suffix = "";
     if (location.pathname.startsWith("/admin")) suffix = " — Admin";
     else if (location.pathname.startsWith("/cabinet")) suffix = " — Кабинет";
-    document.title = (base + suffix).trim() || suffix.replace(/^ — /, "").trim();
+    if (location.pathname !== "/") document.title = (base + suffix).trim() || suffix.replace(/^ — /, "").trim();
 
     // Custom favicon: убираем все статические <link rel="icon"> из index.html
     // (svg, 32px, 16px, apple-touch и иконки PWA-манифеста), потому что
@@ -503,7 +497,7 @@ function TitleAndThemeSync() {
     // Также подменяем <link rel="manifest"> на динамический эндпоинт
     // /api/public/manifest.webmanifest когда есть custom favicon — иначе
     // PWA install/Add-to-home-screen покажет дефолтную иконку сборки.
-    if (config.serviceDescription) {
+    if (config.serviceDescription && location.pathname !== "/") {
       let meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
       if (!meta) {
         meta = document.createElement("meta");

@@ -141,6 +141,9 @@ services:
       TZ: Europe/Moscow
       BOT_TOKEN: "${BOT_TOKEN:-}"
       API_URL: "http://api:5000"
+      # Rich-меню (Bot API 10.1+). Код читает process.env.BOT_RICH_MENU, но
+      # переменную сюда не пробрасывали — флаг был невозможно включить.
+      BOT_RICH_MENU: "${BOT_RICH_MENU:-}"
     depends_on:
       api:
         condition: service_healthy

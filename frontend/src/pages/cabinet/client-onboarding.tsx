@@ -1,3 +1,4 @@
+import { onboardingSteps, nextOnboardingStep, type OnboardingStep } from "@/lib/client-onboarding";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -13,7 +14,7 @@ import { cn } from "@/lib/utils";
 
 // T-onb-email (26.05.2026, WolfVPN): добавлен обязательный шаг "email"
 // для TG-юзеров без привязанной почты.
-type Step = "welcome" | "email" | "password" | "2fa" | "done";
+type Step = OnboardingStep;
 
 const slideVariants = {
   enter: (direction: number) => ({
@@ -170,17 +171,16 @@ export function ClientOnboardingPage() {
   const [twoFaError, setTwoFaError] = useState("");
   const [twoFaSetupLoading, setTwoFaSetupLoading] = useState(false);
 
-  // T-onb-email (26.05.2026, WolfVPN): динамический список шагов.
-  // Шаг "email" появляется только если у клиента email ещё не привязан.
-  // Welcome / 2fa / done — всегда; password — всегда (для TG-юзеров пароль отсутствует,
-  // для email-регистрации он уже стоит, но бэк позволяет переустановить пока onboardingCompleted=false).
-  const STEPS = useMemo<Step[]>(() => {
-    const hasEmail = !!client?.email;
-    const arr: Step[] = ["welcome"];
-    if (!hasEmail) arr.push("email");
-    arr.push("password", "2fa", "done");
-    return arr;
-  }, [client?.email]);
+  const [profileLoading, setProfileLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    refreshProfile().finally(() => { if (alive) setProfileLoading(false); });
+    return () => { alive = false; };
+  }, [refreshProfile]);
+  const STEPS = useMemo(() => onboardingSteps(client), [client?.email, client?.hasPassword, client?.totpEnabled]);
+  useEffect(() => {
+    if (!profileLoading && !STEPS.includes(step)) setStep(nextOnboardingStep(step, STEPS));
+  }, [profileLoading, STEPS, step]);
 
   const stepIndex = STEPS.indexOf(step);
 
@@ -193,20 +193,19 @@ export function ClientOnboardingPage() {
   // Следующий шаг после welcome — email если нужен, иначе password.
   // Аналогично после email → password.
   function nextStepAfter(current: Step): Step {
-    const idx = STEPS.indexOf(current);
-    return STEPS[idx + 1] ?? "done";
+    return nextOnboardingStep(current, STEPS);
   }
 
   // Load 2FA setup when entering that step
   useEffect(() => {
-    if (step === "2fa" && !twoFaData && token) {
+    if (!profileLoading && step === "2fa" && !client?.totpEnabled && !twoFaData && token) {
       setTwoFaSetupLoading(true);
       api.client2FASetup(token)
         .then(data => setTwoFaData(data))
         .catch(() => {})
         .finally(() => setTwoFaSetupLoading(false));
     }
-  }, [step, twoFaData, token]);
+  }, [step, twoFaData, token, profileLoading, client?.totpEnabled]);
 
   const [exitOverlay, setExitOverlay] = useState(false);
 
@@ -241,7 +240,11 @@ export function ClientOnboardingPage() {
     setPasswordError("");
     setPasswordLoading(true);
     try {
-      await api.clientSetPassword(token, { newPassword });
+      const fresh = await api.clientMe(token);
+      if (fresh.hasPassword !== true) await api.clientSetPassword(token, { newPassword });
+      await refreshProfile();
+      setNewPassword("");
+      setConfirmPassword("");
       goTo(nextStepAfter("password"));
     } catch (e) {
       setPasswordError(e instanceof Error ? e.message : "Ошибка");
@@ -322,7 +325,7 @@ export function ClientOnboardingPage() {
     const isPast = stepIndex > i;
     // T-onb-polish: layout-анимация через motion — плавный морфинг ширины/цвета,
     // активный dot пульсирует.
-    return (
+  return (
       <motion.div
         key={s}
         layout
@@ -343,6 +346,8 @@ export function ClientOnboardingPage() {
       </motion.div>
     );
   });
+
+    if (profileLoading) return <div className="min-h-svh flex items-center justify-center" role="status"><Loader2 className="h-6 w-6 animate-spin"/><span className="ml-3">Загружаем аккаунт…</span></div>;
 
   return (
     <div className="min-h-svh flex flex-col items-center justify-center p-4 relative overflow-hidden">

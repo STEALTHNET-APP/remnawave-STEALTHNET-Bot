@@ -1,89 +1,37 @@
-/**
- * Вьюпорт мини-аппа Telegram: раскрытие на весь экран и safe-area.
- *
- * Без `expand()` Telegram открывает мини-апп «половинкой» — примерно на 50%
- * экрана, и пользователю приходится тянуть шторку вверх руками.
- *
- * `disableVerticalSwipes()` отключает закрытие свайпом вниз: иначе прокрутка
- * внутренних списков и нижних шторок то и дело сворачивает приложение
- * (Bot API 7.7+, дёргаем опционально).
- *
- * `requestFullscreen()` (Bot API 8.0+) отдаёт экран целиком, вместе с областью
- * статус-бара. ВАЖНО: в этом режиме шапка Telegram с крестиком ложится ПОВЕРХ
- * контента, поэтому мы:
- *   1) вешаем на <html> атрибут `data-tg-fullscreen="1"`;
- *   2) держим в переменной `--app-tg-top` высоту верхних отступов;
- *   3) в index.css по этому атрибуту сдвигаем вниз весь #root.
- * Так отступ получают все три дизайна кабинета сразу, без правки их разметки.
- *
- * Значения safe-area приходят асинхронно и меняются (поворот экрана, свёртка),
- * поэтому пересчитываем их по событиям Telegram, а не один раз на старте.
- *
- * Вне Telegram (обычный браузер, PWA) не делаем ничего.
- */
-
-/** Сумма верхних отступов: системный статус-бар + шапка клиента Telegram. */
-function applyTopInset(): void {
+/** Shared Mini App expansion. Fullscreen is owned exclusively by AuroraLayout. */
+export function initTelegramViewport(): void {
   const tg = window.Telegram?.WebApp;
-  if (!tg) return;
-  const safe = tg.safeAreaInset?.top ?? 0;
-  const content = tg.contentSafeAreaInset?.top ?? 0;
-  document.documentElement.style.setProperty("--app-tg-top", `${safe + content}px`);
+  if (!tg?.initData?.trim()) return;
+  // A reload can inherit fullscreen from the old build. Aurora re-enters on mount.
+  try { if (tg.isFullscreen) tg.exitFullscreen?.(); } catch { /* legacy client */ }
+  try { tg.ready(); } catch { /* legacy client */ }
+  try { tg.expand(); } catch { /* legacy client */ }
+  try { tg.disableVerticalSwipes?.(); } catch { /* legacy client */ }
 }
 
-export function initTelegramViewport(): void {
-  if (typeof window === "undefined") return;
+/** Returns cleanup so switching away from Aurora also leaves fullscreen. */
+export function enterAuroraFullscreen(): () => void {
   const tg = window.Telegram?.WebApp;
-  // Пустой initData = страницу открыли не из Telegram; вьюпорт не трогаем.
-  if (!tg || !tg.initData?.trim()) return;
-
-  try {
-    tg.ready();
-  } catch {
-    /* старый клиент — не критично */
-  }
-  try {
-    tg.expand();
-  } catch {
-    /* не поддерживается — останется высота по умолчанию */
-  }
-  try {
-    tg.disableVerticalSwipes?.();
-  } catch {
-    /* Bot API < 7.7 */
-  }
-
-  // Полный экран — только если клиент умеет (Bot API 8.0+).
-  if (typeof tg.requestFullscreen !== "function") return;
-  try {
-    tg.requestFullscreen();
-  } catch {
-    return;
-  }
-
-  document.documentElement.dataset.tgFullscreen = "1";
-  applyTopInset();
-
-  // Отступы приходят не мгновенно и меняются при повороте экрана.
-  for (const ev of ["safeAreaChanged", "contentSafeAreaChanged", "viewportChanged"]) {
-    try {
-      tg.onEvent?.(ev, applyTopInset);
-    } catch {
-      /* событие неизвестно этой версии клиента */
-    }
-  }
-  try {
-    tg.onEvent?.("fullscreenChanged", () => {
-      if (tg.isFullscreen === false) {
-        delete document.documentElement.dataset.tgFullscreen;
-      } else {
-        document.documentElement.dataset.tgFullscreen = "1";
-        applyTopInset();
-      }
-    });
-  } catch {
-    /* Bot API < 8.0 */
-  }
-  // Подстраховка: часть клиентов отдаёт инсеты уже после первого кадра.
-  setTimeout(applyTopInset, 300);
+  if (!tg?.initData?.trim() || !tg.requestFullscreen) return () => {};
+  let active = true;
+  const sync = () => {
+    if (!active) return;
+    const full = tg.isFullscreen === true;
+    if (full) document.documentElement.dataset.tgFullscreen = "1";
+    else delete document.documentElement.dataset.tgFullscreen;
+    document.documentElement.style.setProperty("--app-tg-top", `${full ? (tg.safeAreaInset?.top ?? 0) + (tg.contentSafeAreaInset?.top ?? 0) : 0}px`);
+    document.documentElement.style.setProperty("--app-tg-bottom", `${full ? (tg.safeAreaInset?.bottom ?? 0) + (tg.contentSafeAreaInset?.bottom ?? 0) : 0}px`);
+  };
+  const events = ["fullscreenChanged", "fullscreenFailed", "safeAreaChanged", "contentSafeAreaChanged", "viewportChanged"];
+  for (const event of events) { try { tg.onEvent?.(event, sync); } catch { /* legacy event */ } }
+  try { tg.requestFullscreen(); } catch { /* unsupported client retains expanded view */ }
+  sync();
+  return () => {
+    active = false;
+    for (const event of events) { try { tg.offEvent?.(event, sync); } catch { /* legacy client */ } }
+    try { tg.exitFullscreen?.(); } catch { /* legacy client */ }
+    delete document.documentElement.dataset.tgFullscreen;
+    document.documentElement.style.removeProperty("--app-tg-top");
+    document.documentElement.style.removeProperty("--app-tg-bottom");
+  };
 }

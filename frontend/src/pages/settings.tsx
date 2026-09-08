@@ -5,9 +5,8 @@ import { useAdminSettings, useSshConfig, useAutoRenewStats, useLanguages, useRem
 import { useAdminUi } from "@/lib/admin-stores";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { api, type AdminSettings, type SshConfig, type UpdateSettingsPayload } from "@/lib/api";
 import { useAuth } from "@/contexts/auth";
-import { useRemnaCapabilities } from "@/lib/use-remna-capabilities";
+import { api, type AdminSettings, type SshConfig, type UpdateSettingsPayload } from "@/lib/api";
 import { SubscriptionPageEditor } from "@/components/subscription-page-editor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -420,8 +419,6 @@ export function SettingsPage() {
   const [landingDevicesList, setLandingDevicesList] = useState<string[]>(defaultDevicesList);
   const [landingQuickStartList, setLandingQuickStartList] = useState<string[]>(defaultQuickStartList);
   const token = state.accessToken!;
-  // На Remnawave 3.x ручки happ-шифрования нет — тумблер обещал бы несбыточное.
-  const remnaCaps = useRemnaCapabilities();
 
   /* Данные — через TanStack Query (admin-queries). Формы остаются локальным useState. */
   const qc = useQueryClient();
@@ -848,6 +845,10 @@ export function SettingsPage() {
         cryptopayTestnet: settings.cryptopayTestnet ?? false,
         heleketMerchantId: settings.heleketMerchantId ?? null,
         heleketApiKey: settings.heleketApiKey && settings.heleketApiKey !== "********" ? settings.heleketApiKey : undefined,
+        paritypayShopId: settings.paritypayShopId ?? null,
+        paritypayApiKey: settings.paritypayApiKey === "********" ? undefined : settings.paritypayApiKey,
+        paritypaySigningSecret: settings.paritypaySigningSecret === "********" ? undefined : settings.paritypaySigningSecret,
+        paritypayEnabled: settings.paritypayEnabled === true,
         rollypayApiKey: settings.rollypayApiKey && settings.rollypayApiKey !== "********" ? settings.rollypayApiKey : undefined,
         rollypaySigningSecret: settings.rollypaySigningSecret && settings.rollypaySigningSecret !== "********" ? settings.rollypaySigningSecret : undefined,
         rollypayTestMode: settings.rollypayTestMode === true,
@@ -3446,6 +3447,80 @@ export function SettingsPage() {
                   </CardContent>
                 </CollapsibleContent>
               </Collapsible>
+              <Collapsible defaultOpen={false} className="group mt-4">
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
+                      <div className="flex items-center justify-between pr-2">
+                        <div className="flex items-center gap-2">
+                          <Wallet className="h-5 w-5 text-primary" />
+                          <CardTitle>ParityPay</CardTitle>
+                          <span className="text-xs font-normal text-muted-foreground">— СБП / Карты (RUB)</span>
+                        </div>
+                        <ChevronDown className="chevron h-5 w-5 shrink-0 text-muted-foreground" />
+                      </div>
+                    </CardHeader>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Создайте кассу в ParityPay и укажите её ID и два секретных ключа. Платёжка появится у клиентов после включения и заполнения всех полей.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="parity-shop">ID кассы (X-ShopId)</Label>
+                        <Input
+                          id="parity-shop"
+                          value={settings.paritypayShopId ?? ""}
+                          onChange={(e) => setSettings((s) => (s ? { ...s, paritypayShopId: e.target.value || null } : s))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="parity-key">Секретный ключ №1 — API</Label>
+                        <Input
+                          id="parity-key"
+                          type="password"
+                          autoComplete="new-password"
+                          value={settings.paritypayApiKey ?? ""}
+                          onChange={(e) => setSettings((s) => (s ? { ...s, paritypayApiKey: e.target.value || null } : s))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="parity-sign">Секретный ключ №2 — подпись уведомлений</Label>
+                        <Input
+                          id="parity-sign"
+                          type="password"
+                          autoComplete="new-password"
+                          value={settings.paritypaySigningSecret ?? ""}
+                          onChange={(e) => setSettings((s) => (s ? { ...s, paritypaySigningSecret: e.target.value || null } : s))}
+                        />
+                      </div>
+                    </div>
+                    <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.paritypayEnabled === true}
+                        onChange={(e) => setSettings((s) => (s ? { ...s, paritypayEnabled: e.target.checked } : s))}
+                        className="rounded border w-4 h-4"
+                      />
+                      <span className="text-sm font-medium">Включить ParityPay</span>
+                    </label>
+                    <div className="rounded-xl bg-muted/40 border border-border p-3.5">
+                      <p className="text-xs text-muted-foreground">Адрес уведомлений об оплате</p>
+                      <code className="text-xs break-all">{`${window.location.origin}/api/webhooks/paritypay`}</code>
+                    </div>
+                    <div className="pt-2 border-t">
+                      <Button type="submit" disabled={saving} className="min-w-[140px]">
+                        {saving ? t("admin.settings.saving") : t("admin.settings.save")}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Collapsible>
               {/* RollyPay — приём рублей (СБП/карты/крипта) с конвертацией в USDT.
                   Кнопка у клиента появляется только когда заполнены ОБА поля: без секрета
                   подписи вебхук всё равно будет отвергнут. */}
@@ -3928,8 +4003,7 @@ export function SettingsPage() {
                   <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={settings.happCryptEnabled === true && remnaCaps.happCrypt}
-                      disabled={!remnaCaps.happCrypt}
+                      checked={settings.happCryptEnabled === true}
                       onChange={(e) => setSettings((s) => (s ? { ...s, happCryptEnabled: e.target.checked } : s))}
                       className="rounded border w-4 h-4"
                     />

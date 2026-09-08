@@ -2316,7 +2316,7 @@ adminRouter.post("/clients/:id/grant-tariff", async (req, res) => {
     }
   }
 
-  // админская выдача = НОВАЯ подписка клиенту (НЕ подарок).
+  // Админская выдача учитывает режим мультиподписки (это НЕ подарок).
   // можно переопределить trafficLimitBytes (только если у тарифа не безлимит).
   // Применяется ТОЛЬКО для лимитных тарифов: если у тарифа уже безлимит — override игнорируем.
   const hasTariffLimit = tariff.trafficLimitBytes != null && Number(tariff.trafficLimitBytes) > 0;
@@ -2329,8 +2329,8 @@ adminRouter.post("/clients/:id/grant-tariff", async (req, res) => {
   // Полезно если админ хочет выдать нестандартный срок (например, 7 дн. компенсации).
   const effectiveDurationDays = customDurationDays ?? selectedOption?.durationDays ?? tariff.durationDays;
 
-  const { createAdditionalSubscription } = await import("../gift/gift.service.js");
-  const subResult = await createAdditionalSubscription(clientId, {
+  const { grantSubscriptionTariff } = await import("./grant-subscription.service.js");
+  const subResult = await grantSubscriptionTariff(clientId, {
     id: tariff.id,
     name: tariff.name,
     price: selectedOption?.price ?? tariff.price,
@@ -2338,9 +2338,12 @@ adminRouter.post("/clients/:id/grant-tariff", async (req, res) => {
     trafficLimitBytes: effectiveTrafficLimit,
     deviceLimit: tariff.deviceLimit,
     includedDevices: tariff.includedDevices,
+    pricePerExtraDevice: tariff.pricePerExtraDevice,
+    maxExtraDevices: tariff.maxExtraDevices,
+    deviceDiscountTiers: tariff.deviceDiscountTiers,
     internalSquadUuids: tariff.internalSquadUuids,
     trafficResetMode: tariff.trafficResetMode ?? undefined,
-  }, { skipConfigCheck: true, extraDevices: effectiveExtras, purchasedAsGift: false });
+  }, effectiveExtras);
 
   if (!subResult.ok) {
     if (paymentId) {
@@ -2929,6 +2932,10 @@ const updateSettingsSchema = z.object({
   cryptopayTestnet: z.boolean().optional(),
   heleketMerchantId: z.string().max(500).nullable().optional(),
   heleketApiKey: z.string().max(500).nullable().optional(),
+  paritypayShopId: z.string().max(100).nullable().optional(),
+  paritypayApiKey: z.string().max(500).nullable().optional(),
+  paritypaySigningSecret: z.string().max(500).nullable().optional(),
+  paritypayEnabled: z.boolean().optional(),
   rollypayApiKey: z.string().max(500).nullable().optional(),
   rollypaySigningSecret: z.string().max(500).nullable().optional(),
   rollypayTestMode: z.boolean().optional(),
@@ -3514,6 +3521,22 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.heleketMerchantId !== undefined) {
     const val = updates.heleketMerchantId ?? "";
     await prisma.systemSetting.upsert({ where: { key: "heleket_merchant_id" }, create: { key: "heleket_merchant_id", value: val }, update: { value: val } });
+  }
+  if (updates.paritypayShopId !== undefined && updates.paritypayShopId !== "********") {
+    const val = updates.paritypayShopId ?? "";
+    await prisma.systemSetting.upsert({ where: { key: "paritypay_shop_id" }, create: { key: "paritypay_shop_id", value: val }, update: { value: val } });
+  }
+  if (updates.paritypayApiKey !== undefined && updates.paritypayApiKey !== "********") {
+    const val = updates.paritypayApiKey ?? "";
+    await prisma.systemSetting.upsert({ where: { key: "paritypay_api_key" }, create: { key: "paritypay_api_key", value: val }, update: { value: val } });
+  }
+  if (updates.paritypaySigningSecret !== undefined && updates.paritypaySigningSecret !== "********") {
+    const val = updates.paritypaySigningSecret ?? "";
+    await prisma.systemSetting.upsert({ where: { key: "paritypay_signing_secret" }, create: { key: "paritypay_signing_secret", value: val }, update: { value: val } });
+  }
+  if (updates.paritypayEnabled !== undefined) {
+    const val = updates.paritypayEnabled ? "true" : "false";
+    await prisma.systemSetting.upsert({ where: { key: "paritypay_enabled" }, create: { key: "paritypay_enabled", value: val }, update: { value: val } });
   }
   if (updates.rollypayApiKey !== undefined) {
     const val = updates.rollypayApiKey ?? "";
