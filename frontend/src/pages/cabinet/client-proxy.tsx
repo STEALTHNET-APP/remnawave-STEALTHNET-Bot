@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
 import { PayNowPanel } from "@/components/payment/pay-now-panel";
 import { cn } from "@/lib/utils";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 type ProxyTariff = { id: string; name: string; description?: string; proxyCount: number; durationDays: number; price: number; currency: string };
 type ProxyCategory = { id: string; name: string; sortOrder: number; tariffs: ProxyTariff[] };
@@ -101,7 +102,7 @@ export function ClientProxyPage() {
   }, []);
 
   useEffect(() => {
-    api.getPublicConfig().then((c) => {
+    getPublicConfigCached().then((c) => {
       setPlategaMethods(c.plategaMethods ?? []);
       setYoomoneyEnabled(Boolean(c.yoomoneyEnabled));
       setYookassaEnabled(Boolean(c.yookassaEnabled));
@@ -494,7 +495,7 @@ export function ClientProxyPage() {
   const flatTariffs = categories.flatMap((c) => c.tariffs.map((t) => ({ ...t, categoryName: c.name })));
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
+    <div className="space-y-8 max-w-7xl mx-auto">
       <AnimatePresence mode="wait">
         {isMobileOrMiniapp && payModal ? (
           <motion.div

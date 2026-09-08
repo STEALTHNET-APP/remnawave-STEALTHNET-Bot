@@ -6,10 +6,12 @@
  * - При reject баланс возвращается клиенту атомарно (см. backend).
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { WithdrawalRequestRecord } from "@/lib/api";
+import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Check, X, RefreshCw, Copy, Clock3 } from "lucide-react";
@@ -47,31 +49,25 @@ const FILTERS: { key: StatusFilter; label: string }[] = [
 export function WithdrawalsPage() {
   const { state } = useAuth();
   const token = state.accessToken ?? null;
+  const queryClient = useQueryClient();
 
-  const [items, setItems] = useState<WithdrawalRequestRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("PENDING");
   const [processing, setProcessing] = useState<string | null>(null);
 
-  const load = async () => {
-    if (!token) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await api.getWithdrawals(token, filter === "ALL" ? undefined : filter);
-      setItems(res.items);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const statusParam = filter === "ALL" ? undefined : filter;
+  const listQuery = useQuery({
+    queryKey: qk.admin.withdrawals(filter),
+    queryFn: () => api.getWithdrawals(token!, statusParam),
+    enabled: !!token,
+  });
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, filter]);
+  const items = listQuery.data?.items ?? [];
+  const loading = listQuery.isLoading;
+  const error = listQuery.isError
+    ? listQuery.error instanceof Error ? listQuery.error.message : "Ошибка загрузки"
+    : null;
+  const load = () => { void listQuery.refetch(); };
+
 
   const handleApprove = async (id: string) => {
     if (!token) return;
@@ -79,7 +75,7 @@ export function WithdrawalsPage() {
     setProcessing(id);
     try {
       await api.approveWithdrawal(token, id);
-      await load();
+      void queryClient.invalidateQueries({ queryKey: ["admin", "withdrawals"], exact: false });
     } catch (e) {
       alert(e instanceof Error ? e.message : "Ошибка одобрения");
     } finally {
@@ -95,7 +91,7 @@ export function WithdrawalsPage() {
     setProcessing(id);
     try {
       await api.rejectWithdrawal(token, id, comment.trim() || undefined);
-      await load();
+      void queryClient.invalidateQueries({ queryKey: ["admin", "withdrawals"], exact: false });
     } catch (e) {
       alert(e instanceof Error ? e.message : "Ошибка отклонения");
     } finally {

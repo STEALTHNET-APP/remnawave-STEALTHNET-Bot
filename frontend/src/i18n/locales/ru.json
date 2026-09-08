@@ -1838,7 +1838,9 @@
       "sbp": "СБП",
       "yoomoney_cards": "ЮMoney / Карты",
       "cards_label": "Карты",
-      "crypto": "Криптовалюта"
+      "crypto": "Криптовалюта",
+      "best_badge": "Выгодно",
+      "per_day": "В день"
     },
     "profile": {
       "title": "Профиль",

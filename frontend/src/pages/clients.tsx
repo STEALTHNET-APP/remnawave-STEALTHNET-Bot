@@ -1,4 +1,20 @@
 import { useEffect, useState, useCallback } from "react";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
+import {
+  useAdminClients,
+  useAdminClientsOnlineStatuses,
+  useAdminClientDetail,
+  useAdminClientServices,
+  useAdminClientAllDevices,
+  useAdminClientSubsOverview,
+  useAdminClientSubscriptionsList,
+  useAdminClientRemna,
+  useAdminClientRemnaUsage,
+  useAdminSettings,
+  useTariffCategories,
+  useAdminTariffs,
+} from "@/lib/admin-queries";
+import { useAdminSelection } from "@/lib/admin-stores";
 import { useAuth } from "@/contexts/auth";
 import {
   api,
@@ -6,9 +22,6 @@ import {
   type UpdateClientPayload,
   type UpdateClientRemnaPayload,
   type RemnaUserFull,
-  type RemnaUserUsageResponse,
-  type AdminClientSubscriptionItem,
-  type TariffCategoryWithTariffs,
   type TariffRecord,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -77,23 +90,25 @@ function getOnlineStatus(onlineAt: string | null): { isOnline: boolean; label: s
 export function ClientsPage() {
   const { t } = useTranslation();
   const { state } = useAuth();
-  const [data, setData] = useState<{ items: ClientRecord[]; total: number } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const token = state.accessToken!;
+  const settingsQuery = useAdminSettings(token);
+  const settings = settingsQuery.data
+    ? { activeLanguages: settingsQuery.data.activeLanguages, activeCurrencies: settingsQuery.data.activeCurrencies }
+    : null;
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<ClientRecord | null>(null);
   const [editForm, setEditForm] = useState<UpdateClientPayload & Partial<UpdateClientRemnaPayload>>({});
-  const [settings, setSettings] = useState<{ activeLanguages: string[]; activeCurrencies: string[] } | null>(null);
-  const [saving, setSaving] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [passwordForm, setPasswordForm] = useState<{ newPassword: string; confirm: string }>({ newPassword: "", confirm: "" });
-  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
-  const [savingPassword, setSavingPassword] = useState(false);
   const [search, setSearch] = useState("");
   const [searchApplied, setSearchApplied] = useState("");
   const [filterBlocked, setFilterBlocked] = useState<"all" | "blocked" | "active">("all");
-
   //  Bulk-actions state 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectedIds = useAdminSelection((s) => s.selectedClientIds);
+  const toggleClientSelected = useAdminSelection((s) => s.toggleClientSelected);
+  const setSelectedClients = useAdminSelection((s) => s.setSelectedClients);
+  const clearSelectedClients = useAdminSelection((s) => s.clearSelectedClients);
   const [bulkBusy, setBulkBusy] = useState<BulkClientAction | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkResult, setBulkResult] = useState<{ ok: number; failed: number } | null>(null);
@@ -101,121 +116,164 @@ export function ClientsPage() {
   // optional inputs
   const [bulkAmount, setBulkAmount] = useState("");
   const [bulkReason, setBulkReason] = useState("");
+  // TQ-миграция (W1): параметры списка сериализуются в ключ кеша, prev-данные
+  // удерживаются между страницами (placeholderData) — пагинация не «мигает».
+  const queryClient = useQueryClient();
+  const isBlockedFilter =
+    filterBlocked === "blocked" ? true : filterBlocked === "active" ? false : undefined;
+  const listParams = { search: searchApplied || undefined, isBlocked: isBlockedFilter };
+  const listParamsJson = JSON.stringify({ page, ...listParams });
+  const clientsQuery = useAdminClients(token, listParamsJson, page, listParams);
+  const data = clientsQuery.data
+    ? { items: clientsQuery.data.items, total: clientsQuery.data.total }
+    : null;
+  const loading = clientsQuery.isLoading;
+  const onlineUuids = (data?.items ?? [])
+    .map((c) => c.remnawaveUuid)
+    .filter((u): u is string => Boolean(u));
+  // Поллинг онлайн-статусов 30 c — как прежний setInterval (useQuery refetchInterval).
+  const onlineStatuses = useAdminClientsOnlineStatuses(token, onlineUuids).data ?? {};
 
-  const [onlineStatuses, setOnlineStatuses] = useState<Record<string, { onlineAt: string | null }>>({});
-
-  const token = state.accessToken!;
-
-  useEffect(() => {
-    api.getSettings(token).then((s) => setSettings({ activeLanguages: s.activeLanguages, activeCurrencies: s.activeCurrencies })).catch(() => {});
-  }, [token]);
-
-  const loadClients = () => {
-    setLoading(true);
-    const isBlocked =
-      filterBlocked === "blocked" ? true : filterBlocked === "active" ? false : undefined;
-    api.getClients(token, page, 20, { search: searchApplied || undefined, isBlocked }).then((r) => {
-      setData({ items: r.items, total: r.total });
-      setLoading(false);
-    }).catch(() => setLoading(false));
+  const invalidateClientList = () => {
+    void queryClient.invalidateQueries({ queryKey: ["admin", "clients"], exact: false });
   };
+  const refetchClients = clientsQuery.refetch;
+
+  const saveClientMutation = useMutation({
+    mutationFn: (vars: { id: string; payload: UpdateClientPayload }) =>
+      api.updateClient(token, vars.id, vars.payload),
+    onSuccess: (updated) => {
+      setEditing(updated);
+      // Пересоздаём форму из обновлённых данных, иначе input'ы (привязанные к editForm)
+      // показали бы пустые значения после save, и нужно было бы переоткрыть карточку.
+      setEditForm({
+        email: updated.email ?? undefined,
+        preferredLang: updated.preferredLang,
+        preferredCurrency: updated.preferredCurrency,
+        balance: updated.balance,
+        isBlocked: updated.isBlocked,
+        blockReason: updated.blockReason ?? undefined,
+        referralPercent: updated.referralPercent ?? undefined,
+        personalDiscountPercent: updated.personalDiscountPercent ?? undefined,
+        personalDiscountIsOneTime: updated.personalDiscountIsOneTime ?? false,
+      });
+      setActionMessage(t("admin.clients.saved"));
+      invalidateClientList();
+    },
+    onError: (e) => {
+      setActionMessage(e instanceof Error ? e.message : t("admin.clients.error"));
+    },
+  });
+
+  const deleteClientMutation = useMutation({
+    mutationFn: (id: string) => api.deleteClient(token, id),
+    onSuccess: (_r, id) => {
+      if (editing?.id === id) setEditing(null);
+      invalidateClientList();
+    },
+    onError: (e) => {
+      alert(e instanceof Error ? e.message : "Ошибка удаления");
+    },
+  });
+
+  const remnaBulkMutation = useMutation({
+    mutationFn: (vars: { action: "reset-traffic" | "revoke"; uuids: string[] }) =>
+      api.remnaUsersBulk(token, vars.action, vars.uuids),
+    onSuccess: (_r, vars) => {
+      setBulkResult({ ok: vars.uuids.length, failed: 0 });
+      invalidateClientList();
+    },
+    onError: (e) => {
+      setBulkError(e instanceof Error ? e.message : "Ошибка массовой операции Remnawave");
+    },
+    onSettled: () => setRemnaBulkBusy(null),
+  });
+
+  const bulkMutation = useMutation({
+    mutationFn: (vars: { action: BulkClientAction; ids: string[]; params?: { reason?: string; amount?: number } }) =>
+      clientsBulkApi.bulk(token, vars),
+    onSuccess: (r) => {
+      setBulkResult({ ok: r.ok, failed: r.failed });
+      if (r.failed === 0) {
+        // полный успех — снимаем выделение и перезагружаем
+        setTimeout(() => {
+          setSelectedClients([]);
+          invalidateClientList();
+        }, 1500);
+      } else {
+        invalidateClientList();
+      }
+    },
+    onError: (e) => {
+      setBulkError(e instanceof Error ? e.message : "bulk error");
+    },
+    onSettled: () => setBulkBusy(null),
+  });
+
+  const savePasswordMutation = useMutation({
+    mutationFn: (vars: { id: string; newPassword: string }) =>
+      api.setClientPassword(token, vars.id, vars.newPassword),
+    onSuccess: () => {
+      setPasswordMessage(t("admin.clients.password_set"));
+      setPasswordForm({ newPassword: "", confirm: "" });
+    },
+    onError: (e) => {
+      setPasswordMessage(e instanceof Error ? e.message : t("admin.clients.error"));
+    },
+  });
+  const saving = saveClientMutation.isPending;
+  const savingPassword = savePasswordMutation.isPending;
 
   //  Bulk-actions helpers 
+  const selectedIdSet = new Set(selectedIds);
   const allRowIds = (data?.items ?? []).map((c) => c.id);
-  const allSelected = allRowIds.length > 0 && allRowIds.every((id) => selectedIds.has(id));
+  const allSelected = allRowIds.length > 0 && allRowIds.every((id) => selectedIdSet.has(id));
 
   // Массовые операции напрямую в Remnawave (API 2.8 /users/bulk/*): маппим выбранных клиентов  remnawaveUuid.
-  const runRemnaBulk = async (action: "reset-traffic" | "revoke") => {
-    const uuids = (data?.items ?? []).filter((c) => selectedIds.has(c.id) && c.remnawaveUuid).map((c) => c.remnawaveUuid as string);
-    if (uuids.length === 0) { setBulkError("У выбранных клиентов нет VPN-подписки (remnawaveUuid)."); setBulkResult(null); return; }
+  const runRemnaBulk = (action: "reset-traffic" | "revoke") => {
+    const remnaUuids = (data?.items ?? []).filter((c) => selectedIdSet.has(c.id) && c.remnawaveUuid).map((c) => c.remnawaveUuid as string);
+    if (remnaUuids.length === 0) { setBulkError("У выбранных клиентов нет VPN-подписки (remnawaveUuid)."); setBulkResult(null); return; }
     const label = action === "reset-traffic" ? "Сбросить трафик" : "Перевыпустить подписку (revoke)";
-    if (!confirm(`${label} у ${uuids.length} клиент(ов) в Remnawave?`)) return;
+    if (!confirm(`${label} у ${remnaUuids.length} клиент(ов) в Remnawave?`)) return;
     setRemnaBulkBusy(action); setBulkError(null); setBulkResult(null);
-    try {
-      await api.remnaUsersBulk(token, action, uuids);
-      setBulkResult({ ok: uuids.length, failed: 0 });
-      await loadClients();
-    } catch (e) { setBulkError(e instanceof Error ? e.message : "Ошибка массовой операции Remnawave"); }
-    finally { setRemnaBulkBusy(null); }
+    remnaBulkMutation.mutate({ action, uuids: remnaUuids });
   };
   function toggleId(id: string) {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    toggleClientSelected(id);
   }
   function toggleAll() {
-    if (allSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(allRowIds));
+    if (allSelected) setSelectedClients([]);
+    else setSelectedClients(allRowIds);
   }
   function clearSelection() {
-    setSelectedIds(new Set());
+    clearSelectedClients();
     setBulkError(null);
     setBulkResult(null);
     setBulkAmount("");
     setBulkReason("");
   }
-  async function runBulk(action: BulkClientAction) {
-    if (selectedIds.size === 0) return;
+  function runBulk(action: BulkClientAction) {
+    if (selectedIdSet.size === 0) return;
     setBulkBusy(action);
     setBulkError(null);
     setBulkResult(null);
-    try {
-      const params: { reason?: string; amount?: number } = {};
-      if (action === "credit_balance" || action === "debit_balance") {
-        const n = parseFloat(bulkAmount);
-        if (!Number.isFinite(n) || n <= 0) {
-          setBulkError("Введите положительное число для amount");
-          setBulkBusy(null);
-          return;
-        }
-        params.amount = n;
+    const params: { reason?: string; amount?: number } = {};
+    if (action === "credit_balance" || action === "debit_balance") {
+      const n = parseFloat(bulkAmount);
+      if (!Number.isFinite(n) || n <= 0) {
+        setBulkError("Введите положительное число для amount");
+        setBulkBusy(null);
+        return;
       }
-      if (action === "block" && bulkReason) params.reason = bulkReason;
-
-      const r = await clientsBulkApi.bulk(token, {
-        action,
-        ids: Array.from(selectedIds),
-        params: Object.keys(params).length ? params : undefined,
-      });
-      setBulkResult({ ok: r.ok, failed: r.failed });
-      if (r.failed === 0) {
-        // полный успех — снимаем выделение и перезагружаем
-        setTimeout(() => {
-          setSelectedIds(new Set());
-          loadClients();
-        }, 1500);
-      } else {
-        loadClients();
-      }
-    } catch (e) {
-      setBulkError(e instanceof Error ? e.message : "bulk error");
-    } finally {
-      setBulkBusy(null);
+      params.amount = n;
     }
+    if (action === "block" && bulkReason) params.reason = bulkReason;
+    bulkMutation.mutate({
+      action,
+      ids: Array.from(selectedIdSet),
+      params: Object.keys(params).length ? params : undefined,
+    });
   }
-
-  useEffect(() => {
-    loadClients();
-  }, [token, page, searchApplied, filterBlocked]);
-
-  useEffect(() => {
-    const uuids = data?.items
-      .map(c => c.remnawaveUuid)
-      .filter((u): u is string => Boolean(u)) ?? [];
-    if (uuids.length === 0) return;
-    
-    const poll = () => {
-      api.getClientsOnlineStatuses(token, uuids)
-        .then(setOnlineStatuses)
-        .catch(() => {});
-    };
-    poll();
-    const interval = setInterval(poll, 30000);
-    return () => clearInterval(interval);
-  }, [token, data?.items]);
 
   const applySearch = () => {
     setSearchApplied(search);
@@ -238,12 +296,12 @@ export function ClientsPage() {
     setActionMessage(null);
   }
 
-  async function saveClient() {
+  function saveClient() {
     if (!editing) return;
-    setSaving(true);
     setActionMessage(null);
-    try {
-      const updated = await api.updateClient(token, editing.id, {
+    saveClientMutation.mutate({
+      id: editing.id,
+      payload: {
         email: editForm.email ?? null,
         preferredLang: editForm.preferredLang,
         preferredCurrency: editForm.preferredCurrency,
@@ -253,42 +311,16 @@ export function ClientsPage() {
         referralPercent: editForm.referralPercent ?? null,
         personalDiscountPercent: editForm.personalDiscountPercent ?? null,
         personalDiscountIsOneTime: editForm.personalDiscountIsOneTime ?? false,
-      });
-      setEditing(updated);
-      // Пересоздаём форму из обновлённых данных, иначе input'ы (привязанные к editForm)
-      // показали бы пустые значения после save, и нужно было бы переоткрыть карточку.
-      setEditForm({
-        email: updated.email ?? undefined,
-        preferredLang: updated.preferredLang,
-        preferredCurrency: updated.preferredCurrency,
-        balance: updated.balance,
-        isBlocked: updated.isBlocked,
-        blockReason: updated.blockReason ?? undefined,
-        referralPercent: updated.referralPercent ?? undefined,
-        personalDiscountPercent: updated.personalDiscountPercent ?? undefined,
-        personalDiscountIsOneTime: updated.personalDiscountIsOneTime ?? false,
-      });
-      setActionMessage(t("admin.clients.saved"));
-      loadClients();
-    } catch (e) {
-      setActionMessage(e instanceof Error ? e.message : t("admin.clients.error"));
-    } finally {
-      setSaving(false);
-    }
+      },
+    });
   }
 
-  async function deleteClient(c: ClientRecord) {
+  function deleteClient(c: ClientRecord) {
     if (!confirm(`Удалить клиента ${c.email || c.telegramId || c.id}?`)) return;
-    try {
-      await api.deleteClient(token, c.id);
-      if (editing?.id === c.id) setEditing(null);
-      loadClients();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    }
+    deleteClientMutation.mutate(c.id);
   }
 
-  async function saveClientPassword() {
+  function saveClientPassword() {
     if (!editing) return;
     if (passwordForm.newPassword.length < 8) {
       setPasswordMessage(t("admin.clients.password_min_8"));
@@ -299,16 +331,7 @@ export function ClientsPage() {
       return;
     }
     setPasswordMessage(null);
-    setSavingPassword(true);
-    try {
-      await api.setClientPassword(token, editing.id, passwordForm.newPassword);
-      setPasswordMessage(t("admin.clients.password_set"));
-      setPasswordForm({ newPassword: "", confirm: "" });
-    } catch (e) {
-      setPasswordMessage(e instanceof Error ? e.message : t("admin.clients.error"));
-    } finally {
-      setSavingPassword(false);
-    }
+    savePasswordMutation.mutate({ id: editing.id, newPassword: passwordForm.newPassword });
   }
 
   const totalPages = data ? Math.ceil(data.total / 20) : 0;
@@ -344,7 +367,7 @@ export function ClientsPage() {
             </div>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={loadClients} disabled={loading} className="relative h-9 w-9 rounded-full hover:bg-foreground/[0.06] dark:hover:bg-card">
+        <Button variant="ghost" size="icon" onClick={() => refetchClients()} disabled={loading} className="relative h-9 w-9 rounded-full hover:bg-foreground/[0.06] dark:hover:bg-card">
           <RefreshCw className={cn("h-4 w-4 text-muted-foreground transition-all", loading && "animate-[spin_1.5s_linear_infinite] text-primary")} />
         </Button>
       </motion.div>
@@ -389,12 +412,12 @@ export function ClientsPage() {
       </Card>
 
       {/* BULK ACTIONS BAR */}
-      {selectedIds.size > 0 && (
+      {selectedIdSet.size > 0 && (
         <Card className="bg-primary/10 border-border p-4 rounded-xl">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
             <div className="flex items-center gap-3 shrink-0">
               <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-full bg-primary text-primary-foreground text-xs font-bold">
-                {selectedIds.size}
+                {selectedIdSet.size}
               </span>
               <span className="text-sm font-medium text-foreground">выбрано</span>
               <button
@@ -522,7 +545,7 @@ export function ClientsPage() {
       )}
 
       {/* TABLE */}
-      <Card className="bg-card border-border rounded-2xl overflow-hidden relative min-h-[400px]">
+      <Card className="glass-card-hover rounded-2xl overflow-hidden relative min-h-[400px]">
         {loading && !data ? (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-card">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
@@ -582,7 +605,7 @@ export function ClientsPage() {
                         <input
                           type="checkbox"
                           className="h-4 w-4 rounded border-border bg-background cursor-pointer accent-primary"
-                          checked={selectedIds.has(c.id)}
+                          checked={selectedIdSet.has(c.id)}
                           onChange={() => toggleId(c.id)}
                           aria-label={`Выбрать клиента ${c.id}`}
                         />
@@ -720,11 +743,11 @@ function ClientEditModal({
   setEditForm: React.Dispatch<React.SetStateAction<UpdateClientPayload & Partial<UpdateClientRemnaPayload>>>;
   saving: boolean;
   actionMessage: string | null;
+  onClose: () => void;
   activeLanguages: string[];
   activeCurrencies: string[];
-  onClose: () => void;
-  onSave: () => Promise<void>;
-  onSetPassword: () => Promise<void>;
+  onSave: () => void;
+  onSetPassword: () => void;
   passwordForm: { newPassword: string; confirm: string };
   setPasswordForm: React.Dispatch<React.SetStateAction<{ newPassword: string; confirm: string }>>;
   passwordMessage: string | null;
@@ -736,28 +759,40 @@ function ClientEditModal({
   // T-admin-services (портировано из WolfVPN): доступ к вкладке «Услуги» — ADMIN или action manage_services.
   const canManageServices = state.admin?.role === "ADMIN" || (Array.isArray(state.admin?.allowedSections) && state.admin.allowedSections.includes("action:manage_services"));
   const [tab, setTab] = useState("profile");
-  const [remnaUser, setRemnaUser] = useState<RemnaUserFull | null>(null);
-  const [, setRemnaLoading] = useState(false);
-  // devices-список теперь во вложенном <ClientAllDevicesTab>.
-  // Здесь оставляем только total — для бейджа на вкладке.
-  const [devicesTotal, setDevicesTotal] = useState(0);
+  // TQ-миграция (W1): Remna-юзер, устройства, usage, подписки, реферер, тарифы —
+  // useQuery с ключами qk.admin.client*; инвалидируются после мутаций.
+  const hasRemna = !!editing.remnawaveUuid;
+  const remnaUserQuery = useAdminClientRemna(token, editing.id, hasRemna);
+  const remnaUser = remnaUserQuery.data
+    ? (((remnaUserQuery.data as Record<string, unknown>)?.response ?? remnaUserQuery.data) as RemnaUserFull)
+    : null;
+  const devicesQuery = useAdminClientAllDevices(token, editing.id);
+  const devicesTotal = devicesQuery.data?.total ?? 0;
+  const usageQuery = useAdminClientRemnaUsage(token, editing.id, hasRemna);
+  const usageData = usageQuery.data?.response ?? null;
+  const secondarySubsQuery = useAdminClientSubscriptionsList(token, editing.id);
+  const secondarySubs = secondarySubsQuery.data?.items ?? [];
+  const secondarySubsLoading = secondarySubsQuery.isLoading;
+  // догружаем реферера (список клиентов его не отдаёт).
+  const referrerQuery = useAdminClientDetail(token, editing.id);
+  const referrerInfo = referrerQuery.data?.referrer ?? null;
+  const tariffCategoriesQuery = useTariffCategories(token);
+  const tariffCategories = tariffCategoriesQuery.data?.items ?? [];
+
+  const refetchModalData = () => {
+    void remnaUserQuery.refetch();
+    void devicesQuery.refetch();
+    void usageQuery.refetch();
+    void secondarySubsQuery.refetch();
+    void referrerQuery.refetch();
+  };
+
   // inline-редактор реферера (кто привёл клиента).
-  const [referrerInfo, setReferrerInfo] = useState<ClientRecord["referrer"]>(undefined);
   const [referrerInput, setReferrerInput] = useState("");
   const [referrerLookupBy, setReferrerLookupBy] = useState<"referralCode" | "username" | "tgid" | "id">("referralCode");
   const [referrerSaving, setReferrerSaving] = useState(false);
   const [referrerMessage, setReferrerMessage] = useState<string | null>(null);
-  const [usageData, setUsageData] = useState<RemnaUserUsageResponse["response"] | null>(null);
-  // раньше тут грузили через getSecondarySubscriptions(search=clientId).
-  // Этот endpoint был для глобальной страницы /admin/secondary-subscriptions и работал
-  // через text-search по нескольким полям — для мигрированных клиентов случались
-  // false-negatives (показывало «У клиента ещё нет подписок» когда subs в DB были).
-  // Теперь используем дедикатед /admin/clients/:id/subscriptions — точный фильтр по
-  // ownerId + giftedToClientId, возвращает ВСЕ subs клиента (включая root index=0).
-  const [secondarySubs, setSecondarySubs] = useState<AdminClientSubscriptionItem[]>([]);
-  const [secondarySubsLoading, setSecondarySubsLoading] = useState(false);
 
-  const [tariffCategories, setTariffCategories] = useState<TariffCategoryWithTariffs[]>([]);
   const [selectedGrantTariffId, setSelectedGrantTariffId] = useState<string>("");
   // Выбранная опция длительности из priceOptions выбранного тарифа
   const [selectedGrantOptionId, setSelectedGrantOptionId] = useState<string>("");
@@ -771,51 +806,13 @@ function ClientEditModal({
   const [grantLoading, setGrantLoading] = useState(false);
   const [grantMessage, setGrantMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  const loadRemnaUser = useCallback(() => {
-    if (!editing.remnawaveUuid) return;
-    setRemnaLoading(true);
-    api.getClientRemna(token, editing.id).then((raw: unknown) => {
-      const resp = (raw as Record<string, unknown>)?.response ?? raw;
-      setRemnaUser(resp as RemnaUserFull);
-    }).catch(() => {}).finally(() => setRemnaLoading(false));
-  }, [token, editing.id, editing.remnawaveUuid]);
-
-  // Тут только обновляем total для бейджа — сам список рендерится в ClientAllDevicesTab.
-  const loadDevices = useCallback(() => {
-    api.getClientAllDevices(token, editing.id).then((r) => {
-      setDevicesTotal(r.total);
-    }).catch(() => {});
-  }, [token, editing.id]);
-
-  const loadUsage = useCallback(() => {
-    if (!editing.remnawaveUuid) return;
-    api.getClientRemnaUsage(token, editing.id, 30).then((d) => {
-      setUsageData(d.response ?? null);
-    }).catch(() => {});
-  }, [token, editing.id, editing.remnawaveUuid]);
-
-  const loadSecondarySubs = useCallback(() => {
-    setSecondarySubsLoading(true);
-    api.getClientSubscriptionsList(token, editing.id)
-      .then((r) => setSecondarySubs(r.items ?? []))
-      .catch(() => setSecondarySubs([]))
-      .finally(() => setSecondarySubsLoading(false));
-  }, [token, editing.id]);
-
-  // догружаем реферера (список клиентов его не отдаёт).
-  const loadReferrer = useCallback(() => {
-    api.getClientDetail(token, editing.id)
-      .then((full) => setReferrerInfo(full.referrer ?? null))
-      .catch(() => setReferrerInfo(null));
-  }, [token, editing.id]);
-
   async function attachReferrer() {
     if (!referrerInput.trim()) return;
     setReferrerSaving(true);
     setReferrerMessage(null);
     try {
       const res = await api.setReferralReferrer(token, editing.id, referrerInput.trim(), referrerLookupBy);
-      loadReferrer();
+      void referrerQuery.refetch();
       setReferrerInput("");
       setReferrerMessage(res.referrerId ? " Реферер привязан" : "Реферер убран");
     } catch (e) {
@@ -830,7 +827,7 @@ function ClientEditModal({
     setReferrerMessage(null);
     try {
       await api.setReferralReferrer(token, editing.id, null);
-      setReferrerInfo(null);
+      void referrerQuery.refetch();
       setReferrerMessage("Реферер убран");
     } catch (e) {
       setReferrerMessage(e instanceof Error ? e.message : "Ошибка");
@@ -838,22 +835,6 @@ function ClientEditModal({
       setReferrerSaving(false);
     }
   }
-
-  useEffect(() => {
-    loadRemnaUser();
-    loadDevices();
-    loadUsage();
-    loadSecondarySubs();
-    loadReferrer();
-  }, [loadRemnaUser, loadDevices, loadUsage, loadSecondarySubs, loadReferrer]);
-
-  useEffect(() => {
-    let cancelled = false;
-    api.getTariffCategories(token)
-      .then((r) => { if (!cancelled) setTariffCategories(r.items ?? []); })
-      .catch(() => { /* ignore */ });
-    return () => { cancelled = true; };
-  }, [token]);
 
   const flatTariffs: TariffRecord[] = tariffCategories.flatMap((c) => c.tariffs ?? []);
 
@@ -900,10 +881,7 @@ function ClientEditModal({
         setGrantNote("");
         setGrantTrafficGb("");
         setGrantCustomDays("");
-        loadRemnaUser();
-        loadDevices();
-        loadUsage();
-        loadSecondarySubs();
+        refetchModalData();
       } else {
         setGrantMessage({ type: "err", text: res.message ?? t("admin.clients.grant_tariff_error", "Не удалось выдать тариф") });
       }
@@ -1650,9 +1628,7 @@ function ClientEditModal({
                     clientId={editing.id}
                     token={token}
                     onChanged={() => {
-                      loadDevices();
-                      loadUsage();
-                      loadSecondarySubs();
+                      refetchModalData();
                     }}
                   />
                 </div>
@@ -1682,13 +1658,9 @@ function ClientEditModal({
                     client={editing}
                     token={token}
                     onChanged={() => {
-                      loadRemnaUser();
-                      loadDevices();
-                      loadUsage();
-                      loadSecondarySubs();
+                      refetchModalData();
                     }}
                   />
-
                   {/* Per-subscription quick actions (Отозвать/Disable/Enable/Reset/Unlink)
                       переехали во вкладку «Подписки» — там для каждой подписки свой набор.
                       Здесь оставлены ТОЛЬКО массовые операции — они в ClientBulkActionsPanel выше. */}
@@ -1764,9 +1736,21 @@ function ClientBulkActionsPanel({
   onChanged: () => void;
 }) {
   const { t } = useTranslation();
+  // TQ-миграция (W1): аудит — useMutation по qk.admin.clientAudit; успех операций
+  // инвалидирует клиентские ключи (детали/подписки/устройства/сводка).
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
   const [lastReport, setLastReport] = useState<{ title: string; report: import("@/lib/api").BulkOpReport | null; audit?: import("@/lib/api").ClientAuditResult } | null>(null);
   const [auditOpen, setAuditOpen] = useState(false);
+
+  const auditMutation = useMutation({
+    mutationFn: () => api.clientAudit(token, client.id),
+    onSuccess: (r) => {
+      setLastReport({ title: t("admin.clients.bulk_audit", "Аудит БД vs Remnawave"), report: null, audit: r });
+      setAuditOpen(true);
+    },
+    onSettled: () => setBusy(null),
+  });
 
   // Универсальный wrapper для запуска bulk-операции с UI loading + отчёт.
   const run = useCallback(async (
@@ -1781,23 +1765,18 @@ function ClientBulkActionsPanel({
       const r = await fn();
       setLastReport({ title, report: r });
       onChanged();
+      void queryClient.invalidateQueries({ queryKey: ["admin", "client-detail", client.id], exact: false });
     } catch (e) {
       setLastReport({ title, report: { ok: 0, skipped: 0, failed: 1, items: [{ subscriptionId: "", subscriptionIndex: -1, remnawaveUuid: null, status: "error", message: e instanceof Error ? e.message : String(e) }] } });
     } finally {
       setBusy(null);
     }
-  }, [onChanged]);
+  }, [onChanged, queryClient, client.id]);
 
-  const runAudit = useCallback(async () => {
+  const runAudit = useCallback(() => {
     setBusy("audit");
-    try {
-      const r = await api.clientAudit(token, client.id);
-      setLastReport({ title: t("admin.clients.bulk_audit", "Аудит БД vs Remnawave"), report: null, audit: r });
-      setAuditOpen(true);
-    } finally {
-      setBusy(null);
-    }
-  }, [token, client.id, t]);
+    auditMutation.mutate();
+  }, [auditMutation]);
 
   const isBlocked = client.isBlocked;
 
@@ -1960,32 +1939,40 @@ function ClientBulkActionsPanel({
 // 
 // T-tariff-restriction (портировано из WolfVPN): секция запрета тарифов клиенту в карточке.
 function TariffRestrictionsSection({ clientId, editing, token }: { clientId: string; editing: ClientRecord; token: string }) {
-  const [tariffs, setTariffs] = useState<{ id: string; name: string }[]>([]);
+  // TQ-миграция (W1): тарифы — useAdminTariffs, никаких ручных loading/useEffect.
+  const tariffsQuery = useAdminTariffs(token);
+  const tariffs = (tariffsQuery.data?.items ?? []).map((t) => ({ id: t.id, name: t.name }));
+  const loading = tariffsQuery.isLoading;
+  const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reason, setReason] = useState("");
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    api.getTariffs(token).then((r) => setTariffs(r.items.map((t) => ({ id: t.id, name: t.name })))).catch(() => setTariffs([])).finally(() => setLoading(false));
     let ids: string[] = [];
     try { if (editing.restrictedTariffIds) { const p = JSON.parse(editing.restrictedTariffIds); if (Array.isArray(p)) ids = p.map(String); } } catch { /* битый JSON */ }
     setSelected(new Set(ids));
     setReason(editing.tariffRestrictionReason ?? "");
-  }, [token, editing.restrictedTariffIds, editing.tariffRestrictionReason]);
+  }, [editing.restrictedTariffIds, editing.tariffRestrictionReason]);
 
   const toggle = (id: string) => setSelected((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
-  async function save() {
-    setSaving(true); setMsg(null);
-    try {
-      await api.setClientTariffRestrictions(token, clientId, [...selected], reason.trim() || null);
+  const saveMutation = useMutation({
+    mutationFn: (vars: { tariffIds: string[]; reason: string | null }) =>
+      api.setClientTariffRestrictions(token, clientId, vars.tariffIds, vars.reason),
+    onSuccess: () => {
       setMsg("Сохранено ");
       setTimeout(() => setMsg(null), 2500);
-    } catch (e) { setMsg(e instanceof Error ? e.message : "Ошибка"); }
-    finally { setSaving(false); }
+      void queryClient.invalidateQueries({ queryKey: ["admin", "clients"], exact: false });
+    },
+    onError: (e) => setMsg(e instanceof Error ? e.message : "Ошибка"),
+    onSettled: () => setSaving(false),
+  });
+
+  function save() {
+    setSaving(true); setMsg(null);
+    saveMutation.mutate({ tariffIds: [...selected], reason: reason.trim() || null });
   }
 
   return (
@@ -2039,8 +2026,10 @@ function TariffRestrictionsSection({ clientId, editing, token }: { clientId: str
 
 // T-admin-services (портировано из WolfVPN): вкладка «Услуги» — выдать/забрать доп. устройства подписке.
 function ClientServicesTab({ clientId, token }: { clientId: string; token: string }) {
-  const [items, setItems] = useState<import("@/lib/api").ClientServiceItem[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  // TQ-миграция (W1): услуги — useAdminClientServices; выдача/забор — useMutation.
+  const servicesQuery = useAdminClientServices(token, clientId);
+  const items = servicesQuery.data?.items ?? null;
+  const loading = servicesQuery.isLoading;
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [grantOpen, setGrantOpen] = useState(false);
@@ -2048,38 +2037,36 @@ function ClientServicesTab({ clientId, token }: { clientId: string; token: strin
   const [grantCount, setGrantCount] = useState(1);
   const [grantPrice, setGrantPrice] = useState(0);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    api.getClientServices(token, clientId)
-      .then((r) => setItems(r.items))
-      .catch(() => setItems(null))
-      .finally(() => setLoading(false));
-  }, [token, clientId]);
-  useEffect(() => { load(); }, [load]);
+  const grantDevicesMutation = useMutation({
+    mutationFn: (payload: { subscriptionId: string; deviceCount: number; monthlyPrice: number }) =>
+      api.grantClientDevices(token, clientId, payload),
+    onSuccess: () => {
+      setGrantOpen(false); setGrantCount(1); setGrantPrice(0); setGrantSubId("");
+      void servicesQuery.refetch();
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Не удалось выдать услугу"),
+    onSettled: () => setBusy(null),
+  });
+
+  const removeDevicesMutation = useMutation({
+    mutationFn: (subId: string) => api.removeClientServiceDevices(token, clientId, subId),
+    onSuccess: () => void servicesQuery.refetch(),
+    onError: (e) => setError(e instanceof Error ? e.message : "Не удалось забрать услугу"),
+    onSettled: () => setBusy(null),
+  });
 
   const linkedSubs = (items ?? []).filter((s) => s.linked);
 
-  async function grant() {
+  function grant() {
     if (!grantSubId || grantCount < 1) { setError("Выберите подписку и количество"); return; }
     setBusy("grant"); setError("");
-    try {
-      await api.grantClientDevices(token, clientId, { subscriptionId: grantSubId, deviceCount: grantCount, monthlyPrice: Math.max(0, grantPrice) });
-      setGrantOpen(false); setGrantCount(1); setGrantPrice(0); setGrantSubId("");
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось выдать услугу");
-    } finally { setBusy(null); }
+    grantDevicesMutation.mutate({ subscriptionId: grantSubId, deviceCount: grantCount, monthlyPrice: Math.max(0, grantPrice) });
   }
 
-  async function remove(subId: string) {
+  function remove(subId: string) {
     if (!confirm("Забрать все доп. устройства этой подписки? Лимит вернётся к базовому тарифу, лишние устройства будут отключены, а цена продления уменьшится.")) return;
     setBusy(subId); setError("");
-    try {
-      await api.removeClientServiceDevices(token, clientId, subId);
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось забрать услугу");
-    } finally { setBusy(null); }
+    removeDevicesMutation.mutate(subId);
   }
 
   if (loading) return <p className="text-sm text-muted-foreground">Загрузка…</p>;
@@ -2091,7 +2078,7 @@ function ClientServicesTab({ clientId, token }: { clientId: string; token: strin
           <Gift className="h-4 w-4" /> Услуги клиента
         </h3>
         <div className="flex items-center gap-1.5">
-          <Button variant="ghost" size="sm" onClick={load} title="Обновить"><RefreshCw className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="sm" onClick={() => void servicesQuery.refetch()} title="Обновить"><RefreshCw className="h-4 w-4" /></Button>
           <Button size="sm" className="gap-1.5" onClick={() => { setGrantOpen((v) => !v); setError(""); setGrantSubId(linkedSubs[0]?.subscriptionId ?? ""); }}>
             <Plus className="h-4 w-4" /> Выдать
           </Button>
@@ -2191,18 +2178,10 @@ function ClientServicesTab({ clientId, token }: { clientId: string; token: strin
 
 function ClientAllDevicesTab({ clientId, token }: { clientId: string; token: string }) {
   const { t } = useTranslation();
-  const [data, setData] = useState<import("@/lib/api").ClientAllDevicesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    api.getClientAllDevices(token, clientId)
-      .then((r) => setData(r))
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
-  }, [token, clientId]);
-
-  useEffect(() => { load(); }, [load]);
+  // TQ-миграция (W1): устройства — useAdminClientAllDevices.
+  const devicesQuery = useAdminClientAllDevices(token, clientId);
+  const data = devicesQuery.data ?? null;
+  const loading = devicesQuery.isLoading;
 
   const deleteDevice = async (subId: string, uuid: string | null, hwid: string) => {
     if (!uuid) return;
@@ -2212,7 +2191,7 @@ function ClientAllDevicesTab({ clientId, token }: { clientId: string; token: str
       // если устройство с primary; иначе — через прямой Remna-uuid (надо отдельный endpoint).
       // Для минимального решения — оставляем через clientId — работает для primary subscription.
       await api.deleteClientRemnaDevice(token, clientId, hwid);
-      load();
+      void devicesQuery.refetch();
     } catch (e) {
       alert(e instanceof Error ? e.message : t("admin.clients.delete_error"));
     }
@@ -2231,7 +2210,7 @@ function ClientAllDevicesTab({ clientId, token }: { clientId: string; token: str
             <Smartphone className="h-4 w-4" />
             {t("admin.clients.hwid_devices", "HWID устройства")} (0)
           </h3>
-          <Button variant="ghost" size="sm" onClick={load} title={t("admin.clients.refresh_data", "Обновить")}>
+          <Button variant="ghost" size="sm" onClick={() => void devicesQuery.refetch()} title={t("admin.clients.refresh_data", "Обновить")}>
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
@@ -2251,7 +2230,7 @@ function ClientAllDevicesTab({ clientId, token }: { clientId: string; token: str
           {t("admin.clients.hwid_devices", "HWID устройства")} ({data.total})
           <span className="text-muted-foreground font-normal text-[11px]">{t("admin.clients.from_all_subs", "со всех подписок клиента")}</span>
         </h3>
-        <Button variant="ghost" size="sm" onClick={load} title={t("admin.clients.refresh_data", "Обновить")}>
+        <Button variant="ghost" size="sm" onClick={() => void devicesQuery.refetch()} title={t("admin.clients.refresh_data", "Обновить")}>
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
@@ -2326,8 +2305,10 @@ function ClientAllDevicesTab({ clientId, token }: { clientId: string; token: str
 // 
 function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token: string }) {
   const { t } = useTranslation();
-  const [data, setData] = useState<import("@/lib/api").ClientSubsOverviewResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  // TQ-миграция (W1): сводка подписок — useAdminClientSubsOverview.
+  const overviewQuery = useAdminClientSubsOverview(token, clientId);
+  const data = overviewQuery.data ?? null;
+  const loading = overviewQuery.isLoading;
   // ручное продление конкретной подписки (компенсация/бонус).
   const [extendFor, setExtendFor] = useState<{ subId: string; label: string } | null>(null);
   const [extendDays, setExtendDays] = useState<number>(30);
@@ -2341,16 +2322,6 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
   const [attachBusy, setAttachBusy] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    api.getClientSubsOverview(token, clientId)
-      .then((r) => setData(r))
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
-  }, [token, clientId]);
-
-  useEffect(() => { load(); }, [load]);
-
   async function grantExtend() {
     if (!extendFor || extendDays < 1) return;
     setExtendBusy(true);
@@ -2363,7 +2334,7 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
       setExtendDone(`Подписка продлена на ${r.tariff.durationDays} дн. (${r.tariff.name})`);
       setExtendFor(null);
       setExtendNote("");
-      load();
+      void overviewQuery.refetch();
       setTimeout(() => setExtendDone(null), 4000);
     } catch (e) {
       setExtendError(e instanceof Error ? e.message : "Ошибка продления");
@@ -2381,7 +2352,7 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
       setExtendDone(`Remna-юзер привязан как подписка #${r.subscriptionIndex}`);
       setAttachOpen(false);
       setAttachQuery("");
-      load();
+      void overviewQuery.refetch();
       setTimeout(() => setExtendDone(null), 4000);
     } catch (e) {
       setAttachError(e instanceof Error ? e.message : "Ошибка привязки");
@@ -2419,7 +2390,7 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
             <Link className="h-3 w-3" />
             Привязать Remna
           </Button>
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={load}>
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => void overviewQuery.refetch()}>
             <RefreshCw className="h-3 w-3" />
           </Button>
         </div>
@@ -2547,7 +2518,7 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
 
       {/* привязка существующего Remna-юзера */}
       <Dialog open={attachOpen} onOpenChange={(o) => { if (!o && !attachBusy) setAttachOpen(false); }}>
-        <DialogContent className="bg-card border-border rounded-2xl max-w-sm">
+        <DialogContent className="bg-card/95 backdrop-blur-2xl rounded-2xl max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
               Привязать Remna-юзера
@@ -2588,7 +2559,7 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
 
       {/* мини-диалог ручного продления подписки */}
       <Dialog open={!!extendFor} onOpenChange={(o) => { if (!o && !extendBusy) setExtendFor(null); }}>
-        <DialogContent className="bg-card border-border rounded-2xl max-w-sm">
+        <DialogContent className="bg-card/95 backdrop-blur-2xl rounded-2xl max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
               Продлить подписку

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, XCircle, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -50,6 +51,7 @@ function push(input: ToastInput): number {
   };
   // не копим бесконечно — максимум 4 на экране
   items = [...items, item].slice(-4);
+  ensureToasterMounted();
   emit();
   if (item.duration > 0 && typeof window !== "undefined") {
     window.setTimeout(() => dismiss(id), item.duration);
@@ -103,7 +105,7 @@ function ToastCard({ item }: { item: ToastItem }) {
       exit={{ opacity: 0, y: -16, scale: 0.92, transition: { duration: 0.18 } }}
       transition={{ type: "spring", stiffness: 380, damping: 30 }}
       className={cn(
-        "pointer-events-auto relative flex w-[calc(100vw-2rem)] max-w-sm items-start gap-3 overflow-hidden rounded-xl border bg-card/90 px-4 py-3.5",
+        "pointer-events-auto relative flex w-[calc(100vw-2rem)] max-w-sm items-start gap-3 overflow-hidden rounded-xl border bg-card/95 backdrop-blur-2xl px-4 py-3.5",
         style.ring,
         style.glow,
       )}
@@ -146,4 +148,18 @@ export function Toaster() {
     </div>,
     document.body,
   );
+}
+
+// Самомонтирование: <Toaster /> раньше нигде не рендерился (App.tsx не импортирует
+// его), поэтому toast.success/error/info молча ничего не показывали. Монтируем
+// контейнер лениво — при первом toast.* вызове (гарантированно есть DOM и
+// пользовательский контекст). Работает во всех лейаутах.
+let toasterMounted = false;
+function ensureToasterMounted() {
+  if (toasterMounted || typeof document === "undefined") return;
+  toasterMounted = true;
+  const host = document.createElement("div");
+  host.id = "toast-root";
+  document.body.appendChild(host);
+  createRoot(host).render(<Toaster />);
 }

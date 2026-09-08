@@ -1,7 +1,10 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
+import { qk } from "@/lib/query-client";
+import { useAdminTourSteps, useAdminTourMascots } from "@/lib/admin-queries";
 import { createPortal } from "react-dom";
 import { useAuth } from "@/contexts/auth";
-import { api, type TourStepRecord, type TourMascotRecord, type PublicConfig, type MascotEmotionRecord } from "@/lib/api";
+import { api, type TourStepRecord, type PublicConfig, type MascotEmotionRecord } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 const CABINET_ROUTES = [
   { value: "", label: "Текущая страница" },
@@ -284,14 +288,30 @@ export function TourConstructorPage() {
   const { state } = useAuth();
   const token = state.accessToken ?? null;
 
-  const [steps, setSteps] = useState<TourStepRecord[]>([]);
-  const [mascots, setMascots] = useState<TourMascotRecord[]>([]);
-  const [publicConfig, setPublicConfig] = useState<PublicConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  const stepsQ = useAdminTourSteps(token);
+  const mascotsQ = useAdminTourMascots(token);
+  const steps = stepsQ.data?.items ?? [];
+  const mascots = mascotsQ.data?.items ?? [];
+  const loading = (stepsQ.isLoading || mascotsQ.isLoading) && !stepsQ.isError;
+
+  // Отдельная ошибка мутаций/реордера — тост поверх страницы (как прежний setError).
   const [error, setError] = useState<string | null>(null);
-  
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.admin.tourSteps(), exact: false });
+    void queryClient.invalidateQueries({ queryKey: qk.admin.tourMascots(), exact: false });
+  };
+
+  // publicConfig: cached fetch через React Query (ключ из qk.publicConfig).
+  const publicConfigQ = useQuery({
+    queryKey: qk.publicConfig,
+    queryFn: () => getPublicConfigCached().catch(() => null),
+    staleTime: Infinity,
+  });
+  const publicConfig = publicConfigQ.data ?? null;
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   // Editor form state
   const [editTitle, setEditTitle] = useState("");
@@ -300,39 +320,16 @@ export function TourConstructorPage() {
   const [editPlacement, setEditPlacement] = useState("center");
   const [editMascotId, setEditMascotId] = useState<string | null>(null);
   const [editMood, setEditMood] = useState("wave");
-  const [editIsActive, setEditIsActive] = useState(true);
   const [editRoute, setEditRoute] = useState<string>("");
+  const [editIsActive, setEditIsActive] = useState(true);
 
-  // Upload state
-  const [uploadingVideo, setUploadingVideo] = useState(false);
   const videoInputRef = useRef<HTMLInputElement>(null);
+
 
   const [view, setView] = useState<"constructor" | "library">("constructor");
   const [selectedLibraryCharacterId, setSelectedLibraryCharacterId] = useState<string | null>(null);
   const [editCharacterName, setEditCharacterName] = useState("");
 
-  const load = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const [stepsRes, mascotsRes, configRes] = await Promise.all([
-        api.getTourSteps(token),
-        api.getTourMascots(token),
-        api.getPublicConfig().catch(() => null),
-      ]);
-      setSteps(stepsRes.items);
-      setMascots(mascotsRes.items);
-      if (configRes) setPublicConfig(configRes);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   const selectedStep = steps.find(s => s.id === selectedStepId);
 
@@ -353,58 +350,72 @@ export function TourConstructorPage() {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  // Drag-reorder: оптимистично переставляем items в кеше (как прежний setSteps);
+  // при ошибке — refetch (откат) + тост.
+  const reorderMutation = useMutation({
+    mutationFn: async ({ items, reordered }: { items: { id: string; sortOrder: number }[]; reordered: TourStepRecord[] }) => {
+      // Оптимистично кладём переставленный список в кеш (как прежний setSteps).
+      queryClient.setQueryData(qk.admin.tourSteps(), { items: reordered });
+      await api.reorderTourSteps(token!, items);
+      return reordered;
+    },
+    onSuccess: invalidate,
+    onError: (e) => {
+      setError(e instanceof Error ? e.message : "Ошибка сохранения порядка");
+      void stepsQ.refetch(); // откат оптимистичного обновления
+    },
+  });
+
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    
+    if (!token) return;
     const oldIndex = steps.findIndex((s) => s.id === active.id);
     const newIndex = steps.findIndex((s) => s.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-    
     const reordered = arrayMove(steps, oldIndex, newIndex);
-    setSteps(reordered);
-    
-    if (!token) return;
-    try {
-      const items = reordered.map((s, index) => ({ id: s.id, sortOrder: index }));
-      await api.reorderTourSteps(token, items);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка сохранения порядка");
-      load();
-    }
+    reorderMutation.mutate({ items: reordered.map((s, index) => ({ id: s.id, sortOrder: index })), reordered });
   };
 
-  const handleCreateStep = async (targetDef: typeof TOUR_TARGETS[0]) => {
-    if (!token) return;
-    setSaving(true);
-    try {
-      const firstMascot = mascots[0] ?? null;
-      const newStep = await api.createTourStep(token, {
+  const createStepMutation = useMutation({
+    mutationFn: (targetDef: typeof TOUR_TARGETS[0]) =>
+      api.createTourStep(token!, {
         target: targetDef.target,
         targetLabel: targetDef.label,
         title: targetDef.description,
         content: "Текст шага...",
         placement: targetDef.defaultPlacement,
-        mascotId: firstMascot?.id ?? null,
+        mascotId: mascots[0]?.id ?? null,
         mood: "wave",
         isActive: true,
         sortOrder: steps.length,
         route: targetDef.defaultRoute || null,
-      });
-      setSteps([...steps, newStep]);
+      }),
+    onSuccess: (newStep) => {
+      invalidate();
       setSelectedStepId(newStep.id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка создания шага");
-    } finally {
-      setSaving(false);
-    }
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка создания шага"),
+  });
+
+  const handleCreateStep = (targetDef: typeof TOUR_TARGETS[0]) => {
+    if (!token) return;
+    createStepMutation.mutate(targetDef);
   };
 
-  const handleSaveStep = async () => {
+
+  const saveStepMutation = useMutation({
+    mutationFn: (vars: { id: string; payload: Parameters<typeof api.updateTourStep>[2] }) =>
+      api.updateTourStep(token!, vars.id, vars.payload),
+    onSuccess: invalidate,
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка сохранения шага"),
+  });
+
+  const handleSaveStep = () => {
     if (!token || !selectedStepId) return;
-    setSaving(true);
-    try {
-      const updated = await api.updateTourStep(token, selectedStepId, {
+    saveStepMutation.mutate({
+      id: selectedStepId,
+      payload: {
         title: editTitle,
         content: editContent,
         videoUrl: editVideoUrl || null,
@@ -413,168 +424,158 @@ export function TourConstructorPage() {
         mood: editMood,
         isActive: editIsActive,
         route: editRoute || null,
-      });
-      setSteps(steps.map(s => s.id === updated.id ? updated : s));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка сохранения шага");
-    } finally {
-      setSaving(false);
-    }
+      },
+    });
   };
 
-  const handleDeleteStep = async () => {
+  const deleteStepMutation = useMutation({
+    mutationFn: (id: string) => api.deleteTourStep(token!, id),
+    onSuccess: (_d, id) => {
+      invalidate();
+      if (id === selectedStepId) setSelectedStepId(null);
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка удаления шага"),
+  });
+
+  const handleDeleteStep = () => {
     if (!token || !selectedStepId || !confirm("Удалить этот шаг?")) return;
-    setSaving(true);
-    try {
-      await api.deleteTourStep(token, selectedStepId);
-      setSteps(steps.filter(s => s.id !== selectedStepId));
-      setSelectedStepId(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка удаления шага");
-    } finally {
-      setSaving(false);
-    }
+    deleteStepMutation.mutate(selectedStepId);
   };
 
-  const handleSeedDefaults = async () => {
+  const seedDefaultsMutation = useMutation({
+    mutationFn: () => api.seedDefaultTourSteps(token!),
+    onSuccess: () => {
+      invalidate();
+      setSelectedStepId(null);
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка заполнения по умолчанию"),
+  });
+
+  const handleSeedDefaults = () => {
     if (!token || !confirm("Это создаст дефолтные шаги. Продолжить?")) return;
-    setSaving(true);
-    try {
-      const res = await api.seedDefaultTourSteps(token);
-      setSteps(res.items);
-      setSelectedStepId(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка заполнения по умолчанию");
-    } finally {
-      setSaving(false);
-    }
+    seedDefaultsMutation.mutate();
   };
 
-  const handleClearAll = async () => {
+  const clearAllMutation = useMutation({
+    mutationFn: async () => {
+      await Promise.all(steps.map(s => api.deleteTourStep(token!, s.id)));
+    },
+    onSuccess: () => {
+      invalidate();
+      setSelectedStepId(null);
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка очистки шагов"),
+  });
+
+  const handleClearAll = () => {
     if (!token || steps.length === 0 || !confirm("Удалить все шаги тура? Это действие нельзя отменить.")) return;
-    setSaving(true);
-    try {
-      await Promise.all(steps.map(s => api.deleteTourStep(token, s.id)));
-      setSteps([]);
-      setSelectedStepId(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка очистки шагов");
-      load();
-    } finally {
-      setSaving(false);
-    }
+    clearAllMutation.mutate();
   };
 
-  // Video upload handler
-  const handleVideoUpload = async (file: File) => {
-    if (!token || !selectedStepId) return;
-    setUploadingVideo(true);
-    try {
-      const updated = await api.uploadTourStepVideo(token, selectedStepId, file);
-      setSteps(steps.map(s => s.id === updated.id ? updated : s));
+  // Video upload handlers — useMutation, результат видео подставляем в форму.
+  const uploadVideoMutation = useMutation({
+    mutationFn: (file: File) => api.uploadTourStepVideo(token!, selectedStepId!, file),
+    onSuccess: (updated) => {
+      invalidate();
       setEditVideoUrl(updated.videoUrl || "");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки видео");
-    } finally {
-      setUploadingVideo(false);
-    }
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка загрузки видео"),
+  });
+
+  const deleteVideoMutation = useMutation({
+    mutationFn: () => api.deleteTourStepVideo(token!, selectedStepId!),
+    onSuccess: () => {
+      invalidate();
+      setEditVideoUrl("");
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка удаления видео"),
+  });
+
+  const uploadingVideo = uploadVideoMutation.isPending || deleteVideoMutation.isPending;
+
+  const handleVideoUpload = (file: File) => {
+    if (!token || !selectedStepId) return;
+    uploadVideoMutation.mutate(file);
   };
 
-  const handleDeleteVideo = async () => {
+  const handleDeleteVideo = () => {
     if (!token || !selectedStepId) return;
-    setUploadingVideo(true);
-    try {
-      const updated = await api.deleteTourStepVideo(token, selectedStepId);
-      setSteps(steps.map(s => s.id === updated.id ? updated : s));
-      setEditVideoUrl("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка удаления видео");
-    } finally {
-      setUploadingVideo(false);
-    }
+    deleteVideoMutation.mutate();
   };
 
   // Library handlers
-  const handleCreateMascot = async () => {
-    if (!token) return;
-    setSaving(true);
-    try {
-      const mascot = await api.uploadTourMascot(token, "Новый персонаж");
-      setMascots([...mascots, mascot]);
+  const createMascotMutation = useMutation({
+    mutationFn: () => api.uploadTourMascot(token!, "Новый персонаж"),
+    onSuccess: (mascot) => {
+      invalidate();
       setSelectedLibraryCharacterId(mascot.id);
       setEditCharacterName(mascot.name);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка создания персонажа");
-    } finally {
-      setSaving(false);
-    }
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка создания персонажа"),
+  });
+
+  const handleCreateMascot = () => {
+    if (!token) return;
+    createMascotMutation.mutate();
   };
 
-  const handleRenameMascot = async (id: string, newName: string) => {
+  const renameMascotMutation = useMutation({
+    mutationFn: (vars: { id: string; name: string }) => api.updateTourMascot(token!, vars.id, vars.name),
+    onSuccess: invalidate,
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка переименования персонажа"),
+  });
+
+  const handleRenameMascot = (id: string, newName: string) => {
     if (!token || !newName.trim()) return;
     const char = mascots.find(m => m.id === id);
     if (!char || char.name === newName) return;
-    try {
-      const updated = await api.updateTourMascot(token, id, newName);
-      setMascots(mascots.map(m => m.id === id ? updated : m));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка переименования персонажа");
-    }
+    renameMascotMutation.mutate({ id, name: newName });
   };
 
-  const handleUploadEmotion = async (mascotId: string, mood: string, file: File) => {
+  const uploadEmotionMutation = useMutation({
+    mutationFn: (vars: { mascotId: string; mood: string; file: File }) =>
+      api.uploadMascotEmotion(token!, vars.mascotId, vars.mood, vars.file),
+    onSuccess: invalidate,
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка загрузки эмоции"),
+  });
+
+  const handleUploadEmotion = (mascotId: string, mood: string, file: File) => {
     if (!token) return;
-    setSaving(true);
-    try {
-      const newEmotion = await api.uploadMascotEmotion(token, mascotId, mood, file);
-      setMascots(mascots.map(m => {
-        if (m.id === mascotId) {
-          const emotions = m.emotions || [];
-          const filtered = emotions.filter(e => e.mood !== mood);
-          return { ...m, emotions: [...filtered, newEmotion] };
-        }
-        return m;
-      }));
-      // If we just uploaded the currently edited mood for the selected mascot in step editor
-      if (editMascotId === mascotId && editMood === mood) {
-         // It should update automatically since selectedMascot comes from state
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки эмоции");
-    } finally {
-      setSaving(false);
-    }
+    uploadEmotionMutation.mutate({ mascotId, mood, file });
   };
 
-  const handleDeleteEmotion = async (mascotId: string, emotionId: string) => {
+  const deleteEmotionMutation = useMutation({
+    mutationFn: (vars: { mascotId: string; emotionId: string }) =>
+      api.deleteMascotEmotion(token!, vars.mascotId, vars.emotionId),
+    onSuccess: invalidate,
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка удаления эмоции"),
+  });
+
+  const handleDeleteEmotion = (mascotId: string, emotionId: string) => {
     if (!token || !confirm("Удалить эту эмоцию?")) return;
-    setSaving(true);
-    try {
-      await api.deleteMascotEmotion(token, mascotId, emotionId);
-      setMascots(mascots.map(m => {
-        if (m.id === mascotId) {
-          return { ...m, emotions: (m.emotions || []).filter(e => e.id !== emotionId) };
-        }
-        return m;
-      }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка удаления эмоции");
-    } finally {
-      setSaving(false);
-    }
+    deleteEmotionMutation.mutate({ mascotId, emotionId });
   };
 
-  const handleDeleteMascot = async (mascotId: string) => {
-    if (!token || !confirm("Удалить этого персонажа?")) return;
-    try {
-      await api.deleteTourMascot(token, mascotId);
-      setMascots(mascots.filter(m => m.id !== mascotId));
-      // If the deleted mascot was selected in editor, clear it
+  const deleteMascotMutation = useMutation({
+    mutationFn: (mascotId: string) => api.deleteTourMascot(token!, mascotId),
+    onSuccess: (_d, mascotId) => {
+      invalidate();
       if (editMascotId === mascotId) setEditMascotId(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка удаления персонажа");
-    }
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка удаления персонажа"),
+  });
+
+  const handleDeleteMascot = (mascotId: string) => {
+    if (!token || !confirm("Удалить этого персонажа?")) return;
+    deleteMascotMutation.mutate(mascotId);
   };
+
+  const saving =
+    reorderMutation.isPending || createStepMutation.isPending || saveStepMutation.isPending ||
+    deleteStepMutation.isPending || seedDefaultsMutation.isPending || clearAllMutation.isPending ||
+    createMascotMutation.isPending || renameMascotMutation.isPending || uploadEmotionMutation.isPending ||
+    deleteEmotionMutation.isPending || deleteMascotMutation.isPending;
+
 
   if (loading && steps.length === 0) {
     return (

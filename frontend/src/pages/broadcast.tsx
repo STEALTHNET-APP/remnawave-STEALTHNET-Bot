@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { api, type BroadcastResult, type BroadcastProgress, type BroadcastHistoryItem, type ListSendJobStatus } from "@/lib/api";
+import { useAdminBroadcastRecipients, useAdminBroadcastHistory } from "@/lib/admin-queries";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,10 +78,10 @@ const CHANNEL_META: Record<ChannelKey, { label: string; desc: string; icon: type
 export function BroadcastPage() {
   const { state } = useAuth();
   const token = state.accessToken ?? "";
-  const [broadcastRecipients, setBroadcastRecipients] = useState<{ withTelegram: number; withEmail: number } | null>(null);
-  const [broadcastChannel, setBroadcastChannel] = useState<ChannelKey>("telegram");
-  // T-unify (12.05.2026, WolfVPN): целевая группа получателей.
+  const queryClient = useQueryClient();
+  const { data: broadcastRecipients } = useAdminBroadcastRecipients(token || null);
   const [broadcastTargetGroup, setBroadcastTargetGroup] = useState<string>("all");
+  const [broadcastChannel, setBroadcastChannel] = useState<ChannelKey>("telegram");
   const [broadcastSubject, setBroadcastSubject] = useState("");
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [broadcastAttachment, setBroadcastAttachment] = useState<File | null>(null);
@@ -240,11 +242,6 @@ export function BroadcastPage() {
     }
   }
 
-  useEffect(() => {
-    if (token) {
-      api.broadcastRecipientsCount(token).then(setBroadcastRecipients).catch(() => setBroadcastRecipients(null));
-    }
-  }, [token]);
 
   const targetCount = useMemo(() => {
     if (!broadcastRecipients) return 0;
@@ -297,7 +294,7 @@ export function BroadcastPage() {
         setBroadcastButtonText("");
         setBroadcastButtonAction("");
         setBroadcastButtonCustomUrl("");
-        api.broadcastRecipientsCount(token).then(setBroadcastRecipients).catch(() => {});
+        queryClient.invalidateQueries({ queryKey: ["admin", "broadcast-recipients"], exact: false });
       }
     } catch (err) {
       setBroadcastResult({
@@ -1406,19 +1403,63 @@ function channelMetaIcon(c: BroadcastHistoryItem["channel"]) {
 }
 
 function BroadcastHistoryPanel({ token }: { token: string }) {
-  const [items, setItems] = useState<BroadcastHistoryItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [total, setTotal] = useState(0);
+  const queryClient = useQueryClient();
+  const { data, isLoading, refetch, isFetching } = useAdminBroadcastHistory(token || null, 100);
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const loading = isLoading || isFetching;
   const [detail, setDetail] = useState<BroadcastHistoryItem | null>(null);
   // 25.05.2026, WolfVPN — state для функции «Возобновить рассылку».
   const resumeFileInputRef = useRef<HTMLInputElement>(null);
-  const [resumeLoading, setResumeLoading] = useState(false);
-  const [resumeError, setResumeError] = useState<string | null>(null);
-  // 25.05.2026, WolfVPN — state для «Остановить» из истории (живой cancel либо zombie cleanup).
-  const [stopLoading, setStopLoading] = useState(false);
-  const [stopError, setStopError] = useState<string | null>(null);
   // 25.05.2026, WolfVPN — скачивание CSV получателей.
   const [recipientsLoading, setRecipientsLoading] = useState(false);
+  const [stopError, setStopError] = useState<string | null>(null);
+  const [resumeError, setResumeError] = useState<string | null>(null);
+
+  const invalidateHistory = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin", "broadcast-history"], exact: false });
+  };
+
+  const stopMutation = useMutation({
+    mutationFn: (jobId: string) => api.cancelBroadcast(token, jobId),
+    onSuccess: () => {
+      setDetail(null);
+      setStopError(null);
+      invalidateHistory();
+    },
+    onError: (e) => setStopError(e instanceof Error ? e.message : String(e)),
+  });
+  const resumeMutation = useMutation({
+    mutationFn: ({ jobId, file }: { jobId: string; file?: File }) =>
+      api.resumeBroadcast(token, jobId, file),
+    onSuccess: (res) => {
+      setDetail(null);
+      setResumeError(null);
+      invalidateHistory();
+      alert(`Рассылка возобновлена (jobId=${res.jobId}). Уже отправленные ${detail?.sentTelegram ?? 0} получателей будут пропущены.`);
+    },
+    onError: (e) => {
+      setResumeError(e instanceof Error ? e.message : String(e));
+      if (resumeFileInputRef.current) resumeFileInputRef.current.value = "";
+    },
+  });
+  const stopLoading = stopMutation.isPending;
+  const resumeLoading = resumeMutation.isPending;
+
+  const handleStop = () => {
+    if (!detail) return;
+    if (!window.confirm("Остановить эту рассылку? Если она ещё идёт — прервётся между сообщениями. Если зависла — будет помечена как cancelled.")) return;
+    stopMutation.mutate(detail.id);
+  };
+
+  const handleResume = (file: File | null) => {
+    if (!detail) return;
+    if (detail.attachmentName && !file) {
+      setResumeError(`Нужно переаплоадить файл "${detail.attachmentName}"`);
+      return;
+    }
+    resumeMutation.mutate({ jobId: detail.id, file: file ?? undefined });
+  };
 
   const handleDownloadRecipients = async () => {
     if (!detail) return;
@@ -1431,60 +1472,6 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
       setRecipientsLoading(false);
     }
   };
-
-  const handleStop = async () => {
-    if (!detail) return;
-    if (!window.confirm("Остановить эту рассылку? Если она ещё идёт — прервётся между сообщениями. Если зависла — будет помечена как cancelled.")) return;
-    setStopLoading(true);
-    setStopError(null);
-    try {
-      await api.cancelBroadcast(token, detail.id);
-      setDetail(null);
-      await load();
-    } catch (e) {
-      setStopError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setStopLoading(false);
-    }
-  };
-
-  const handleResume = async (file: File | null) => {
-    if (!detail) return;
-    setResumeError(null);
-    if (detail.attachmentName && !file) {
-      setResumeError(`Нужно переаплоадить файл "${detail.attachmentName}"`);
-      return;
-    }
-    setResumeLoading(true);
-    try {
-      const res = await api.resumeBroadcast(token, detail.id, file ?? undefined);
-      if (!res.jobId) throw new Error("сервер не вернул jobId");
-      setDetail(null);
-      await load();
-      alert(`Рассылка возобновлена (jobId=${res.jobId}). Уже отправленные ${detail.sentTelegram} получателей будут пропущены.`);
-    } catch (e) {
-      setResumeError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setResumeLoading(false);
-      if (resumeFileInputRef.current) resumeFileInputRef.current.value = "";
-    }
-  };
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const r = await api.getBroadcastHistory(token, 100, 0);
-      setItems(r.items);
-      setTotal(r.total);
-    } catch {
-      setItems([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  useEffect(() => { load(); }, [load]);
 
   // Aggregate stats для верхних карточек.
   const stats = useMemo(() => {
@@ -1515,8 +1502,8 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
               <h2 className="text-[13.5px] font-bold">История рассылок</h2>
               <p className="text-xs text-muted-foreground">Последние {Math.min(items.length, 100)} записей</p>
             </div>
-          </div>
-          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="rounded-xl">
+            </div>
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={loading} className="rounded-xl">
             <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
             Обновить
           </Button>

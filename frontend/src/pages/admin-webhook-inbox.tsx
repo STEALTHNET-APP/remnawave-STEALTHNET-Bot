@@ -3,19 +3,19 @@
  * Фильтр по провайдеру и outcome. Drawer с raw body + headers + кнопкой replay.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, RefreshCw, ChevronRight, Repeat2, Search, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import {
   webhookInboxApi,
   type WebhookEventListItem,
-  type WebhookEventDetail,
 } from "@/lib/admin-extras-api";
+import { Loader2, RefreshCw, ChevronRight, Repeat2, Search, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { fmtMsk } from "@/lib/datetime";
 
 const OUTCOME_META: Record<string, { label: string; cls: string; icon: typeof CheckCircle2 }> = {
@@ -34,63 +34,76 @@ const PROVIDERS = ["platega", "yookassa", "yoomoney", "cryptopay", "heleket", "l
 export function AdminWebhookInboxPage() {
   const { state } = useAuth();
   const token = state.accessToken;
+  const qc = useQueryClient();
 
-  const [items, setItems] = useState<WebhookEventListItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [prevItems, setPrevItems] = useState<WebhookEventListItem[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [provider, setProvider] = useState("");
   const [outcome, setOutcome] = useState("");
   const [q, setQ] = useState("");
+  const [appliedQ, setAppliedQ] = useState("");
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedDetail, setSelectedDetail] = useState<WebhookEventDetail | null>(null);
-  const [replaying, setReplaying] = useState(false);
-
-  const load = useCallback(async (reset = true) => {
-    if (!token) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await webhookInboxApi.list(token, {
+  const listQuery = useQuery({
+    queryKey: ["admin", "webhook-inbox", provider, outcome, appliedQ, cursor ?? ""] as const,
+    queryFn: () =>
+      webhookInboxApi.list(token!, {
         provider: provider || undefined,
         outcome: outcome || undefined,
-        q: q || undefined,
-        cursor: reset ? undefined : cursor || undefined,
+        q: appliedQ || undefined,
+        cursor: cursor ?? undefined,
         limit: 50,
-      });
-      setItems((prev) => (reset ? result.items : [...prev, ...result.items]));
-      setCursor(result.nextCursor);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [token, provider, outcome, q, cursor]);
+      }),
+    enabled: !!token,
+  });
+  const items = useMemo(
+    () => [...prevItems, ...(listQuery.data?.items ?? [])],
+    [prevItems, listQuery.data],
+  );
+  const loading = listQuery.isFetching;
+  const error = listQuery.error ? String(listQuery.error) : null;
+  const nextCursor = listQuery.data?.nextCursor ?? null;
 
-  useEffect(() => { void load(true); /* eslint-disable-next-line */ }, [provider, outcome]);
-
+  // смена фильтров — сброс пагинации (аналог load(true))
   useEffect(() => {
-    if (!selectedId || !token) { setSelectedDetail(null); return; }
-    webhookInboxApi.get(token, selectedId).then(setSelectedDetail).catch(() => {});
-  }, [selectedId, token]);
+    setPrevItems([]);
+    setCursor(null);
+  }, [provider, outcome, appliedQ]);
 
-  const handleReplay = async () => {
-    if (!selectedId || !token) return;
-    if (!confirm("Повторно отправить этот webhook нашему серверу? Создастся новая запись WebhookEvent с replay-меткой.")) return;
-    setReplaying(true);
-    try {
-      const res = await webhookInboxApi.replay(token, selectedId);
+  const detailQuery = useQuery({
+    queryKey: ["admin", "webhook-inbox-detail", selectedId] as const,
+    queryFn: () => webhookInboxApi.get(token!, selectedId!),
+    enabled: !!token && !!selectedId,
+  });
+  const selectedDetail = detailQuery.data ?? null;
+
+  const replayMutation = useMutation({
+    mutationFn: () => webhookInboxApi.replay(token!, selectedId!),
+    onSuccess: (res) => {
       alert(`Replay выполнен. HTTP ${res.replayedHttpStatus ?? "?"}.`);
-      await load(true);
-    } catch (e) {
-      alert(`Ошибка replay: ${e}`);
-    } finally {
-      setReplaying(false);
-    }
+      void qc.invalidateQueries({ queryKey: ["admin", "webhook-inbox"], exact: false });
+    },
+    onError: (e) => alert(`Ошибка replay: ${e}`),
+  });
+  const replaying = replayMutation.isPending;
+
+  const loadReset = () => {
+    setPrevItems([]);
+    setCursor(null);
+    void listQuery.refetch();
+  };
+  const loadMore = () => {
+    if (!nextCursor) return;
+    setPrevItems(items);
+    setCursor(nextCursor);
   };
 
+  const handleReplay = () => {
+    if (!selectedId || !token) return;
+    if (!confirm("Повторно отправить этот webhook нашему серверу? Создастся новая запись WebhookEvent с replay-меткой.")) return;
+    replayMutation.mutate();
+  };
   return (
     <div className="flex flex-col gap-3.5 relative">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between !bg-transparent !border-0 ! !shadow-none">
@@ -100,7 +113,7 @@ export function AdminWebhookInboxPage() {
             <p className="text-[12.5px] text-muted-foreground mt-[3px]">Входящие вебхуки платёжных провайдеров: статус обработки и replay.</p>
           </div>
         </div>
-        <Button onClick={() => load(true)} variant="outline" size="sm" disabled={loading} className="gap-1.5 rounded-xl">
+        <Button onClick={loadReset} variant="outline" size="sm" disabled={loading} className="gap-1.5 rounded-xl">
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Обновить
         </Button>
@@ -126,7 +139,7 @@ export function AdminWebhookInboxPage() {
             <Label className="text-xs">Поиск (paymentId / error / body)</Label>
             <div className="mt-1.5 relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load(true)} className="pl-8" placeholder="…" />
+              <Input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && setAppliedQ(q)} className="pl-8" placeholder="…" />
             </div>
           </div>
         </CardContent>
@@ -163,9 +176,9 @@ export function AdminWebhookInboxPage() {
                   </button>
                 );
               })}
-              {cursor ? (
+              {nextCursor ? (
                 <div className="p-3 text-center">
-                  <Button onClick={() => load(false)} variant="outline" size="sm" disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Загрузить ещё"}</Button>
+                  <Button onClick={loadMore} variant="outline" size="sm" disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Загрузить ещё"}</Button>
                 </div>
               ) : null}
             </div>

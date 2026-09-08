@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
+import { useAdminPromoGroups, useAdminPromoGroupDetail } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import type {
   PromoGroup,
-  PromoGroupDetail,
   CreatePromoGroupPayload,
   UpdatePromoGroupPayload,
   AdminSettings,
@@ -54,14 +56,31 @@ function formatTraffic(bytes: string | number): string {
 export function PromoPage() {
   const { state } = useAuth();
   const token = state.accessToken!;
+  const queryClient = useQueryClient();
 
-  const [groups, setGroups] = useState<PromoGroup[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const groupsQuery = useAdminPromoGroups(token);
+  const groups = groupsQuery.data ?? [];
+  const loading = groupsQuery.isLoading;
+  const error = groupsQuery.error instanceof Error ? groupsQuery.error.message : null;
 
-  // Squads
-  const [squads, setSquads] = useState<Squad[]>([]);
+  // Squads + botUsername (Remna и настройки — независимые запросы).
+  const squadsQuery = useQuery({
+    queryKey: qk.admin.remnaSquads(),
+    queryFn: () => api.getRemnaSquadsInternal(token!).catch(() => ({ response: { internalSquads: [] } })),
+    enabled: !!token,
+  });
+  const squads: Squad[] = useMemo(() => {
+    const res = squadsQuery.data as { response?: { internalSquads?: { uuid?: string; name?: string }[] } } | undefined;
+    const list = res?.response?.internalSquads ?? (Array.isArray(res?.response) ? res.response : []);
+    return Array.isArray(list) ? list.map((s: { uuid?: string; name?: string }) => ({ uuid: s.uuid ?? "", name: s.name })) : [];
+  }, [squadsQuery.data]);
+
+  const settingsQuery = useQuery({
+    queryKey: qk.admin.settings(),
+    queryFn: () => api.getSettings(token!),
+    enabled: !!token,
+  });
+  const botUsername = (settingsQuery.data as AdminSettings | null)?.telegramBotUsername?.replace(/^@/, "") ?? "";
 
   // Create/Edit modal
   const [showForm, setShowForm] = useState(false);
@@ -77,37 +96,16 @@ export function PromoPage() {
   });
 
   // Detail view
-  const [detail, setDetail] = useState<PromoGroupDetail | null>(null);
-  const [, setDetailLoading] = useState(false);
-
-  // Bot username for link
-  const [botUsername, setBotUsername] = useState<string>("");
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detailQuery = useAdminPromoGroupDetail(token, detailId);
+  const detail = detailQuery.data ?? null;
 
   // Copied state
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [groupsRes, squadsRes, settings] = await Promise.all([
-        api.getPromoGroups(token),
-        api.getRemnaSquadsInternal(token).catch(() => ({ response: { internalSquads: [] } })),
-        api.getSettings(token).catch(() => null),
-      ]);
-      setGroups(groupsRes);
-      const res = squadsRes as { response?: { internalSquads?: { uuid?: string; name?: string }[] } };
-      const list = res?.response?.internalSquads ?? (Array.isArray(res?.response) ? res.response : []);
-      setSquads(Array.isArray(list) ? list.map((s: { uuid?: string; name?: string }) => ({ uuid: s.uuid ?? "", name: s.name })) : []);
-      setBotUsername((settings as AdminSettings)?.telegramBotUsername?.replace(/^@/, "") ?? "");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
+  const invalidatePromo = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.admin.promoGroups() });
   };
-
-  useEffect(() => { load(); }, [token]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -137,54 +135,42 @@ export function PromoPage() {
     setShowForm(true);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      if (editingId) {
-        await api.updatePromoGroup(token, editingId, form as UpdatePromoGroupPayload);
-      } else {
-        await api.createPromoGroup(token, form);
-      }
+  const saveMutation = useMutation({
+    mutationFn: () => {
+      if (editingId) return api.updatePromoGroup(token, editingId, form as UpdatePromoGroupPayload);
+      return api.createPromoGroup(token, form);
+    },
+    onSuccess: () => {
       setShowForm(false);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setSaving(false);
-    }
-  };
+      invalidatePromo();
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+  });
+  const saving = saveMutation.isPending;
+  const handleSave = () => saveMutation.mutate();
 
-  const handleDelete = async (id: string) => {
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deletePromoGroup(token, id),
+    onSuccess: (_r, id) => {
+      if (detailId === id) setDetailId(null);
+      invalidatePromo();
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+  });
+  const handleDelete = (id: string) => {
     if (!confirm("Удалить промо-группу? Все активации будут удалены.")) return;
-    try {
-      await api.deletePromoGroup(token, id);
-      if (detail?.id === id) setDetail(null);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    }
+    deleteMutation.mutate(id);
   };
 
-  const handleToggleActive = async (g: PromoGroup) => {
-    try {
-      await api.updatePromoGroup(token, g.id, { isActive: !g.isActive });
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
-    }
-  };
+  const toggleMutation = useMutation({
+    mutationFn: (g: PromoGroup) => api.updatePromoGroup(token, g.id, { isActive: !g.isActive }),
+    onSuccess: () => invalidatePromo(),
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+  });
+  const handleToggleActive = (g: PromoGroup) => toggleMutation.mutate(g);
 
-  const openDetail = async (id: string) => {
-    setDetailLoading(true);
-    try {
-      const d = await api.getPromoGroup(token, id);
-      setDetail(d);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setDetailLoading(false);
-    }
-  };
+  const openDetail = (id: string) => setDetailId(id);
+
 
   const getPromoLink = (code: string) => {
     if (!botUsername) return `t.me/YOUR_BOT?start=promo_${code}`;
@@ -234,7 +220,7 @@ export function PromoPage() {
           className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
         >
           <div className="flex items-start gap-3">
-            <Button variant="ghost" size="icon" className="rounded-xl shrink-0" onClick={() => setDetail(null)}>
+            <Button variant="ghost" size="icon" className="rounded-xl shrink-0" onClick={() => setDetailId(null)}>
               <ChevronLeft className="h-5 w-5" />
             </Button>
             <div className="min-w-0">

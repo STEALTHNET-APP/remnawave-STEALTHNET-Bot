@@ -27,6 +27,7 @@ import { PayNowPanel } from "@/components/payment/pay-now-panel";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { formatRuDays } from "@/lib/i18n";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 const EXTRA_DEVICE_BASE_DAYS = 30;
 
@@ -95,7 +96,7 @@ export function ExtendSubscriptionDialog({
     Promise.all([
       api.clientAllSubscriptions(token).catch((): { items: [] } => ({ items: [] })),
       api.getPublicTariffs().catch((): { items: PublicTariffCategory[] } => ({ items: [] })),
-      api.getPublicConfig().catch(() => null),
+      getPublicConfigCached().catch(() => null),
     ]).then(([all, tariffsRes, cfg]) => {
       if (!alive) return;
       const it = (all.items ?? []).find((s) => s.id === subId) ?? null;

@@ -6,36 +6,40 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { qk } from "@/lib/query-client";
 import { useAuth } from "@/contexts/auth";
-import { api, type PublicConfig } from "@/lib/api";
+import type { PublicConfig } from "@/lib/api";
 import { fetchLandingPreview } from "@/lib/landing-api";
-import type { LandingApiResponse, LandingApiBlock } from "@/components/landing-blocks/types";
+import type { LandingApiBlock } from "@/components/landing-blocks/types";
 import { BlockRenderer } from "@/components/landing-blocks/block-renderer";
 import { LandingHeader } from "@/components/landing-blocks/header";
 import { useUtmCaptureAndBuildLink } from "@/components/landing-blocks/utils";
 import { Eye, Pencil } from "lucide-react";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 export function LandingPreviewPage() {
   const { state } = useAuth();
   const token = state.accessToken;
 
   const [config, setConfig] = useState<PublicConfig | null>(null);
-  const [data, setData] = useState<LandingApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useUtmCaptureAndBuildLink();
 
   useEffect(() => {
-    api.getPublicConfig().then(setConfig).catch((e) => setError(String(e)));
+    getPublicConfigCached().then(setConfig).catch((e) => setError(String(e)));
   }, []);
 
-  useEffect(() => {
-    if (!token || !config) return;
-    const lang = config.defaultLanguage ?? "ru";
-    fetchLandingPreview(token, lang)
-      .then(setData)
-      .catch((e) => setError(String(e)));
-  }, [token, config]);
+  const lang = config?.defaultLanguage ?? "ru";
+  const previewQ = useQuery({
+    queryKey: qk.landing(lang),
+    queryFn: () => fetchLandingPreview(token!, lang),
+    enabled: !!token && !!config,
+  });
+  const data = previewQ.data ?? null;
+  const queryError = previewQ.error ? String(previewQ.error) : null;
+  const displayError = error ?? queryError;
 
   // Подгрузка шрифта.
   useEffect(() => {
@@ -53,11 +57,10 @@ export function LandingPreviewPage() {
     link.href = preset.url;
     document.documentElement.style.setProperty("--landing-font", `"${preset.name}", sans-serif`);
   }, [data?.theme.fontFamily, data?.theme.fontPresets]);
-
-  if (error) {
+  if (displayError) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4">
-        <div className="text-sm text-slate-600 dark:text-slate-400">Ошибка превью: {error}</div>
+        <div className="text-sm text-slate-600 dark:text-slate-400">Ошибка превью: {displayError}</div>
       </div>
     );
   }

@@ -1838,7 +1838,9 @@
       "sbp": "SBP",
       "yoomoney_cards": "YooMoney / Cards",
       "cards_label": "Cards",
-      "crypto": "Crypto"
+      "crypto": "Crypto",
+      "best_badge": "Best value",
+      "per_day": "Per day"
     },
     "profile": {
       "title": "Profile",

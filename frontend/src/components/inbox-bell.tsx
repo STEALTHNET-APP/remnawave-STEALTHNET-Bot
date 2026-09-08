@@ -101,7 +101,7 @@ export function InboxBell() {
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className={cn(
-            "absolute right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[360px] max-w-[360px] rounded-[1.5rem] border border-border dark:border-border bg-slate-200/60 dark:bg-slate-900/60",
+            "absolute right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[360px] max-w-[360px] rounded-[1.5rem] border border-border bg-card/95 backdrop-blur-2xl",
             "p-3"
           )}>
             <div className="flex items-center justify-between px-2 pb-2">

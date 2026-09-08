@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -138,8 +139,7 @@ export function ClientRegisterPage() {
   }
 
   useEffect(() => {
-    api
-      .getPublicConfig()
+    getPublicConfigCached()
       .then((c: PublicConfig) => {
         setBrand({ serviceName: c.serviceName ?? "", logo: c.logo ?? null });
         setDefaults({
@@ -420,7 +420,7 @@ export function ClientRegisterPage() {
     setError("");
     setLoading(true);
     try {
-      const cfg = await api.getPublicConfig();
+      const cfg = await getPublicConfigCached();
       const appleClientIdVal = cfg.appleClientId;
       if (!appleClientIdVal) throw new Error("Apple Sign In not configured");
       const baseUrl = (cfg.publicAppUrl ?? "").trim().replace(/\/$/, "") || window.location.origin;

@@ -20,11 +20,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
+import { useStaggerReveal } from "@/lib/gsap-utils";
 import { Wallet, Bitcoin, Check, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type PublicTariffCategory, type PublicConfig, type TariffConversionPreview } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 interface PriceOption {
   id: string;
@@ -111,13 +112,15 @@ export function AuroraTariffs() {
   // Шторка оплаты: промокод + способы + подтверждение. Раньше всё это лежало
   // в конце страницы, и часть клиентов просто не докручивала до кнопки.
   const [paySheet, setPaySheet] = useState(false);
+  // Мягкое появление контента страницы: секции въезжают каскадом (gsap).
+  const pageRef = useStaggerReveal<HTMLDivElement>([loading]);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     Promise.all([
       api.getPublicTariffs().catch(() => ({ items: [] as PublicTariffCategory[] })),
-      api.getPublicConfig().catch(() => null),
+      getPublicConfigCached().catch(() => null),
     ]).then(([t, c]) => {
       if (!alive) return;
       const cats = (t.items ?? []).filter((cat) => cat.tariffs.length > 0);
@@ -487,7 +490,7 @@ export function AuroraTariffs() {
     );
 
   return (
-    <div className="space-y-3">
+    <div ref={pageRef} className="space-y-3">
       <header className="px-1 pb-1">
         <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">Тарифы</h1>
         <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">
@@ -497,12 +500,7 @@ export function AuroraTariffs() {
 
       {/* Режим продления: бейдж с подпиской, каталог сужен до её тарифа */}
       {extendTarget && (
-        <motion.section
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: "easeOut" }}
-          className={noticeCls("accent")}
-        >
+        <section className={noticeCls("accent")}>
           <div className="flex items-center gap-2.5">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--au-from),var(--au-to))]">
               <RefreshCw className="h-4 w-4 text-white" />
@@ -527,7 +525,7 @@ export function AuroraTariffs() {
               </button>
             </div>
           )}
-        </motion.section>
+        </section>
       )}
 
       {/* Категории (только если больше одной) */}
@@ -588,13 +586,7 @@ export function AuroraTariffs() {
         </div>
       )}
 
-      {/* ── Главная карточка: срок и итоговая цена ── */}
-      <motion.section
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        className="relative overflow-hidden rounded-[26px] bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] p-5 text-white"
-      >
+      <section className="relative overflow-hidden rounded-[26px] bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] p-5 text-white">
         <div className="flex items-center justify-between gap-3">
           <span className="truncate text-[15px] font-medium text-white/85">{currentTariff?.name ?? "Тариф"}</span>
           <span className="shrink-0 rounded-full bg-white/20 px-3 py-1.5 text-[13px] font-semibold">
@@ -629,22 +621,19 @@ export function AuroraTariffs() {
         <div className="mt-5 flex items-end justify-between gap-4">
           <div>
             <div className="text-[13px] text-white/75">К оплате</div>
-            <motion.div
+            <div
               key={totalPrice}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="text-[40px] font-extrabold leading-none tracking-tight tabular-nums"
+              className="au-price-pop text-[40px] font-extrabold leading-none tracking-tight tabular-nums"
             >
               {fmtPrice(totalPrice, currency)}
-            </motion.div>
+            </div>
           </div>
           <div className="pb-1 text-right">
             <div className="text-[19px] font-bold tabular-nums">{fmtPricePerDay(pricePerDay, currency)}</div>
             <div className="text-[13px] text-white/75">в день</div>
           </div>
         </div>
-      </motion.section>
+      </section>
 
       {/* покупка заменяет активный триал (выбор при нескольких). */}
       {!extendTarget && !convPreview?.willConvert && (() => {
@@ -705,12 +694,7 @@ export function AuroraTariffs() {
 
       {/* Конвертация: покупка из single-категории обновляет существующую подписку */}
       {convPreview?.willConvert && convPreview.subscription && (
-        <motion.section
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: "easeOut" }}
-          className={noticeCls("accent")}
-        >
+        <section className={noticeCls("accent")}>
           <div className="flex items-start gap-3">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--au-from),var(--au-to))]">
               <RefreshCw className="h-4 w-4 text-white" />
@@ -791,7 +775,7 @@ export function AuroraTariffs() {
               )}
             </div>
           </div>
-        </motion.section>
+        </section>
       )}
 
       {/* Главное действие: видно сразу, без прокрутки — оплата открывается шторкой */}
@@ -872,13 +856,9 @@ export function AuroraTariffs() {
           className="fixed inset-0 z-[55] flex items-end justify-center bg-black/45"
           onClick={() => setPaySheet(false)}
         >
-          <motion.div
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            transition={{ type: "spring", stiffness: 340, damping: 34 }}
-            className="max-h-[88vh] w-full max-w-md overflow-y-auto rounded-t-[28px] bg-[var(--au-bg)] px-5 pt-3 text-[var(--au-ink)] [backface-visibility:hidden] [isolation:isolate]"
+          <div
+            className="au-sheet-slide max-h-[88vh] w-full max-w-md overflow-y-auto rounded-t-[28px] bg-[var(--au-bg)] px-5 pt-3 text-[var(--au-ink)] [backface-visibility:hidden] [isolation:isolate]"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)" }}
-            onClick={(e) => e.stopPropagation()}
           >
             {/* «ручка» шторки */}
             <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[var(--au-surface)]" />
@@ -948,11 +928,15 @@ export function AuroraTariffs() {
                         type="button"
                         onClick={() => setSelectedMethod(m)}
                         className={cn(
-                          // Тап анимируем CSS-ом, а не framer-motion: JS-transform на
-                          // каждом нажатии пересобирал слой и мигал на телефоне.
-                          // Тень у активной плитки убрана по той же причине —
-                          // анимировать её вместе с рамкой WebKit не успевает.
-                          "flex flex-col items-center gap-2 rounded-[20px] border-2 px-3 py-4 transition-colors active:scale-[0.97]",
+                          // Тап анимируем CSS-ом, а не JS-transform-ом: JS
+                          // на каждом нажатии пересобирал слой и мигал на
+                          // телефоне. Тень у активной плитки убрана по той
+                          // же причине — анимировать её вместе с рамкой
+                          // WebKit не успевает.
+                          // min-h выравнивает высоту всех плиток одной роли:
+                          // тайл «Баланс» с третьей строкой (сумма/«не хватает»)
+                          // растягивал свой ряд до 108px, пока соседи были 86px.
+                          "flex min-h-[108px] flex-col items-center justify-center gap-2 rounded-[20px] border-2 px-3 py-4 transition-colors active:scale-[0.97]",
                           active
                             ? "border-[var(--au-from)] bg-white"
                             : "border-transparent bg-[var(--au-surface)]",
@@ -1010,7 +994,7 @@ export function AuroraTariffs() {
                 {paying ? "Создаём платёж…" : `Оплатить ${fmtPrice(totalPrice, currency)}`}
               </button>
             </div>
-          </motion.div>
+          </div>
         </div>
       )}
 

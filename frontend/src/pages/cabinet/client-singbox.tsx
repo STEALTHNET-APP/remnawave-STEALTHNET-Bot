@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
 import { PayNowPanel } from "@/components/payment/pay-now-panel";
 import { cn } from "@/lib/utils";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 type SingboxTariff = { id: string; name: string; description?: string; slotCount: number; durationDays: number; trafficLimitBytes: string | null; price: number; currency: string };
 type SingboxCategory = { id: string; name: string; sortOrder: number; tariffs: SingboxTariff[] };
@@ -97,7 +98,7 @@ export function ClientSingboxPage() {
   }, []);
 
   useEffect(() => {
-    api.getPublicConfig().then((c) => {
+    getPublicConfigCached().then((c) => {
       setPlategaMethods(c.plategaMethods ?? []);
       setYoomoneyEnabled(Boolean(c.yoomoneyEnabled));
       setYookassaEnabled(Boolean(c.yookassaEnabled));
@@ -490,7 +491,7 @@ export function ClientSingboxPage() {
   const flatTariffs = categories.flatMap((c) => c.tariffs.map((t) => ({ ...t, categoryName: c.name })));
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
+    <div className="space-y-8 max-w-7xl mx-auto">
       <AnimatePresence mode="wait">
         {isMobileOrMiniapp && payModal ? (
           <motion.div

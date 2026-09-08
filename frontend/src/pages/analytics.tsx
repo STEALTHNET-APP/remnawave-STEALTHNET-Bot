@@ -1,6 +1,6 @@
-import { useEffect, useState, Fragment } from "react";
+import { Fragment } from "react";
 import { useAuth } from "@/contexts/auth";
-import { api } from "@/lib/api";
+import { useAdminAnalytics } from "@/lib/admin-queries";
 import { Card } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import {
@@ -134,15 +134,11 @@ type AccentColor = keyof typeof COLOR_MAP;
 export function AnalyticsPage() {
   const { state } = useAuth();
   const token = state.accessToken;
-  const [data, setData] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  // api.getAnalytics возвращает Promise<any> — приводим к локальному контракту.
+  const { data: raw, isLoading } = useAdminAnalytics(token);
+  const data = (raw ?? null) as AnalyticsData | null;
 
-  useEffect(() => {
-    if (!token) return;
-    api.getAnalytics(token).then(setData).catch(() => {}).finally(() => setLoading(false));
-  }, [token]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
         <Loader2 className="h-8 w-8 text-primary animate-spin" />

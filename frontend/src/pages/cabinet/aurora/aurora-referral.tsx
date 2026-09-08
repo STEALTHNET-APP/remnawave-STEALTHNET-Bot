@@ -17,6 +17,7 @@ import { Copy, Check, Send, Users } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type ClientReferralStats, type PublicConfig } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 function fmtMoney(n: number, currency: string) {
   const sym = currency === "rub" || currency === "RUB" ? "₽" : currency === "usd" || currency === "USD" ? "$" : "";
@@ -47,7 +48,7 @@ export function AuroraReferral() {
     setLoading(true);
     Promise.all([
       api.getClientReferralStats(state.token).catch(() => null),
-      api.getPublicConfig().catch(() => null),
+      getPublicConfigCached().catch(() => null),
     ]).then(([s, c]) => {
       if (!alive) return;
       setStats(s);

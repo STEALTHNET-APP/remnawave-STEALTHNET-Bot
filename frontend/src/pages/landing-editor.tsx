@@ -10,6 +10,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { qk } from "@/lib/query-client";
+import {
+  useAdminLandingBlocks,
+  useAdminLandingDraftsStatus,
+  useAdminLandingStatus,
+  useAdminLandingSnapshots,
+} from "@/lib/admin-queries";
 import { Link } from "react-router-dom";
 import {
   DndContext,
@@ -74,8 +82,6 @@ import {
 import {
   landingEditorApi,
   type AdminLandingBlock,
-  type AdminLandingSnapshot,
-  type DraftsStatus,
 } from "@/lib/landing-editor-api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { SchemaForm } from "@/components/landing-editor/schema-form";
@@ -139,13 +145,18 @@ export function LandingEditorPage() {
   const { state } = useAuth();
   const token = state.accessToken;
 
-  const [blocks, setBlocks] = useState<AdminLandingBlock[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const blocksQ = useAdminLandingBlocks(token);
+  const draftsQ = useAdminLandingDraftsStatus(token);
+  const landingStatusQ = useAdminLandingStatus(token);
+  const blocks = blocksQ.data ?? [];
+  const drafts = draftsQ.data ?? { hasBlockDrafts: false, hasThemeDraft: false };
+  const landingEnabled = landingStatusQ.data?.enabled ?? true;
+  const loading = blocksQ.isLoading;
+  const error = !blocksQ.isError ? null : (blocksQ.error instanceof Error ? blocksQ.error.message : String(blocksQ.error));
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<DraftsStatus>({ hasBlockDrafts: false, hasThemeDraft: false });
-  const [landingEnabled, setLandingEnabled] = useState<boolean>(true);
-  const [busy, setBusy] = useState(false);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
@@ -158,42 +169,11 @@ export function LandingEditorPage() {
     setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const reload = useCallback(async () => {
-    if (!token) return;
-    try {
-      const [list, status, landingStatus] = await Promise.all([
-        landingEditorApi.listBlocks(token),
-        landingEditorApi.draftsStatus(token),
-        landingEditorApi.getStatus(token),
-      ]);
-      setBlocks(list);
-      setDrafts(status);
-      setLandingEnabled(landingStatus.enabled);
-      setError(null);
-      // Триггерим перезагрузку iframe-превью.
-      setPreviewKey((k) => k + 1);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  const handleToggleLanding = async (next: boolean) => {
-    if (!token) return;
-    if (!next && !confirm("Выключить лендинг? Корень сайта будет редиректить в /cabinet.")) return;
-    try {
-      const result = await landingEditorApi.setStatus(token, next);
-      setLandingEnabled(result.enabled);
-      showToast("ok", result.enabled ? "Лендинг включён" : "Лендинг выключен");
-    } catch (e) {
-      showToast("err", String(e));
-    }
-  };
-
-  useEffect(() => {
-    reload();
-  }, [reload]);
+  // reload() = invalidate admin-landing ключей + перезагрузка iframe-превью.
+  const reload = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["admin", "landing"], exact: false });
+    setPreviewKey((k) => k + 1);
+  }, []);
 
   // Click-to-edit: iframe-превью посылает {type: 'stealthnet-landing:edit-block', id}.
   // Селектим соответствующий блок в редакторе.
@@ -212,17 +192,25 @@ export function LandingEditorPage() {
 
   const selected = useMemo(() => blocks.find((b) => b.id === selectedId) ?? null, [blocks, selectedId]);
 
-  const handleToggleVisible = async (id: string, visible: boolean) => {
+  // ── Мутации ──
+  const toggleVisibleMutation = useMutation({
+    mutationFn: (vars: { id: string; visible: boolean }) =>
+      landingEditorApi.updateBlock(token!, vars.id, { visible: vars.visible }),
+    onSuccess: reload,
+    onError: (e) => showToast("err", String(e)),
+  });
+  const handleToggleVisible = (id: string, visible: boolean) => {
     if (!token) return;
-    try {
-      await landingEditorApi.updateBlock(token, id, { visible });
-      await reload();
-    } catch (e) {
-      showToast("err", String(e));
-    }
+    toggleVisibleMutation.mutate({ id, visible });
   };
 
-  const handleReorder = async (id: string, direction: "up" | "down") => {
+  const reorderMutation = useMutation({
+    mutationFn: (items: { id: string; order: number }[]) => landingEditorApi.reorderBlocks(token!, items),
+    onSuccess: reload,
+    onError: (e) => showToast("err", String(e)),
+  });
+
+  const handleReorder = (id: string, direction: "up" | "down") => {
     if (!token) return;
     const idx = blocks.findIndex((b) => b.id === id);
     if (idx < 0) return;
@@ -232,18 +220,13 @@ export function LandingEditorPage() {
     // Свопаем order у двух блоков
     const a = blocks[idx];
     const b = blocks[target];
-    try {
-      await landingEditorApi.reorderBlocks(token, [
-        { id: a.id, order: b.order },
-        { id: b.id, order: a.order },
-      ]);
-      await reload();
-    } catch (e) {
-      showToast("err", String(e));
-    }
+    reorderMutation.mutate([
+      { id: a.id, order: b.order },
+      { id: b.id, order: a.order },
+    ]);
   };
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     if (!token) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -252,18 +235,9 @@ export function LandingEditorPage() {
     if (oldIndex < 0 || newIndex < 0) return;
     const next = arrayMove(blocks, oldIndex, newIndex);
     // Оптимистично обновляем UI.
-    setBlocks(next);
-    try {
-      // Назначаем новые order'ы сериями по 10 для удобства будущих вставок.
-      await landingEditorApi.reorderBlocks(
-        token,
-        next.map((b, i) => ({ id: b.id, order: (i + 1) * 10 })),
-      );
-      await reload();
-    } catch (e) {
-      showToast("err", String(e));
-      await reload();
-    }
+    queryClient.setQueryData(qk.admin.landingBlocks(), next);
+    // Назначаем новые order'ы сериями по 10 для удобства будущих вставок.
+    reorderMutation.mutate(next.map((b, i) => ({ id: b.id, order: (i + 1) * 10 })));
   };
 
   const dndSensors = useSensors(
@@ -271,76 +245,119 @@ export function LandingEditorPage() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const handleDelete = async (id: string) => {
+  const deleteBlockMutation = useMutation({
+    mutationFn: (id: string) => landingEditorApi.deleteBlock(token!, id),
+    onSuccess: (_d, id) => {
+      if (selectedId === id) setSelectedId(null);
+      reload();
+      showToast("ok", "Блок удалён");
+    },
+    onError: (e) => showToast("err", String(e)),
+  });
+
+  const handleDelete = (id: string) => {
     if (!token) return;
     if (!confirm("Удалить блок? Будет создан авто-снапшот при следующем Publish.")) return;
-    try {
-      await landingEditorApi.deleteBlock(token, id);
-      if (selectedId === id) setSelectedId(null);
-      await reload();
-      showToast("ok", "Блок удалён");
-    } catch (e) {
-      showToast("err", String(e));
-    }
+    deleteBlockMutation.mutate(id);
   };
 
-  const handleAddBlock = async (type: string, variant: string) => {
-    if (!token) return;
-    try {
-      const created = await landingEditorApi.createBlock(token, { type, variant, props: {}, i18n: { ru: {} } });
-      await reload();
+  const addBlockMutation = useMutation({
+    mutationFn: (vars: { type: string; variant: string }) =>
+      landingEditorApi.createBlock(token!, { type: vars.type, variant: vars.variant, props: {}, i18n: { ru: {} } }),
+    onSuccess: (created, vars) => {
+      reload();
       setSelectedId(created.id);
       setAddOpen(false);
-      showToast("ok", `Блок ${type}/${variant} добавлен`);
-    } catch (e) {
-      showToast("err", String(e));
-    }
+      showToast("ok", `Блок ${vars.type}/${vars.variant} добавлен`);
+    },
+    onError: (e) => showToast("err", String(e)),
+  });
+
+  const handleAddBlock = (type: string, variant: string) => {
+    if (!token) return;
+    addBlockMutation.mutate({ type, variant });
   };
 
-  const handlePublishAll = async () => {
+  const publishAllMutation = useMutation({
+    mutationFn: () => landingEditorApi.publishAll(token!),
+    onSuccess: (result) => {
+      reload();
+      showToast("ok", `Опубликовано: ${result.publishedBlocks} блоков, тема: ${result.themePublished ? "да" : "нет"}`);
+    },
+    onError: (e) => showToast("err", String(e)),
+  });
+
+  const handlePublishAll = () => {
     if (!token) return;
     if (!confirm("Опубликовать все черновики? Будет создан авто-снапшот.")) return;
-    setBusy(true);
-    try {
-      const result = await landingEditorApi.publishAll(token);
-      await reload();
-      showToast("ok", `Опубликовано: ${result.publishedBlocks} блоков, тема: ${result.themePublished ? "да" : "нет"}`);
-    } catch (e) {
-      showToast("err", String(e));
-    } finally {
-      setBusy(false);
-    }
+    publishAllMutation.mutate();
   };
 
-  const handleDiscardAll = async () => {
+  const discardAllMutation = useMutation({
+    mutationFn: () => landingEditorApi.discardAllDrafts(token!),
+    onSuccess: () => {
+      reload();
+      showToast("ok", "Черновики отброшены");
+    },
+    onError: (e) => showToast("err", String(e)),
+  });
+
+  const handleDiscardAll = () => {
     if (!token) return;
     if (!confirm("Отбросить все черновики? Действие необратимо.")) return;
-    setBusy(true);
-    try {
-      await landingEditorApi.discardAllDrafts(token);
-      await reload();
-      showToast("ok", "Черновики отброшены");
-    } catch (e) {
-      showToast("err", String(e));
-    } finally {
-      setBusy(false);
-    }
+    discardAllMutation.mutate();
   };
 
-  const handleManualSnapshot = async () => {
+  const manualSnapshotMutation = useMutation({
+    mutationFn: (label?: string) => landingEditorApi.createSnapshot(token!, label),
+    onSuccess: () => showToast("ok", "Снапшот создан"),
+    onError: (e) => showToast("err", String(e)),
+  });
+
+  const busy =
+    publishAllMutation.isPending || discardAllMutation.isPending || manualSnapshotMutation.isPending;
+
+  const handleManualSnapshot = () => {
     if (!token) return;
     const label = prompt("Название снапшота (можно пустое):", "manual");
     if (label === null) return;
-    setBusy(true);
-    try {
-      await landingEditorApi.createSnapshot(token, label || undefined);
-      showToast("ok", "Снапшот создан");
-    } catch (e) {
-      showToast("err", String(e));
-    } finally {
-      setBusy(false);
-    }
+    manualSnapshotMutation.mutate(label || undefined);
   };
+
+  // Переключение лендинга вкл/выкл.
+  const setStatusMutation = useMutation({
+    mutationFn: (next: boolean) => landingEditorApi.setStatus(token!, next),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: qk.admin.landingStatus() });
+      showToast("ok", result.enabled ? "Лендинг включён" : "Лендинг выключен");
+    },
+    onError: (e) => showToast("err", String(e)),
+  });
+
+  const handleToggleLanding = (next: boolean) => {
+    if (!token) return;
+    if (!next && !confirm("Выключить лендинг? Корень сайта будет редиректить в /cabinet.")) return;
+    setStatusMutation.mutate(next);
+  };
+
+  const publishBlockMutation = useMutation({
+    mutationFn: (id: string) => landingEditorApi.publishBlock(token!, id),
+    onSuccess: reload,
+    onError: () => undefined, // тост показывает вызывающий колбэк
+  });
+
+  const discardBlockMutation = useMutation({
+    mutationFn: (id: string) => landingEditorApi.discardBlockDraft(token!, id),
+    onSuccess: reload,
+    onError: () => undefined,
+  });
+
+  const applyDefaultsMutation = useMutation({
+    mutationFn: (vars: { id: string; mode: "merge" | "overwrite" }) =>
+      landingEditorApi.applyBlockDefaults(token!, vars.id, vars.mode),
+    onSuccess: reload,
+    onError: () => undefined,
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -487,40 +504,27 @@ export function LandingEditorPage() {
                   <BlockEditor
                     key={selected.id}
                     block={selected}
-                    token={token!}
-                    onSaved={async () => {
-                      await reload();
+                    onSaved={() => {
+                      reload();
                       showToast("ok", "Сохранено в черновик");
                     }}
                     onError={(e) => showToast("err", e)}
                     onDelete={() => handleDelete(selected.id)}
-                    onPublishOne={async () => {
-                      try {
-                        await landingEditorApi.publishBlock(token!, selected.id);
-                        await reload();
-                        showToast("ok", "Блок опубликован");
-                      } catch (e) {
-                        showToast("err", String(e));
-                      }
-                    }}
-                    onDiscardOne={async () => {
-                      try {
-                        await landingEditorApi.discardBlockDraft(token!, selected.id);
-                        await reload();
-                        showToast("ok", "Черновик отброшен");
-                      } catch (e) {
-                        showToast("err", String(e));
-                      }
-                    }}
-                    onApplyDefaults={async (mode) => {
-                      try {
-                        await landingEditorApi.applyBlockDefaults(token!, selected.id, mode);
-                        await reload();
-                        showToast("ok", "Дефолты применены в черновик. Жми «Опубликовать», чтобы сохранить.");
-                      } catch (e) {
-                        showToast("err", String(e));
-                      }
-                    }}
+                    onPublishOne={() =>
+                      publishBlockMutation.mutateAsync(selected.id)
+                        .then(() => showToast("ok", "Блок опубликован"))
+                        .catch((e) => showToast("err", String(e)))
+                    }
+                    onDiscardOne={() =>
+                      discardBlockMutation.mutateAsync(selected.id)
+                        .then(() => showToast("ok", "Черновик отброшен"))
+                        .catch((e) => showToast("err", String(e)))
+                    }
+                    onApplyDefaults={(mode) =>
+                      applyDefaultsMutation.mutateAsync({ id: selected.id, mode })
+                        .then(() => showToast("ok", "Дефолты применены в черновик. Жми «Опубликовать», чтобы сохранить."))
+                        .catch((e) => showToast("err", String(e)))
+                    }
                   />
                 )}
               </CardContent>
@@ -589,9 +593,8 @@ export function LandingEditorPage() {
       </Dialog>
 
       <SnapshotsDialog
-        open={snapshotsOpen}
         onClose={() => setSnapshotsOpen(false)}
-        token={token}
+        open={snapshotsOpen}
         onRestored={async () => {
           setSnapshotsOpen(false);
           await reload();
@@ -687,7 +690,6 @@ function SortableBlockRow({ block, isFirst, isLast, isSelected, onSelect, onMove
 
 interface BlockEditorProps {
   block: AdminLandingBlock;
-  token: string;
   onSaved: () => Promise<void> | void;
   onError: (msg: string) => void;
   onDelete: () => void;
@@ -696,7 +698,7 @@ interface BlockEditorProps {
   onApplyDefaults: (mode: "merge" | "overwrite") => Promise<void> | void;
 }
 
-function BlockEditor({ block, token, onSaved, onError, onDelete, onPublishOne, onDiscardOne, onApplyDefaults }: BlockEditorProps) {
+function BlockEditor({ block, onSaved, onError, onDelete, onPublishOne, onDiscardOne, onApplyDefaults }: BlockEditorProps) {
   const draftedProps = (block.propsDraft ?? block.props) as Record<string, unknown>;
   const draftedI18n = (block.i18nDraft ?? block.i18n) as Record<string, unknown>;
 
@@ -716,11 +718,25 @@ function BlockEditor({ block, token, onSaved, onError, onDelete, onPublishOne, o
   const [i18nError, setI18nError] = useState<string | null>(null);
   const [mode, setMode] = useState<"form" | "json">(schema ? "form" : "json");
 
-  const [saving, setSaving] = useState(false);
+
+  // Token нужен для PATCH /blocks/:id — берём из useAuth (props API не меняем).
+  const { state } = useAuth();
+  const token = state.accessToken;
 
   const drafted = block.propsDraft !== null || block.i18nDraft !== null;
 
-  const handleSave = async () => {
+  const saveMutation = useMutation({
+    mutationFn: (vars: { finalProps: Record<string, unknown>; finalI18n: Record<string, unknown>; variantChanged: boolean }) =>
+      landingEditorApi.updateBlock(token!, block.id, {
+        propsDraft: vars.finalProps,
+        i18nDraft: vars.finalI18n,
+        variant: vars.variantChanged ? variant : undefined,
+      }),
+    onSuccess: () => onSaved(),
+    onError: (e) => onError(String(e)),
+  });
+
+  const handleSave = () => {
     let finalProps: Record<string, unknown>;
     let finalI18n: Record<string, unknown>;
 
@@ -744,19 +760,7 @@ function BlockEditor({ block, token, onSaved, onError, onDelete, onPublishOne, o
       }
     }
 
-    setSaving(true);
-    try {
-      await landingEditorApi.updateBlock(token, block.id, {
-        propsDraft: finalProps,
-        i18nDraft: finalI18n,
-        variant: variant !== block.variant ? variant : undefined,
-      });
-      await onSaved();
-    } catch (e) {
-      onError(String(e));
-    } finally {
-      setSaving(false);
-    }
+    saveMutation.mutate({ finalProps, finalI18n, variantChanged: variant !== block.variant });
   };
 
   return (
@@ -902,8 +906,8 @@ function BlockEditor({ block, token, onSaved, onError, onDelete, onPublishOne, o
       </Tabs>
 
       <div className="flex justify-end gap-2 border-t pt-4">
-        <Button onClick={handleSave} disabled={saving} className="gap-1.5">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        <Button onClick={handleSave} disabled={saveMutation.isPending} className="gap-1.5">
+          {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Сохранить в черновик
         </Button>
       </div>
@@ -928,45 +932,44 @@ function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
 interface SnapshotsDialogProps {
   open: boolean;
   onClose: () => void;
-  token: string | null;
   onRestored: () => Promise<void> | void;
   onError: (msg: string) => void;
 }
 
-function SnapshotsDialog({ open, onClose, token, onRestored, onError }: SnapshotsDialogProps) {
-  const [snapshots, setSnapshots] = useState<AdminLandingSnapshot[]>([]);
-  const [loading, setLoading] = useState(false);
+function SnapshotsDialog({ open, onClose, onRestored, onError }: SnapshotsDialogProps) {
+  const { state } = useAuth();
+  const token = state.accessToken;
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (!open || !token) return;
-    setLoading(true);
-    landingEditorApi
-      .listSnapshots(token)
-      .then(setSnapshots)
-      .catch((e) => onError(String(e)))
-      .finally(() => setLoading(false));
-  }, [open, token, onError]);
+  const snapshotsQ = useAdminLandingSnapshots(token, open);
+  const snapshots = snapshotsQ.data ?? [];
+  const loading = snapshotsQ.isLoading && open;
 
-  const handleRestore = async (id: string) => {
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => landingEditorApi.restoreSnapshot(token!, id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin", "landing"], exact: false });
+      onRestored();
+    },
+    onError: (e) => onError(String(e)),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => landingEditorApi.deleteSnapshot(token!, id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: qk.admin.landingSnapshots() }),
+    onError: (e) => onError(String(e)),
+  });
+
+  const handleRestore = (id: string) => {
     if (!token) return;
     if (!confirm("Восстановить лендинг из этого снапшота? Текущее состояние сохранится как auto-snapshot.")) return;
-    try {
-      await landingEditorApi.restoreSnapshot(token, id);
-      await onRestored();
-    } catch (e) {
-      onError(String(e));
-    }
+    restoreMutation.mutate(id);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (!token) return;
     if (!confirm("Удалить снапшот безвозвратно?")) return;
-    try {
-      await landingEditorApi.deleteSnapshot(token, id);
-      setSnapshots((s) => s.filter((x) => x.id !== id));
-    } catch (e) {
-      onError(String(e));
-    }
+    deleteMutation.mutate(id);
   };
 
   return (

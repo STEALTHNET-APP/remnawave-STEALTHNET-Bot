@@ -5,7 +5,8 @@
  * взаимодействий (регистрация, оплаты, рассылки, тикеты, gift, admin actions).
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   MessageSquare, Loader2, Search, RefreshCw, User, Send, CreditCard,
   ShieldCheck, Ticket, Gift, AlertCircle, UserPlus, Mail, MessagesSquare,
@@ -14,9 +15,9 @@ import { useAuth } from "@/contexts/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
-import { botConversationsApi, type BotConversationListItem, type TimelineEvent } from "@/lib/admin-extras-api";
+import { botConversationsApi, type TimelineEvent } from "@/lib/admin-extras-api";
 import { fmtMsk } from "@/lib/datetime";
+import { cn } from "@/lib/utils";
 
 const KIND_META: Record<TimelineEvent["kind"], { color: string; Icon: typeof User }> = {
   registered:        { color: "text-emerald-500", Icon: UserPlus },
@@ -32,45 +33,32 @@ const KIND_META: Record<TimelineEvent["kind"], { color: string; Icon: typeof Use
 
 export function AdminBotConversationsPage() {
   const { state } = useAuth();
-  const [items, setItems] = useState<BotConversationListItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<{ client: Record<string, unknown>; events: TimelineEvent[]; stats: Record<string, number> } | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!state.accessToken) return;
-    setLoading(true);
-    setErr(null);
-    try {
-      const r = await botConversationsApi.list(state.accessToken, { q: search, limit: 100 });
-      setItems(Array.isArray(r?.items) ? r.items : []);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "load error");
-    } finally {
-      setLoading(false);
-    }
-  }, [state.accessToken, search]);
+  const token = state.accessToken;
 
-  useEffect(() => { load(); }, [load]);
+  const listQuery = useQuery({
+    queryKey: ["admin", "bot-conversations", search] as const,
+    queryFn: () => botConversationsApi.list(token!, { q: search || undefined, limit: 100 }),
+    enabled: !!token,
+  });
+  const items = listQuery.data?.items ?? [];
+  const loading = listQuery.isFetching;
+  const err = listQuery.error
+    ? listQuery.error instanceof Error ? listQuery.error.message : "load error"
+    : null;
 
-  async function selectClient(id: string) {
-    if (!state.accessToken) return;
-    setActiveId(id);
-    setDetail(null);
-    setDetailLoading(true);
-    try {
-      const r = await botConversationsApi.detail(state.accessToken, id);
-      setDetail(r);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "detail error");
-    } finally {
-      setDetailLoading(false);
-    }
-  }
+  const detailQuery = useQuery({
+    queryKey: ["admin", "bot-conversation-detail", activeId] as const,
+    queryFn: () => botConversationsApi.detail(token!, activeId!),
+    enabled: !!token && !!activeId,
+  });
+  const detail = detailQuery.data ?? null;
+  const detailLoading = detailQuery.isFetching;
+
+  const selectClient = (id: string) => setActiveId(id);
 
   return (
     <div className="w-full space-y-4 px-4 sm:px-6 md:px-8 pt-6 pb-10">
@@ -105,7 +93,7 @@ export function AdminBotConversationsPage() {
               />
             </div>
             <Button size="sm" variant="ghost" onClick={() => setSearch(searchInput.trim())} className="h-9 px-2"><Search className="h-3.5 w-3.5" /></Button>
-            <Button size="sm" variant="ghost" onClick={() => load()} className="h-9 px-2"><RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} /></Button>
+            <Button size="sm" variant="ghost" onClick={() => void listQuery.refetch()} className="h-9 px-2"><RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} /></Button>
           </div>
 
           {loading && items.length === 0 ? (

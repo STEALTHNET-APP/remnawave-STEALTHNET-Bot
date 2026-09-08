@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
-import { api, type TicketAttachmentDto, type TicketMessageDto } from "@/lib/api";
+import { api, type TicketAttachmentDto } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -13,20 +14,9 @@ import {
 import { cn } from "@/lib/utils";
 import { fmtMskShort } from "@/lib/datetime";
 
-type TicketListItem = {
-  id: string;
-  subject: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  client: { id: string; email: string | null; telegramUsername: string | null };
-};
-type TicketMessage = TicketMessageDto;
-
 // Синхронизировано с backend (uploadTicketAttachment).
 const MAX_FILES = 5;
 const MAX_FILE_MB = 10;
-const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
 
 function AttachmentsGallery({ items }: { items: TicketAttachmentDto[] }) {
   if (!items || items.length === 0) return null;
@@ -62,22 +52,9 @@ export function AdminTicketsPage() {
   const { state } = useAuth();
   const token = state.accessToken ?? "";
 
-  const [list, setList] = useState<TicketListItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "open" | "closed">("all");
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<{
-    id: string;
-    subject: string;
-    status: string;
-    client: { id: string; email: string | null; telegramUsername: string | null };
-    messages: TicketMessage[];
-    createdAt: string;
-    updatedAt: string;
-  } | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [replyText, setReplyText] = useState("");
-  const [replySending, setReplySending] = useState(false);
   const [replyFiles, setReplyFiles] = useState<File[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const replyInputRef = useRef<HTMLInputElement>(null);
@@ -95,7 +72,7 @@ export function AdminTicketsPage() {
         setUploadError("Можно прикладывать только изображения");
         continue;
       }
-      if (f.size > MAX_FILE_BYTES) {
+      if (f.size > MAX_FILE_MB * 1024 * 1024) {
         setUploadError(`Файл больше ${MAX_FILE_MB} MB`);
         continue;
       }
@@ -104,76 +81,57 @@ export function AdminTicketsPage() {
     setReplyFiles(next);
   };
 
-  const loadList = () => {
-    if (!token) return;
-    const status = filter === "open" || filter === "closed" ? filter : undefined;
-    api
-      .getAdminTickets(token, status)
-      .then((r) => {
-        setList(r.items);
-        setLoading(false);
-      })
-      .catch(() => {
-        setList([]);
-        setLoading(false);
-      });
-  };
+  const qc = useQueryClient();
 
-  useEffect(() => {
-    if (!token) return;
-    setLoading(true);
-    loadList();
-    const intervalId = window.setInterval(loadList, 10000);
-    return () => {
-      window.clearInterval(intervalId);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, filter]);
+  const status = filter === "open" || filter === "closed" ? filter : undefined;
+  const listQuery = useQuery({
+    queryKey: ["admin", "tickets", status ?? "all"] as const,
+    queryFn: () => api.getAdminTickets(token, status),
+    enabled: !!token,
+    refetchInterval: 10000,
+  });
+  const list = listQuery.data?.items ?? [];
+  const loading = listQuery.isFetching;
 
-  useEffect(() => {
-    if (!detailId || !token) {
-      setDetail(null);
-      return;
-    }
-    const loadDetail = () => {
-      setDetailLoading(true);
-      api
-        .getAdminTicket(token, detailId)
-        .then(setDetail)
-        .catch(() => setDetail(null))
-        .finally(() => setDetailLoading(false));
-    };
-    loadDetail();
-    const intervalId = window.setInterval(loadDetail, 10000);
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [detailId, token]);
+  const detailQuery = useQuery({
+    queryKey: ["admin", "ticket", detailId] as const,
+    queryFn: () => api.getAdminTicket(token, detailId!),
+    enabled: !!token && !!detailId,
+    refetchInterval: 10000,
+  });
+  const detail = detailQuery.data ?? null;
+  const detailLoading = detailQuery.isFetching;
+
+  const replyMutation = useMutation({
+    mutationFn: () => api.postAdminTicketMessage(token, detailId!, { content: replyText.trim(), files: replyFiles }),
+    onSuccess: () => {
+      setReplyText("");
+      setReplyFiles([]);
+      if (replyInputRef.current) replyInputRef.current.value = "";
+      void qc.invalidateQueries({ queryKey: ["admin", "ticket", detailId], exact: false });
+      void qc.invalidateQueries({ queryKey: ["admin", "tickets"], exact: false });
+    },
+    onError: (e) => setUploadError(e instanceof Error ? e.message : "Не удалось отправить"),
+  });
+  const replySending = replyMutation.isPending;
+
+  const statusMutation = useMutation({
+    mutationFn: (next: "open" | "closed") => api.patchAdminTicket(token, detail!.id, { status: next }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "ticket", detailId], exact: false });
+      void qc.invalidateQueries({ queryKey: ["admin", "tickets"], exact: false });
+    },
+  });
 
   const sendReply = () => {
     if (!token || !detailId) return;
     if (!replyText.trim() && replyFiles.length === 0) return;
-    setReplySending(true);
-    setUploadError(null);
-    api
-      .postAdminTicketMessage(token, detailId, { content: replyText.trim(), files: replyFiles })
-      .then((msg) => {
-        setDetail((d) => (d ? { ...d, messages: [...d.messages, msg] } : d));
-        setReplyText("");
-        setReplyFiles([]);
-        if (replyInputRef.current) replyInputRef.current.value = "";
-      })
-      .catch((e) => setUploadError(e instanceof Error ? e.message : "Не удалось отправить"))
-      .finally(() => setReplySending(false));
+    replyMutation.mutate();
   };
 
   const toggleStatus = () => {
     if (!token || !detail) return;
-    const next = detail.status === "open" ? "closed" : "open";
-    api.patchAdminTicket(token, detail.id, { status: next }).then(() => {
-      setDetail((d) => (d ? { ...d, status: next } : d));
-      setList((prev) => prev.map((t) => (t.id === detail.id ? { ...t, status: next } : t)));
-    });
+    statusMutation.mutate(detail.status === "open" ? "closed" : "open");
   };
 
   const formatDate = (s: string) => {
@@ -197,7 +155,7 @@ export function AdminTicketsPage() {
           className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <Button variant="ghost" size="icon" onClick={() => { setDetailId(null); setDetail(null); }} className="rounded-full hover:bg-card shrink-0">
+            <Button variant="ghost" size="icon" onClick={() => setDetailId(null)} className="rounded-full hover:bg-card shrink-0">
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div className="min-w-0">
@@ -370,7 +328,7 @@ export function AdminTicketsPage() {
             </div>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={loadList} disabled={loading} className="rounded-full hover:bg-card">
+        <Button variant="ghost" size="icon" onClick={() => void listQuery.refetch()} disabled={loading} className="rounded-full hover:bg-card">
           <RefreshCw className={cn("h-4 w-4 text-muted-foreground", loading && "animate-spin text-primary")} />
         </Button>
       </motion.div>

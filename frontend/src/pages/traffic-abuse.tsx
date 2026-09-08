@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Loader2, RefreshCw, AlertTriangle, Activity,
   Users, Server, TrendingUp, ChevronDown, ChevronUp, Search, Copy, Check,
 } from "lucide-react";
+import { api, type TrafficAbuser } from "@/lib/api";
 import { useAuth } from "@/contexts/auth";
-import { api, type TrafficAbuseResponse, type TrafficAbuser } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -194,27 +195,19 @@ export function TrafficAbusePage() {
   const token = useAuth().state.accessToken!;
   const [days, setDays] = useState("7");
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<TrafficAbuseResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
   // фильтр по squads (тарифные группы Remnawave).
   // Пустой Set = «все»; иначе показываем только юзеров чьи squadNames пересекаются с фильтром.
   const [selectedSquads, setSelectedSquads] = useState<Set<string>>(new Set());
 
-  const load = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await api.getTrafficAbuseAnalytics(token, { days: Number(days) || 7 });
-      setData(res);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки аналитики");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  const abuseQuery = useQuery({
+    queryKey: ["admin", "traffic-abuse", days] as const,
+    queryFn: () => api.getTrafficAbuseAnalytics(token, { days: Number(days) || 7 }),
+  });
+  const data = abuseQuery.data ?? null;
+  const loading = abuseQuery.isFetching;
+  const error = abuseQuery.error
+    ? abuseQuery.error instanceof Error ? abuseQuery.error.message : "Ошибка загрузки аналитики"
+    : null;
 
   // Все уникальные squad-имена из текущей выборки — для рендера чипов фильтра.
   const allSquads = Array.from(
@@ -269,7 +262,7 @@ export function TrafficAbusePage() {
             />
             <span className="text-muted-foreground text-xs">дн.</span>
           </div>
-          <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={load} disabled={loading}>
+          <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" onClick={() => void abuseQuery.refetch()} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Обновить
           </Button>

@@ -14,22 +14,26 @@ import { useUtmCaptureAndBuildLink } from "@/components/landing-blocks/utils";
 
 interface LandingPageProps {
   config: PublicConfig;
+  /** Предзагруженный ответ /api/public/landing — если передан, внутренний fetch не нужен
+   *  (RootRoute стартует оба запроса параллельно, чтобы юзер видел ОДИН лоадер, а не два подряд). */
+  initialData?: LandingApiResponse | null;
 }
 
-export function LandingPage({ config }: LandingPageProps) {
-  const [data, setData] = useState<LandingApiResponse | null>(null);
+export function LandingPage({ config, initialData }: LandingPageProps) {
+  const [data, setData] = useState<LandingApiResponse | null>(initialData ?? null);
   const [error, setError] = useState<string | null>(null);
 
   // Активирует UTM-капчер на корне страницы (в шапке/блоках сами уже).
   useUtmCaptureAndBuildLink();
 
   useEffect(() => {
+    // initialData уже есть → повторный запрос не нужен (лоадер №2 никогда не показывается).
+    if (initialData) return;
     const lang = config.defaultLanguage ?? "ru";
     fetchLanding(lang)
       .then(setData)
       .catch((e) => setError(String(e)));
-  }, [config.defaultLanguage]);
-
+  }, [config.defaultLanguage, initialData]);
   // Подгрузка шрифта из темы.
   useEffect(() => {
     if (!data?.theme.fontFamily) return;

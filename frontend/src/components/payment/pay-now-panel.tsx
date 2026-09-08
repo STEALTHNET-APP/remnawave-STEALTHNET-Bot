@@ -124,7 +124,7 @@ export function PayNowPanel({ url, provider, onBack, onPaid, compact }: PayNowPa
           compact ? "h-14 rounded-xl" : "h-12 rounded-xl",
         )}
       >
-        <ArrowLeft className="h-4 w-4 mr-2" />
+        <ArrowLeft className="h-4 w-4" />
         {t("cabinet.common.choose_another_method")}
       </Button>
     </div>

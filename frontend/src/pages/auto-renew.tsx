@@ -7,8 +7,11 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
+import { useAdminAutoRenewNotifications } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import type { AutoRenewNotificationRecord, AutoRenewTriggerType, AdminSettings } from "@/lib/api";
 import { CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -120,79 +123,76 @@ export function AutoRenewPage() {
   const { state } = useAuth();
   const token = state.accessToken ?? null;
 
-  const [notifs, setNotifs] = useState<AutoRenewNotificationRecord[]>([]);
-  const [settings, setSettings] = useState<AdminSettings | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
+
+  const notifsQuery = useAdminAutoRenewNotifications(token);
+  const notifs = notifsQuery.data?.items ?? [];
+
+  // Настройки списания — тот же ключ qk.admin.settings(), что и settings.tsx.
+  const settingsQuery = useQuery({
+    queryKey: qk.admin.settings(),
+    queryFn: () => api.getSettings(token!),
+    enabled: !!token,
+  });
+  const settings = settingsQuery.data ?? null;
+  const loading = notifsQuery.isLoading || settingsQuery.isLoading;
+
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const error = notifsQuery.error instanceof Error ? notifsQuery.error.message : null;
   const [editor, setEditor] = useState<EditState>(null);
   const [tab, setTab] = useState<TabFilter>("ALL");
 
-  const load = async () => {
-    if (!token) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [notifRes, settingsRes] = await Promise.all([
-        api.getAutoRenewNotifications(token),
-        api.getSettings(token),
-      ]);
-      setNotifs(notifRes.items);
-      setSettings(settingsRes);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
+  const invalidateNotifs = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.admin.autoRenewNotifications() });
   };
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  const handleSaveSettings = async () => {
-    if (!token || !settings) return;
-    setSaving(true);
-    setSavedMsg(null);
-    try {
-      await api.updateSettings(token, {
-        defaultAutoRenewEnabled: settings.defaultAutoRenewEnabled,
-        yookassaRecurringEnabled: settings.yookassaRecurringEnabled,
-        autoRenewDaysBeforeExpiry: settings.autoRenewDaysBeforeExpiry,
-        autoRenewGracePeriodDays: settings.autoRenewGracePeriodDays,
-        autoRenewMaxRetries: settings.autoRenewMaxRetries,
-      });
+  const saveSettingsMutation = useMutation({
+    mutationFn: () =>
+      api.updateSettings(token!, {
+        defaultAutoRenewEnabled: settings!.defaultAutoRenewEnabled,
+        yookassaRecurringEnabled: settings!.yookassaRecurringEnabled,
+        autoRenewDaysBeforeExpiry: settings!.autoRenewDaysBeforeExpiry,
+        autoRenewGracePeriodDays: settings!.autoRenewGracePeriodDays,
+        autoRenewMaxRetries: settings!.autoRenewMaxRetries,
+      }),
+    onSuccess: () => {
       setSavedMsg("Сохранено");
       setTimeout(() => setSavedMsg(null), 2500);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setSaving(false);
-    }
+      void queryClient.invalidateQueries({ queryKey: qk.admin.settings() });
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+  });
+  const saving = saveSettingsMutation.isPending;
+  const handleSaveSettings = () => {
+    if (!token || !settings) return;
+    saveSettingsMutation.mutate();
   };
 
-  const handleToggle = async (n: AutoRenewNotificationRecord) => {
+  const setSettings = (updater: (s: AdminSettings) => AdminSettings) => {
+    void queryClient.setQueryData<AdminSettings>(qk.admin.settings(), (s) => (s ? updater(s) : s));
+  };
+
+  const toggleMutation = useMutation({
+    mutationFn: (n: AutoRenewNotificationRecord) => api.updateAutoRenewNotification(token!, n.id, { enabled: !n.enabled }),
+    onSuccess: () => invalidateNotifs(),
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+  });
+  const handleToggle = (n: AutoRenewNotificationRecord) => {
     if (!token) return;
-    try {
-      await api.updateAutoRenewNotification(token, n.id, { enabled: !n.enabled });
-      setNotifs((arr) => arr.map((it) => (it.id === n.id ? { ...it, enabled: !it.enabled } : it)));
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
-    }
+    toggleMutation.mutate(n);
   };
 
-  const handleDelete = async (n: AutoRenewNotificationRecord) => {
+  const deleteMutation = useMutation({
+    mutationFn: (n: AutoRenewNotificationRecord) => api.deleteAutoRenewNotification(token!, n.id),
+    onSuccess: () => invalidateNotifs(),
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+  });
+  const handleDelete = (n: AutoRenewNotificationRecord) => {
     if (!token) return;
     if (!confirm(`Удалить шаблон «${n.name}»?`)) return;
-    try {
-      await api.deleteAutoRenewNotification(token, n.id);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
-    }
+    deleteMutation.mutate(n);
   };
+
 
   const grouped = useMemo(() => {
     const g: Record<AutoRenewTriggerType, AutoRenewNotificationRecord[]> = {
@@ -512,7 +512,7 @@ export function AutoRenewPage() {
             onClose={() => setEditor(null)}
             onSaved={async () => {
               setEditor(null);
-              await load();
+              invalidateNotifs();
             }}
             token={token}
           />
@@ -641,7 +641,6 @@ function NotifEditor({
   );
   const [messageText, setMessageText] = useState(initial?.messageText ?? "");
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
-  const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -659,28 +658,30 @@ function NotifEditor({
     return v;
   };
 
-  const handleSave = async () => {
+  const saveMutation = useMutation({
+    mutationFn: (payload: { name: string; triggerType: AutoRenewTriggerType; offsetMinutes: number; messageText: string; enabled: boolean }) => {
+      if (initial) {
+        return api.updateAutoRenewNotification(token!, initial.id, payload).then(() => undefined);
+      }
+      return api.createAutoRenewNotification(token!, payload).then(() => undefined);
+    },
+    onSuccess: () => void onSaved(),
+    onError: (e) => setErr(e instanceof Error ? e.message : "Ошибка сохранения"),
+  });
+  const saving = saveMutation.isPending;
+
+  const handleSave = () => {
     if (!token) return;
     setErr(null);
-    if (!name.trim()) return setErr("Укажите название");
-    if (!messageText.trim()) return setErr("Укажите текст сообщения");
-    setSaving(true);
-    try {
-      const payload = {
-        name: name.trim(),
-        triggerType,
-        offsetMinutes: triggerType === "UPCOMING" ? toMinutes() : 0,
-        messageText: messageText.trim(),
-        enabled,
-      };
-      if (initial) await api.updateAutoRenewNotification(token, initial.id, payload);
-      else await api.createAutoRenewNotification(token, payload);
-      await onSaved();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setSaving(false);
-    }
+    if (!name.trim()) { setErr("Укажите название"); return; }
+    if (!messageText.trim()) { setErr("Укажите текст сообщения"); return; }
+    saveMutation.mutate({
+      name: name.trim(),
+      triggerType,
+      offsetMinutes: triggerType === "UPCOMING" ? toMinutes() : 0,
+      messageText: messageText.trim(),
+      enabled,
+    });
   };
 
   const previewText = renderSample(messageText || "");

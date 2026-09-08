@@ -18,8 +18,9 @@
 
 import { Outlet } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { api, type PublicConfig } from "@/lib/api";
+import type { PublicConfig } from "@/lib/api";
 import { AuroraTabs } from "@/components/aurora/aurora-tabs";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 /** hex → [r,g,b]; при мусоре — индиго по умолчанию (#5B4BE8). */
 function hexToRgb(hex: string | null | undefined): [number, number, number] {
@@ -39,7 +40,7 @@ export function AuroraLayout() {
   const [config, setConfig] = useState<PublicConfig | null>(null);
 
   useEffect(() => {
-    api.getPublicConfig().then(setConfig).catch(() => {});
+    getPublicConfigCached().then(setConfig).catch(() => {});
   }, []);
 
   // Aurora светлый, а в полноэкранном режиме иконки статус-бара Telegram

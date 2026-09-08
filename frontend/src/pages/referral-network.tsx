@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import ForceGraph2D, { type ForceGraphMethods } from "react-force-graph-2d";
 import { Network, RefreshCw, ZoomIn, ZoomOut, Maximize, Target, GitBranch, Globe } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
@@ -40,22 +41,20 @@ export function ReferralNetworkPage() {
   const fgRef = useRef<ForceGraphMethods<Node, Link>>();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [dims, setDims] = useState({ width: window.innerWidth, height: window.innerHeight - 56 });
-  const [data, setData] = useState<{ nodes: Node[]; links: Link[]; stats?: any } | null>(null);
-  const [loading, setLoading] = useState(true);
   // «только связанные» — скрывает одиночные узлы
   // (без реферера/рефералов), чтобы реальные цепочки не терялись среди тысяч точек.
   const [onlyLinked, setOnlyLinked] = useState(true);
 
-  const load = async () => {
-    setLoading(true);
-    const res = await api.getReferralNetwork(token);
-    setData({ nodes: res.nodes, links: res.links, stats: res.stats });
-    setLoading(false);
-  };
+  const networkQuery = useQuery({
+    queryKey: ["admin", "referral-network"] as const,
+    queryFn: () => api.getReferralNetwork(token),
+  });
+  const loading = networkQuery.isPending;
+  const data = networkQuery.data
+    ? { nodes: networkQuery.data.nodes, links: networkQuery.data.links, stats: networkQuery.data.stats }
+    : null;
 
-  useEffect(() => {
-    load();
-  }, []);
+  const reload = () => void networkQuery.refetch();
 
   useEffect(() => {
     const measure = () => {
@@ -133,7 +132,7 @@ export function ReferralNetworkPage() {
           {onlyLinked ? <GitBranch className="h-4 w-4" /> : <Globe className="h-4 w-4" />}
           {onlyLinked ? "Только связанные" : "Все клиенты"}
         </Button>
-        <Button variant="secondary" size="sm" className="shadow-sm" onClick={load}>
+        <Button variant="secondary" size="sm" className="shadow-sm" onClick={reload}>
           <RefreshCw className="h-4 w-4 mr-2" />Обновить
         </Button>
       </div>

@@ -5,7 +5,8 @@
  * подстановкой переменных, кнопка Send test.
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, RefreshCw, Save, Eye, Send, AlertCircle, Check } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
 import { Card } from "@/components/ui/card";
@@ -17,38 +18,30 @@ import { emailTemplatesApi, type EmailTemplate } from "@/lib/admin-extras-api";
 
 export function AdminEmailTemplatesPage() {
   const { state } = useAuth();
-  const [items, setItems] = useState<EmailTemplate[]>([]);
+  const token = state.accessToken;
   const [activeKey, setActiveKey] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const templatesQuery = useQuery({
+    queryKey: ["admin", "email-templates"] as const,
+    queryFn: () => emailTemplatesApi.list(token!).catch(() => null),
+    enabled: !!token,
+  });
+  const items = templatesQuery.data?.items ?? [];
+  const loading = templatesQuery.isFetching;
+
   const [previewSubject, setPreviewSubject] = useState("");
   const [previewBody, setPreviewBody] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [vars, setVars] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState<"save" | "preview" | "send" | null>(null);
   const [saved, setSaved] = useState(false);
 
   const [testEmail, setTestEmail] = useState("");
-
-  async function load() {
-    if (!state.accessToken) return;
-    setLoading(true);
-    setErr(null);
-    try {
-      const r = await emailTemplatesApi.list(state.accessToken);
-      const list = Array.isArray(r?.items) ? r.items : [];
-      setItems(list);
-      if (list.length > 0 && !activeKey) selectTemplate(list[0]);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "load error");
-    } finally {
-      setLoading(false);
-    }
-  }
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [state.accessToken]);
+  const err = [
+    templatesQuery.error ? (templatesQuery.error instanceof Error ? templatesQuery.error.message : "load error") : null,
+    saveErr,
+  ].find(Boolean) ?? null;
 
   function selectTemplate(t: EmailTemplate) {
     setActiveKey(t.key);
@@ -63,56 +56,56 @@ export function AdminEmailTemplatesPage() {
 
   const active = items.find((t) => t.key === activeKey);
 
-  async function save() {
-    if (!state.accessToken || !active) return;
-    setBusy("save");
-    setErr(null);
-    try {
-      await emailTemplatesApi.update(state.accessToken, active.key, subject, body);
+  const [busy, setBusy] = useState<"save" | "send" | null>(null);
+
+  const saveMutation = useMutation({
+    mutationFn: () => emailTemplatesApi.update(token!, active!.key, subject, body),
+    onSuccess: () => {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
       // refresh list to update isDefault flag
-      await load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "save error");
-    } finally {
-      setBusy(null);
-    }
-  }
+      void templatesQuery.refetch();
+    },
+    onError: (e) => setSaveErr(e instanceof Error ? e.message : "save error"),
+    onSettled: () => setBusy(null),
+  });
 
-  async function preview() {
-    if (!state.accessToken || !active) return;
-    setBusy("preview");
-    setErr(null);
-    try {
-      // используем текущие subject/body, а не сохранённые — для live-preview сначала сохраняем, потом превьюим
-      // Здесь делаем offline-preview: сами подставляем vars
-      const render = (tpl: string) => tpl.replace(/\{\{(\w+)\}\}/g, (_m, name) => vars[name] ?? `{{${name}}}`);
-      setPreviewSubject(render(subject));
-      setPreviewBody(render(body));
-      setShowPreview(true);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "preview error");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function sendTest() {
-    if (!state.accessToken || !active || !testEmail) return;
-    setBusy("send");
-    setErr(null);
-    try {
+  const sendTestMutation = useMutation({
+    mutationFn: async () => {
       // сохраняем перед отправкой если что-то изменено
-      await emailTemplatesApi.update(state.accessToken, active.key, subject, body);
-      await emailTemplatesApi.sendTest(state.accessToken, active.key, testEmail, vars);
+      await emailTemplatesApi.update(token!, active!.key, subject, body);
+      await emailTemplatesApi.sendTest(token!, active!.key, testEmail, vars);
+    },
+    onSuccess: () => {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "send error");
-    } finally {
-      setBusy(null);
-    }
+    },
+    onError: (e) => setSaveErr(e instanceof Error ? e.message : "send error"),
+    onSettled: () => setBusy(null),
+  });
+
+  function preview() {
+    if (!active) return;
+    // используем текущие subject/body, а не сохранённые
+    // Здесь делаем offline-preview: сами подставляем vars
+    const render = (tpl: string) => tpl.replace(/\{\{(\w+)\}\}/g, (_m, name) => vars[name] ?? `{{${name}}}`);
+    setPreviewSubject(render(subject));
+    setPreviewBody(render(body));
+    setShowPreview(true);
+  }
+
+  function save() {
+    if (!token || !active || busy) return;
+    setSaveErr(null);
+    setBusy("save");
+    saveMutation.mutate();
+  }
+
+  function sendTest() {
+    if (!token || !active || !testEmail) return;
+    setSaveErr(null);
+    setBusy("send");
+    sendTestMutation.mutate();
   }
 
   return (
@@ -124,7 +117,7 @@ export function AdminEmailTemplatesPage() {
             <p className="text-[12.5px] text-muted-foreground mt-[3px]">Системные транзакционные письма (приветствие, оплата, истечение и т.п.)</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading} className="rounded-xl gap-2">
+        <Button variant="outline" size="sm" onClick={() => void templatesQuery.refetch()} disabled={loading} className="rounded-xl gap-2">
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
           Обновить
         </Button>

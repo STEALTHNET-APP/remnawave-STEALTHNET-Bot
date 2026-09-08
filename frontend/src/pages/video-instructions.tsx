@@ -1,10 +1,12 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { Button } from "@/components/ui/button";
+import { qk } from "@/lib/query-client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import {
   Video, Plus, Trash2, Save, RefreshCw, ArrowUp, ArrowDown,
@@ -22,10 +24,16 @@ interface Instruction {
 export function VideoInstructionsPage() {
   const { state } = useAuth();
   const token = state.accessToken!;
+  const queryClient = useQueryClient();
 
-  const [enabled, setEnabled] = useState(false);
-  const [items, setItems] = useState<Instruction[]>([]);
-  const [loading, setLoading] = useState(true);
+  const listQuery = useQuery({
+    queryKey: qk.admin.videoInstructions(),
+    queryFn: () => api.getVideoInstructions(token),
+    enabled: !!token,
+  });
+  const items = [...(listQuery.data?.items ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+  const enabled = listQuery.data?.enabled ?? false;
+  const loading = listQuery.isLoading;
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -38,26 +46,17 @@ export function VideoInstructionsPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editFileId, setEditFileId] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.getVideoInstructions(token);
-      setEnabled(res.enabled);
-      setItems(res.items.sort((a, b) => a.sortOrder - b.sortOrder));
-    } catch {
-      setMessage("Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
+  const load = () => { void listQuery.refetch(); };
 
-  useEffect(() => { load(); }, [load]);
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.admin.videoInstructions(), exact: false });
+  };
 
   async function toggle() {
     setSaving(true);
     try {
       await api.toggleVideoInstructions(token, !enabled);
-      setEnabled(!enabled);
+      invalidate();
       flash(!enabled ? "Видео-инструкции включены" : "Видео-инструкции выключены");
     } catch {
       flash("Ошибка");
@@ -70,8 +69,8 @@ export function VideoInstructionsPage() {
     if (!newTitle.trim() || !newFileId.trim()) return;
     setAdding(true);
     try {
-      const res = await api.addVideoInstruction(token, newTitle.trim(), newFileId.trim());
-      setItems(res.items.sort((a: Instruction, b: Instruction) => a.sortOrder - b.sortOrder));
+      await api.addVideoInstruction(token, newTitle.trim(), newFileId.trim());
+      invalidate();
       setNewTitle("");
       setNewFileId("");
       setShowForm(false);
@@ -86,8 +85,8 @@ export function VideoInstructionsPage() {
   async function deleteItem(id: string) {
     if (!confirm("Удалить эту инструкцию?")) return;
     try {
-      const res = await api.deleteVideoInstruction(token, id);
-      setItems(res.items.sort((a: Instruction, b: Instruction) => a.sortOrder - b.sortOrder));
+      await api.deleteVideoInstruction(token, id);
+      invalidate();
       flash("Удалено");
     } catch {
       flash("Ошибка удаления");
@@ -98,11 +97,11 @@ export function VideoInstructionsPage() {
     if (!editingId) return;
     setSaving(true);
     try {
-      const res = await api.updateVideoInstruction(token, editingId, {
+      await api.updateVideoInstruction(token, editingId, {
         title: editTitle.trim(),
         telegramFileId: editFileId.trim(),
       });
-      setItems(res.items.sort((a: Instruction, b: Instruction) => a.sortOrder - b.sortOrder));
+      invalidate();
       setEditingId(null);
       flash("Сохранено");
     } catch {
@@ -119,10 +118,9 @@ export function VideoInstructionsPage() {
     if (swapIdx < 0 || swapIdx >= items.length) return;
     const newItems = [...items];
     [newItems[idx], newItems[swapIdx]] = [newItems[swapIdx], newItems[idx]];
-    setItems(newItems);
     try {
-      const res = await api.reorderVideoInstructions(token, newItems.map((i) => i.id));
-      setItems(res.items.sort((a: Instruction, b: Instruction) => a.sortOrder - b.sortOrder));
+      await api.reorderVideoInstructions(token, newItems.map((i) => i.id));
+      invalidate();
     } catch {
       flash("Ошибка сортировки");
     }

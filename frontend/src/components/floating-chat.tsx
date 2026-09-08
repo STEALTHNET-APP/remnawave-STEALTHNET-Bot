@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import gsap from "gsap";
+import { EASE_OUT, EASE_SPRING, reducedMotion } from "@/lib/gsap-utils";
 import { MessageCircle, X, Send, User, Sparkles, Headset, ArrowLeft, MessageSquarePlus, CircleDot, CircleCheck, Inbox, Loader2, Maximize2, Minimize2, Paperclip, X as XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -344,15 +345,13 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
             ) : detail?.messages?.length === 0 ? (
               <div className="flex h-full items-center justify-center text-muted-foreground text-sm font-medium">Нет сообщений</div>
             ) : (
-              <AnimatePresence mode="popLayout">
+              <div data-msg-list>
                 {detail?.messages?.map((m: any) => {
                   const isSupport = m.authorType === "support";
                   const isUser = !isSupport;
                   return (
-                    <motion.div
+                    <div
                       key={m.id}
-                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
                       className={cn("flex gap-3 max-w-[85%]", isUser ? "ml-auto flex-row-reverse" : "mr-auto")}
                     >
                       <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-sm mt-1", isUser ? "bg-primary/20 text-primary" : "bg-blue-500/20 text-blue-400")}>
@@ -365,10 +364,10 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
                           {formatDate(m.createdAt)}
                         </p>
                       </div>
-                    </motion.div>
+                    </div>
                   );
                 })}
-              </AnimatePresence>
+              </div>
             )}
             <div ref={messagesEndRef} className="h-1" />
           </div>
@@ -442,7 +441,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
               />
               <Button
                 size="icon"
-                className="h-10 w-10 rounded-xl shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground transition-transform active:scale-95 mb-0.5 mr-0.5"
+                className="h-10 w-10 rounded-xl shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground transition-transform active:scale-95 mb-0.5"
                 onClick={sendReply}
                 disabled={replySending || (!replyText.trim() && replyFiles.length === 0)}
               >
@@ -539,7 +538,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
             onClick={createTicket}
             disabled={createSending || !newSubject.trim() || (!newMessage.trim() && newFiles.length === 0)}
           >
-            {createSending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+            {createSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             Отправить
           </Button>
         </div>
@@ -559,7 +558,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
           className="h-8 rounded-lg text-xs bg-card border-border dark:border-border"
           onClick={() => setShowNewForm(true)}
         >
-          <MessageSquarePlus className="h-3 w-3 mr-1.5" />
+          <MessageSquarePlus className="h-3 w-3" />
           Создать
         </Button>
       </div>
@@ -615,6 +614,179 @@ export function FloatingChat() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeChat, setActiveChat] = useState<ChatType>(() => (config?.aiChatEnabled !== false ? "ai" : "support"));
   const [hasOpenDialog, setHasOpenDialog] = useState(false);
+  // Panel visibility is driven manually: `isOpen` управляет анимацией,
+  // `panelVisible` монтирует/размонтирует DOM (замена AnimatePresence).
+  const [panelVisible, setPanelVisible] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const fabRef = useRef<HTMLButtonElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const [aiChats, setAiChats] = useState<Message[]>(() => getInitialAiMessage("Сервис"));
+  useEffect(() => {
+    setAiChats((prev) => {
+      if (prev.length !== 1 || prev[0].id !== "a1") return prev;
+      const want = getInitialAiMessage(serviceName)[0].text;
+      return prev[0].text === want ? prev : getInitialAiMessage(serviceName);
+    });
+  }, [serviceName]);
+  const [aiUnread, setAiUnread] = useState(0);
+  const [supportUnread, setSupportUnread] = useState(0);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+
+  // Панель: открытие/закрытие через gsap (opacity+scale+y), exit перед unmount.
+  // МOUNT-TWICE-паттерн: при open→true сначала монтируем панель (panelVisible),
+  // вход проигрывает второй эффект; при open→false — быстрый выход 0.18s,
+  // затем unmount по таймеру (замена AnimatePresence).
+  useEffect(() => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    if (isOpen) {
+      setPanelVisible(true);
+    } else if (panelVisible) {
+      if (reducedMotion()) {
+        setPanelVisible(false);
+        return;
+      }
+      const panel = panelRef.current;
+      if (!panel) {
+        setPanelVisible(false);
+        return;
+      }
+      const ctx = gsap.context(() => {
+        gsap.to(panel, {
+          opacity: 0,
+          scale: 0.95,
+          y: 20,
+          filter: "blur(4px)",
+          duration: 0.18,
+          ease: "power2.in",
+          overwrite: "auto",
+        });
+      }, panel);
+      closeTimerRef.current = window.setTimeout(() => {
+        closeTimerRef.current = null;
+        ctx.revert();
+        gsap.set(panel, { clearProps: "all" });
+        setPanelVisible(false);
+      }, 180);
+      return () => {
+        window.clearTimeout(closeTimerRef.current ?? 0);
+        ctx.revert();
+      };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  // Вход панели после монтирования (когда panelRef уже указывает на DOM).
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel || !panelVisible || !isOpen) return;
+    if (reducedMotion()) {
+      gsap.set(panel, { clearProps: "all" });
+      return;
+    }
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        panel,
+        { opacity: 0, scale: 0.95, y: 20, filter: "blur(4px)" },
+        { opacity: 1, scale: 1, y: 0, filter: "blur(0px)", duration: 0.3, ease: EASE_OUT, overwrite: "auto", clearProps: "filter" },
+      );
+    }, panel);
+    return () => ctx.revert();
+  }, [panelVisible, isOpen]);
+
+  // Иконка FAB: вращение+fade при переключении open/close.
+  useEffect(() => {
+    const icon = fabRef.current?.querySelector("[data-fab-icon]");
+    if (!icon || reducedMotion()) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        icon,
+        { rotate: isOpen ? -90 : 90, opacity: 0 },
+        { rotate: 0, opacity: 1, duration: 0.15, ease: EASE_OUT, overwrite: "auto" },
+      );
+    }, fabRef.current ?? undefined);
+    return () => ctx.revert();
+  }, [isOpen]);
+
+  // Бейдж непрочитанных: pop-in с пружиной (замена motion spring).
+  useEffect(() => {
+    const badge = fabRef.current?.querySelector("[data-fab-badge]");
+    if (!badge) return;
+    if (reducedMotion()) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        badge,
+        { scale: 0, y: 10 },
+        { scale: 1, y: 0, duration: 0.25, ease: EASE_SPRING, overwrite: "auto" },
+      );
+    }, fabRef.current ?? undefined);
+    return () => ctx.revert();
+  }, [aiUnread, supportUnread, isOpen]);
+
+  // Плавающий переключатель при скролле: gsap slide-down вместо AnimatePresence.
+  const floatSwitcherRef = useRef<HTMLDivElement>(null);
+  const switcherShownRef = useRef(false);
+  useEffect(() => {
+    const el = floatSwitcherRef.current;
+    if (!el) return;
+    if (isScrolled) {
+      el.classList.remove("hidden");
+      if (switcherShownRef.current || reducedMotion()) return;
+      switcherShownRef.current = true;
+      const ctx = gsap.context(() => {
+        gsap.fromTo(
+          el,
+          { opacity: 0, y: -20 },
+          { opacity: 1, y: 0, duration: 0.2, ease: EASE_OUT, overwrite: "auto" },
+        );
+      }, el);
+      return () => ctx.revert();
+    }
+    el.classList.add("hidden");
+    gsap.set(el, { clearProps: "all" });
+  }, [isScrolled]);
+
+  // Сообщения: reveal последнего сообщения (AI-чат).
+  const aiMsgCount = aiChats.length;
+  useEffect(() => {
+    const list = panelRef.current?.querySelector("[data-ai-msg-list]");
+    const last = list?.lastElementChild;
+    if (!last || reducedMotion()) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        last,
+        { opacity: 0, y: 10, scale: 0.95 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.2, ease: EASE_OUT, overwrite: "auto", clearProps: "transform" },
+      );
+    }, list);
+    return () => ctx.revert();
+  }, [aiMsgCount]);
+
+  // Сообщения поддержки: reveal последнего сообщения тикета.
+  const [detailMsgCount, setDetailMsgCount] = useState(0);
+  useEffect(() => {
+    const list = panelRef.current?.querySelector("[data-msg-list]");
+    const count = list ? list.childElementCount : 0;
+    if (count !== detailMsgCount) setDetailMsgCount(count);
+  });
+
+  useEffect(() => {
+    const list = panelRef.current?.querySelector("[data-msg-list]");
+    const last = list?.lastElementChild;
+    if (!last || reducedMotion()) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        last,
+        { opacity: 0, y: 10, scale: 0.95 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.2, ease: EASE_OUT, overwrite: "auto", clearProps: "transform" },
+      );
+    }, list);
+    return () => ctx.revert();
+  }, [detailMsgCount]);
+
   useEffect(() => {
     if (!aiChatEnabled && activeChat === "ai") setActiveChat("support");
   }, [aiChatEnabled, activeChat]);
@@ -635,22 +807,9 @@ export function FloatingChat() {
     };
   }, []);
 
-  const [aiChats, setAiChats] = useState<Message[]>(() => getInitialAiMessage("Сервис"));
-  useEffect(() => {
-    setAiChats((prev) => {
-      if (prev.length !== 1 || prev[0].id !== "a1") return prev;
-      const want = getInitialAiMessage(serviceName)[0].text;
-      return prev[0].text === want ? prev : getInitialAiMessage(serviceName);
-    });
-  }, [serviceName]);
   const [aiInput, setAiInput] = useState("");
-
-  const [aiUnread, setAiUnread] = useState(0);
-  const [supportUnread, setSupportUnread] = useState(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
   const [aiLoading, setAiLoading] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     setIsScrolled(e.currentTarget.scrollTop > 100);
@@ -761,34 +920,29 @@ export function FloatingChat() {
     } finally {
       setAiLoading(false);
     }
-  };
+  }
 
   const headerProps = { activeChat, setActiveChat, isExpanded, setIsExpanded, setIsOpen, aiUnread, supportUnread, showAiTab: aiChatEnabled };
 
   return (
     <>
       <div className={cn("fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-[100]", hasOpenDialog && !isOpen && "pointer-events-none opacity-0")}>
-        <AnimatePresence>
-          {isOpen && (
-            <motion.div
-              key="chat-panel"
-              data-tour="floating-chat"
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-              className={cn(
-                "fixed sm:absolute z-50",
-                "inset-0 sm:inset-auto sm:bottom-20 sm:right-0",
-                "w-full h-[100dvh]",
-                isExpanded
-                  ? "sm:w-[calc(100vw-48px)] sm:h-[calc(100dvh-120px)]"
-                  : "sm:w-[450px] sm:h-[650px] sm:max-h-[85vh]",
-                "sm:rounded-xl border-0 sm:border border-border",
-                "bg-card sm:bg-card sm:shadow-2xl sm:shadow-black/50",
-                "flex flex-col overflow-hidden transition-all duration-500 ease-in-out"
-              )}
-            >
+        {panelVisible && (
+        <div
+          ref={panelRef}
+          data-tour="floating-chat"
+          className={cn(
+            "fixed sm:absolute z-50",
+            "inset-0 sm:inset-auto sm:bottom-20 sm:right-0",
+            "w-full h-[100dvh]",
+            isExpanded
+              ? "sm:w-[calc(100vw-48px)] sm:h-[calc(100dvh-120px)]"
+              : "sm:w-[450px] sm:h-[650px] sm:max-h-[85vh]",
+            "sm:rounded-xl border-0 sm:border border-border",
+            "bg-card sm:bg-card sm:shadow-2xl sm:shadow-black/50",
+            "flex flex-col overflow-hidden",
+          )}
+        >
               {activeChat === "ai" && aiChatEnabled ? (
                 <div className="flex flex-col flex-1 min-h-0 w-full">
                   {/* AI Messages */}
@@ -800,31 +954,22 @@ export function FloatingChat() {
                     
                     {/* Floating Switcher */}
                     <div className="sticky top-4 z-30 flex justify-center pointer-events-none px-4 w-full h-0 overflow-visible">
-                      <AnimatePresence>
-                        {isScrolled && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                            transition={{ duration: 0.2 }}
-                            className="pointer-events-auto w-full sm:w-auto"
-                          >
-                            <ChatSwitcher {...headerProps} isFloating={true} />
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                      <div
+                        ref={floatSwitcherRef}
+                        data-float-switcher
+                        className={cn("pointer-events-auto w-full sm:w-auto", !isScrolled && "hidden")}
+                      >
+                        <ChatSwitcher {...headerProps} isFloating={true} />
+                      </div>
                     </div>
 
                     <div className="p-4 space-y-4 flex-1">
-                      <AnimatePresence mode="popLayout">
+                      <div data-ai-msg-list>
                         {aiChats.map((msg) => {
                           const isUser = msg.from === "user";
                           return (
-                            <motion.div
+                            <div
                               key={msg.id}
-                              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              transition={{ duration: 0.2 }}
                               className={cn("flex gap-3 max-w-[85%]", isUser ? "ml-auto flex-row-reverse" : "mr-auto")}
                             >
                               <div
@@ -853,10 +998,10 @@ export function FloatingChat() {
                                   {msg.time}
                                 </p>
                               </div>
-                            </motion.div>
+                            </div>
                           );
                         })}
-                      </AnimatePresence>
+                      </div>
                       <div ref={messagesEndRef} className="h-1" />
                     </div>
                   </div>
@@ -883,7 +1028,7 @@ export function FloatingChat() {
                       />
                       <Button
                         size="icon"
-                        className="h-10 w-10 rounded-xl shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground transition-transform active:scale-95 mb-0.5 mr-0.5"
+                        className="h-10 w-10 rounded-xl shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground transition-transform active:scale-95 mb-0.5"
                         onClick={handleSendAi}
                         disabled={!aiInput.trim() || aiLoading}
                       >
@@ -895,15 +1040,13 @@ export function FloatingChat() {
               ) : (
                 <SupportTab headerProps={headerProps} onRefreshUnread={refreshUnread} />
               )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </div>
+        )}
 
         {/* Toggle button */}
         <div data-tour="floating-chat-button" className={cn("relative group", isOpen && "hidden sm:block")}>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+          <button
+            ref={fabRef}
             onClick={() => setIsOpen((v) => !v)}
             className={cn(
               "relative flex h-9 w-9 sm:h-16 sm:w-16 items-center justify-center rounded-full z-10",
@@ -911,44 +1054,20 @@ export function FloatingChat() {
               !isOpen ? "shadow-[0_8px_32px_rgba(0,0,0,0.12)]" : "shadow-lg"
             )}
           >
-            <AnimatePresence mode="wait">
-              {isOpen ? (
-                <motion.span
-                  key="close"
-                  initial={{ rotate: -90, opacity: 0 }}
-                  animate={{ rotate: 0, opacity: 1 }}
-                  exit={{ rotate: 90, opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                >
-                  <X className="h-7 w-7" />
-                </motion.span>
-              ) : (
-                <motion.span
-                  key="open"
-                  initial={{ rotate: 90, opacity: 0 }}
-                  animate={{ rotate: 0, opacity: 1 }}
-                  exit={{ rotate: -90, opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                >
-                  <MessageCircle className="h-7 w-7" />
-                </motion.span>
-              )}
-            </AnimatePresence>
+            <span data-fab-icon className="flex items-center justify-center">
+              {isOpen ? <X className="h-7 w-7" /> : <MessageCircle className="h-7 w-7" />}
+            </span>
 
             {/* Unread badge */}
-            <AnimatePresence>
-              {(aiUnread + supportUnread) > 0 && !isOpen && (
-                <motion.span
-                  initial={{ scale: 0, y: 10 }}
-                  animate={{ scale: 1, y: 0 }}
-                  exit={{ scale: 0, opacity: 0 }}
-                  className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-destructive text-[11px] font-bold text-white"
-                >
-                  {aiUnread + supportUnread}
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </motion.button>
+            {(aiUnread + supportUnread) > 0 && !isOpen && (
+              <span
+                data-fab-badge
+                className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-destructive text-[11px] font-bold text-white"
+              >
+                {aiUnread + supportUnread}
+              </span>
+            )}
+          </button>
         </div>
       </div>
     </>
