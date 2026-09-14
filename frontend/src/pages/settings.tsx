@@ -2617,7 +2617,12 @@ export function SettingsPage() {
                   }}
                 />
               </CardContent>
-                <div className="relative bg-muted p-4 border-b border-border">
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="referral">
+            <Card className="overflow-hidden border-border">
+              <div className="relative bg-muted p-4 border-b border-border">
                 <div className="absolute inset-0 bg-transparent pointer-events-none" />
                 <div className="relative flex items-start gap-5">
                   <div className="flex-1 min-w-0">
