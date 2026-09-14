@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { api } from "./api";
+import { getPublicConfigCached } from "./public-config";
 
 export type CabinetDesign = "classic" | "stealth" | "aurora";
 
@@ -80,7 +80,7 @@ export function useCabinetDesign(): CabinetDesign {
 
   useEffect(() => {
     let alive = true;
-    api.getPublicConfig()
+    getPublicConfigCached()
       .then((cfg) => {
         if (!alive) return;
         // ⚠️ Здесь раньше проверялось только "stealth" — любой новый дизайн

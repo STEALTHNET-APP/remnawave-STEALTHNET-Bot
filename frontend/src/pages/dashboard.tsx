@@ -23,10 +23,20 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import type { DashboardStats, RemnaNode, RemnaNodesResponse, ServerStats, GiftAnalytics } from "@/lib/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { RemnaNode, ServerStats } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/auth";
 import { cn } from "@/lib/utils";
+import {
+  useAdminAnalytics,
+  useAdminDashboardStats,
+  useAdminGiftAnalytics,
+  useAdminServerStats,
+  useAdminSettings,
+  useRemnaNodes,
+} from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import {
   AreaChart,
   Area,
@@ -452,7 +462,7 @@ function NodeCard({
 
   return (
     <motion.div custom={index} variants={cardVariants}>
-      <Card className="relative overflow-hidden bg-card border-border rounded-2xl p-5 hover:border-border transition-all">
+      <Card className="relative overflow-hidden glass-card glass-card-hover rounded-2xl p-5 hover:border-border transition-all">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-center gap-3 min-w-0">
@@ -555,93 +565,67 @@ export function DashboardPage() {
   const admin = state.admin;
   const hasRemnaNodesAccess = admin ? canAccessRemnaNodes(admin.role, admin.allowedSections) : false;
 
-  /* eslint-disable @typescript-eslint/no-explicit-any */
-  const [analyticsData, setAnalyticsData] = useState<any | null>(null);
-  /* eslint-enable @typescript-eslint/no-explicit-any */
   const [chartPeriod, setChartPeriod] = useState(30);
-
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [serverStats, setServerStats] = useState<ServerStats | null>(null);
-  const [nodes, setNodes] = useState<RemnaNode[]>([]);
-  const [giftAnalytics, setGiftAnalytics] = useState<GiftAnalytics | null>(null);
-  const [defaultCurrency, setDefaultCurrency] = useState<string>("USD");
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [nodeActionUuid, setNodeActionUuid] = useState<string | null>(null);
 
-  const refetchNodes = useCallback(async () => {
-    if (!token || !hasRemnaNodesAccess) return;
-    const data = (await api.getRemnaNodes(token).catch(() => ({ response: [] }))) as RemnaNodesResponse;
-    setNodes(Array.isArray(data?.response) ? data.response : []);
-  }, [token, hasRemnaNodesAccess]);
+  const queryClient = useQueryClient();
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const statsQ = useAdminDashboardStats(token);
+  const serverStatsQ = useAdminServerStats(token);
+  const analyticsQ = useAdminAnalytics(token);
+  const giftAnalyticsQ = useAdminGiftAnalytics(token);
+  const nodesQ = useRemnaNodes(token, hasRemnaNodesAccess);
+  const settingsQ = useAdminSettings(token);
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  const stats = statsQ.data ?? null;
+  const serverStats = serverStatsQ.data ?? null;
+  const analyticsData = analyticsQ.data ?? null;
+  const giftAnalytics = giftAnalyticsQ.data ?? null;
+  const nodes: RemnaNode[] = nodesQ.data?.response ?? [];
+  const defaultCurrency = useMemo(
+    () => (settingsQ.data?.defaultCurrency ? String(settingsQ.data.defaultCurrency).toUpperCase() : "USD"),
+    [settingsQ.data?.defaultCurrency]
+  );
+
+  const loading = statsQ.isLoading;
+  const refreshing = statsQ.isFetching && !statsQ.isLoading;
+
+  const nodeAction = useMutation({
+    mutationFn: async ({ action, nodeUuid }: { action: "enable" | "disable" | "restart"; nodeUuid: string }) => {
+      if (action === "enable") await api.remnaNodeEnable(token!, nodeUuid);
+      else if (action === "disable") await api.remnaNodeDisable(token!, nodeUuid);
+      else await api.remnaNodeRestart(token!, nodeUuid);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: qk.admin.remnaNodes() });
+    },
+  });
+
 
   const handleNodeAction = useCallback(
     async (nodeUuid: string, action: "enable" | "disable" | "restart") => {
       if (!token || !hasRemnaNodesAccess) return;
       setNodeActionUuid(nodeUuid);
       try {
-        if (action === "enable") await api.remnaNodeEnable(token, nodeUuid);
-        else if (action === "disable") await api.remnaNodeDisable(token, nodeUuid);
-        else await api.remnaNodeRestart(token, nodeUuid);
-        await refetchNodes();
+        await nodeAction.mutateAsync({ action, nodeUuid });
       } catch (e) {
-        setError(e instanceof Error ? e.message : t("admin.dashboard.node_error"));
+        const msg = e instanceof Error ? e.message : t("admin.dashboard.node_error");
+        // eslint-disable-next-line no-console
+        console.warn(msg);
       } finally {
         setNodeActionUuid(null);
       }
     },
-    [token, hasRemnaNodesAccess, refetchNodes, t]
-  );
-
-  const loadAll = useCallback(
-    async (silent = false) => {
-      if (!token) return;
-      if (silent) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-      try {
-        const statsP = api.getDashboardStats(token);
-        const nodesP = hasRemnaNodesAccess
-          ? api.getRemnaNodes(token).catch(() => ({ response: [] }))
-          : Promise.resolve(null);
-        const settingsP = api.getSettings(token).catch(() => null);
-        const serverP = api.getServerStats(token).catch(() => null);
-        const analyticsP = api.getAnalytics(token).catch(() => null);
-        const giftAnalyticsP = api.getGiftAnalytics(token).catch(() => null);
-        const [statsRes, nodesRes, settingsRes, serverRes, analyticsRes, giftAnalyticsRes] = await Promise.all([
-          statsP, nodesP, settingsP, serverP, analyticsP, giftAnalyticsP,
-        ]);
-        setStats(statsRes);
-        setServerStats(serverRes);
-        setAnalyticsData(analyticsRes);
-        setGiftAnalytics(giftAnalyticsRes);
-        if (nodesRes != null) {
-          const data = nodesRes as RemnaNodesResponse;
-          setNodes(Array.isArray(data?.response) ? data.response : []);
-        } else {
-          setNodes([]);
-        }
-        const curr = settingsRes?.defaultCurrency;
-        setDefaultCurrency(curr ? String(curr).toUpperCase() : "USD");
-      } catch (e) {
-        setError(e instanceof Error ? e.message : t("admin.dashboard.loading_error"));
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [token, hasRemnaNodesAccess, t]
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!cancelled) loadAll(false);
-    return () => {
-      cancelled = true;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, hasRemnaNodesAccess]);
+    [token, hasRemnaNodesAccess, nodeAction.mutateAsync, t]
+  );
+
+  const refreshAll = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["admin"], exact: false });
+  }, [queryClient]);
+
 
   const chartData = useMemo(() => {
     const revenueSeries = analyticsData?.revenueSeries ?? [];
@@ -720,7 +704,7 @@ export function DashboardPage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => loadAll(true)}
+            onClick={refreshAll}
             disabled={loading || refreshing}
             className="h-9 w-9 rounded-full hover:bg-card"
             title="Обновить"
@@ -742,13 +726,13 @@ export function DashboardPage() {
       )}
 
       {/* Error display */}
-      {error && (
+      {statsQ.isError && statsQ.error instanceof Error && (
         <motion.div
           className="rounded-xl border border-border border-border px-4 py-3 text-sm text-muted-foreground dark:text-muted-foreground"
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          {error}
+          {statsQ.error.message || t("admin.dashboard.loading_error")}
         </motion.div>
       )}
 
@@ -964,11 +948,11 @@ export function DashboardPage() {
           }
         />
         {!hasRemnaNodesAccess ? (
-          <Card className="bg-card border-border rounded-2xl py-10 text-center">
+          <Card className="glass-card glass-card-hover rounded-2xl py-10 text-center">
             <p className="text-sm text-muted-foreground">{t("admin.dashboard.no_node_access")}</p>
           </Card>
         ) : nodes.length === 0 ? (
-          <Card className="bg-card border-border rounded-2xl py-10 text-center">
+          <Card className="glass-card glass-card-hover rounded-2xl py-10 text-center">
             <p className="text-sm text-muted-foreground">{t("admin.dashboard.nodes_not_loaded")}</p>
           </Card>
         ) : (

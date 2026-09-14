@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import {
-  api,
   type AutoBroadcastRule,
   type AutoBroadcastRulePayload,
   type AutoBroadcastTriggerType,
 } from "@/lib/api";
+import { api } from "@/lib/api";
+import { useAdminAutoBroadcastRules, useAdminAutoBroadcastEligibleCounts, type AdminSettings } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,9 +88,10 @@ const CHANNEL_LABELS: Record<string, string> = {
 export function AutoBroadcastPage() {
   const { state } = useAuth();
   const token = state.accessToken ?? "";
-  const [rules, setRules] = useState<AutoBroadcastRule[]>([]);
-  const [eligibleCounts, setEligibleCounts] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: rulesData, isLoading: loading } = useAdminAutoBroadcastRules(token || null);
+  const rules = rulesData ?? [];
+  const { data: eligibleCounts } = useAdminAutoBroadcastEligibleCounts(token || null, rules.map((r) => r.id));
   const [runAllLoading, setRunAllLoading] = useState(false);
   const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -113,53 +117,38 @@ export function AutoBroadcastPage() {
   });
   const [formSaving, setFormSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [scheduleCron, setScheduleCron] = useState("");
+  // Черновик ввода cron; пока не тронут — показываем сохранённое значение из settings.
+  const [scheduleCronDraft, setScheduleCronDraft] = useState<string | null>(null);
   const [scheduleSaving, setScheduleSaving] = useState(false);
 
-  function loadRules() {
-    if (!token) return;
-    setLoading(true);
-    api
-      .getAutoBroadcastRules(token)
-      .then((list) => {
-        setRules(list);
-        return list;
-      })
-      .then((list) => {
-        const counts: Record<string, number> = {};
-        Promise.all(
-          list.map((r) =>
-            api.getAutoBroadcastEligibleCount(token, r.id).then(({ count }) => {
-              counts[r.id] = count;
-            })
-          )
-        ).then(() => setEligibleCounts(counts));
-      })
-      .catch(() => setRules([]))
-      .finally(() => setLoading(false));
-  }
+  const invalidateRules = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin", "auto-broadcast-rules"], exact: false });
+    queryClient.invalidateQueries({ queryKey: ["admin", "auto-broadcast-eligible-counts"], exact: false });
+  };
 
-  useEffect(() => {
-    loadRules();
-  }, [token]);
-
-  useEffect(() => {
-    if (token) {
-      api.getSettings(token).then((s) => setScheduleCron(s.autoBroadcastCron ?? "")).catch(() => {});
-    }
-  }, [token]);
+  // Расписание авто-рассылки — часть admin settings; берём из кеша (settings.tsx владеет ключом).
+  const { data: settings } = useQuery<AdminSettings>({
+    queryKey: qk.admin.settings(),
+    queryFn: () => api.getSettings(token),
+    enabled: !!token,
+  });
+  // Ввод cron: черновик, пока не тронут — показываем сохранённое значение из settings.
+  const scheduleCron = scheduleCronDraft ?? (settings?.autoBroadcastCron ?? "");
+  const saveScheduleMutation = useMutation({
+    mutationFn: (cron: string) => api.updateSettings(token, { autoBroadcastCron: cron.trim() || null }),
+    onSuccess: () => {
+      setScheduleSaving(false);
+      queryClient.invalidateQueries({ queryKey: ["admin", "settings"], exact: false });
+    },
+    onError: () => setScheduleSaving(false),
+  });
 
   async function handleSaveSchedule(e: React.FormEvent) {
     e.preventDefault();
     setScheduleSaving(true);
-    try {
-      await api.updateSettings(token, { autoBroadcastCron: scheduleCron.trim() || null });
-    } catch {
-      // ignore
-    } finally {
-      setScheduleSaving(false);
-    }
+    saveScheduleMutation.mutate(scheduleCron);
   }
+
 
   const [buttonAction, setButtonAction] = useState("");
   const [buttonCustomUrl, setButtonCustomUrl] = useState("");
@@ -266,7 +255,7 @@ export function AutoBroadcastPage() {
         await api.createAutoBroadcastRule(token, payload);
       }
       closeForm();
-      loadRules();
+      invalidateRules();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Ошибка сохранения");
     } finally {
@@ -278,7 +267,7 @@ export function AutoBroadcastPage() {
     if (!confirm("Удалить правило?")) return;
     try {
       await api.deleteAutoBroadcastRule(token, ruleId);
-      loadRules();
+      invalidateRules();
     } catch {
       // ignore
     }
@@ -300,7 +289,7 @@ export function AutoBroadcastPage() {
       const totalSent = results.reduce((s, r) => s + r.sent, 0);
       const totalSkipped = results.reduce((s, r) => s + r.skipped, 0);
       const totalErrors = results.reduce((s, r) => s + r.errors.length, 0);
-      loadRules();
+      invalidateRules();
       alert(`Отправлено: ${totalSent}, пропущено: ${totalSkipped}${totalErrors > 0 ? `, ошибок: ${totalErrors}` : ""}`);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Ошибка запуска");
@@ -313,7 +302,7 @@ export function AutoBroadcastPage() {
     setRunningRuleId(ruleId);
     try {
       const result = await api.runAutoBroadcastRule(token, ruleId);
-      loadRules();
+      invalidateRules();
       alert(formatRunResult(result));
     } catch (err) {
       alert(err instanceof Error ? err.message : "Ошибка запуска");
@@ -379,7 +368,7 @@ export function AutoBroadcastPage() {
             <Input
               id="schedule-cron"
               value={scheduleCron}
-              onChange={(e) => setScheduleCron(e.target.value)}
+              onChange={(e) => setScheduleCronDraft(e.target.value)}
               placeholder="0 9 * * *"
               className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
             />
@@ -454,7 +443,7 @@ export function AutoBroadcastPage() {
                     <span className="inline-flex items-center gap-1">
                       <Users className="h-3 w-3" />
                       Подходят сейчас:{" "}
-                      <span className="text-foreground font-medium">{eligibleCounts[rule.id] ?? "—"}</span>
+                      <span className="text-foreground font-medium">{eligibleCounts?.[rule.id] ?? "—"}</span>
                     </span>
                   </div>
                 </div>

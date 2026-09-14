@@ -7,9 +7,12 @@
  * UI: таблица + модалка создания/редактирования. Сделано простой формой, без лишних украшений.
  */
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
+import { useAdminTrials } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import type { TrialRecord, CreateTrialPayload, TariffCategoryWithTariffs } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,60 +28,58 @@ export function TrialsPage() {
   const { state } = useAuth();
   const token = state.accessToken ?? null;
 
-  const [trials, setTrials] = useState<TrialRecord[]>([]);
-  const [tariffsFlat, setTariffsFlat] = useState<FlatTariff[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const trialsQuery = useAdminTrials(token);
+  const trials = trialsQuery.data?.items ?? [];
+  const loading = trialsQuery.isLoading;
+  const error = trialsQuery.error instanceof Error ? trialsQuery.error.message : null;
   const [modal, setModal] = useState<"add" | { edit: TrialRecord } | null>(null);
+  const [errorState, setError] = useState<string | null>(null);
 
-  const load = async () => {
-    if (!token) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [trialsRes, catsRes] = await Promise.all([
-        api.getTrials(token),
-        api.getTariffCategories(token),
-      ]);
-      setTrials(trialsRes.items);
-      const flat: FlatTariff[] = [];
-      for (const c of catsRes.items as TariffCategoryWithTariffs[]) {
-        for (const t of c.tariffs) {
-          flat.push({ id: t.id, name: t.name, categoryName: c.name });
-        }
+  // Тарифы для привязки триала (категории с вложенными тарифами).
+  const catsQuery = useQuery({
+    queryKey: qk.admin.tariffCategories(),
+    queryFn: () => api.getTariffCategories(token!),
+    enabled: !!token,
+  });
+  const tariffsFlat = useMemo<FlatTariff[]>(() => {
+    const items = (catsQuery.data?.items ?? []) as TariffCategoryWithTariffs[];
+    const flat: FlatTariff[] = [];
+    for (const c of items) {
+      for (const t of c.tariffs) {
+        flat.push({ id: t.id, name: t.name, categoryName: c.name });
       }
-      setTariffsFlat(flat);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
     }
+    return flat;
+  }, [catsQuery.data]);
+
+  const invalidateTrials = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.admin.trials() });
   };
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deleteTrial(token!, id),
+    onSuccess: () => invalidateTrials(),
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка удаления"),
+  });
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (!token || !confirm("Удалить триал? Уже активированные клиентами подписки останутся живыми, но потеряют пометку.")) return;
-    try {
-      await api.deleteTrial(token, id);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка удаления");
-    }
+    deleteMutation.mutate(id);
   };
 
-  const handleToggleEnabled = async (t: TrialRecord) => {
+  const toggleMutation = useMutation({
+    mutationFn: (t: TrialRecord) => api.updateTrial(token!, t.id, { enabled: !t.enabled }),
+    onSuccess: () => invalidateTrials(),
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка обновления"),
+  });
+
+  const handleToggleEnabled = (t: TrialRecord) => {
     if (!token) return;
-    try {
-      await api.updateTrial(token, t.id, { enabled: !t.enabled });
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка обновления");
-    }
+    toggleMutation.mutate(t);
   };
+
 
   return (
     <div className="flex flex-col gap-3.5 relative">
@@ -101,9 +102,8 @@ export function TrialsPage() {
           Добавить триал
         </Button>
       </motion.div>
-
-      {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div>
+      {(errorState || error) && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{errorState ?? error}</div>
       )}
 
       {loading && (
@@ -186,7 +186,7 @@ export function TrialsPage() {
           onClose={() => setModal(null)}
           onSaved={async () => {
             setModal(null);
-            await load();
+            invalidateTrials();
           }}
         />
       )}
@@ -219,21 +219,26 @@ function TrialFormDialog({
   const [tariffId, setTariffId] = useState(trial?.tariffId ?? tariffs[0]?.id ?? "");
   const [squadUuid, setSquadUuid] = useState<string>(trial?.squadUuids?.[0] ?? "");
   const [deviceLimit, setDeviceLimit] = useState<number>(trial?.deviceLimit ?? 1);
-  const [squads, setSquads] = useState<{ uuid: string; name?: string }[]>([]);
+  // сквады из Remna — для standalone-источника.
+  const squadsQuery = useQuery({
+    queryKey: qk.admin.remnaSquads(),
+    queryFn: async () => {
+      try {
+        const r = await api.getRemnaSquadsInternal(token!);
+        const res = r as { response?: { internalSquads?: { uuid?: string; name?: string }[] } };
+        const list = res?.response?.internalSquads ?? [];
+        return Array.isArray(list) ? list.map((s) => ({ uuid: s.uuid ?? "", name: s.name })) : [];
+      } catch {
+        return [] as { uuid: string; name?: string }[];
+      }
+    },
+    enabled: !!token,
+  });
+  const squads = squadsQuery.data ?? [];
   // конвертация триала: тоггл + «в любой тариф».
   const [convertEnabled, setConvertEnabled] = useState<boolean>(trial?.convertEnabled ?? true);
   const [convertAllTariffs, setConvertAllTariffs] = useState<boolean>(trial?.convertAllTariffs ?? false);
   const [durationDays, setDurationDays] = useState<number>(trial?.durationDays ?? 3);
-
-  // сквады из Remna — для standalone-источника.
-  useEffect(() => {
-    if (!token) return;
-    api.getRemnaSquadsInternal(token).then((r) => {
-      const res = r as { response?: { internalSquads?: { uuid?: string; name?: string }[] } };
-      const list = res?.response?.internalSquads ?? [];
-      setSquads(Array.isArray(list) ? list.map((s) => ({ uuid: s.uuid ?? "", name: s.name })) : []);
-    }).catch(() => setSquads([]));
-  }, [token]);
   // отдельный лимит трафика триала в ГБ (пусто = из тарифа).
   // BigInt в БД, в UI работаем в ГБ для удобства администратора.
   const initialTrialGb = trial?.trafficLimitBytes != null
@@ -247,10 +252,18 @@ function TrialFormDialog({
   // пробного периода (переход на их сквады). Пусто — только тариф триала.
   const [convertIds, setConvertIds] = useState<string[]>(trial?.convertTariffIds ?? []);
 
-  const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const saveMutation = useMutation({
+    mutationFn: (payload: CreateTrialPayload) => {
+      if (mode === "edit" && trial) return api.updateTrial(token!, trial.id, payload);
+      return api.createTrial(token!, payload);
+    },
+    onSuccess: () => onSaved(),
+    onError: (e) => setErr(e instanceof Error ? e.message : "Ошибка сохранения"),
+  });
+  const saving = saveMutation.isPending;
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!token) return;
     if (!name.trim() || durationDays < 1 || (source === "tariff" ? !tariffId : !squadUuid)) {
       setErr(source === "tariff"
@@ -258,44 +271,32 @@ function TrialFormDialog({
         : "Заполните название, выберите сквад и укажите длительность ≥ 1.");
       return;
     }
-    setSaving(true);
     setErr(null);
-    try {
-      // T16 (12.05.2026) — ГБ  байты (BigInt в БД).
-      // Пустая строка / 0 / NaN  null (используется лимит тарифа).
-      let trafficLimitBytes: number | null = null;
-      if (trialTrafficGb.trim()) {
-        const gb = parseFloat(trialTrafficGb.replace(",", "."));
-        if (Number.isFinite(gb) && gb > 0) {
-          trafficLimitBytes = Math.floor(gb * 1024 ** 3);
-        }
+    // T16 (12.05.2026) — ГБ  байты (BigInt в БД).
+    // Пустая строка / 0 / NaN  null (используется лимит тарифа).
+    let trafficLimitBytes: number | null = null;
+    if (trialTrafficGb.trim()) {
+      const gb = parseFloat(trialTrafficGb.replace(",", "."));
+      if (Number.isFinite(gb) && gb > 0) {
+        trafficLimitBytes = Math.floor(gb * 1024 ** 3);
       }
-      const payload: CreateTrialPayload = {
-        name: name.trim(),
-        tariffId: source === "tariff" ? tariffId : null,
-        squadUuids: source === "squad" ? [squadUuid] : null,
-        deviceLimit: source === "squad" ? Math.max(1, deviceLimit) : null,
-        durationDays,
-        trafficLimitBytes,
-        enabled,
-        sortOrder,
-        description: description.trim() || null,
-        convertEnabled,
-        convertAllTariffs,
-        // сам тариф триала всегда доступен — храним только дополнительные.
-        convertTariffIds: convertAllTariffs ? null : convertIds.filter((id) => id !== tariffId),
-      };
-      if (mode === "edit" && trial) {
-        await api.updateTrial(token, trial.id, payload);
-      } else {
-        await api.createTrial(token, payload);
-      }
-      onSaved();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setSaving(false);
     }
+    const payload: CreateTrialPayload = {
+      name: name.trim(),
+      tariffId: source === "tariff" ? tariffId : null,
+      squadUuids: source === "squad" ? [squadUuid] : null,
+      deviceLimit: source === "squad" ? Math.max(1, deviceLimit) : null,
+      durationDays,
+      trafficLimitBytes,
+      enabled,
+      sortOrder,
+      description: description.trim() || null,
+      convertEnabled,
+      convertAllTariffs,
+      // сам тариф триала всегда доступен — храним только дополнительные.
+      convertTariffIds: convertAllTariffs ? null : convertIds.filter((id) => id !== tariffId),
+    };
+    saveMutation.mutate(payload);
   };
 
   return (

@@ -2,10 +2,12 @@
  * Шапка лендинга с навигацией. Не блок — рендерится статически в LandingPage сверху.
  */
 
+import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import gsap from "gsap";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
+import { EASE_OUT, reducedMotion } from "@/lib/gsap-utils";
 import { useUtmCaptureAndBuildLink, useLandingTheme } from "./utils";
 
 interface LandingHeaderProps {
@@ -21,11 +23,25 @@ export function LandingHeader({ serviceName, logoUrl, navItems, loginText, ctaTe
   const { accentTheme } = useLandingTheme();
   const buildLink = useUtmCaptureAndBuildLink();
 
-  const accentBg = `linear-gradient(135deg, ${accentTheme.primary}, ${accentTheme.tertiary})`;
+  const actionsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = actionsRef.current;
+    if (!el || reducedMotion()) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        el,
+        { opacity: 0, x: 8 },
+        { opacity: 1, x: 0, duration: 0.4, ease: EASE_OUT, overwrite: "auto", clearProps: "transform" },
+      );
+    }, el);
+    return () => ctx.revert();
+  }, []);
+  const accentBg = accentTheme.ctaBg;
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/60 dark:border-border bg-card dark:bg-slate-950/70">
-      <div className="container mx-auto flex h-16 items-center justify-between px-4">
+      <div className="max-w-7xl mx-auto flex h-16 items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-3">
           {logoUrl ? (
             <img src={logoUrl} alt={serviceName} className="h-9 w-9 rounded-xl object-contain" />
@@ -55,17 +71,17 @@ export function LandingHeader({ serviceName, logoUrl, navItems, loginText, ctaTe
           ))}
         </nav>
 
-        <motion.div initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-2">
-          <Button asChild variant="ghost" className="h-9 rounded-full px-4 text-sm font-medium">
+        <div ref={actionsRef} className="flex items-center gap-2">
+          <Button asChild variant="ghost" className="hidden h-9 rounded-full px-4 text-sm font-medium text-slate-900 dark:text-slate-100 sm:inline-flex">
             <Link to={buildLink("/cabinet/login")}>{loginText}</Link>
           </Button>
-          <Button asChild className="h-9 rounded-full px-4 text-sm font-semibold text-white" style={{ background: accentBg }}>
+          <Button asChild className="h-9 rounded-full px-4 text-sm font-semibold" style={{ background: accentBg, color: accentTheme.ctaFg }}>
             <Link to={buildLink("/cabinet/register")}>
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+              <Sparkles className="h-3.5 w-3.5" />
               {ctaText}
             </Link>
           </Button>
-        </motion.div>
+        </div>
       </div>
     </header>
   );

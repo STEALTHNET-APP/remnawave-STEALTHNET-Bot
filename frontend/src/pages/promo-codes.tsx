@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
+import { useAdminPromoCodes, useAdminPromoCodeDetail } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import type {
   PromoCodeRecord,
-  PromoCodeDetail,
   CreatePromoCodePayload,
   UpdatePromoCodePayload,
 } from "@/lib/api";
@@ -58,12 +60,23 @@ function formatTraffic(bytes: string | number | null): string {
 export function PromoCodesPage() {
   const { state } = useAuth();
   const token = state.accessToken!;
+  const queryClient = useQueryClient();
 
-  const [codes, setCodes] = useState<PromoCodeRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [squads, setSquads] = useState<Squad[]>([]);
+  const codesQuery = useAdminPromoCodes(token);
+  const codes = codesQuery.data ?? [];
+  const loading = codesQuery.isLoading;
+  const error = codesQuery.error instanceof Error ? codesQuery.error.message : null;
+
+  const squadsQuery = useQuery({
+    queryKey: qk.admin.remnaSquads(),
+    queryFn: () => api.getRemnaSquadsInternal(token!).catch(() => ({ response: { internalSquads: [] } })),
+    enabled: !!token,
+  });
+  const squads: Squad[] = useMemo(() => {
+    const res = squadsQuery.data as { response?: { internalSquads?: { uuid?: string; name?: string }[] } } | undefined;
+    const list = res?.response?.internalSquads ?? (Array.isArray(res?.response) ? res.response : []);
+    return Array.isArray(list) ? list.map((s: { uuid?: string; name?: string }) => ({ uuid: s.uuid ?? "", name: s.name })) : [];
+  }, [squadsQuery.data]);
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -83,30 +96,15 @@ export function PromoCodesPage() {
     expiresAt: null,
   });
 
-  const [detail, setDetail] = useState<PromoCodeDetail | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detailQuery = useAdminPromoCodeDetail(token, detailId);
+  const detail = detailQuery.data ?? null;
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [showMassDialog, setShowMassDialog] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [codesRes, squadsRes] = await Promise.all([
-        api.getPromoCodes(token),
-        api.getRemnaSquadsInternal(token).catch(() => ({ response: { internalSquads: [] } })),
-      ]);
-      setCodes(codesRes);
-      const res = squadsRes as { response?: { internalSquads?: { uuid?: string; name?: string }[] } };
-      const list = res?.response?.internalSquads ?? (Array.isArray(res?.response) ? res.response : []);
-      setSquads(Array.isArray(list) ? list.map((s: { uuid?: string; name?: string }) => ({ uuid: s.uuid ?? "", name: s.name })) : []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
+  const invalidateCodes = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.admin.promoCodes() });
   };
-
-  useEffect(() => { load(); }, [token]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -148,52 +146,45 @@ export function PromoCodesPage() {
     setShowForm(true);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
+  const saveMutation = useMutation({
+    mutationFn: () => {
       if (editingId) {
         const { code: _code, ...rest } = form;
-        await api.updatePromoCode(token, editingId, rest as UpdatePromoCodePayload);
-      } else {
-        await api.createPromoCode(token, form);
+        return api.updatePromoCode(token, editingId, rest as UpdatePromoCodePayload);
       }
+      return api.createPromoCode(token, form);
+    },
+    onSuccess: () => {
       setShowForm(false);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setSaving(false);
-    }
-  };
+      invalidateCodes();
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+  });
+  const saving = saveMutation.isPending;
+  const handleSave = () => saveMutation.mutate();
 
-  const handleDelete = async (id: string) => {
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deletePromoCode(token, id),
+    onSuccess: (_r, id) => {
+      if (detailId === id) setDetailId(null);
+      invalidateCodes();
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+  });
+  const handleDelete = (id: string) => {
     if (!confirm("Удалить промокод? Все данные об использованиях будут удалены.")) return;
-    try {
-      await api.deletePromoCode(token, id);
-      if (detail?.id === id) setDetail(null);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    }
+    deleteMutation.mutate(id);
   };
 
-  const handleToggleActive = async (c: PromoCodeRecord) => {
-    try {
-      await api.updatePromoCode(token, c.id, { isActive: !c.isActive });
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
-    }
-  };
+  const toggleMutation = useMutation({
+    mutationFn: (c: PromoCodeRecord) => api.updatePromoCode(token, c.id, { isActive: !c.isActive }),
+    onSuccess: () => invalidateCodes(),
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+  });
+  const handleToggleActive = (c: PromoCodeRecord) => toggleMutation.mutate(c);
 
-  const openDetail = async (id: string) => {
-    try {
-      const d = await api.getPromoCode(token, id);
-      setDetail(d);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка загрузки");
-    }
-  };
+  const openDetail = (id: string) => setDetailId(id);
+
 
   const copyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -270,7 +261,7 @@ export function PromoCodesPage() {
           className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
         >
           <div className="flex items-start gap-3">
-            <Button variant="ghost" size="icon" className="rounded-xl shrink-0" onClick={() => setDetail(null)}>
+            <Button variant="ghost" size="icon" className="rounded-xl shrink-0" onClick={() => setDetailId(null)}>
               <ChevronLeft className="h-5 w-5" />
             </Button>
             <div className="min-w-0">
@@ -403,7 +394,7 @@ export function PromoCodesPage() {
       <MassPromoDialog
         open={showMassDialog}
         onClose={() => setShowMassDialog(false)}
-        onCreated={() => load()}
+        onCreated={() => invalidateCodes()}
         squads={squads}
       />
 

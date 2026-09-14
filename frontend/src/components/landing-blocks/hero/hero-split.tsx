@@ -5,17 +5,11 @@
  */
 
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useStaggerReveal } from "@/lib/gsap-utils";
 import { useUtmCaptureAndBuildLink, txt, p, SECTION_SCROLL_OFFSET, useLandingTheme } from "../utils";
 import type { LandingApiBlock } from "../types";
-
-const fadeUp = {
-  initial: { opacity: 0, y: 18 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.5 },
-};
 
 interface HeroSplitProps {
   block: LandingApiBlock;
@@ -23,8 +17,9 @@ interface HeroSplitProps {
 }
 
 export function HeroSplit({ block, serviceName }: HeroSplitProps) {
-  const { accentTheme, resolvedMode } = useLandingTheme();
   const buildLink = useUtmCaptureAndBuildLink();
+  const { accentTheme, resolvedMode } = useLandingTheme();
+  const gridRef = useStaggerReveal<HTMLDivElement>([], { y: 18, dur: 0.5, stagger: 0.1 });
 
   const badge = txt(block.text, "badge", "Приватность · Скорость · Доступ");
   const headline1 = txt(block.text, "headline1", "Подключение, которое");
@@ -41,16 +36,16 @@ export function HeroSplit({ block, serviceName }: HeroSplitProps) {
   const ctaUrl = p(block.props, "ctaUrl", "/cabinet/register");
   const secondaryCtaUrl = p(block.props, "secondaryCtaUrl", "/cabinet/login");
 
-  const accentBg = `linear-gradient(135deg, ${accentTheme.primary}, ${accentTheme.tertiary})`;
+  const accentBg = accentTheme.ctaBg;
   const accentText: React.CSSProperties = {
     backgroundImage: accentBg,
     color: resolvedMode === "dark" ? accentTheme.tertiary : accentTheme.primary,
   };
 
   return (
-    <section id="home" className={`container mx-auto px-4 pb-12 pt-12 md:pb-20 md:pt-16 ${SECTION_SCROLL_OFFSET}`}>
-      <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-        <motion.div {...fadeUp} className="max-w-3xl">
+    <section id="home" className={`max-w-7xl mx-auto px-4 pb-12 pt-12 md:pb-20 md:pt-16 ${SECTION_SCROLL_OFFSET}`}>
+      <div ref={gridRef} className="grid items-start gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+        <div className="max-w-3xl">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-slate-200/60 dark:border-border bg-card dark:bg-card px-4 py-2 text-xs font-semibold uppercase tracking-[0.32em] text-slate-600 dark:text-slate-300">
             <Sparkles className="h-4 w-4" style={{ color: accentTheme.primary }} />
             {badge}
@@ -70,7 +65,7 @@ export function HeroSplit({ block, serviceName }: HeroSplitProps) {
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button asChild size="lg" className="group h-14 rounded-full border px-7 text-base font-semibold text-white" style={{ background: accentBg, borderColor: "transparent" }}>
+            <Button asChild size="lg" className="group h-14 rounded-full border px-7 text-base font-semibold" style={{ background: accentBg, color: accentTheme.ctaFg, borderColor: "transparent" }}>
               <Link to={buildLink(ctaUrl)} className="flex items-center justify-center gap-2">
                 {ctaText}
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -82,15 +77,10 @@ export function HeroSplit({ block, serviceName }: HeroSplitProps) {
           </div>
 
           {hint ? <p className="mt-5 text-sm text-slate-500 dark:text-slate-400">{hint}</p> : null}
-        </motion.div>
+        </div>
 
-        <motion.aside
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.6, delay: 0.1 }}
-          className="rounded-[28px] border border-slate-200/60 dark:border-border bg-primary p-6"
-        >
-          <div className="text-[11px] font-semibold uppercase tracking-[0.32em]" style={{ color: accentTheme.primary }}>
+        <aside className="rounded-[28px] border border-slate-200/60 dark:border-border bg-primary p-6">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.32em]" style={{ color: accentTheme.ctaFg, opacity: 0.9 }}>
             {txt(block.text, "rightCardEyebrow", "Premium Access")}
           </div>
           <h3 className="mt-3 text-2xl font-black tracking-[-0.04em] text-slate-950 dark:text-white">
@@ -106,7 +96,7 @@ export function HeroSplit({ block, serviceName }: HeroSplitProps) {
               </span>
             ))}
           </div>
-        </motion.aside>
+        </aside>
       </div>
     </section>
   );

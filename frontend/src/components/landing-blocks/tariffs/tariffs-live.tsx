@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { useScrollReveal } from "../scroll-reveal";
 import { Check, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,15 +29,17 @@ export function TariffsLive({ block }: TariffsLiveProps) {
       .finally(() => setLoading(false));
   }, []);
 
+  const tariffsGridRef = useScrollReveal<HTMLDivElement>([loading, categories?.length], { y: 14, dur: 0.35, stagger: 0.04 });
+
   const title = txt(block.text, "title", "Тарифы");
   const subtitle = txt(block.text, "subtitle", "Выбирай удобный сценарий — без переплат и со свободой смены тарифа.");
   const noTariffsMessage = txt(block.text, "noTariffsMessage", "Скоро тарифы появятся — следи за обновлениями.");
   const buttonChooseTariff = txt(block.text, "buttonChooseTariff", "Выбрать");
 
-  const accentBg = `linear-gradient(135deg, ${accentTheme.primary}, ${accentTheme.tertiary})`;
+  const accentBg = accentTheme.ctaBg;
 
   return (
-    <section id="tariffs" className={`container mx-auto px-4 py-16 md:py-24 ${SECTION_SCROLL_OFFSET}`}>
+    <section id="tariffs" className={`max-w-7xl mx-auto px-4 py-16 md:py-24 ${SECTION_SCROLL_OFFSET}`}>
       <div className="text-center">
         <h2 className="text-3xl font-black tracking-[-0.04em] text-slate-950 md:text-5xl dark:text-white">{title}</h2>
         {subtitle ? <p className="mx-auto mt-4 max-w-2xl text-base text-slate-600 dark:text-slate-300 md:text-lg">{subtitle}</p> : null}
@@ -50,19 +52,13 @@ export function TariffsLive({ block }: TariffsLiveProps) {
           ))}
         </div>
       ) : categories && categories.length > 0 ? (
-        <div className="mt-12 space-y-12">
+        <div ref={tariffsGridRef} className="mt-12 space-y-12">
           {categories.map((cat) => (
             <div key={cat.id}>
               {cat.name ? <h3 className="mb-5 text-xl font-bold text-slate-950 dark:text-white">{cat.name}</h3> : null}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {cat.tariffs.map((t, idx) => (
-                  <motion.div
-                    key={t.id}
-                    initial={{ opacity: 0, y: 14 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.35, delay: idx * 0.04 }}
-                  >
+                {cat.tariffs.map((t) => (
+                  <div key={t.id}>
                     <Card className="h-full border-slate-200/70 dark:border-border bg-card dark:bg-card">
                       <CardContent className="flex h-full flex-col p-6">
                         <h4 className="text-lg font-bold text-slate-950 dark:text-white">{t.name}</h4>
@@ -103,7 +99,7 @@ export function TariffsLive({ block }: TariffsLiveProps) {
                           )}
                         </ul>
 
-                        <Button asChild className="group mt-6 h-9 rounded-full font-semibold text-white" style={{ background: accentBg }}>
+                        <Button asChild className="group mt-6 h-9 rounded-full font-semibold" style={{ background: accentBg, color: accentTheme.ctaFg }}>
                           <Link to={buildLink("/cabinet/register")} className="flex items-center justify-center gap-2">
                             {buttonChooseTariff}
                             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -111,7 +107,7 @@ export function TariffsLive({ block }: TariffsLiveProps) {
                         </Button>
                       </CardContent>
                     </Card>
-                  </motion.div>
+                  </div>
                 ))}
               </div>
             </div>

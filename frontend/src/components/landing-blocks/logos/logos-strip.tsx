@@ -3,9 +3,8 @@
  * Картинки в greyscale + hover full-color для tasteful look.
  */
 
-import { motion } from "framer-motion";
+import { useScrollReveal } from "../scroll-reveal";
 import { txt, arr, SECTION_SCROLL_OFFSET } from "../utils";
-import type { LandingApiBlock } from "../types";
 
 interface LogoItem {
   imageUrl: string;
@@ -13,14 +12,15 @@ interface LogoItem {
   href?: string;
 }
 
-export function LogosStrip({ block }: { block: LandingApiBlock }) {
+export function LogosStrip({ block }: { block: import("../types").LandingApiBlock }) {
   const items = arr<LogoItem>(block.props, "items", []);
   const title = txt(block.text, "title");
   const subtitle = txt(block.text, "subtitle");
+  const rowRef = useScrollReveal<HTMLDivElement>([items.length], { y: 12, dur: 0.4, stagger: 0 });
 
   if (items.length === 0) {
     return (
-      <section className={`container mx-auto px-4 py-8 md:py-12 ${SECTION_SCROLL_OFFSET}`}>
+      <section className={`max-w-7xl mx-auto px-4 py-8 md:py-12 ${SECTION_SCROLL_OFFSET}`}>
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-border bg-card dark:bg-card p-8 text-center text-sm text-slate-500 dark:text-slate-400">
           Добавь логотипы в props.items. Каждый — картинка через загрузчик.
         </div>
@@ -29,7 +29,7 @@ export function LogosStrip({ block }: { block: LandingApiBlock }) {
   }
 
   return (
-    <section className={`container mx-auto px-4 py-8 md:py-12 ${SECTION_SCROLL_OFFSET}`}>
+    <section className={`max-w-7xl mx-auto px-4 py-8 md:py-12 ${SECTION_SCROLL_OFFSET}`}>
       {title || subtitle ? (
         <div className="mb-6 text-center">
           {title ? <h2 className="text-xl font-bold tracking-tight text-slate-950 dark:text-white">{title}</h2> : null}
@@ -37,11 +37,8 @@ export function LogosStrip({ block }: { block: LandingApiBlock }) {
         </div>
       ) : null}
 
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.4 }}
+      <div
+        ref={rowRef}
         className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6"
       >
         {items.map((logo, idx) => {
@@ -61,7 +58,7 @@ export function LogosStrip({ block }: { block: LandingApiBlock }) {
             <div key={idx}>{img}</div>
           );
         })}
-      </motion.div>
+      </div>
     </section>
   );
 }

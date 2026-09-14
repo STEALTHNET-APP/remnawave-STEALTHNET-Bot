@@ -5,7 +5,8 @@
  * редактор для конкретного ключа (text/json/markdown/boolean/number).
  */
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Loader2, RefreshCw, Save, Check, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
 import { Card } from "@/components/ui/card";
@@ -16,33 +17,24 @@ import { botMessagesApi, type BotMessage } from "@/lib/admin-extras-api";
 
 export function AdminBotMessagesPage() {
   const { state } = useAuth();
-  const [items, setItems] = useState<BotMessage[]>([]);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [val, setVal] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  async function load() {
-    if (!state.accessToken) return;
-    setLoading(true);
-    setErr(null);
-    try {
-      const r = await botMessagesApi.list(state.accessToken);
-      const list = Array.isArray(r?.items) ? r.items : [];
-      setItems(list);
-      if (!activeKey && list.length > 0) {
-        setActiveKey(list[0].key);
-        setVal(list[0].value);
-      }
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "load error");
-    } finally {
-      setLoading(false);
-    }
-  }
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [state.accessToken]);
+  const token = state.accessToken;
+
+  const listQuery = useQuery({
+    queryKey: ["admin", "bot-messages"] as const,
+    queryFn: () => botMessagesApi.list(token!).catch(() => null),
+    enabled: !!token,
+  });
+  const items = listQuery.data?.items ?? [];
+  const loading = listQuery.isFetching;
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const err = [
+    listQuery.error ? (listQuery.error instanceof Error ? listQuery.error.message : "load error") : null,
+    saveErr,
+  ].find(Boolean) ?? null;
 
   function select(item: BotMessage) {
     setActiveKey(item.key);
@@ -52,27 +44,23 @@ export function AdminBotMessagesPage() {
 
   const active = items.find((i) => i.key === activeKey);
 
-  async function save() {
-    if (!state.accessToken || !active) return;
-    setBusy(true);
-    setErr(null);
-    try {
+  const saveMutation = useMutation({
+    mutationFn: () => {
       // local validate JSON
-      if (active.valueType === "json" && val.trim()) {
+      if (active?.valueType === "json" && val.trim()) {
         try { JSON.parse(val); }
-        catch { setErr("Невалидный JSON"); setBusy(false); return; }
+        catch { return Promise.reject(new Error("Невалидный JSON")); }
       }
-      await botMessagesApi.update(state.accessToken, active.key, val);
+      return botMessagesApi.update(token!, active!.key, val);
+    },
+    onSuccess: () => {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-      // обновляем item локально
-      setItems((prev) => prev.map((i) => i.key === active.key ? { ...i, value: val } : i));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "save error");
-    } finally {
-      setBusy(false);
-    }
-  }
+      void listQuery.refetch();
+    },
+    onError: (e) => setSaveErr(e instanceof Error ? e.message : "save error"),
+  });
+  const busy = saveMutation.isPending;
 
   // group by .group
   const groups = items.reduce<Record<string, BotMessage[]>>((acc, m) => {
@@ -90,7 +78,7 @@ export function AdminBotMessagesPage() {
             <p className="text-[12.5px] text-muted-foreground mt-[3px]">Все bot_* настройки в одном месте: меню, тарифы, оплата, кнопки</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading} className="rounded-xl gap-2">
+        <Button variant="outline" size="sm" onClick={() => void listQuery.refetch()} disabled={loading} className="rounded-xl gap-2">
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
           Обновить
         </Button>
@@ -171,9 +159,8 @@ export function AdminBotMessagesPage() {
                 spellCheck={false}
               />
             )}
-
             <div className="flex items-center gap-2 pt-2 border-t border-border">
-              <Button onClick={save} disabled={busy} className="gap-2">
+              <Button onClick={() => { setSaveErr(null); if (active) saveMutation.mutate(); }} disabled={busy} className="gap-2">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
                 {saved ? "Сохранено" : "Сохранить"}
               </Button>

@@ -40,3 +40,8 @@ temp/
 # ── Local server/helper files ─────────────────
 server_info.md
 git-manager.*
+
+# Local dev tools (portable postgres binaries) + staging dumps
+.tools/
+staging_*.sql
+*.tsbuildinfo

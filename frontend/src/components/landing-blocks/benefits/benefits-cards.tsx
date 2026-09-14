@@ -2,9 +2,9 @@
  * Benefits (variants: cards-4 | cards-6 | mosaic) — сетка карточек преимуществ.
  */
 
-import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Zap, Globe, Shield, Lock, LayoutDashboard, Sparkles, type LucideIcon } from "lucide-react";
+import { useScrollReveal } from "../scroll-reveal";
 import { txt, arr, SECTION_SCROLL_OFFSET, useLandingTheme } from "../utils";
 import type { LandingApiBlock } from "../types";
 
@@ -32,9 +32,10 @@ export function BenefitsCards({ block }: { block: LandingApiBlock }) {
   const title = txt(block.text, "title", "Почему выбирают нас");
   const subtitle = txt(block.text, "subtitle", "Шесть причин, почему сервис ощущается надёжным с первого экрана.");
   const badge = txt(block.text, "badge", "Преимущества");
+  const gridRef = useScrollReveal<HTMLDivElement>([items.length], { y: 16, dur: 0.4, stagger: 0.05 });
 
   return (
-    <section id="benefits" className={`container mx-auto px-4 py-16 md:py-24 ${SECTION_SCROLL_OFFSET}`}>
+    <section id="benefits" className={`max-w-7xl mx-auto px-4 py-16 md:py-24 ${SECTION_SCROLL_OFFSET}`}>
       <div className="text-center">
         {badge ? (
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/60 dark:border-border bg-card dark:bg-card px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-600 dark:text-slate-300">
@@ -46,17 +47,11 @@ export function BenefitsCards({ block }: { block: LandingApiBlock }) {
         {subtitle ? <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-slate-600 dark:text-slate-300 md:text-lg">{subtitle}</p> : null}
       </div>
 
-      <div className={`mt-10 grid gap-4 ${cardsCount === 4 ? "md:grid-cols-2 lg:grid-cols-4" : "md:grid-cols-2 lg:grid-cols-3"}`}>
+      <div ref={gridRef} className={`mt-10 grid gap-4 ${cardsCount === 4 ? "md:grid-cols-2 lg:grid-cols-4" : "md:grid-cols-2 lg:grid-cols-3"}`}>
         {items.map((it, idx) => {
           const Icon = ICONS[idx % ICONS.length];
           return (
-            <motion.div
-              key={`${it.title}-${idx}`}
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.4, delay: idx * 0.05 }}
-            >
+            <div key={`${it.title}-${idx}`}>
               <Card className="h-full border-slate-200/70 dark:border-border bg-card dark:bg-card">
                 <CardContent className="p-6">
                   <div className="flex h-9 w-11 items-center justify-center rounded-xl" style={{ background: `${accentTheme.primary}18`, color: accentTheme.primary }}>
@@ -66,7 +61,7 @@ export function BenefitsCards({ block }: { block: LandingApiBlock }) {
                   <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{it.desc}</p>
                 </CardContent>
               </Card>
-            </motion.div>
+            </div>
           );
         })}
       </div>

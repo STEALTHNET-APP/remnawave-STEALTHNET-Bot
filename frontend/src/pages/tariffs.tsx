@@ -1,12 +1,20 @@
-import { useEffect, useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import type {
   TariffCategoryWithTariffs,
   TariffRecord,
   CreateTariffPayload,
   UpdateTariffPayload,
 } from "@/lib/api";
+import {
+  useTariffCategories,
+  useRemnaSquadsInternal,
+  useRemnaStatus,
+} from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
+import { toast } from "@/components/ui/toast";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -714,12 +722,21 @@ export function TariffsPage() {
   const { state } = useAuth();
   const token = state.accessToken ?? null;
 
-  const [categories, setCategories] = useState<TariffCategoryWithTariffs[]>([]);
-  const [squads, setSquads] = useState<SquadOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const qc = useQueryClient();
 
-  const [remnaConfigured, setRemnaConfigured] = useState<boolean | null>(null);
+  const categoriesQuery = useTariffCategories(token);
+  const squadsQuery = useRemnaSquadsInternal(token);
+  const remnaStatusQuery = useRemnaStatus(token);
+
+  const categories = categoriesQuery.data?.items ?? [];
+  const remnaConfigured = remnaStatusQuery.data?.configured ?? null;
+
+  // Нормализация squads — тот же null-tolerant разбор, что был в load():
+  const squads: SquadOption[] = (() => {
+    const res = squadsQuery.data as { response?: { internalSquads?: { uuid?: string; name?: string }[] } } | null | undefined;
+    const list = res?.response?.internalSquads ?? (Array.isArray(res?.response) ? res.response : []);
+    return Array.isArray(list) ? list.map((s) => ({ uuid: s.uuid ?? "", name: s.name })) : [];
+  })();
 
   const [categoryModal, setCategoryModal] = useState<"add" | { edit: TariffCategoryWithTariffs } | null>(null);
   const [showCsvDialog, setShowCsvDialog] = useState(false);
@@ -728,81 +745,104 @@ export function TariffsPage() {
     | { kind: "edit"; category: TariffCategoryWithTariffs; tariff: TariffRecord }
     | null
   >(null);
-  const [saving, setSaving] = useState(false);
 
-  const load = async () => {
-    if (!token) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [status, cats, squadsRes] = await Promise.all([
-        api.getRemnaStatus(token),
-        api.getTariffCategories(token),
-        api.getRemnaSquadsInternal(token).catch(() => ({ response: { internalSquads: [] } })),
-      ]);
-      setRemnaConfigured(status.configured);
-      setCategories(cats.items);
-      const res = squadsRes as { response?: { internalSquads?: { uuid?: string; name?: string }[] } };
-      const list = res?.response?.internalSquads ?? (Array.isArray(res?.response) ? res.response : []);
-      setSquads(Array.isArray(list) ? list.map((s) => ({ uuid: s.uuid ?? "", name: s.name })) : []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
+  // Ошибки мутаций — тот же красный баннер, что был при load/delete/drag.
+  const [error, setError] = useState<string | null>(null);
+
+  const invalidateTariffs = () => {
+    void qc.invalidateQueries({ queryKey: qk.admin.tariffCategories() });
   };
 
-  useEffect(() => {
-    load();
-  }, [token]);
+  const deleteCategoryMutation = useMutation({
+    mutationFn: (id: string) => api.deleteTariffCategory(token!, id),
+    onSuccess: () => {
+      invalidateTariffs();
+      toast.success("Категория удалена");
+    },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Ошибка удаления"),
+  });
 
-  const handleDeleteCategory = async (id: string) => {
+  const deleteTariffMutation = useMutation({
+    mutationFn: (id: string) => api.deleteTariff(token!, id),
+    onSuccess: () => {
+      invalidateTariffs();
+      toast.success("Тариф удалён");
+    },
+    onError: (e: unknown) => setError(e instanceof Error ? e.message : "Ошибка удаления"),
+  });
+
+  const reorderCategoriesMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map((id, index) => api.updateTariffCategory(token!, id, { sortOrder: index })));
+    },
+    onSuccess: invalidateTariffs,
+    onError: (e: unknown) => {
+      setError(e instanceof Error ? e.message : "Ошибка сохранения порядка");
+      invalidateTariffs();
+    },
+  });
+
+  const reorderTariffsMutation = useMutation({
+    mutationFn: async (args: { categoryId: string; ids: string[] }) => {
+      await Promise.all(args.ids.map((id, index) => api.updateTariff(token!, id, { sortOrder: index })));
+    },
+    onSuccess: invalidateTariffs,
+    onError: (e: unknown) => {
+      setError(e instanceof Error ? e.message : "Ошибка сохранения порядка");
+      invalidateTariffs();
+    },
+  });
+
+  // Сохранение категории/тарифа — мутации вместо ручных setSaving в модалках.
+  const saveCategoryMutation = useMutation({
+    mutationFn: (args: { id: string | null; payload: { name: string; emojiKey: string | null; singleSubscriptionMode: boolean } }) =>
+      args.id
+        ? api.updateTariffCategory(token!, args.id, args.payload)
+        : api.createTariffCategory(token!, args.payload),
+    onSuccess: () => {
+      invalidateTariffs();
+      toast.success("Категория сохранена");
+    },
+  });
+
+  const saveTariffMutation = useMutation({
+    mutationFn: (args: { id: string | null; categoryId: string; payload: CreateTariffPayload | UpdateTariffPayload }) =>
+      args.id
+        ? api.updateTariff(token!, args.id, args.payload as UpdateTariffPayload)
+        : api.createTariff(token!, args.payload as CreateTariffPayload),
+    onSuccess: () => {
+      invalidateTariffs();
+      toast.success("Тариф сохранён");
+    },
+  });
+
+  const handleDeleteCategory = (id: string) => {
     if (!token || !confirm("Удалить категорию и все тарифы в ней?")) return;
-    try {
-      await api.deleteTariffCategory(token, id);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка удаления");
-    }
+    deleteCategoryMutation.mutate(id);
   };
 
-  const handleDeleteTariff = async (id: string) => {
+  const handleDeleteTariff = (id: string) => {
     if (!token || !confirm("Удалить тариф?")) return;
-    try {
-      await api.deleteTariff(token, id);
-      await load();
-      setTariffModal(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка удаления");
-    }
+    deleteTariffMutation.mutate(id, {
+      onSuccess: () => setTariffModal(null),
+    });
   };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  const handleCategoryDragEnd = async (event: DragEndEvent) => {
+  const handleCategoryDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const oldIndex = categories.findIndex((c) => c.id === active.id);
     const newIndex = categories.findIndex((c) => c.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-    const reordered = arrayMove(categories, oldIndex, newIndex);
-    setCategories(reordered);
     if (!token) return;
-    try {
-      await Promise.all(
-        reordered.map((cat, index) =>
-          api.updateTariffCategory(token, cat.id, { sortOrder: index })
-        )
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка сохранения порядка");
-      load();
-    }
+    reorderCategoriesMutation.mutate(arrayMove(categories, oldIndex, newIndex).map((cat) => cat.id));
   };
 
-  const handleTariffDragEnd = async (
+  const handleTariffDragEnd = (
     event: DragEndEvent,
     category: TariffCategoryWithTariffs
   ) => {
@@ -812,24 +852,15 @@ export function TariffsPage() {
     const oldIndex = tariffs.findIndex((t) => t.id === active.id);
     const newIndex = tariffs.findIndex((t) => t.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-    const reordered = arrayMove(tariffs, oldIndex, newIndex);
-    setCategories((prev) =>
-      prev.map((c) =>
-        c.id === category.id ? { ...c, tariffs: reordered } : c
-      )
-    );
     if (!token) return;
-    try {
-      await Promise.all(
-        reordered.map((t, index) =>
-          api.updateTariff(token, t.id, { sortOrder: index })
-        )
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка сохранения порядка");
-      load();
-    }
+    reorderTariffsMutation.mutate({
+      categoryId: category.id,
+      ids: arrayMove(tariffs, oldIndex, newIndex).map((t) => t.id),
+    });
   };
+
+  const loading = categoriesQuery.isLoading;
+  const loadError = categoriesQuery.error instanceof Error ? categoriesQuery.error.message : null;
 
   if (loading && categories.length === 0) {
     return (
@@ -875,17 +906,17 @@ export function TariffsPage() {
       <TariffCsvDialog
         open={showCsvDialog}
         onClose={() => setShowCsvDialog(false)}
-        onApplied={() => load()}
+        onApplied={() => invalidateTariffs()}
       />
 
 
-      {error && (
+      {(loadError || error) && (
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400"
         >
-          {error}
+          {loadError || error}
         </motion.div>
       )}
 
@@ -951,31 +982,25 @@ export function TariffsPage() {
       {/* Модалка категории */}
       {categoryModal && (
         <CategoryModal
-          token={token}
           modal={categoryModal}
           onClose={() => setCategoryModal(null)}
           onSaved={() => {
             setCategoryModal(null);
-            load();
           }}
-          saving={saving}
-          setSaving={setSaving}
+          saveMutation={saveCategoryMutation}
         />
       )}
 
       {/* Модалка тарифа */}
       {tariffModal && (
         <TariffModal
-          token={token}
           squads={squads}
           modal={tariffModal}
           onClose={() => setTariffModal(null)}
           onSaved={() => {
             setTariffModal(null);
-            load();
           }}
-          saving={saving}
-          setSaving={setSaving}
+          saveMutation={saveTariffMutation}
         />
       )}
     </div>
@@ -983,19 +1008,18 @@ export function TariffsPage() {
 }
 
 function CategoryModal({
-  token,
   modal,
   onClose,
   onSaved,
-  saving,
-  setSaving,
+  saveMutation,
 }: {
-  token: string | null;
   modal: "add" | { edit: TariffCategoryWithTariffs };
   onClose: () => void;
   onSaved: () => void;
-  saving: boolean;
-  setSaving: (v: boolean) => void;
+  saveMutation: {
+    mutateAsync: (args: { id: string | null; payload: { name: string; emojiKey: string | null; singleSubscriptionMode: boolean } }) => Promise<unknown>;
+    isPending: boolean;
+  };
 }) {
   const isEdit = modal !== "add";
   const editCat = isEdit ? (modal as { edit: TariffCategoryWithTariffs }).edit : null;
@@ -1017,20 +1041,15 @@ function CategoryModal({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token || !name.trim()) return;
-    setSaving(true);
+    if (!name.trim()) return;
     try {
-      const payload = { name: name.trim(), emojiKey: emojiKey.trim() || null, singleSubscriptionMode: singleMode };
-      if (isEdit) {
-        await api.updateTariffCategory(token, (modal as { edit: TariffCategoryWithTariffs }).edit.id, payload);
-      } else {
-        await api.createTariffCategory(token, payload);
-      }
+      await saveMutation.mutateAsync({
+        id: isEdit ? (modal as { edit: TariffCategoryWithTariffs }).edit.id : null,
+        payload: { name: name.trim(), emojiKey: emojiKey.trim() || null, singleSubscriptionMode: singleMode },
+      });
       onSaved();
     } catch (err) {
       console.error(err);
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -1099,8 +1118,8 @@ function CategoryModal({
           </button>
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">Отмена</Button>
-            <Button type="submit" disabled={saving} className="gap-2 rounded-xl">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            <Button type="submit" disabled={saveMutation.isPending} className="gap-2 rounded-xl">
+              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {isEdit ? "Сохранить" : "Создать"}
             </Button>
           </DialogFooter>
@@ -1111,21 +1130,20 @@ function CategoryModal({
 }
 
 function TariffModal({
-  token,
   squads,
   modal,
   onClose,
   onSaved,
-  saving,
-  setSaving,
+  saveMutation,
 }: {
-  token: string | null;
   squads: SquadOption[];
   modal: { kind: "add"; categoryId: string } | { kind: "edit"; category: TariffCategoryWithTariffs; tariff: TariffRecord };
   onClose: () => void;
   onSaved: () => void;
-  saving: boolean;
-  setSaving: (v: boolean) => void;
+  saveMutation: {
+    mutateAsync: (args: { id: string | null; categoryId: string; payload: CreateTariffPayload | UpdateTariffPayload }) => Promise<unknown>;
+    isPending: boolean;
+  };
 }) {
   const isEdit = modal.kind === "edit";
   const tariff = isEdit ? modal.tariff : null;
@@ -1346,7 +1364,7 @@ function TariffModal({
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token || !name.trim() || selectedSquadUuids.length === 0) return;
+    if (!name.trim() || selectedSquadUuids.length === 0) return;
 
     // Валидация priceOptions
     if (priceOptions.length === 0) {
@@ -1412,67 +1430,39 @@ function TariffModal({
     const pricePerExtraNum = parseFloat(pricePerExtraDevice);
     const effectivePricePerExtra = extraDevicesEnabled && Number.isFinite(pricePerExtraNum) && pricePerExtraNum > 0 ? pricePerExtraNum : 0;
 
-    setSaving(true);
     try {
-      if (isEdit && tariff) {
-        const payload: UpdateTariffPayload = {
-          name: name.trim(),
-          description: description.trim() || null,
-          internalSquadUuids: selectedSquadUuids,
-          trafficLimitBytes: trafficLimitBytes ?? null,
-          trafficResetMode,
-          deviceLimit: deviceLimitNum ?? null,
-          includedDevices,
-          pricePerExtraDevice: effectivePricePerExtra,
-          maxExtraDevices: effectiveMaxExtras,
-          deviceDiscountTiers: normalizedTiers,
-          currency: currency || "usd",
-          lavatopOfferId: lavatopOfferId.trim() || null,
-          // T11+T12 (11.05.2026) — rich-text локаций тарифа.
-          locations: locations.trim() || null,
-          // T16 (12.05.2026) — эмодзи-префикс для главного меню бота.
-          menuEmoji: menuEmoji.trim() || null,
-          // T-cooldown (13.05.2026) — кулдаун покупки (дней). Пусто/0 = без ограничения.
-          purchaseCooldownDays: (() => {
-            const n = parseInt(purchaseCooldownDays.trim(), 10);
-            return Number.isFinite(n) && n > 0 ? n : null;
-          })(),
-          priceOptions: normalized,
-        };
-        await api.updateTariff(token, tariff.id, payload);
-      } else {
-        const payload: CreateTariffPayload = {
-          categoryId,
-          name: name.trim(),
-          description: description.trim() || null,
-          internalSquadUuids: selectedSquadUuids,
-          trafficLimitBytes: trafficLimitBytes ?? null,
-          trafficResetMode,
-          deviceLimit: deviceLimitNum ?? null,
-          includedDevices,
-          pricePerExtraDevice: effectivePricePerExtra,
-          maxExtraDevices: effectiveMaxExtras,
-          deviceDiscountTiers: normalizedTiers,
-          currency: currency || "usd",
-          lavatopOfferId: lavatopOfferId.trim() || null,
-          // T11+T12 (11.05.2026) — rich-text локаций тарифа.
-          locations: locations.trim() || null,
-          // T16 (12.05.2026) — эмодзи-префикс для главного меню бота.
-          menuEmoji: menuEmoji.trim() || null,
-          // T-cooldown (13.05.2026) — кулдаун покупки (дней). Пусто/0 = без ограничения.
-          purchaseCooldownDays: (() => {
-            const n = parseInt(purchaseCooldownDays.trim(), 10);
-            return Number.isFinite(n) && n > 0 ? n : null;
-          })(),
-          priceOptions: normalized,
-        };
-        await api.createTariff(token, payload);
-      }
+      const commonPayload = {
+        name: name.trim(),
+        description: description.trim() || null,
+        internalSquadUuids: selectedSquadUuids,
+        trafficLimitBytes: trafficLimitBytes ?? null,
+        trafficResetMode,
+        deviceLimit: deviceLimitNum ?? null,
+        includedDevices,
+        pricePerExtraDevice: effectivePricePerExtra,
+        maxExtraDevices: effectiveMaxExtras,
+        deviceDiscountTiers: normalizedTiers,
+        currency: currency || "usd",
+        lavatopOfferId: lavatopOfferId.trim() || null,
+        // T11+T12 (11.05.2026) — rich-text локаций тарифа.
+        locations: locations.trim() || null,
+        // T16 (12.05.2026) — эмодзи-префикс для главного меню бота.
+        menuEmoji: menuEmoji.trim() || null,
+        // T-cooldown (13.05.2026) — кулдаун покупки (дней). Пусто/0 = без ограничения.
+        purchaseCooldownDays: (() => {
+          const n = parseInt(purchaseCooldownDays.trim(), 10);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        })(),
+        priceOptions: normalized,
+      };
+      await saveMutation.mutateAsync({
+        id: isEdit && tariff ? tariff.id : null,
+        categoryId,
+        payload: isEdit && tariff ? (commonPayload as UpdateTariffPayload) : ({ ...commonPayload, categoryId } as CreateTariffPayload),
+      });
       onSaved();
     } catch (err) {
       console.error(err);
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -1859,10 +1849,10 @@ function TariffModal({
             <Button type="button" variant="outline" onClick={onClose} className="rounded-xl">Отмена</Button>
             <Button
               type="submit"
-              disabled={saving || selectedSquadUuids.length === 0 || hasDuplicates || priceOptions.length === 0}
+              disabled={saveMutation.isPending || selectedSquadUuids.length === 0 || hasDuplicates || priceOptions.length === 0}
               className="gap-2 rounded-xl"
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {isEdit ? "Сохранить" : "Создать"}
             </Button>
           </DialogFooter>

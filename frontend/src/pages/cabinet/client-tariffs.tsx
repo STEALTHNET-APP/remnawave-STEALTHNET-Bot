@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
 import { PayNowPanel } from "@/components/payment/pay-now-panel";
+import { getPublicConfigCached } from "@/lib/public-config";
 import { ExtendSubscriptionDialog } from "@/components/payment/extend-subscription-dialog";
 import { cn } from "@/lib/utils";
 
@@ -253,7 +254,7 @@ function ClassicTariffsPage() {
   useEffect(() => { loadCatalog(); }, [loadCatalog]);
 
   useEffect(() => {
-    api.getPublicConfig().then((c) => {
+    getPublicConfigCached().then((c) => {
       setPlategaMethods(c.plategaMethods ?? []);
       setYoomoneyEnabled(Boolean(c.yoomoneyEnabled));
       setYookassaEnabled(Boolean(c.yookassaEnabled));
@@ -1400,6 +1401,7 @@ async function startParitypayPayment(tariff: TariffForPay) {
             )}
 
             <div data-tour="tariff-list">
+<<<<<<< HEAD
               {loading ? (
                 <div className="flex justify-center py-20" role="status">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
@@ -1418,6 +1420,232 @@ async function startParitypayPayment(tariff: TariffForPay) {
               ) : (
                 <ClassicTariffCatalog categories={displayTariffs} canBuy={!!token} onChoose={requestBuy} getExtraCost={extendExtraCost} />
               )}
+=======
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary/50" />
+              </div>
+            ) : displayTariffs.length === 0 ? (
+              <Card className="rounded-3xl glass-card-hover border border-border/50 shadow-sm">
+                <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-4">
+                  <Package className="h-12 w-12 opacity-20" />
+                  <p className="text-base font-medium text-center">{t("cabinet.tariffs.empty")}</p>
+                </CardContent>
+              </Card>
+            ) : useCategoryCardLayout ? (
+              <div className="space-y-1">
+                {displayTariffs.map((cat, catIndex) => (
+                  <Collapsible
+                    key={cat.id}
+                    // При продлении (?extend) видимая категория единственная — раскрываем её
+                    // принудительно, без зависимости от тайминга загрузки userSubs/tariffs.
+                    open={displayTariffs.length === 1 || expandedCategoryId === cat.id}
+                    onOpenChange={(open) => setExpandedCategoryId(open ? cat.id : null)}
+                  >
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, delay: catIndex * 0.03 }}
+                      className="rounded-3xl glass-card-hover border border-border/50 shadow-lg overflow-hidden transition-all duration-300"
+                    >
+                      <CollapsibleTrigger asChild>
+                        <button
+                          type="button"
+                          className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-muted/20 active:bg-muted/30 transition-colors"
+                        >
+                          <span className="flex items-center gap-3 font-bold text-[16px] text-foreground">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20 text-primary shadow-inner shrink-0">
+                              <Package className="h-4 w-4" />
+                            </div>
+                            {cat.name}
+                          </span>
+                          <ChevronDown
+                            className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform duration-300 ${expandedCategoryId === cat.id ? "rotate-180" : ""}`}
+                          />
+                        </button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="px-3 pb-4 pt-1 flex flex-col gap-3">
+                          {cat.tariffs.map((tf) => (
+                            <Card key={tf.id} className="rounded-2xl border border-border/50 bg-background/50 backdrop-blur-md shadow-sm hover:shadow-md transition-all duration-300">
+                              <CardContent className="flex flex-row items-center gap-4 py-4 px-4 min-h-0 min-w-0">
+                                <div className="flex-1 min-w-0 space-y-1.5">
+                                  <p className="text-[15px] font-bold leading-tight truncate text-foreground">{tf.name}</p>
+                                  {tf.description?.trim() ? (
+                                    <p className="text-xs text-muted-foreground font-medium line-clamp-2">{tf.description}</p>
+                                  ) : null}
+                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                                    <span className="flex items-center gap-1.5 bg-background/50 px-2 py-1 rounded-md border border-border/50">
+                                      <Calendar className="h-3 w-3 text-primary" />
+                                      {(() => {
+                                        const opts = tf.priceOptions ?? [];
+                                        if (opts.length > 1) {
+                                          const minDays = opts.reduce((min, o) => Math.min(min, o.durationDays), opts[0].durationDays);
+                                          return <>от {minDays} {t("cabinet.tariffs.days_short")}</>;
+                                        }
+                                        return <>{tf.durationDays} {t("cabinet.tariffs.days_short")}</>;
+                                      })()}
+                                    </span>
+                                    <span className="flex items-center gap-1.5 bg-background/50 px-2 py-1 rounded-md border border-border/50">
+                                      <Wifi className="h-3 w-3 text-primary" />
+                                      {tf.trafficLimitBytes != null && tf.trafficLimitBytes > 0 ? `${(tf.trafficLimitBytes / 1024 / 1024 / 1024).toFixed(1)} ${t("cabinet.tariffs.gb_unit")}${tf.trafficResetMode === "monthly" || tf.trafficResetMode === "monthly_rolling" ? t("cabinet.tariffs.per_month") : ""}` : "∞"}
+                                    </span>
+                                    <span className="flex items-center gap-1.5 bg-background/50 px-2 py-1 rounded-md border border-border/50">
+                                      <Smartphone className="h-3 w-3 text-primary" />
+                                      {tf.deviceLimit != null && tf.deviceLimit > 0 ? `${tf.deviceLimit}` : "∞"}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-center justify-center gap-2.5 shrink-0 min-w-[90px]">
+                                  <span className="text-lg font-bold tabular-nums whitespace-nowrap text-foreground" title={formatMoney(tf.price, tf.currency)}>
+                                    {(() => {
+                                      const opts = tf.priceOptions ?? [];
+                                      const dev = extendExtraCost(tf);
+                                      if (opts.length > 1) {
+                                        const min = opts.reduce((a, b) => (a.price < b.price ? a : b));
+                                        return <>{t("cabinet.tariffs.from_price", { defaultValue: "от" })} {formatMoney(min.price + dev, tf.currency)}</>;
+                                      }
+                                      return formatMoney(tf.price + dev, tf.currency);
+                                    })()}
+                                  </span>
+                                  {token ? (
+                                    <Button
+                                      size="sm"
+                                      className="w-full h-9 rounded-xl shadow-md text-xs font-semibold gap-1.5 hover:scale-105 transition-transform"
+                                      onClick={() => requestBuy({ ...tf })}
+                                    >
+                                      <CreditCard className="h-3.5 w-3.5 shrink-0" />
+                                      {t("cabinet.tariffs.pay")}
+                                    </Button>
+                                  ) : (
+                                    <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">{t("cabinet.tariffs.in_bot")}</span>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </motion.div>
+                  </Collapsible>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-10">
+                {displayTariffs.map((cat, catIndex) => (
+                  <motion.section
+                    key={cat.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: catIndex * 0.05 }}
+                  >
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-3 text-foreground">
+                      <span className="text-2xl leading-none" aria-hidden>{cat.emoji || "📦"}</span>
+                      {cat.name}
+                    </h2>
+                    <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {cat.tariffs.map((tf) => {
+                        const opts = tf.priceOptions ?? [];
+                        const dev = extendExtraCost(tf);
+                        const minOpt = opts.length > 1 ? opts.reduce((a, b) => (a.price < b.price ? a : b)) : null;
+                        const shownPrice = (minOpt ? minOpt.price : tf.price) + dev;
+                        const shownDays = minOpt ? minOpt.durationDays : tf.durationDays;
+                        const bestPrice = Math.min(
+                          ...cat.tariffs.map((x) => {
+                            const base = (x.priceOptions ?? []).length > 1
+                              ? Math.min(...(x.priceOptions ?? []).map((o) => o.price))
+                              : x.price;
+                            return base + extendExtraCost(x);
+                          }),
+                        );
+                        const best = cat.tariffs.length > 1 && shownPrice === bestPrice;
+                        return (
+                        <Card key={tf.id} className={cn(
+                          "rounded-2xl border bg-card/60 backdrop-blur-xl shadow-md hover:shadow-lg transition-all duration-300 flex flex-col overflow-hidden",
+                          best ? "border-primary/60 border-2" : "border-border/50",
+                        )}>
+                          <CardContent className="flex-1 flex flex-col p-0 min-h-0 min-w-0">
+                            {/* Шапка: имя + срок */}
+                            <div className="px-4 pt-4 pb-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-[15px] font-bold leading-tight line-clamp-2 text-foreground">{tf.name}</p>
+                                {tf.menuEmoji && <span className="text-xl leading-none shrink-0 -mt-0.5" aria-hidden>{tf.menuEmoji}</span>}
+                              </div>
+                              {tf.description?.trim() ? (
+                                <p className="text-xs text-muted-foreground font-medium mt-1 line-clamp-2">{tf.description}</p>
+                              ) : null}
+                            </div>
+
+                            {/* Сетка значений: 3 ячейки сразу видно */}
+                            <div className="grid grid-cols-4 divide-x divide-border/50 border-y border-border/50 bg-background/30 text-center">
+                              <div className="px-1 py-2.5">
+                                <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">{t("cabinet.tariffs.duration_label")}</div>
+                                <div className="text-sm font-bold text-foreground tabular-nums">{shownDays} <span className="font-medium text-muted-foreground text-xs">{t("cabinet.tariffs.days_short")}</span></div>
+                              </div>
+                              <div className="px-1 py-2.5">
+                                <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">{t("cabinet.tariffs.traffic_label")}</div>
+                                <div className="text-sm font-bold text-foreground tabular-nums truncate">
+                                  {tf.trafficLimitBytes != null && tf.trafficLimitBytes > 0
+                                    ? `${(tf.trafficLimitBytes / 1024 / 1024 / 1024).toFixed(0)} ${t("cabinet.tariffs.gb_unit")}`
+                                    : "∞"}
+                                </div>
+                              </div>
+                              <div className="px-1 py-2.5">
+                                <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">{t("cabinet.tariffs.devices")}</div>
+                                <div className="text-sm font-bold text-foreground tabular-nums">{tf.deviceLimit != null && tf.deviceLimit > 0 ? tf.deviceLimit : "∞"}</div>
+                              </div>
+                              <div className="px-1 py-2.5">
+                                <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">{t("cabinet.tariffs.per_day")}</div>
+                                <div className="text-sm font-bold text-primary tabular-nums">
+                                  {(() => {
+                                    const perDay = shownPrice / Math.max(shownDays, 1);
+                                    return perDay >= 1
+                                      ? formatMoney(Math.round(perDay), tf.currency)
+                                      : formatMoneyPerDay(perDay, tf.currency);
+                                  })()}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Цена + кнопка */}
+                            <div className="p-4 mt-auto flex flex-col gap-3 min-w-0">
+                              <div className="flex items-baseline justify-center gap-1.5">
+                                {minOpt && <span className="text-xs font-bold text-muted-foreground">{t("cabinet.tariffs.from_price", { defaultValue: "от" })}</span>}
+                                <span className="text-3xl font-black tabular-nums text-foreground" title={formatMoney(shownPrice, tf.currency)}>
+                                  {formatMoney(shownPrice, tf.currency)}
+                                </span>
+                                <span className="text-xs font-semibold text-muted-foreground">/ {shownDays} {t("cabinet.tariffs.days_short")}</span>
+                                {best && (
+                                  <span className="absolute top-3 right-3 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+                                    <Sparkles className="h-3 w-3" /> {t("cabinet.tariffs.best_badge")}
+                                  </span>
+                                )}
+                              </div>
+                              {token ? (
+                                <Button
+                                  size="lg"
+                                  className="w-full h-11 rounded-xl shadow-md text-[15px] font-bold gap-2 hover:scale-[1.02] transition-transform"
+                                  onClick={() => requestBuy({ ...tf })}
+                                >
+                                  <CreditCard className="h-5 w-5 shrink-0" />
+                                  {t("cabinet.tariffs.pay")}
+                                </Button>
+                              ) : (
+                                <div className="w-full h-11 rounded-xl bg-muted/50 border border-border/50 flex items-center justify-center">
+                                  <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">{t("cabinet.tariffs.in_bot")}</span>
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                        );
+                      })}
+                    </div>
+                  </motion.section>
+                ))}
+              </div>
+            )}
+>>>>>>> 3d6b243 (feat(frontend): TanStack Query + Zustand everywhere, GSAP animations, UI redesign)
             </div>
           </motion.div>
         )}

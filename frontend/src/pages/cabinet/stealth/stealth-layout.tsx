@@ -15,9 +15,10 @@
 
 import { Outlet } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { api, type PublicConfig } from "@/lib/api";
+import type { PublicConfig } from "@/lib/api";
 import { NetworkBg } from "@/components/stealth/network-bg";
 import { BottomTabs } from "@/components/stealth/bottom-tabs";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 // hex (#RRGGBB) → "R G B" (пробел-разделённые каналы для rgb(var(--stealth-accent) / a)).
 function hexToRgbTriple(hex: string | null | undefined, fallback = "255 35 87"): string {
@@ -31,7 +32,7 @@ export function StealthLayout() {
   const [config, setConfig] = useState<PublicConfig | null>(null);
 
   useEffect(() => {
-    api.getPublicConfig().then(setConfig).catch(() => {});
+    getPublicConfigCached().then(setConfig).catch(() => {});
   }, []);
 
   const brand = (config?.serviceName ?? "STEALTHNET").toUpperCase();

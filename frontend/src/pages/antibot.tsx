@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -23,7 +24,6 @@ import {
   clientsBulkApi,
   type AntibotCandidate,
   type AntibotFindFilters,
-  type AntibotFindResult,
 } from "@/lib/admin-extras-api";
 
 type Preset = "all_test" | "recent_hour" | "ip_storm" | "custom";
@@ -39,12 +39,26 @@ export function AntibotPage() {
     limit: 500,
   });
   const [preset, setPreset] = useState<Preset>("custom");
-  const [result, setResult] = useState<AntibotFindResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [purging, setPurging] = useState(false);
   const [purgeMsg, setPurgeMsg] = useState<string | null>(null);
+
+  // Поиск запускается кнопкой «Найти» — enabled=false, запрос через refetch.
+  const findQuery = useQuery({
+    queryKey: ["admin", "antibot-find", filters] as const,
+    queryFn: () => clientsBulkApi.antibotFind(token, filters),
+    enabled: false,
+  });
+  const result = findQuery.data ?? null;
+  const loading = findQuery.isFetching;
+  const error = findQuery.error
+    ? findQuery.error instanceof Error ? findQuery.error.message : "Ошибка поиска"
+    : null;
+
+  const find = () => {
+    setSelected(new Set());
+    setPurgeMsg(null);
+    void findQuery.refetch();
+  };
 
   const applyPreset = (p: Preset) => {
     setPreset(p);
@@ -76,20 +90,19 @@ export function AntibotPage() {
     }
   };
 
-  const find = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  const purgeMutation = useMutation({
+    mutationFn: (force: boolean) => clientsBulkApi.antibotPurge(token, { ids: Array.from(selected), force }),
+    onSuccess: (r) => {
+      setPurgeMsg(
+        `Удалено ${r.deleted} из ${r.requested}` +
+          (r.protected.length > 0 ? `, защищено ${r.protected.length} (платящие)` : "") +
+          (r.errors.length > 0 ? `, ошибок ${r.errors.length}` : "")
+      );
       setSelected(new Set());
-      setPurgeMsg(null);
-      const r = await clientsBulkApi.antibotFind(token, filters);
-      setResult(r);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка поиска");
-    } finally {
-      setLoading(false);
-    }
-  }, [token, filters]);
+      void findQuery.refetch();
+    },
+  });
+  const purging = purgeMutation.isPending;
 
   const toggleAll = () => {
     if (!result) return;
@@ -103,27 +116,13 @@ export function AntibotPage() {
     setSelected(next);
   };
 
-  const purge = async (force = false) => {
-    if (selected.size === 0) return;
+  const purge = (force = false) => {
+    if (selected.size === 0 || purging) return;
     const msg = force
       ? `Удалить ${selected.size} клиентов БЕЗ защиты от удаления платящих? Это необратимо.`
       : `Удалить ${selected.size} клиентов? Платящие/с активной подпиской будут пропущены.`;
     if (!confirm(msg)) return;
-    try {
-      setPurging(true);
-      const r = await clientsBulkApi.antibotPurge(token, { ids: Array.from(selected), force });
-      setPurgeMsg(
-        `Удалено ${r.deleted} из ${r.requested}` +
-          (r.protected.length > 0 ? `, защищено ${r.protected.length} (платящие)` : "") +
-          (r.errors.length > 0 ? `, ошибок ${r.errors.length}` : "")
-      );
-      setSelected(new Set());
-      await find();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка удаления");
-    } finally {
-      setPurging(false);
-    }
+    purgeMutation.mutate(force);
   };
 
   const allSelected = useMemo(

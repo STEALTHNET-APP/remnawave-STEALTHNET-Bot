@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
-import { api } from "@/lib/api";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 export type ThemeMode = "light" | "dark" | "system";
 export type ThemeAccent =
@@ -88,11 +88,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const hasLocalAccent = !!(typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_KEY) && JSON.parse(localStorage.getItem(STORAGE_KEY)!).accent);
 
   useEffect(() => {
-    // Получаем глобальные настройки при загрузке
-    api.getPublicConfig().then((cfg) => {
-      if (cfg.themeAccent) setServerAccent(cfg.themeAccent as ThemeAccent);
-      // @ts-ignore
-      if (cfg.allowUserThemeChange !== undefined) setAllowUserThemeChange(cfg.allowUserThemeChange);
+    // Один общий /public/config (кеш в lib/public-config) — не свой HTTP-запрос.
+    getPublicConfigCached().then((cfg) => {
+      if ("themeAccent" in cfg && cfg.themeAccent) setServerAccent(cfg.themeAccent as ThemeAccent);
+      if ("allowUserThemeChange" in cfg) setAllowUserThemeChange(Boolean(cfg.allowUserThemeChange));
     }).catch(() => {});
   }, []);
 

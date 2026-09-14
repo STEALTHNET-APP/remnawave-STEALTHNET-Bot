@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/auth";
-import { api, type AdminSettings } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,28 +83,33 @@ function SectionCard({ title, icon: Icon, description, children, color = "primar
 export function MarketingPage() {
   const { state } = useAuth();
   const token = state.accessToken;
-  const [settings, setSettings] = useState<AdminSettings | null>(null);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({
+    queryKey: qk.admin.settings(),
+    queryFn: () => api.getSettings(token!),
+    enabled: !!token,
+  });
+  const analyticsQuery = useQuery({
+    queryKey: qk.admin.analytics(),
+    queryFn: () => api.getAnalytics(token!).catch(() => null),
+    enabled: !!token,
+  });
+  const settings = settingsQuery.data ?? null;
+  const loading = settingsQuery.isLoading;
+  const campaignsStats: CampaignsStatsRow[] | null =
+    (analyticsQuery.data?.campaignsStats as CampaignsStatsRow[] | undefined) ?? null;
+  const analyticsLoading = analyticsQuery.isLoading;
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [gaId, setGaId] = useState("");
   const [ymId, setYmId] = useState("");
-  const [campaignsStats, setCampaignsStats] = useState<CampaignsStatsRow[] | null>(null);
-  const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   useEffect(() => {
-    if (!token) return;
-    api.getSettings(token).then((s) => {
-      setSettings(s);
-      setGaId(s.googleAnalyticsId ?? "");
-      setYmId(s.yandexMetrikaId ?? "");
-    }).catch(() => {}).finally(() => setLoading(false));
-  }, [token]);
-
-  useEffect(() => {
-    if (!token) return;
-    api.getAnalytics(token).then((data) => setCampaignsStats(data.campaignsStats ?? [])).catch(() => setCampaignsStats([])).finally(() => setAnalyticsLoading(false));
-  }, [token]);
+    if (settings) {
+      setGaId(settings.googleAnalyticsId ?? "");
+      setYmId(settings.yandexMetrikaId ?? "");
+    }
+  }, [settings]);
 
   const saveAnalyticsIds = async () => {
     if (!token) return;
@@ -113,7 +120,7 @@ export function MarketingPage() {
         googleAnalyticsId: gaId.trim() || null,
         yandexMetrikaId: ymId.trim() || null,
       });
-      setSettings(updated);
+      void queryClient.invalidateQueries({ queryKey: qk.admin.settings(), exact: false });
       setGaId(updated.googleAnalyticsId ?? "");
       setYmId(updated.yandexMetrikaId ?? "");
       setMessage("Настройки сохранены.");

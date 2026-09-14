@@ -7,9 +7,11 @@
  *  - Заработок: суммарно + L1/L2/L3
  *  - Приглашённые + история начислений
  */
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -72,73 +74,60 @@ const MEDAL_BG = [
 
 export function AdminReferralsPage() {
   const token = useAuth().state.accessToken!;
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
-  const [lookupResults, setLookupResults] = useState<LookupClient[]>([]);
-  const [searching, setSearching] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<Detail | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Обзор сети (топ-рефереры + статистика)
-  const [nodes, setNodes] = useState<NetworkNode[]>([]);
-  const [stats, setStats] = useState<NetworkStats | null>(null);
-  const [loadingOverview, setLoadingOverview] = useState(true);
+  const overviewQuery = useQuery({
+    queryKey: qk.admin.referralNetwork(),
+    queryFn: () => api.getReferralNetwork(token).catch(() => null),
+    enabled: !!token,
+  });
+  const nodes: NetworkNode[] = overviewQuery.data?.nodes ?? [];
+  const stats: NetworkStats | null = overviewQuery.data?.stats ?? null;
+  const loadingOverview = overviewQuery.isLoading;
+  const loadOverview = () => {
+    void overviewQuery.refetch();
+  };
+
+  // Живой поиск: debounce 280мс, запрос через TanStack Query (кеш по строке).
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQuery(query), 280);
+    return () => clearTimeout(handle);
+  }, [query]);
+  const lookupQuery = useQuery({
+    queryKey: qk.admin.referralLookup(debouncedQuery),
+    queryFn: () => api.lookupReferralClient(token, debouncedQuery.trim()),
+    enabled: !!token && debouncedQuery.trim().length >= 2,
+  });
+  const lookupResults: LookupClient[] = lookupQuery.data?.clients ?? [];
+  const searching = lookupQuery.isFetching;
+  const lookupError = lookupQuery.isError
+    ? lookupQuery.error instanceof Error ? lookupQuery.error.message : "Ошибка поиска"
+    : null;
+
+  // Детальная карточка клиента
+  const detailQuery = useQuery({
+    queryKey: qk.admin.referralDetail(selectedId ?? ""),
+    queryFn: () => api.getReferralDetail(token, selectedId!),
+    enabled: !!token && !!selectedId,
+  });
+  const detail: Detail | null = detailQuery.data ?? null;
+  const loadingDetail = detailQuery.isFetching;
+  const loadDetail = (clientId: string) => {
+    setSelectedId(clientId);
+    setQuery("");
+    setDebouncedQuery("");
+  };
 
   // Редактор реферера
   const [editorOpen, setEditorOpen] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [editLookupBy, setEditLookupBy] = useState<"id" | "tgid" | "username" | "referralCode">("username");
   const [savingReferrer, setSavingReferrer] = useState(false);
-
-  const loadOverview = useCallback(async () => {
-    setLoadingOverview(true);
-    try {
-      const res = await api.getReferralNetwork(token);
-      setNodes(res.nodes ?? []);
-      setStats(res.stats ?? null);
-    } catch {
-      /* обзор не критичен */
-    } finally {
-      setLoadingOverview(false);
-    }
-  }, [token]);
-
-  useEffect(() => { loadOverview(); }, [loadOverview]);
-
-  // Живой поиск (debounce)
-  useEffect(() => {
-    if (query.trim().length < 2) { setLookupResults([]); return; }
-    const handle = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await api.lookupReferralClient(token, query.trim());
-        setLookupResults(res.clients);
-      } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "Ошибка поиска");
-      } finally {
-        setSearching(false);
-      }
-    }, 280);
-    return () => clearTimeout(handle);
-  }, [query, token]);
-
-  const loadDetail = async (clientId: string) => {
-    setLoadingDetail(true);
-    setError(null);
-    setLookupResults([]);
-    setQuery("");
-    try {
-      const d = await api.getReferralDetail(token, clientId);
-      setDetail(d);
-      setSelectedId(clientId);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-      setDetail(null);
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
+  const error = lookupError;
 
   const handleSaveReferrer = async (referrerId: string | null) => {
     if (!selectedId) return;
@@ -147,8 +136,7 @@ export function AdminReferralsPage() {
       await api.setReferralReferrer(token, selectedId, referrerId, referrerId ? editLookupBy : undefined);
       setEditorOpen(false);
       setEditValue("");
-      await loadDetail(selectedId);
-      loadOverview();
+      void queryClient.invalidateQueries({ queryKey: ["admin", "referral"], exact: false });
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "Ошибка сохранения");
     } finally {
@@ -244,7 +232,7 @@ export function AdminReferralsPage() {
 
       {!loadingDetail && detail && (
         <div className="space-y-4">
-          <button onClick={() => { setDetail(null); setSelectedId(null); }} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-emerald-300">
+          <button onClick={() => { setSelectedId(null); }} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-emerald-300">
             <ArrowLeft className="h-4 w-4" /> к обзору
           </button>
 

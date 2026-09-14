@@ -1,8 +1,17 @@
 import { useEffect, useState } from "react";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { qk } from "@/lib/query-client";
+import { useAdminSettings, useSshConfig, useAutoRenewStats, useLanguages, useRemnaSquadsInternal, useAdminSubscriptionPageConfig, useRemnaStatus } from "@/lib/admin-queries";
+import { useAdminUi } from "@/lib/admin-stores";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import { api, type AdminSettings, type SshConfig, type UpdateSettingsPayload } from "@/lib/api";
 import { useAuth } from "@/contexts/auth";
+<<<<<<< HEAD
 import { api, type AdminSettings, type AutoRenewStats, type SyncResult, type SyncToRemnaResult, type SyncCreateRemnaForMissingResult, type SubscriptionPageConfig, type SshConfig } from "@/lib/api";
+=======
+import { useRemnaCapabilities } from "@/lib/use-remna-capabilities";
+>>>>>>> 3d6b243 (feat(frontend): TanStack Query + Zustand everywhere, GSAP animations, UI redesign)
 import { SubscriptionPageEditor } from "@/components/subscription-page-editor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -377,18 +386,8 @@ export function SettingsPage() {
   const [twoFaCode, setTwoFaCode] = useState("");
   const [twoFaLoading, setTwoFaLoading] = useState(false);
   const [twoFaError, setTwoFaError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-  const [sshConfig, setSshConfig] = useState<SshConfig | null>(null);
-  const [sshSaving, setSshSaving] = useState(false);
-  const [sshMessage, setSshMessage] = useState("");
-  const [syncLoading, setSyncLoading] = useState<"from" | "to" | "missing" | null>(null);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [squads, setSquads] = useState<{ uuid: string; name?: string }[]>([]);
-  const [activeTab, setActiveTab] = useState("general");
   const [botSubTab, setBotSubTab] = useState<"menu" | "texts" | "emoji" | "behavior" | "links">("menu");
-  const [installedLangCodes, setInstalledLangCodes] = useState<string[]>(FALLBACK_LANGS);
+
   const [plategaCallbackCopied, setPlategaCallbackCopied] = useState(false);
   const [yoomoneyWebhookCopied, setYoomoneyWebhookCopied] = useState(false);
   const [yookassaWebhookCopied, setYookassaWebhookCopied] = useState(false);
@@ -396,8 +395,10 @@ export function SettingsPage() {
   const [heleketWebhookCopied, setHeleketWebhookCopied] = useState(false);
   const [lavaWebhookCopied, setLavaWebhookCopied] = useState(false);
   const [overpayWebhookCopied, setOverpayWebhookCopied] = useState(false);
-  const [defaultSubpageConfig, setDefaultSubpageConfig] = useState<SubscriptionPageConfig | null>(null);
-  const [autoRenewStats, setAutoRenewStats] = useState<AutoRenewStats | null>(null);
+  const [message, setMessage] = useState("");
+  const [sshMessage, setSshMessage] = useState("");
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("general");
   const defaultJourneySteps = [
     { title: "Выбираешь сценарий", desc: "Доступны гибкие тарифы: выбери то, что подходит именно тебе, без переплат." },
     { title: "Оплачиваешь как удобно", desc: "Карта, СБП, крипта — выбирай любой удобный и безопасный метод оплаты." },
@@ -424,103 +425,122 @@ export function SettingsPage() {
   const [landingQuickStartList, setLandingQuickStartList] = useState<string[]>(defaultQuickStartList);
   const token = state.accessToken!;
 
-  useEffect(() => {
-    let cancelled = false;
-    api.getLanguages(token).then((res) => {
-      if (cancelled || !res?.ok) return;
-      const codes = Array.from(new Set<string>(["ru", ...res.languages.map((l) => l.code)]));
-      setInstalledLangCodes(codes);
-    }).catch(() => { /* keep fallback */ });
-    return () => { cancelled = true; };
-  }, [token]);
+  /* Данные — через TanStack Query (admin-queries). Формы остаются локальным useState. */
+  const qc = useQueryClient();
+  const { bumpRefresh } = useAdminUi();
+  const settingsQ = useAdminSettings(token);
+  const languagesQ = useLanguages(token);
+  const autoRenewStatsQ = useAutoRenewStats(token);
+  const sshQ = useSshConfig(token);
+  const squadsQ = useRemnaSquadsInternal(token);
+  // Признак подключённой Remna (кэш прогревается здесь; используется в логике
+  // сохранения ниже и доступен дочерним компонентам по ключу).
+  const remnaConfigured = useRemnaStatus(token).data?.configured ?? false;
+  const subpageQ = useAdminSubscriptionPageConfig(token, activeTab === "subpage");
+  const [sshDraft, setSshDraft] = useState<SshConfig | null>(null);
+  useEffect(() => { setSshDraft(sshQ.data ?? null); }, [sshQ.data]);
+  const installedLangCodes = (() => {
+    const res = languagesQ.data;
+    if (!res?.ok) return FALLBACK_LANGS;
+    const codes = res.languages.map((l) => l.code);
+    return Array.from(new Set<string>(["ru", ...codes]));
+  })();
+  const squads = (() => {
+    const res = squadsQ.data as { response?: { internalSquads?: { uuid: string; name?: string }[] } } | null | undefined;
+    const items = res?.response?.internalSquads ?? (res && Array.isArray(res) ? res : []);
+    return Array.isArray(items) ? items : [];
+  })();
+  const autoRenewStats = autoRenewStatsQ.data ?? null;
+  const defaultSubpageConfig = subpageQ.data ?? null;
 
   useEffect(() => {
-    api.getSettings(token).then((data) => {
-      const allowed = installedLangCodes;
-      setSettings({
-        ...data,
-        activeLanguages: (data.activeLanguages || []).filter((l: string) => allowed.includes(l)),
-        activeCurrencies: (data.activeCurrencies || []).filter((c: string) => ALLOWED_CURRENCIES.includes(c)),
-        defaultReferralPercent: data.defaultReferralPercent ?? 30,
-        referralPercentLevel2: (data as AdminSettings).referralPercentLevel2 ?? 10,
-        referralPercentLevel3: (data as AdminSettings).referralPercentLevel3 ?? 10,
-        withdrawalsEnabled: (data as AdminSettings).withdrawalsEnabled ?? true,
-        withdrawalMinAmount: (data as AdminSettings).withdrawalMinAmount ?? 3000,
-        plategaMethods: (data as AdminSettings).plategaMethods ?? DEFAULT_PLATEGA_METHODS,
-        botButtons: (() => {
-          const raw = (data as AdminSettings).botButtons;
-          const loaded = Array.isArray(raw) ? raw : [];
-          return DEFAULT_BOT_BUTTONS.map((def) => {
-            const fromApi = loaded.find((b: { id: string }) => b.id === def.id);
-            return fromApi ? { ...def, ...fromApi } : def;
-          }) as BotButtonItem[];
-        })(),
-        botButtonsPerRow: (data as AdminSettings).botButtonsPerRow ?? 1,
-        botEmojis: (data as AdminSettings).botEmojis ?? {},
-        botBackLabel: (data as AdminSettings).botBackLabel ?? " В меню",
-        botDevicesText: (data as AdminSettings).botDevicesText ?? "",
-        botMenuTexts: { ...DEFAULT_BOT_MENU_TEXTS, ...((data as AdminSettings).botMenuTexts ?? {}) },
-        botMenuLineVisibility: { ...DEFAULT_BOT_MENU_LINE_VISIBILITY, ...((data as AdminSettings).botMenuLineVisibility ?? {}) },
-        botTariffsText: (data as AdminSettings).botTariffsText ?? DEFAULT_BOT_TARIFFS_TEXT,
-        botTariffsFields: { ...DEFAULT_BOT_TARIFF_FIELDS, ...((data as AdminSettings).botTariffsFields ?? {}) },
-        botPaymentText: (data as AdminSettings).botPaymentText ?? DEFAULT_BOT_PAYMENT_TEXT,
-        botInnerButtonStyles: (() => {
-          const raw = (data as AdminSettings).botInnerButtonStyles;
-          const loaded =
-            raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, string>) : {};
-          return { ...DEFAULT_BOT_INNER_STYLES, ...loaded };
-        })(),
-        subscriptionPageConfig: (data as AdminSettings).subscriptionPageConfig ?? null,
-        supportLink: (data as AdminSettings).supportLink ?? "",
-        agreementLink: (data as AdminSettings).agreementLink ?? "",
-        referralInstructionsUrl: (data as AdminSettings).referralInstructionsUrl ?? "",
-        offerLink: (data as AdminSettings).offerLink ?? "",
-        instructionsLink: (data as AdminSettings).instructionsLink ?? "",
-        // T11 (11.05.2026): — Политика возврата.
-        refundLink: (data as AdminSettings & { refundLink?: string | null }).refundLink ?? "",
-        // Текст экрана «Помощь» (большой rich-text «цели/приоритеты»).
-        helpIntroText: (data as AdminSettings & { helpIntroText?: string | null }).helpIntroText ?? "",
-        // настройки экрана «Бесплатный Прокси для Telegram».
-        tgProxyText: (data as AdminSettings).tgProxyText ?? "",
-        tgProxyUrlPrimary: (data as AdminSettings).tgProxyUrlPrimary ?? "",
-        tgProxyUrlBackup: (data as AdminSettings).tgProxyUrlBackup ?? "",
-        // динамический список TG-прокси. Бэк уже отдаёт
-        // распарсенный массив (см. client.service.ts  tgProxyServers).
-        // Если массив пуст И есть legacy primary/backup — мигрируем их в массив
-        // (one-time, при следующем сохранении уйдут только в новый формат).
-        tgProxyServers: (() => {
-          const fromApi = (data as AdminSettings).tgProxyServers;
-          if (Array.isArray(fromApi) && fromApi.length > 0) return fromApi;
-          // Migrate legacy primary/backup  массив, чтобы UI сразу показал данные.
-          const out: { flag: string; name: string; url: string }[] = [];
-          const p = (data as AdminSettings).tgProxyUrlPrimary?.trim();
-          const b = (data as AdminSettings).tgProxyUrlBackup?.trim();
-          if (p) out.push({ flag: "", name: "Нидерланды", url: p });
-          if (b) out.push({ flag: "", name: "Германия", url: b });
-          return out;
-        })(),
-        ticketsEnabled: (data as AdminSettings).ticketsEnabled ?? false,
-        aiChatEnabled: (data as AdminSettings).aiChatEnabled !== false,
-        sellOptionsEnabled: (data as AdminSettings).sellOptionsEnabled ?? false,
-        sellOptionsTrafficEnabled: (data as AdminSettings).sellOptionsTrafficEnabled ?? false,
-        sellOptionsTrafficProducts: (data as AdminSettings).sellOptionsTrafficProducts ?? [],
-        sellOptionsDevicesEnabled: (data as AdminSettings).sellOptionsDevicesEnabled ?? false,
-        sellOptionsDevicesProducts: (data as AdminSettings).sellOptionsDevicesProducts ?? [],
-        sellOptionsServersEnabled: (data as AdminSettings).sellOptionsServersEnabled ?? false,
-        sellOptionsServersProducts: (data as AdminSettings).sellOptionsServersProducts ?? [],
-        giftSubscriptionsEnabled: (data as AdminSettings).giftSubscriptionsEnabled ?? false,
-        giftCodeExpiryHours: (data as AdminSettings).giftCodeExpiryHours ?? 72,
-        maxAdditionalSubscriptions: (data as AdminSettings).maxAdditionalSubscriptions ?? 5,
-        giftCodeFormatLength: (data as AdminSettings).giftCodeFormatLength ?? 12,
-        giftRateLimitPerMinute: (data as AdminSettings).giftRateLimitPerMinute ?? 5,
-        giftExpiryNotificationDays: (data as AdminSettings).giftExpiryNotificationDays ?? 3,
-        giftReferralEnabled: (data as AdminSettings).giftReferralEnabled ?? true,
-        giftMessageMaxLength: (data as AdminSettings).giftMessageMaxLength ?? 200,
-      });
-    }).finally(() => setLoading(false));
-    api.getAutoRenewStats(token).then(setAutoRenewStats).catch(() => {});
-    api.getSshConfig(token).then(setSshConfig).catch(() => {});
-  }, [token]);
+    const data = settingsQ.data;
+    if (!data) return;
+    const allowed = installedLangCodes;
+    setSettings({
+      ...data,
+      activeLanguages: (data.activeLanguages || []).filter((l: string) => allowed.includes(l)),
+      activeCurrencies: (data.activeCurrencies || []).filter((c: string) => ALLOWED_CURRENCIES.includes(c)),
+      defaultReferralPercent: data.defaultReferralPercent ?? 30,
+      referralPercentLevel2: (data as AdminSettings).referralPercentLevel2 ?? 10,
+      referralPercentLevel3: (data as AdminSettings).referralPercentLevel3 ?? 10,
+      withdrawalsEnabled: (data as AdminSettings).withdrawalsEnabled ?? true,
+      withdrawalMinAmount: (data as AdminSettings).withdrawalMinAmount ?? 3000,
+      plategaMethods: (data as AdminSettings).plategaMethods ?? DEFAULT_PLATEGA_METHODS,
+      botButtons: (() => {
+        const raw = (data as AdminSettings).botButtons;
+        const loaded = Array.isArray(raw) ? raw : [];
+        return DEFAULT_BOT_BUTTONS.map((def) => {
+          const fromApi = loaded.find((b: { id: string }) => b.id === def.id);
+          return fromApi ? { ...def, ...fromApi } : def;
+        }) as BotButtonItem[];
+      })(),
+      botButtonsPerRow: (data as AdminSettings).botButtonsPerRow ?? 1,
+      botEmojis: (data as AdminSettings).botEmojis ?? {},
+      botBackLabel: (data as AdminSettings).botBackLabel ?? " В меню",
+      botDevicesText: (data as AdminSettings).botDevicesText ?? "",
+      botMenuTexts: { ...DEFAULT_BOT_MENU_TEXTS, ...((data as AdminSettings).botMenuTexts ?? {}) },
+      botMenuLineVisibility: { ...DEFAULT_BOT_MENU_LINE_VISIBILITY, ...((data as AdminSettings).botMenuLineVisibility ?? {}) },
+      botTariffsText: (data as AdminSettings).botTariffsText ?? DEFAULT_BOT_TARIFFS_TEXT,
+      botTariffsFields: { ...DEFAULT_BOT_TARIFF_FIELDS, ...((data as AdminSettings).botTariffsFields ?? {}) },
+      botPaymentText: (data as AdminSettings).botPaymentText ?? DEFAULT_BOT_PAYMENT_TEXT,
+      botInnerButtonStyles: (() => {
+        const raw = (data as AdminSettings).botInnerButtonStyles;
+        const loaded =
+          raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, string>) : {};
+        return { ...DEFAULT_BOT_INNER_STYLES, ...loaded };
+      })(),
+      subscriptionPageConfig: (data as AdminSettings).subscriptionPageConfig ?? null,
+      supportLink: (data as AdminSettings).supportLink ?? "",
+      agreementLink: (data as AdminSettings).agreementLink ?? "",
+      referralInstructionsUrl: (data as AdminSettings).referralInstructionsUrl ?? "",
+      offerLink: (data as AdminSettings).offerLink ?? "",
+      instructionsLink: (data as AdminSettings).instructionsLink ?? "",
+      // T11 (11.05.2026): — Политика возврата.
+      refundLink: (data as AdminSettings & { refundLink?: string | null }).refundLink ?? "",
+      // Текст экрана «Помощь» (большой rich-text «цели/приоритеты»).
+      helpIntroText: (data as AdminSettings & { helpIntroText?: string | null }).helpIntroText ?? "",
+      // настройки экрана «Бесплатный Прокси для Telegram».
+      tgProxyText: (data as AdminSettings).tgProxyText ?? "",
+      tgProxyUrlPrimary: (data as AdminSettings).tgProxyUrlPrimary ?? "",
+      tgProxyUrlBackup: (data as AdminSettings).tgProxyUrlBackup ?? "",
+      // динамический список TG-прокси. Бэк уже отдаёт
+      // распарсенный массив (см. client.service.ts  tgProxyServers).
+      // Если массив пуст И есть legacy primary/backup — мигрируем их в массив
+      // (one-time, при следующем сохранении уйдут только в новый формат).
+      tgProxyServers: (() => {
+        const fromApi = (data as AdminSettings).tgProxyServers;
+        if (Array.isArray(fromApi) && fromApi.length > 0) return fromApi;
+        // Migrate legacy primary/backup  массив, чтобы UI сразу показал данные.
+        const out: { flag: string; name: string; url: string }[] = [];
+        const p = (data as AdminSettings).tgProxyUrlPrimary?.trim();
+        const b = (data as AdminSettings).tgProxyUrlBackup?.trim();
+        if (p) out.push({ flag: "", name: "Нидерланды", url: p });
+        if (b) out.push({ flag: "", name: "Германия", url: b });
+        return out;
+      })(),
+      ticketsEnabled: (data as AdminSettings).ticketsEnabled ?? false,
+      aiChatEnabled: (data as AdminSettings).aiChatEnabled !== false,
+      sellOptionsEnabled: (data as AdminSettings).sellOptionsEnabled ?? false,
+      sellOptionsTrafficEnabled: (data as AdminSettings).sellOptionsTrafficEnabled ?? false,
+      sellOptionsTrafficProducts: (data as AdminSettings).sellOptionsTrafficProducts ?? [],
+      sellOptionsDevicesEnabled: (data as AdminSettings).sellOptionsDevicesEnabled ?? false,
+      sellOptionsDevicesProducts: (data as AdminSettings).sellOptionsDevicesProducts ?? [],
+      sellOptionsServersEnabled: (data as AdminSettings).sellOptionsServersEnabled ?? false,
+      sellOptionsServersProducts: (data as AdminSettings).sellOptionsServersProducts ?? [],
+      giftSubscriptionsEnabled: (data as AdminSettings).giftSubscriptionsEnabled ?? false,
+      giftCodeExpiryHours: (data as AdminSettings).giftCodeExpiryHours ?? 72,
+      maxAdditionalSubscriptions: (data as AdminSettings).maxAdditionalSubscriptions ?? 5,
+      giftCodeFormatLength: (data as AdminSettings).giftCodeFormatLength ?? 12,
+      giftRateLimitPerMinute: (data as AdminSettings).giftRateLimitPerMinute ?? 5,
+      giftExpiryNotificationDays: (data as AdminSettings).giftExpiryNotificationDays ?? 3,
+      giftReferralEnabled: (data as AdminSettings).giftReferralEnabled ?? true,
+      giftMessageMaxLength: (data as AdminSettings).giftMessageMaxLength ?? 200,
+    });
+    // Реинициализация формы только при смене данных запроса (рефетч/инвалидация),
+    // не при каждом редактировании локального стейта.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsQ.data]);
 
   useEffect(() => {
     if (!settings) return;
@@ -584,87 +604,69 @@ export function SettingsPage() {
     } catch { /* keep default */ }
   }, [settings?.landingJourneyStepsJson, settings?.landingSignalCardsJson, settings?.landingTrustPointsJson, settings?.landingExperiencePanelsJson, settings?.landingDevicesListJson, settings?.landingQuickStartJson]);
 
-  useEffect(() => {
-    if (activeTab === "subpage") {
-      api.getDefaultSubscriptionPageConfig(token).then((c) => setDefaultSubpageConfig(c ?? null)).catch(() => setDefaultSubpageConfig(null));
-    }
-  }, [token, activeTab]);
+  const invalidateAdmin = () => { void qc.invalidateQueries({ queryKey: ["admin"], exact: false }); };
 
-  useEffect(() => {
-    api.getRemnaSquadsInternal(token).then((raw: unknown) => {
-      const res = raw as { response?: { internalSquads?: { uuid: string; name?: string }[] } };
-      const items = res?.response?.internalSquads ?? (Array.isArray(res) ? res : []);
-      setSquads(Array.isArray(items) ? items : []);
-    }).catch(() => setSquads([]));
-  }, [token]);
-
-  async function handleSyncFromRemna() {
-    setSyncLoading("from");
-    setSyncMessage(null);
-    try {
-      const r: SyncResult = await api.syncFromRemna(token);
+  const syncFromRemnaMut = useMutation({
+    mutationFn: () => api.syncFromRemna(token),
+    onSuccess: (r) => {
       setSyncMessage(
         r.ok
           ? t("admin.settings.sync_from_result", { created: r.created, updated: r.updated, skipped: r.skipped })
           : t("admin.settings.sync_errors", { errors: r.errors.join("; ") })
       );
-    } catch (e) {
-      setSyncMessage(e instanceof Error ? e.message : t("admin.settings.sync_error"));
-    } finally {
-      setSyncLoading(null);
-    }
-  }
+      bumpRefresh();
+      invalidateAdmin();
+    },
+    onError: (e) => setSyncMessage(e instanceof Error ? e.message : t("admin.settings.sync_error")),
+  });
 
-  async function handleSyncToRemna() {
-    setSyncLoading("to");
-    setSyncMessage(null);
-    try {
-      const r: SyncToRemnaResult = await api.syncToRemna(token);
+  const syncToRemnaMut = useMutation({
+    mutationFn: () => api.syncToRemna(token),
+    onSuccess: (r) => {
       const parts: string[] = [];
       if (r.updated > 0) parts.push(`${t("admin.settings.sync_updated")}: ${r.updated}`);
       if (r.unlinked > 0) parts.push(`${t("admin.settings.sync_unlinked")}: ${r.unlinked}`);
       const successMsg = parts.length > 0 ? parts.join(". ") : t("admin.settings.sync_no_changes");
       const msg = r.ok ? successMsg : (r.errors.length > 0 ? `${t("admin.settings.error")}: ${r.errors.join("; ")}` : "") + (r.unlinked > 0 ? (r.errors.length ? ". " : "") + `${t("admin.settings.sync_unlinked")}: ${r.unlinked}` : "");
       setSyncMessage(msg || successMsg);
-    } catch (e) {
-      setSyncMessage(e instanceof Error ? e.message : t("admin.settings.sync_error"));
-    } finally {
-      setSyncLoading(null);
-    }
-  }
+      bumpRefresh();
+      invalidateAdmin();
+    },
+    onError: (e) => setSyncMessage(e instanceof Error ? e.message : t("admin.settings.sync_error")),
+  });
 
-  async function handleSyncCreateRemnaForMissing() {
-    setSyncLoading("missing");
-    setSyncMessage(null);
-    try {
-      const r: SyncCreateRemnaForMissingResult = await api.syncCreateRemnaForMissing(token);
+  const syncCreateRemnaForMissingMut = useMutation({
+    mutationFn: () => api.syncCreateRemnaForMissing(token),
+    onSuccess: (r) => {
       setSyncMessage(
         r.ok
           ? `${t("admin.settings.sync_created")}: ${r.created}, ${t("admin.settings.sync_linked")}: ${r.linked}`
           : `${t("admin.settings.error")}: ${r.errors.join("; ")}`
       );
-    } catch (e) {
-      setSyncMessage(e instanceof Error ? e.message : t("admin.settings.error"));
-    } finally {
-      setSyncLoading(null);
-    }
-  }
+      bumpRefresh();
+      invalidateAdmin();
+    },
+    onError: (e) => setSyncMessage(e instanceof Error ? e.message : t("admin.settings.error")),
+  });
 
-  async function openTwoFaEnable() {
+  function handleSyncFromRemna() { setSyncMessage(null); syncFromRemnaMut.mutate(); }
+  function handleSyncToRemna() { setSyncMessage(null); syncToRemnaMut.mutate(); }
+  function handleSyncCreateRemnaForMissing() { setSyncMessage(null); syncCreateRemnaForMissingMut.mutate(); }
+
+  const twoFaSetupMut = useMutation({
+    mutationFn: () => api.admin2FASetup(token),
+    onSuccess: (data) => setTwoFaSetupData(data),
+    onError: (e) => setTwoFaError(e instanceof Error ? e.message : t("admin.settings.error")),
+    onSettled: () => setTwoFaLoading(false),
+  });
+  function openTwoFaEnable() {
     setTwoFaError(null);
     setTwoFaSetupData(null);
     setTwoFaStep(1);
     setTwoFaCode("");
     setTwoFaEnableOpen(true);
     setTwoFaLoading(true);
-    try {
-      const data = await api.admin2FASetup(token);
-      setTwoFaSetupData(data);
-    } catch (e) {
-      setTwoFaError(e instanceof Error ? e.message : t("admin.settings.error"));
-    } finally {
-      setTwoFaLoading(false);
-    }
+    twoFaSetupMut.mutate();
   }
   function closeTwoFaEnable() {
     setTwoFaEnableOpen(false);
@@ -673,86 +675,98 @@ export function SettingsPage() {
     setTwoFaCode("");
     setTwoFaError(null);
   }
-  async function confirmTwoFaEnable() {
+  const twoFaConfirmMut = useMutation({
+    mutationFn: (code: string) => api.admin2FAConfirm(token, code),
+    onSuccess: async () => {
+      const admin = await api.getMe(token);
+      updateAdmin(admin);
+      closeTwoFaEnable();
+      void qc.invalidateQueries({ queryKey: qk.admin.settings() });
+    },
+    onError: (e) => setTwoFaError(e instanceof Error ? e.message : t("admin.settings.2fa_invalid_code")),
+    onSettled: () => setTwoFaLoading(false),
+  });
+  function confirmTwoFaEnable() {
     if (!twoFaCode.trim() || twoFaCode.length !== 6) {
       setTwoFaError(t("admin.settings.2fa_enter_code_error"));
       return;
     }
     setTwoFaError(null);
     setTwoFaLoading(true);
-    try {
-      await api.admin2FAConfirm(token, twoFaCode.trim());
-      const admin = await api.getMe(token);
-      updateAdmin(admin);
-      closeTwoFaEnable();
-    } catch (e) {
-      setTwoFaError(e instanceof Error ? e.message : t("admin.settings.2fa_invalid_code"));
-    } finally {
-      setTwoFaLoading(false);
-    }
+    twoFaConfirmMut.mutate(twoFaCode.trim());
   }
-  async function openTwoFaDisable() {
+  function openTwoFaDisable() {
     setTwoFaDisableOpen(true);
     setTwoFaCode("");
     setTwoFaError(null);
   }
-  async function confirmTwoFaDisable() {
+  const twoFaDisableMut = useMutation({
+    mutationFn: (code: string) => api.admin2FADisable(token, code),
+    onSuccess: async () => {
+      const admin = await api.getMe(token);
+      updateAdmin(admin);
+      setTwoFaDisableOpen(false);
+      setTwoFaCode("");
+      void qc.invalidateQueries({ queryKey: qk.admin.settings() });
+    },
+    onError: (e) => setTwoFaError(e instanceof Error ? e.message : t("admin.settings.2fa_invalid_code")),
+    onSettled: () => setTwoFaLoading(false),
+  });
+  const saveSshMut = useMutation({
+    mutationFn: (data: SshConfig) => api.updateSshConfig(token, data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.admin.sshConfig() });
+      setSshMessage(t("admin.settings.saved"));
+    },
+    onError: (e) => setSshMessage(e instanceof Error ? e.message : t("admin.settings.error")),
+  });
+  function confirmTwoFaDisable() {
     if (!twoFaCode.trim() || twoFaCode.length !== 6) {
       setTwoFaError(t("admin.settings.2fa_enter_code_error"));
       return;
     }
     setTwoFaError(null);
     setTwoFaLoading(true);
-    try {
-      await api.admin2FADisable(token, twoFaCode.trim());
-      const admin = await api.getMe(token);
-      updateAdmin(admin);
-      setTwoFaDisableOpen(false);
-      setTwoFaCode("");
-    } catch (e) {
-      setTwoFaError(e instanceof Error ? e.message : t("admin.settings.2fa_invalid_code"));
-    } finally {
-      setTwoFaLoading(false);
-    }
+    twoFaDisableMut.mutate(twoFaCode.trim());
   }
 
-  async function saveOptionsOnly() {
-    if (!settings) return;
-    setSaving(true);
-    setMessage("");
-    try {
-      const payload = {
-        sellOptionsEnabled: settings.sellOptionsEnabled ?? false,
-        sellOptionsTrafficEnabled: settings.sellOptionsTrafficEnabled ?? false,
-        sellOptionsTrafficProducts: (settings.sellOptionsTrafficProducts?.length ? JSON.stringify(settings.sellOptionsTrafficProducts) : "") as string | null,
-        sellOptionsDevicesEnabled: settings.sellOptionsDevicesEnabled ?? false,
-        sellOptionsDevicesProducts: (settings.sellOptionsDevicesProducts?.length ? JSON.stringify(settings.sellOptionsDevicesProducts) : "") as string | null,
-        sellOptionsServersEnabled: settings.sellOptionsServersEnabled ?? false,
-        sellOptionsServersProducts: (settings.sellOptionsServersProducts?.length ? JSON.stringify(settings.sellOptionsServersProducts) : "") as string | null,
-      };
-      const updated = await api.updateSettings(token, payload);
+  const saveSettingsMut = useMutation({
+    mutationFn: (payload: UpdateSettingsPayload) => api.updateSettings(token, payload),
+    onSuccess: (updated) => {
       const u = updated as AdminSettings;
-      setSettings((prev) => (prev ? { ...prev, ...u } : prev));
+      setSettings((prev) => (prev ? { ...prev, ...u, botInnerButtonStyles: { ...DEFAULT_BOT_INNER_STYLES, ...(prev.botInnerButtonStyles ?? {}) } } : prev));
       setMessage(t("admin.settings.saved"));
-    } catch {
-      setMessage(t("admin.settings.save_error"));
-    } finally {
-      setSaving(false);
-    }
+      void qc.invalidateQueries({ queryKey: qk.admin.settings() });
+    },
+    onError: () => setMessage(t("admin.settings.save_error")),
+  });
+  const saving = saveSettingsMut.isPending;
+
+  function saveOptionsOnly() {
+    if (!settings) return;
+    setMessage("");
+    const payload = {
+      sellOptionsEnabled: settings.sellOptionsEnabled ?? false,
+      sellOptionsTrafficEnabled: settings.sellOptionsTrafficEnabled ?? false,
+      sellOptionsTrafficProducts: (settings.sellOptionsTrafficProducts?.length ? JSON.stringify(settings.sellOptionsTrafficProducts) : "") as string | null,
+      sellOptionsDevicesEnabled: settings.sellOptionsDevicesEnabled ?? false,
+      sellOptionsDevicesProducts: (settings.sellOptionsDevicesProducts?.length ? JSON.stringify(settings.sellOptionsDevicesProducts) : "") as string | null,
+      sellOptionsServersEnabled: settings.sellOptionsServersEnabled ?? false,
+      sellOptionsServersProducts: (settings.sellOptionsServersProducts?.length ? JSON.stringify(settings.sellOptionsServersProducts) : "") as string | null,
+    };
+    saveSettingsMut.mutate(payload);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!settings) return;
-    setSaving(true);
     setMessage("");
     const allowedLangs = installedLangCodes.length ? installedLangCodes : FALLBACK_LANGS;
     const langs = Array.isArray(settings.activeLanguages) ? settings.activeLanguages.filter((l) => allowedLangs.includes(l)) : allowedLangs;
     const currs = Array.isArray(settings.activeCurrencies) ? settings.activeCurrencies.filter((c) => ALLOWED_CURRENCIES.includes(c)) : ALLOWED_CURRENCIES;
     const defaultLang = (settings.defaultLanguage && allowedLangs.includes(settings.defaultLanguage) ? settings.defaultLanguage : langs[0]) ?? "ru";
     const defaultCurr = (settings.defaultCurrency && ALLOWED_CURRENCIES.includes(settings.defaultCurrency) ? settings.defaultCurrency : currs[0]) ?? "usd";
-    api
-      .updateSettings(token, {
+    const payloadBase: UpdateSettingsPayload = {
         activeLanguages: langs.length ? langs.join(",") : allowedLangs.join(","),
         activeCurrencies: currs.length ? currs.join(",") : ALLOWED_CURRENCIES.join(","),
         defaultLanguage: defaultLang,
@@ -1055,23 +1069,11 @@ export function SettingsPage() {
         geoMapEnabled: settings.geoMapEnabled ?? false,
         geoCacheTtl: settings.geoCacheTtl ?? 60,
         maxmindDbPath: settings.maxmindDbPath ?? null,
-      })
-      .then((updated) => {
-        const u = updated as AdminSettings;
-        setSettings({
-          ...u,
-          botInnerButtonStyles: {
-            ...DEFAULT_BOT_INNER_STYLES,
-            ...(settings.botInnerButtonStyles ?? {}),
-          },
-        });
-        setMessage(t("admin.settings.saved"));
-      })
-      .catch(() => setMessage(t("admin.settings.error")))
-      .finally(() => setSaving(false));
+    };
+    saveSettingsMut.mutate(payloadBase);
   }
 
-  if (loading) return <div className="text-muted-foreground">{t("admin.common.loading")}</div>;
+  if (settingsQ.isLoading || settingsQ.isFetching) return <div className="text-muted-foreground">{t("admin.common.loading")}</div>;
   if (!settings) return <div className="text-destructive">{t("admin.common.loading_error")}</div>;
 
   return (
@@ -1085,7 +1087,7 @@ export function SettingsPage() {
             <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
               {t("admin.settings.title")}
             </h1>
-            <p className="text-sm sm:text-base text-muted-foreground mt-2 leading-relaxed max-w-2xl">
+            <p className="text-[12.5px] text-muted-foreground mt-[3px] leading-relaxed max-w-2xl">
               {t("admin.settings.subtitle")}
             </p>
           </div>
@@ -2588,17 +2590,9 @@ export function SettingsPage() {
                     <Button
                       type="button"
                       disabled={saving}
-                      onClick={async () => {
-                        setSaving(true);
+                      onClick={() => {
                         setMessage("");
-                        try {
-                          await api.updateSettings(token, { useRemnaSubscriptionPage: settings.useRemnaSubscriptionPage ?? false });
-                          setMessage(t("admin.settings.saved"));
-                        } catch {
-                          setMessage(t("admin.settings.save_error"));
-                        } finally {
-                          setSaving(false);
-                        }
+                        saveSettingsMut.mutate({ useRemnaSubscriptionPage: settings.useRemnaSubscriptionPage ?? false });
                       }}
                     >
                       {saving ? t("admin.settings.saving") : t("admin.settings.save")}
@@ -2612,32 +2606,18 @@ export function SettingsPage() {
                   onFetchDefault={async () => {
                     // fresh=true чтобы перечитать файл с диска (а не отдать кэш)
                     const c = await api.getDefaultSubscriptionPageConfig(token, true);
-                    setDefaultSubpageConfig(c ?? null);
+                    void qc.invalidateQueries({ queryKey: qk.admin.subscriptionPageConfig() });
                     return c ?? null;
                   }}
                   saving={saving}
                   onSave={async (configJson) => {
                     setSettings((s) => (s ? { ...s, subscriptionPageConfig: configJson } : s));
-                    setSaving(true);
                     setMessage("");
-                    try {
-                      await api.updateSettings(token, { subscriptionPageConfig: configJson });
-                      setMessage(t("admin.settings.saved"));
-                    } catch {
-                      setMessage(t("admin.settings.save_error"));
-                    } finally {
-                      setSaving(false);
-                    }
+                    saveSettingsMut.mutate({ subscriptionPageConfig: configJson });
                   }}
                 />
-                {message && <p className="text-sm text-muted-foreground mt-4">{message}</p>}
               </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="referral">
-            <Card className="overflow-hidden border-border">
-              <div className="relative bg-muted p-4 border-b border-border">
+                <div className="relative bg-muted p-4 border-b border-border">
                 <div className="absolute inset-0 bg-transparent pointer-events-none" />
                 <div className="relative flex items-start gap-5">
                   <div className="flex-1 min-w-0">
@@ -4413,12 +4393,11 @@ export function SettingsPage() {
                 {message && <p className="text-sm text-muted-foreground mb-2">{message}</p>}
                 <Button
                   onClick={() => {
-                    setSaving(true);
                     setMessage("");
-                    api.updateSettings(token, { themeAccent: settings.themeAccent ?? "default", allowUserThemeChange: (settings as any).allowUserThemeChange ?? true })
-                      .then(() => setMessage(t("admin.settings.theme_saved")))
-                      .catch(() => setMessage(t("admin.settings.save_error")))
-                      .finally(() => setSaving(false));
+                    saveSettingsMut.mutate(
+                      { themeAccent: settings.themeAccent ?? "default", allowUserThemeChange: (settings as any).allowUserThemeChange ?? true },
+                      { onSuccess: () => setMessage(t("admin.settings.theme_saved")) }
+                    );
                   }}
                   disabled={saving}
                 >
@@ -4586,7 +4565,7 @@ export function SettingsPage() {
                             <td className="p-2">
                               <select className="h-9 rounded-md border px-2 w-full min-w-[180px] bg-background" value={p.squadUuid} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsServersProducts) return s; const arr = [...s.sellOptionsServersProducts]; arr[i] = { ...arr[i], squadUuid: e.target.value }; return { ...s, sellOptionsServersProducts: arr }; })}>
                                 <option value="">{t("admin.settings.options_squad_none")}</option>
-                                {squads.map((sq) => <option key={sq.uuid} value={sq.uuid}>{sq.name || sq.uuid}</option>)}
+                                {remnaConfigured && squads.map((sq) => <option key={sq.uuid} value={sq.uuid}>{sq.name || sq.uuid}</option>)}
                               </select>
                             </td>
                             <td className="p-2"><Input type="number" min={0} step={0.5} className="h-9 w-full" placeholder="0" value={p.trafficGb ?? ""} onChange={(e) => setSettings((s) => { if (!s?.sellOptionsServersProducts) return s; const arr = [...s.sellOptionsServersProducts]; arr[i] = { ...arr[i], trafficGb: parseFloat(e.target.value) || 0 }; return { ...s, sellOptionsServersProducts: arr }; })} /></td>
@@ -4937,7 +4916,7 @@ export function SettingsPage() {
               </div>
             </div>
             <CardContent className="space-y-6 p-4 sm:p-4">
-              {!sshConfig ? (
+              {!sshDraft ? (
                 <p className="text-sm text-muted-foreground py-4">
                   {t("admin.settings.ssh_not_found")}
                 </p>
@@ -4949,8 +4928,8 @@ export function SettingsPage() {
                       type="number"
                       min={1}
                       max={65535}
-                      value={sshConfig.port}
-                      onChange={(e) => setSshConfig({ ...sshConfig, port: parseInt(e.target.value, 10) || 22 })}
+                      value={sshDraft.port}
+                      onChange={(e) => setSshDraft({ ...sshDraft, port: parseInt(e.target.value, 10) || 22 })}
                     />
                     <p className="text-xs text-muted-foreground">Стандартный порт — 22. Смена порта снижает количество ботов.</p>
                   </div>
@@ -4959,8 +4938,8 @@ export function SettingsPage() {
                     <Label>{t("admin.settings.ssh_root_login")}</Label>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={sshConfig.permitRootLogin}
-                      onChange={(e) => setSshConfig({ ...sshConfig, permitRootLogin: e.target.value })}
+                      value={sshDraft.permitRootLogin}
+                      onChange={(e) => setSshDraft({ ...sshDraft, permitRootLogin: e.target.value })}
                     >
                       <option value="yes">yes — разрешён вход по паролю и ключу</option>
                       <option value="prohibit-password">prohibit-password — только по ключу</option>
@@ -4974,8 +4953,8 @@ export function SettingsPage() {
                       <p className="text-sm text-muted-foreground">PasswordAuthentication — отключите, если используете только ключи</p>
                     </div>
                     <Switch
-                      checked={sshConfig.passwordAuthentication}
-                      onCheckedChange={(v) => setSshConfig({ ...sshConfig, passwordAuthentication: v })}
+                      checked={sshDraft.passwordAuthentication}
+                      onCheckedChange={(v) => setSshDraft({ ...sshDraft, passwordAuthentication: v })}
                     />
                   </div>
 
@@ -4985,8 +4964,8 @@ export function SettingsPage() {
                       <p className="text-sm text-muted-foreground">PubkeyAuthentication — всегда должен быть включён, если заходите по ключу</p>
                     </div>
                     <Switch
-                      checked={sshConfig.pubkeyAuthentication}
-                      onCheckedChange={(v) => setSshConfig({ ...sshConfig, pubkeyAuthentication: v })}
+                      checked={sshDraft.pubkeyAuthentication}
+                      onCheckedChange={(v) => setSshDraft({ ...sshDraft, pubkeyAuthentication: v })}
                     />
                   </div>
 
@@ -5002,22 +4981,12 @@ export function SettingsPage() {
                   )}
 
                   <Button
-                    disabled={sshSaving}
-                    onClick={async () => {
-                      setSshSaving(true);
-                      setSshMessage("");
-                      try {
-                        const updated = await api.updateSshConfig(token, sshConfig);
-                        setSshConfig(updated);
-                        setSshMessage(t("admin.settings.saved"));
-                      } catch (e) {
-                        setSshMessage(e instanceof Error ? e.message : t("admin.settings.error"));
-                      } finally {
-                        setSshSaving(false);
-                      }
+                    disabled={saveSshMut.isPending}
+                    onClick={() => {
+                      sshDraft && saveSshMut.mutate(sshDraft);
                     }}
                   >
-                    {sshSaving ? t("admin.settings.saving") : t("admin.settings.ssh_apply")}
+                    {saveSshMut.isPending ? t("admin.settings.saving") : t("admin.settings.ssh_apply")}
                   </Button>
                 </>
               )}
@@ -5538,39 +5507,39 @@ export function SettingsPage() {
             </div>
             <CardContent className="space-y-4 p-4 sm:p-4">
               <div className="grid gap-3 sm:grid-cols-3">
-                <button type="button" onClick={handleSyncFromRemna} disabled={syncLoading !== null} className="group relative overflow-hidden rounded-xl border border-violet-500/30 bg-transparent p-4 text-left transition-all hover:border-violet-500/50 hover:shadow-violet-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
+                <button type="button" onClick={handleSyncFromRemna} disabled={syncFromRemnaMut.isPending} className="group relative overflow-hidden rounded-xl border border-violet-500/30 bg-transparent p-4 text-left transition-all hover:border-violet-500/50 hover:shadow-violet-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
                   <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-violet-500/10 blur-2xl group-hover:bg-violet-500/20 transition-colors" />
                   <div className="relative flex items-center gap-3 mb-2">
                     <div className="h-10 w-10 rounded-xl bg-violet-500/20 flex items-center justify-center">
-                      {syncLoading === "from" ? <Loader2 className="h-5 w-5 text-violet-500 animate-spin" /> : <Download className="h-5 w-5 text-violet-500" />}
+                      {syncFromRemnaMut.isPending ? <Loader2 className="h-5 w-5 text-violet-500 animate-spin" /> : <Download className="h-5 w-5 text-violet-500" />}
                     </div>
                     <span className="text-sm font-bold uppercase tracking-wider text-violet-500/80">From Remna </span>
                   </div>
-                  <div className="relative text-base font-semibold mb-1">{syncLoading === "from" ? t("admin.settings.sync_in_progress") : t("admin.settings.sync_from_remna")}</div>
+                  <div className="relative text-base font-semibold mb-1">{syncFromRemnaMut.isPending ? t("admin.settings.sync_in_progress") : t("admin.settings.sync_from_remna")}</div>
                   <p className="relative text-xs text-muted-foreground">Подтянуть всех клиентов и подписки из Remna в локальную БД</p>
                 </button>
 
-                <button type="button" onClick={handleSyncToRemna} disabled={syncLoading !== null} className="group relative overflow-hidden rounded-xl border border-indigo-500/30 bg-transparent p-4 text-left transition-all hover:border-indigo-500/50 hover:shadow-indigo-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
+                <button type="button" onClick={handleSyncToRemna} disabled={syncToRemnaMut.isPending} className="group relative overflow-hidden rounded-xl border border-indigo-500/30 bg-transparent p-4 text-left transition-all hover:border-indigo-500/50 hover:shadow-indigo-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
                   <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-indigo-500/10 blur-2xl group-hover:bg-indigo-500/20 transition-colors" />
                   <div className="relative flex items-center gap-3 mb-2">
                     <div className="h-10 w-10 rounded-xl bg-indigo-500/20 flex items-center justify-center">
-                      {syncLoading === "to" ? <Loader2 className="h-5 w-5 text-indigo-500 animate-spin" /> : <Upload className="h-5 w-5 text-indigo-500" />}
+                      {syncToRemnaMut.isPending ? <Loader2 className="h-5 w-5 text-indigo-500 animate-spin" /> : <Upload className="h-5 w-5 text-indigo-500" />}
                     </div>
                     <span className="text-sm font-bold uppercase tracking-wider text-indigo-500/80"> To Remna</span>
                   </div>
-                  <div className="relative text-base font-semibold mb-1">{syncLoading === "to" ? t("admin.settings.sync_in_progress") : t("admin.settings.sync_to_remna")}</div>
+                  <div className="relative text-base font-semibold mb-1">{syncToRemnaMut.isPending ? t("admin.settings.sync_in_progress") : t("admin.settings.sync_to_remna")}</div>
                   <p className="relative text-xs text-muted-foreground">Записать локальные изменения обратно в Remna-панель</p>
                 </button>
 
-                <button type="button" onClick={handleSyncCreateRemnaForMissing} disabled={syncLoading !== null} className="group relative overflow-hidden rounded-xl border border-blue-500/30 bg-transparent p-4 text-left transition-all hover:border-blue-500/50 hover:shadow-blue-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
+                <button type="button" onClick={handleSyncCreateRemnaForMissing} disabled={syncCreateRemnaForMissingMut.isPending} className="group relative overflow-hidden rounded-xl border border-blue-500/30 bg-transparent p-4 text-left transition-all hover:border-blue-500/50 hover:shadow-blue-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
                   <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-blue-500/10 blur-2xl group-hover:bg-blue-500/20 transition-colors" />
                   <div className="relative flex items-center gap-3 mb-2">
                     <div className="h-10 w-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                      {syncLoading === "missing" ? <Loader2 className="h-5 w-5 text-blue-500 animate-spin" /> : <Link2 className="h-5 w-5 text-blue-500" />}
+                      {syncCreateRemnaForMissingMut.isPending ? <Loader2 className="h-5 w-5 text-blue-500 animate-spin" /> : <Link2 className="h-5 w-5 text-blue-500" />}
                     </div>
                     <span className="text-sm font-bold uppercase tracking-wider text-blue-500/80">+ Создать</span>
                   </div>
-                  <div className="relative text-base font-semibold mb-1">{syncLoading === "missing" ? t("admin.settings.sync_running") : t("admin.settings.sync_create_missing")}</div>
+                  <div className="relative text-base font-semibold mb-1">{syncCreateRemnaForMissingMut.isPending ? t("admin.settings.sync_running") : t("admin.settings.sync_create_missing")}</div>
                   <p className="relative text-xs text-muted-foreground">Создать в Remna записи для клиентов, которых там нет</p>
                 </button>
               </div>

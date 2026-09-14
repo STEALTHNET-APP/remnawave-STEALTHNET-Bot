@@ -5,8 +5,8 @@
  * карточек с градиентами. Клиент выбирает один → активация → onActivated() → close.
  */
 
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import gsap from "gsap";
 import { Gift, Sparkles, Clock, Wifi, Smartphone, Loader2, Check, Infinity as InfinityIcon } from "lucide-react";
 import {
   Dialog,
@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { api, type ClientTrialOption } from "@/lib/api";
 import { formatRuDays } from "@/lib/i18n";
+import { EASE_OUT, reducedMotion, useStaggerReveal } from "@/lib/gsap-utils";
 
 interface TrialsPickerDialogProps {
   open: boolean;
@@ -61,6 +62,37 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activatingId, setActivatingId] = useState<string | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  // Контейнер карточек — stagger-появление при каждом открытии/загрузке списка.
+  const gridRef = useStaggerReveal<HTMLDivElement>([open, loading, items.length > 0], { y: 10, stagger: 0.05, dur: 0.32, selector: "[data-trial-card]" });
+
+  // Открытие модалки: scale + fade через gsap.
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el || !open || reducedMotion()) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        el,
+        { scale: 0.96, opacity: 0 },
+        { scale: 1, opacity: 1, duration: 0.25, ease: EASE_OUT, overwrite: "auto" },
+      );
+    }, el);
+    return () => ctx.revert();
+  }, [open]);
+
+  // Закрытие: короткий scale-out перед onOpenChange(false) — иначе Radix сносит узел мгновенно.
+  const requestClose = () => {
+    const el = contentRef.current;
+    if (!el || reducedMotion()) { onOpenChange(false); return; }
+    gsap.fromTo(
+      el,
+      { scale: 1, opacity: 1 },
+      {
+        scale: 0.96, opacity: 0, duration: 0.15, ease: "power2.in", overwrite: "auto",
+        onComplete: () => { gsap.set(el, { clearProps: "all" }); onOpenChange(false); },
+      },
+    );
+  };
 
   useEffect(() => {
     if (!open || !token) return;
@@ -88,8 +120,8 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden border-border/50 bg-card/95 backdrop-blur-xl">
+    <Dialog open={open} onOpenChange={(next) => { if (!next) requestClose(); else onOpenChange(true); }}>
+      <DialogContent ref={contentRef} className="max-w-2xl p-0 gap-0 overflow-hidden border-border/50 bg-card/95 backdrop-blur-xl">
         {/* Декоративные blur-блобы — pointer-events-none чтобы не перекрывали крестик закрытия. */}
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 rounded-full bg-emerald-500/15 blur-[80px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-40 h-40 rounded-full bg-violet-500/15 blur-[80px] pointer-events-none" />
@@ -131,8 +163,7 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
             )}
 
             {!loading && !error && items.length > 0 && (
-              <div className="grid gap-3">
-                <AnimatePresence>
+              <div ref={gridRef} className="grid gap-3">
                   {items.map((trial, idx) => {
                     const isActivating = activatingId === trial.id;
                     const isDisabled = activatingId !== null && !isActivating;
@@ -141,13 +172,10 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
                     const traffic = formatTrafficLabel(trial.trafficLimitBytes);
                     const devices = trial.deviceLimit ?? trial.includedDevices ?? null;
                     return (
-                      <motion.div
+                      <div
                         key={trial.id}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        transition={{ duration: 0.22, delay: idx * 0.04 }}
-                        className={`relative overflow-hidden rounded-2xl border  ${gradient} p-5 transition-all duration-300 ${isDisabled ? "opacity-50" : "hover:scale-[1.015] hover:shadow-xl"}`}
+                        data-trial-card
+                        className={`relative overflow-hidden rounded-2xl border ${gradient} p-5 transition-all duration-300 ${isDisabled ? "opacity-50" : "hover:scale-[1.015] hover:shadow-xl"}`}
                       >
                         <div className="flex items-start gap-4">
                           <div className={`shrink-0 inline-flex h-12 w-12 items-center justify-center rounded-2xl ${iconBg}`}>
@@ -205,10 +233,9 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
                             </>
                           )}
                         </Button>
-                      </motion.div>
+                      </div>
                     );
                   })}
-                </AnimatePresence>
               </div>
             )}
           </div>

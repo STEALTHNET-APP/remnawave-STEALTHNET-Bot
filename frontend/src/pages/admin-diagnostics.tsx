@@ -3,7 +3,8 @@
  * logs viewer + кнопка «Logout all admins».
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, RefreshCw, Activity, Clock, FileText, ShieldOff, Play, CheckCircle2, AlertTriangle, XCircle, MinusCircle } from "lucide-react";
-import { diagnosticsApi, adminSecurityApi, type HealthResponse, type CronEntry } from "@/lib/admin-extras-api";
+import { diagnosticsApi, adminSecurityApi } from "@/lib/admin-extras-api";
 import { ConsoleAccessCard } from "@/components/console-access-card";
 import { fmtMsk } from "@/lib/datetime";
 
@@ -26,68 +27,44 @@ export function AdminDiagnosticsPage() {
   const { state } = useAuth();
   const token = state.accessToken;
 
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [crons, setCrons] = useState<CronEntry[]>([]);
-  const [logs, setLogs] = useState("");
-  const [logsFilter, setLogsFilter] = useState("");
   const [logsLines, setLogsLines] = useState(200);
-  const [loading, setLoading] = useState({ health: false, crons: false, logs: false });
-  const [triggeringCron, setTriggeringCron] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [logsFilter, setLogsFilter] = useState("");
+  const healthQuery = useQuery({
+    queryKey: ["admin", "diagnostics-health"] as const,
+    queryFn: () => diagnosticsApi.health(token!).catch(() => null),
+    enabled: !!token,
+  });
+  const health = healthQuery.data ?? null;
 
-  const loadHealth = useCallback(async () => {
-    if (!token) return;
-    setLoading((l) => ({ ...l, health: true }));
-    try {
-      setHealth(await diagnosticsApi.health(token));
-      setError(null);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading((l) => ({ ...l, health: false }));
-    }
-  }, [token]);
+  const cronsQuery = useQuery({
+    queryKey: ["admin", "diagnostics-crons"] as const,
+    queryFn: () => diagnosticsApi.crons(token!).catch(() => null),
+    enabled: !!token,
+  });
+  const crons = cronsQuery.data?.items ?? [];
 
-  const loadCrons = useCallback(async () => {
-    if (!token) return;
-    setLoading((l) => ({ ...l, crons: true }));
-    try {
-      const r = await diagnosticsApi.crons(token);
-      setCrons(r.items);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading((l) => ({ ...l, crons: false }));
-    }
-  }, [token]);
+  // Логи — по кнопке «Tail» (не авто): enabled=false, запрос запускаем вручную.
+  const logsQuery = useQuery({
+    queryKey: ["admin", "diagnostics-logs", logsLines, logsFilter] as const,
+    queryFn: () => diagnosticsApi.logs(token!, { lines: logsLines, filter: logsFilter || undefined }).catch(() => null),
+    enabled: false,
+  });
+  const logs = logsQuery.data?.text ?? "";
+  const error = healthQuery.error || cronsQuery.error
+    ? String(healthQuery.error ?? cronsQuery.error)
+    : null;
 
-  const loadLogs = useCallback(async () => {
-    if (!token) return;
-    setLoading((l) => ({ ...l, logs: true }));
-    try {
-      const r = await diagnosticsApi.logs(token, { lines: logsLines, filter: logsFilter || undefined });
-      setLogs(r.text);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading((l) => ({ ...l, logs: false }));
-    }
-  }, [token, logsLines, logsFilter]);
+  const triggerCronMutation = useMutation({
+    mutationFn: (name: string) => diagnosticsApi.triggerCron(token!, name),
+    onSuccess: () => void cronsQuery.refetch(),
+    onError: (e) => alert(`Ошибка: ${e}`),
+  });
+  const triggeringCron = triggerCronMutation.isPending ? triggerCronMutation.variables ?? null : null;
 
-  useEffect(() => { void loadHealth(); void loadCrons(); }, [loadHealth, loadCrons]);
-
-  const triggerCron = async (name: string) => {
+  const triggerCron = (name: string) => {
     if (!token) return;
     if (!confirm(`Запустить cron-задачу «${name}» прямо сейчас?`)) return;
-    setTriggeringCron(name);
-    try {
-      await diagnosticsApi.triggerCron(token, name);
-      await loadCrons();
-    } catch (e) {
-      alert(`Ошибка: ${e}`);
-    } finally {
-      setTriggeringCron(null);
-    }
+    triggerCronMutation.mutate(name);
   };
 
   const handleLogoutAll = async () => {
@@ -138,8 +115,8 @@ export function AdminDiagnosticsPage() {
                 </span>
               ) : null}
             </h2>
-            <Button onClick={loadHealth} variant="ghost" size="sm" disabled={loading.health} className="gap-1">
-              {loading.health ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            <Button onClick={() => void healthQuery.refetch()} variant="ghost" size="sm" disabled={healthQuery.isFetching} className="gap-1">
+              {healthQuery.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
             </Button>
           </div>
           {health ? (
@@ -174,8 +151,8 @@ export function AdminDiagnosticsPage() {
             <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
               <Clock className="h-4 w-4" /> Cron-задачи ({crons.length})
             </h2>
-            <Button onClick={loadCrons} variant="ghost" size="sm" disabled={loading.crons} className="gap-1">
-              {loading.crons ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            <Button onClick={() => void cronsQuery.refetch()} variant="ghost" size="sm" disabled={cronsQuery.isFetching} className="gap-1">
+              {cronsQuery.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
             </Button>
           </div>
           {crons.length === 0 ? (
@@ -240,8 +217,8 @@ export function AdminDiagnosticsPage() {
                 <Label className="text-[10px] uppercase">Filter (regex)</Label>
                 <Input value={logsFilter} onChange={(e) => setLogsFilter(e.target.value)} placeholder="error|webhook" className="h-8 w-48 text-xs" />
               </div>
-              <Button onClick={loadLogs} variant="outline" size="sm" disabled={loading.logs} className="gap-1.5 mt-4">
-                {loading.logs ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              <Button onClick={() => void logsQuery.refetch()} variant="outline" size="sm" disabled={logsQuery.isFetching} className="gap-1.5 mt-4">
+                {logsQuery.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                 Tail
               </Button>
             </div>

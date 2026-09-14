@@ -8,7 +8,9 @@ import {
 import { useClientAuth } from "@/contexts/client-auth";
 import { toast } from "@/components/ui/toast";
 import { useCabinetConfig } from "@/contexts/cabinet-config";
-import { api, type PublicTariff, type PublicTariffCategory } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { useInvalidateClientData, usePublicTariffs } from "@/lib/queries";
+import { api, type PublicTariff } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -94,15 +96,31 @@ export function ClientGiftsPage() {
     };
   }, []);
 
-  // Data states
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [codes, setCodes] = useState<Array<{ id: string; code: string; status: string; expiresAt: string; createdAt: string; redeemedAt: string | null; giftMessage: string | null; subscriptionId: string }>>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // ── Данные через TanStack Query ──
+  const giftsQuery = useQuery({
+    queryKey: ["gifts", "inventory", token],
+    queryFn: async () => {
+      // T-unify (12.05.2026, WolfVPN): `giftListSubscriptions` (без /all) —
+      // ТОЛЬКО подписки купленные для подарка (purchasedAsGift=true).
+      const [subsRes, codesRes] = await Promise.all([
+        api.giftListSubscriptions(token!),
+        api.giftListCodes(token!),
+      ]);
+      return { subscriptions: subsRes.subscriptions || [], codes: codesRes.codes || [] };
+    },
+    enabled: !!token,
+  });
+  const subscriptions = giftsQuery.data?.subscriptions ?? [];
+  const codes = giftsQuery.data?.codes ?? [];
+  const loading = giftsQuery.isLoading;
+  const error = giftsQuery.error instanceof Error ? giftsQuery.error.message : null;
+  const invalidateData = useInvalidateClientData();
+  const fetchData = useCallback(() => invalidateData(), [invalidateData]);
   
   // Buy Dialog State
   const [buyDialogOpen, setBuyDialogOpen] = useState(false);
-  const [tariffs, setTariffs] = useState<PublicTariff[]>([]);
+  const tariffsQuery = usePublicTariffs();
+  const tariffs = (tariffsQuery.data?.items ?? []).flatMap((c) => c.tariffs);
   const [buyLoading, setBuyLoading] = useState(false);
   const [buyError, setBuyError] = useState<string | null>(null);
   /** Картина «выбор опции + extras» для конкретного тарифа (вторая модалка). */
@@ -129,62 +147,25 @@ export function ClientGiftsPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [showFullHistory, setShowFullHistory] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    if (!token) return;
-    try {
-      setError(null);
-      // T-unify (12.05.2026, WolfVPN): используем `giftListSubscriptions` (без /all)
-      // — он отдаёт ТОЛЬКО подписки купленные для подарка (purchasedAsGift=true).
-      // Подписки которые юзер купил себе сюда не попадают (они в `/cabinet/dashboard`).
-      const [subsRes, codesRes] = await Promise.all([
-        api.giftListSubscriptions(token),
-        api.giftListCodes(token),
-      ]);
-      setSubscriptions(subsRes.subscriptions || []);
-      setCodes(codesRes.codes || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка загрузки данных");
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
   const fetchHistory = useCallback(async (page: number = 1) => {
     if (!token) return;
     setHistoryLoading(true);
     try {
-      const res = await api.giftGetHistory(token, page, 10);
-      setHistoryItems(res.items);
-      setHistoryTotal(res.total);
-      setHistoryPage(res.page);
-    } catch {
-      // silent
+      const res = await api.giftGetHistory(token, page);
+      setHistoryItems(res.items ?? []);
+      setHistoryTotal(res.total ?? 0);
+      // ignore
     } finally {
       setHistoryLoading(false);
     }
   }, [token]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  useEffect(() => {
     fetchHistory(historyPage);
   }, [historyPage, fetchHistory]);
 
-  const loadTariffs = async () => {
-    if (tariffs.length > 0) return;
-    try {
-      const res = await api.getPublicTariffs();
-      const flat = (res?.items ?? []).flatMap((cat: PublicTariffCategory) => cat.tariffs);
-      setTariffs(flat);
-    } catch {
-      // ignore
-    }
-  };
 
   const handleOpenBuy = () => {
-    loadTariffs();
     setBuyError(null);
     setBuyDialogOpen(true);
   };
@@ -416,7 +397,7 @@ export function ClientGiftsPage() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg p-6 sm:p-8 flex flex-col relative overflow-hidden"
+            className="rounded-3xl glass-card-hover border border-border/50 shadow-lg p-6 sm:p-8 flex flex-col relative overflow-hidden"
           >
             <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-[40px] pointer-events-none" />
             <div className="flex items-center gap-4 mb-6 relative z-10">
@@ -437,7 +418,7 @@ export function ClientGiftsPage() {
                 className="h-12 text-center font-mono text-base tracking-widest rounded-xl border-border/50 bg-background/50 focus-visible:ring-primary/30 uppercase"
               />
               <Button type="submit" className="h-12 rounded-xl shadow-md font-bold" disabled={redeemLoading || !redeemCode.trim()}>
-                {redeemLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Send className="w-5 h-5 mr-2" />}
+                {redeemLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                 Активировать
               </Button>
               <AnimatePresence>
@@ -464,7 +445,7 @@ export function ClientGiftsPage() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
-            className="rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg p-6 sm:p-8"
+            className="rounded-3xl glass-card-hover border border-border/50 shadow-lg p-6 sm:p-8"
           >
             <h2 className="text-xl font-bold mb-6">Статистика</h2>
             <div className="space-y-3">
@@ -505,7 +486,7 @@ export function ClientGiftsPage() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="lg:col-span-7 rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg p-6 sm:p-8 flex flex-col"
+          className="lg:col-span-7 rounded-3xl glass-card-hover border border-border/50 shadow-lg p-6 sm:p-8 flex flex-col"
         >
           <div className="flex justify-between items-center mb-6">
             <div className="flex items-center gap-4">
@@ -663,7 +644,7 @@ export function ClientGiftsPage() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ delay: i * 0.05 }}
-                    className="rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg p-6 sm:p-8 flex flex-col gap-6 relative overflow-hidden"
+                    className="rounded-3xl glass-card-hover border border-border/50 shadow-lg p-6 sm:p-8 flex flex-col gap-6 relative overflow-hidden"
                   >
                     <div className="flex justify-between items-start gap-4">
                       <div>
@@ -757,7 +738,7 @@ export function ClientGiftsPage() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ delay: i * 0.05 }}
-                    className={`rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg p-6 flex flex-col gap-4 ${!isActive ? 'opacity-60 grayscale-[0.2]' : ''}`}
+                    className={`rounded-3xl glass-card-hover border border-border/50 shadow-lg p-6 flex flex-col gap-4 ${!isActive ? 'opacity-60 grayscale-[0.2]' : ''}`}
                   >
                     <div className="flex justify-between items-start">
                       <span className={`rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider ${isActive ? 'bg-green-500/15 text-green-500' : isRedeemed ? 'bg-blue-500/15 text-blue-500' : 'bg-muted text-muted-foreground'}`}>

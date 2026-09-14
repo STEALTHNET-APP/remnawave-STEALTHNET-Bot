@@ -25,6 +25,7 @@ import { useClientAuth } from "@/contexts/client-auth";
 import { api, type PublicConfig } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { StealthPaymentsModal } from "@/components/stealth/stealth-payments-modal";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 interface MenuItem {
   id: string;
@@ -57,7 +58,7 @@ export function StealthProfile() {
   const [showPayments, setShowPayments] = useState(false);
 
   useEffect(() => {
-    api.getPublicConfig().then(setConfig).catch(() => {});
+    getPublicConfigCached().then(setConfig).catch(() => {});
     if (state.token) {
       api.clientSubscription(state.token)
         .then((r) => {

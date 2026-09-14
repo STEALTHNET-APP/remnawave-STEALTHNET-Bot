@@ -1,11 +1,24 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
 import {
-  api,
   type SingboxNodeListItem,
   type CreateSingboxNodeResponse,
   type SingboxNodeDetail,
 } from "@/lib/api";
+import {
+  useSingboxNodes,
+  useSingboxCategories,
+  useSingboxNodeDetail,
+  useCreateSingboxNodeMutation,
+  useUpdateSingboxNodeMutation,
+  useDeleteSingboxNodeMutation,
+  useCreateSingboxCategoryMutation,
+  useUpdateSingboxCategoryMutation,
+  useDeleteSingboxCategoryMutation,
+  useCreateSingboxTariffMutation,
+  useUpdateSingboxTariffMutation,
+  useDeleteSingboxTariffMutation,
+} from "@/lib/admin-queries";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,13 +48,7 @@ function formatBytes(s: string): string {
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString("ru-RU", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "Europe/Moscow",
-    });
+    return new Date(iso).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
   } catch {
     return iso;
   }
@@ -49,14 +56,14 @@ function formatDate(iso: string | null): string {
 
 function statusBadge(status: string) {
   const map: Record<string, string> = {
-    ONLINE: "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/20",
-    OFFLINE: "bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground border-border",
-    DISABLED: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20",
+    ONLINE: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    OFFLINE: "border-border bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground",
+    DISABLED: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
   };
   const dotColor: Record<string, string> = {
-    ONLINE: "bg-emerald-400",
-    OFFLINE: "bg-muted-foreground/40",
-    DISABLED: "bg-amber-400",
+    ONLINE: "bg-emerald-500",
+    OFFLINE: "bg-muted-foreground/50",
+    DISABLED: "bg-amber-500",
   };
   const label = status === "ONLINE" ? "Онлайн" : status === "DISABLED" ? "Отключена" : "Офлайн";
   return (
@@ -71,189 +78,150 @@ const PROTOCOLS = ["VLESS", "SHADOWSOCKS", "TROJAN", "HYSTERIA2"] as const;
 
 export function SingboxPage() {
   const { state } = useAuth();
-  const [nodes, setNodes] = useState<SingboxNodeListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const token = state.accessToken ?? null;
+
   const [addOpen, setAddOpen] = useState(false);
   const [newNodeName, setNewNodeName] = useState("");
   const [newNodeProtocol, setNewNodeProtocol] = useState<string>("VLESS");
   const [newNodePort, setNewNodePort] = useState("443");
-  const [creating, setCreating] = useState(false);
   const [addResult, setAddResult] = useState<CreateSingboxNodeResponse | null>(null);
   const [copied, setCopied] = useState<"compose" | null>(null);
-  const [detailNode, setDetailNode] = useState<SingboxNodeDetail | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [configJson, setConfigJson] = useState("");
-  const [configSaving, setConfigSaving] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editingNode, setEditingNode] = useState<SingboxNodeListItem | null>(null);
   const [editName, setEditName] = useState("");
   const [editPort, setEditPort] = useState("443");
   const [editProtocol, setEditProtocol] = useState("VLESS");
-  const [saving, setSaving] = useState(false);
   const [nodeToDelete, setNodeToDelete] = useState<SingboxNodeListItem | null>(null);
-  const [deleting, setDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState("nodes");
-  const [categories, setCategories] = useState<SingboxCategoryItem[]>([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categoryModal, setCategoryModal] = useState<"add" | { edit: SingboxCategoryItem } | null>(null);
   const [categoryForm, setCategoryForm] = useState({ name: "", sortOrder: "0" });
   const [tariffModal, setTariffModal] = useState<{ kind: "add"; categoryId: string } | { kind: "edit"; tariff: SingboxTariffListItem } | null>(null);
   const [tariffForm, setTariffForm] = useState({
     name: "", categoryId: "", slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true,
   });
-  const [savingCat, setSavingCat] = useState(false);
-  const [savingTariff, setSavingTariff] = useState(false);
 
-  const token = state.accessToken;
+  const nodesQuery = useSingboxNodes(token);
+  const nodes = nodesQuery.data?.items ?? [];
+  const loading = nodesQuery.isLoading;
+
+  // Категории и тарифы грузятся одним ответом — обе вкладки зависят от него.
+  const categoriesQuery = useSingboxCategories(token);
+  const categories = categoriesQuery.data?.items ?? [];
+  const categoriesLoading = categoriesQuery.isLoading || categoriesQuery.isFetching;
+
+  const detailQuery = useSingboxNodeDetail(token, detailId);
+  const detailNode: SingboxNodeDetail | null = detailQuery.data ?? null;
+  const detailLoading = detailQuery.isFetching;
+
+  const createNode = useCreateSingboxNodeMutation(token);
+  const updateNode = useUpdateSingboxNodeMutation(token);
+  const deleteNode = useDeleteSingboxNodeMutation(token);
+  const createCategory = useCreateSingboxCategoryMutation(token);
+  const updateCategory = useUpdateSingboxCategoryMutation(token);
+  const deleteCategory = useDeleteSingboxCategoryMutation(token);
+  const createTariff = useCreateSingboxTariffMutation(token);
+  const updateTariff = useUpdateSingboxTariffMutation(token);
+  const deleteTariff = useDeleteSingboxTariffMutation(token);
+
+  const creating = createNode.isPending;
+  const saving = updateNode.isPending;
+  const deleting = deleteNode.isPending;
+  const savingCat = createCategory.isPending || updateCategory.isPending;
+  const savingTariff = createTariff.isPending || updateTariff.isPending;
+  const configSaving = updateNode.isPending;
+
   if (!token) return null;
 
-  async function loadNodes() {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const res = await api.getSingboxNodes(token);
-      setNodes(res.items);
-    } catch {
-      setNodes([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadNodes();
-  }, [token]);
-
-  useEffect(() => {
-    if (!token || !detailId) {
-      setDetailNode(null);
-      return;
-    }
-    setDetailLoading(true);
-    api
-      .getSingboxNode(token, detailId)
-      .then(setDetailNode)
-      .catch(() => setDetailNode(null))
-      .finally(() => setDetailLoading(false));
-  }, [token, detailId]);
-
-  async function loadCategories() {
-    if (!token) return;
-    setCategoriesLoading(true);
-    try {
-      const res = await api.getSingboxCategories(token);
-      setCategories(res.items);
-    } catch {
-      setCategories([]);
-    } finally {
-      setCategoriesLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (activeTab === "categories" || activeTab === "tariffs") loadCategories();
-  }, [activeTab, token]);
-
-  async function handleSaveCategory() {
+  function handleSaveCategory() {
     if (!token) return;
     const name = categoryForm.name.trim();
     if (!name) return;
-    setSavingCat(true);
-    try {
-      if (categoryModal === "add") {
-        await api.createSingboxCategory(token, { name, sortOrder: parseInt(categoryForm.sortOrder, 10) || 0 });
-      } else if (categoryModal && "edit" in categoryModal) {
-        await api.updateSingboxCategory(token, categoryModal.edit.id, { name, sortOrder: parseInt(categoryForm.sortOrder, 10) || 0 });
-      }
-      await loadCategories();
-      setCategoryModal(null);
-      setCategoryForm({ name: "", sortOrder: "0" });
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setSavingCat(false);
+    const payload = { name, sortOrder: parseInt(categoryForm.sortOrder, 10) || 0 };
+    if (categoryModal === "add") {
+      createCategory.mutate(payload, {
+        onSuccess: () => {
+          setCategoryModal(null);
+          setCategoryForm({ name: "", sortOrder: "0" });
+        },
+        onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+      });
+    } else if (categoryModal && "edit" in categoryModal) {
+      updateCategory.mutate({ id: categoryModal.edit.id, data: payload }, {
+        onSuccess: () => {
+          setCategoryModal(null);
+          setCategoryForm({ name: "", sortOrder: "0" });
+        },
+        onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+      });
     }
   }
 
-  async function handleDeleteCategory(id: string) {
+  function handleDeleteCategory(id: string) {
     if (!token || !confirm("Удалить категорию и все тарифы в ней?")) return;
-    try {
-      await api.deleteSingboxCategory(token, id);
-      await loadCategories();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    }
+    deleteCategory.mutate(id, {
+      onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+    });
   }
 
-  async function handleSaveTariff() {
+  function handleSaveTariff() {
     if (!token) return;
     const name = tariffForm.name.trim();
     if (!name) return;
     const price = parseFloat(tariffForm.price);
     if (!Number.isFinite(price) || price < 0) return;
-    setSavingTariff(true);
-    try {
-      const trafficBytes = tariffForm.trafficLimitBytes.trim() === "" ? null : (parseInt(tariffForm.trafficLimitBytes, 10) || null);
-      const payload = {
-        name,
-        categoryId: tariffForm.categoryId || (tariffModal && "categoryId" in tariffModal ? tariffModal.categoryId : ""),
-        slotCount: parseInt(tariffForm.slotCount, 10) || 1,
-        durationDays: parseInt(tariffForm.durationDays, 10) || 30,
-        trafficLimitBytes: trafficBytes != null ? trafficBytes * 1024 * 1024 * 1024 : null,
-        price,
-        currency: tariffForm.currency.toUpperCase(),
-        sortOrder: parseInt(tariffForm.sortOrder, 10) || 0,
-        enabled: tariffForm.enabled,
-      };
-      if (tariffModal?.kind === "add") {
-        if (!payload.categoryId) return;
-        await api.createSingboxTariff(token, payload as Parameters<typeof api.createSingboxTariff>[1]);
-      } else if (tariffModal?.kind === "edit") {
-        await api.updateSingboxTariff(token, tariffModal.tariff.id, payload);
-      }
-      await loadCategories();
+    const trafficBytes = tariffForm.trafficLimitBytes.trim() === "" ? null : (parseInt(tariffForm.trafficLimitBytes, 10) || null);
+    const payload = {
+      name,
+      categoryId: tariffForm.categoryId || (tariffModal && "categoryId" in tariffModal ? tariffModal.categoryId : ""),
+      slotCount: parseInt(tariffForm.slotCount, 10) || 1,
+      durationDays: parseInt(tariffForm.durationDays, 10) || 30,
+      trafficLimitBytes: trafficBytes != null ? trafficBytes * 1024 * 1024 * 1024 : null,
+      price,
+      currency: tariffForm.currency.toUpperCase(),
+      sortOrder: parseInt(tariffForm.sortOrder, 10) || 0,
+      enabled: tariffForm.enabled,
+    };
+    const resetForm = () => {
       setTariffModal(null);
       setTariffForm({ name: "", categoryId: "", slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true });
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setSavingTariff(false);
-    }
-  }
-
-  async function handleDeleteTariff(id: string) {
-    if (!token || !confirm("Удалить тариф?")) return;
-    try {
-      await api.deleteSingboxTariff(token, id);
-      await loadCategories();
-      setTariffModal(null);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    }
-  }
-
-  async function handleAddNode() {
-    if (!token) return;
-    setCreating(true);
-    setAddResult(null);
-    try {
-      const port = parseInt(newNodePort, 10) || 443;
-      const res = await api.createSingboxNode(token, {
-        name: newNodeName.trim() || "Sing-box node",
-        protocol: newNodeProtocol,
-        port,
-        tlsEnabled: true,
+    };
+    if (tariffModal?.kind === "add") {
+      if (!payload.categoryId) return;
+      createTariff.mutate(payload, {
+        onSuccess: resetForm,
+        onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
       });
-      setAddResult(res);
-      await loadNodes();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка создания");
-    } finally {
-      setCreating(false);
+    } else if (tariffModal?.kind === "edit") {
+      updateTariff.mutate({ id: tariffModal.tariff.id, data: payload }, {
+        onSuccess: resetForm,
+        onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+      });
     }
+  }
+
+  function handleDeleteTariff(id: string) {
+    if (!token || !confirm("Удалить тариф?")) return;
+    deleteTariff.mutate(id, {
+      onSuccess: () => setTariffModal(null),
+      onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+    });
+  }
+
+  function handleAddNode() {
+    if (!token) return;
+    setAddResult(null);
+    const port = parseInt(newNodePort, 10) || 443;
+    createNode.mutate(
+      { name: newNodeName.trim() || "Sing-box node", protocol: newNodeProtocol, port, tlsEnabled: true },
+      {
+        onSuccess: (res) => setAddResult(res),
+        onError: (e) => alert(e instanceof Error ? e.message : "Ошибка создания"),
+      },
+    );
   }
 
   function copyCompose() {
@@ -271,43 +239,30 @@ export function SingboxPage() {
     setEditOpen(true);
   }
 
-  async function handleSaveEdit() {
+  function handleSaveEdit() {
     if (!token || !editingNode) return;
-    setSaving(true);
-    try {
-      const port = parseInt(editPort, 10) || 443;
-      await api.updateSingboxNode(token, editingNode.id, {
-        name: editName.trim(),
-        port,
-        protocol: editProtocol,
-      });
-      await loadNodes();
-      setEditOpen(false);
-      setEditingNode(null);
-      if (detailNode?.id === editingNode.id) {
-        const updated = await api.getSingboxNode(token, editingNode.id);
-        setDetailNode(updated);
-      }
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setSaving(false);
-    }
+    const port = parseInt(editPort, 10) || 443;
+    updateNode.mutate(
+      { id: editingNode.id, data: { name: editName.trim(), port, protocol: editProtocol } },
+      {
+        onSuccess: () => {
+          setEditOpen(false);
+          setEditingNode(null);
+        },
+        onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+      },
+    );
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!token || !nodeToDelete) return;
-    setDeleting(true);
-    try {
-      await api.deleteSingboxNode(token, nodeToDelete.id);
-      await loadNodes();
-      if (detailId === nodeToDelete.id) setDetailId(null);
-      setNodeToDelete(null);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    } finally {
-      setDeleting(false);
-    }
+    deleteNode.mutate(nodeToDelete.id, {
+      onSuccess: () => {
+        if (detailId === nodeToDelete.id) setDetailId(null);
+        setNodeToDelete(null);
+      },
+      onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+    });
   }
 
   function openConfigEditor() {
@@ -341,7 +296,7 @@ export function SingboxPage() {
     setConfigOpen(true);
   }
 
-  async function saveConfig() {
+  function saveConfig() {
     if (!token || !detailNode) return;
     setConfigError(null);
     const trimmed = configJson.trim();
@@ -355,18 +310,13 @@ export function SingboxPage() {
       setConfigError("Невалидный JSON: " + (e instanceof Error ? e.message : ""));
       return;
     }
-    setConfigSaving(true);
-    try {
-      await api.updateSingboxNode(token, detailNode.id, { customConfigJson: trimmed });
-      setConfigOpen(false);
-      const updated = await api.getSingboxNode(token, detailNode.id);
-      setDetailNode(updated);
-      await loadNodes();
-    } catch (e) {
-      setConfigError(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setConfigSaving(false);
-    }
+    updateNode.mutate(
+      { id: detailNode.id, data: { customConfigJson: trimmed } },
+      {
+        onSuccess: () => setConfigOpen(false),
+        onError: (e) => setConfigError(e instanceof Error ? e.message : "Ошибка сохранения"),
+      },
+    );
   }
 
   function formatPrice(amount: number, currency: string) {
