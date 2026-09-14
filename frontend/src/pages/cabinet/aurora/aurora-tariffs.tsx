@@ -1,30 +1,15 @@
-/**
- * AuroraTariffs — вкладка «Тарифы» третьего дизайна мини-аппа.
- *
- * Композиция (в стиле главного экрана Aurora):
- *   • заголовок страницы;
- *   • chip-переключатели категорий и тарифов (если их больше одного);
- *   • крупная градиентная карточка: выбор срока пилюлями, итоговая цена,
- *     цена за день — визуальный близнец карточки подписки на дашборде;
- *   • предупреждения о продлении/замене подписки;
- *   • кнопка «Оплатить» СРАЗУ под карточкой — она открывает нижнюю шторку
- *     с промокодом, способами оплаты и подтверждением. Раньше всё это было
- *     простынёй в конце страницы, и часть клиентов не докручивала до кнопки;
- *   • блок «Что входит».
- *
- * ВАЖНО: вся денежная логика (промокоды, превью конвертации, судьба доп.
- * устройств, семь платёжных провайдеров, оплата балансом с подтверждением)
- * перенесена из Stealth-версии без изменений — здесь отличается только
- * оформление. Правки поведения нужно вносить в обе страницы синхронно.
- */
+/** Aurora: categories contain complete tariff cards; each card opens the
+ * existing checkout with its chosen duration. Subscription changes are
+ * explained in checkout using the server conversion preview. */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Wallet, Bitcoin, Check, AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { Wallet, Bitcoin, Check, AlertCircle, Loader2, RefreshCw, X } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
-import { api, type PublicTariffCategory, type PublicConfig, type TariffConversionPreview } from "@/lib/api";
+import { api, type PublicTariff, type PublicTariffCategory, type PublicConfig, type TariffConversionPreview } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { AuroraTariffCard, auroraPrice, auroraDays, auroraTraffic, auroraDevices } from "./aurora-tariff-card";
 
 interface PriceOption {
   id: string;
@@ -32,16 +17,7 @@ interface PriceOption {
   price: number;
 }
 
-interface TariffLite {
-  id: string;
-  name: string;
-  price: number;
-  currency: string;
-  priceOptions?: PriceOption[];
-  durationDays?: number;
-  trafficLimitBytes?: string | null;
-  includedDevices?: number;
-}
+type TariffLite = PublicTariff;
 
 type PayMethod =
   | { kind: "platega"; id: number; label: string; icon: typeof Wallet }
@@ -50,18 +26,17 @@ type PayMethod =
   | { kind: "cryptopay"; label: string; icon: typeof Bitcoin }
   | { kind: "heleket"; label: string; icon: typeof Bitcoin }
   | { kind: "rollypay"; label: string; icon: typeof Wallet }
+  | { kind: "paritypay"; label: string; icon: typeof Wallet }
   | { kind: "lava"; label: string; icon: typeof Wallet }
+  | { kind: "overpay"; label: string; icon: typeof Wallet }
+  | { kind: "lavatop"; label: string; icon: typeof Wallet }
   | { kind: "balance"; label: string; icon: typeof Wallet };
 
-function fmtPrice(n: number, currency: string) {
-  const sym = currency === "rub" || currency === "RUB" ? "₽" : currency === "usd" || currency === "USD" ? "$" : currency.toUpperCase();
-  return `${Math.round(n)}${sym}`;
-}
+const fmtPrice = auroraPrice;
 
 // Цена за день — всегда с копейками (2 знака), в отличие от полной цены.
 function fmtPricePerDay(n: number, currency: string) {
-  const sym = currency === "rub" || currency === "RUB" ? "₽" : currency === "usd" || currency === "USD" ? "$" : currency.toUpperCase();
-  return `${n.toFixed(2)}${sym}`;
+  return new Intl.NumberFormat("ru-RU", { style: "currency", currency: currency.toUpperCase(), minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 }
 
 /** «30 дней» с правильным окончанием. */
@@ -106,11 +81,15 @@ export function AuroraTariffs() {
   const [convPreview, setConvPreview] = useState<TariffConversionPreview | null>(null);
   // судьба доп. устройств при конвертации (true = оставить).
   const [convKeepExtras, setConvKeepExtras] = useState(true);
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState(false);
+  const [previewRetry, setPreviewRetry] = useState(0);
   // Блокирующее подтверждение балансовой покупки (мгновенное списание → замена/удаление подписок).
   const [balConfirm, setBalConfirm] = useState<{ title: string; body: string } | null>(null);
   // Шторка оплаты: промокод + способы + подтверждение. Раньше всё это лежало
   // в конце страницы, и часть клиентов просто не докручивала до кнопки.
   const [paySheet, setPaySheet] = useState(false);
+  const paySheetRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -219,7 +198,7 @@ export function AuroraTariffs() {
     }
   }, [extendTarget?.tariffId, categories]);
 
-  const currentCat = displayCategories.find((c) => c.id === selectedCatId);
+  const currentCat = displayCategories.find((c) => c.id === selectedCatId) ?? displayCategories[0];
   const currentTariff = currentCat?.tariffs.find((t) => t.id === selectedTariffId) as TariffLite | undefined;
   const priceOptions: PriceOption[] = currentTariff?.priceOptions ?? [];
   const currentOption = priceOptions.find((o) => o.id === selectedPriceOptionId);
@@ -238,6 +217,8 @@ export function AuroraTariffs() {
   const totalPrice = basePrice + extendExtrasCost + convExtendExtrasCost;
   const pricePerDay = days > 0 ? totalPrice / days : 0;
   const currency = currentTariff?.currency ?? "rub";
+  const requestedPreviewKey = `${selectedTariffId}:${selectedPriceOptionId ?? "base"}`;
+  const previewReady = !!extendTarget || (previewKey === requestedPreviewKey && !previewError);
 
   // Payment methods доступные сейчас
   const availableMethods: PayMethod[] = useMemo(() => {
@@ -251,7 +232,10 @@ export function AuroraTariffs() {
     if (config.cryptopayEnabled) list.push({ kind: "cryptopay", label: "Crypto Pay", icon: Bitcoin });
     if (config.heleketEnabled) list.push({ kind: "heleket", label: "Heleket", icon: Bitcoin });
     if ((config as { rollypayEnabled?: boolean }).rollypayEnabled) list.push({ kind: "rollypay", label: "RollyPay", icon: Wallet });
+    if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kind: "paritypay", label: "ParityPay", icon: Wallet });
     if (config.lavaEnabled) list.push({ kind: "lava", label: "Lava", icon: Wallet });
+    if (config.lavatopEnabled) list.push({ kind: "lavatop", label: "Lava.top", icon: Wallet });
+    if (config.overpayEnabled) list.push({ kind: "overpay", label: "Overpay", icon: Wallet });
     return list;
   }, [config]);
 
@@ -287,17 +271,20 @@ export function AuroraTariffs() {
   // подписка этой категории — покупка обновит её, а не создаст вторую. Показываем
   // юзеру расчёт до оплаты. В режиме явного продления (?extend) превью не нужно.
   useEffect(() => {
-    if (!state.token || !selectedTariffId || extendTarget) { setConvPreview(null); return; }
+    if (!paySheet || !state.token || !selectedTariffId || extendTarget) { setConvPreview(null); return; }
     let alive = true;
     setConvKeepExtras(true);
+    setPreviewKey(null);
+    setPreviewError(false);
+    setConvPreview(null);
     api.clientTariffConversionPreview(state.token, {
       tariffId: selectedTariffId,
       priceOptionId: selectedPriceOptionId ?? undefined,
     })
-      .then((p) => { if (alive) setConvPreview(p); })
-      .catch(() => { if (alive) setConvPreview(null); });
+      .then((p) => { if (alive) { setConvPreview(p); setPreviewKey(requestedPreviewKey); } })
+      .catch(() => { if (alive) { setConvPreview(null); setPreviewError(true); } });
     return () => { alive = false; };
-  }, [state.token, selectedTariffId, selectedPriceOptionId, extendTarget]);
+  }, [state.token, selectedTariffId, selectedPriceOptionId, extendTarget, paySheet, previewRetry, requestedPreviewKey]);
 
   // Пока шторка открыта — фон не скроллим (иначе в Telegram-вебвью страница
   // уезжает под шторкой и её тяжело вернуть).
@@ -309,10 +296,23 @@ export function AuroraTariffs() {
   // стробоскоп и проваливание фона в прозрачность.
   useEffect(() => {
     if (!paySheet) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    paySheetRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); setPaySheet(false); }
+      if (event.key !== "Tab") return;
+      const nodes = Array.from(paySheetRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),a[href],[tabindex="0"]') || []);
+      const first=nodes[0], last=nodes[nodes.length-1];
+      if(event.shiftKey && document.activeElement===first){event.preventDefault();last?.focus();}
+      if(!event.shiftKey && document.activeElement===last){event.preventDefault();first?.focus();}
+    };
+    document.addEventListener("keydown",onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.documentElement.dataset.auSheet = "1";
     return () => {
+      document.removeEventListener("keydown",onKey);
+      previousFocus?.focus();
       document.body.style.overflow = prev;
       delete document.documentElement.dataset.auSheet;
     };
@@ -338,7 +338,7 @@ export function AuroraTariffs() {
   // Баланс списывает МГНОВЕННО → перед заменой/удалением подписок показываем
   // блокирующее подтверждение (как в боте). Чистое продление того же тарифа — без окна.
   async function pay() {
-    if (!state.token || !selectedTariffId || !selectedPriceOptionId || !selectedMethod) return;
+    if (!state.token || !selectedTariffId || !selectedMethod || !previewReady) return;
     if (selectedMethod.kind === "balance") {
       setPaying(true);
       setPayError(null);
@@ -367,13 +367,13 @@ export function AuroraTariffs() {
   }
 
   async function doPay() {
-    if (!state.token || !selectedTariffId || !selectedPriceOptionId || !selectedMethod) return;
+    if (!state.token || !selectedTariffId || !selectedMethod || !previewReady) return;
     setPaying(true);
     setPayError(null);
     try {
       const base = {
         tariffId: selectedTariffId,
-        tariffPriceOptionId: selectedPriceOptionId,
+        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
         promoCode: promoApplied ?? undefined,
         // режим продления конкретной подписки (?extend=) —
         // оплата продлевает ИМЕННО её, а не создаёт новую.
@@ -422,11 +422,20 @@ export function AuroraTariffs() {
       } else if (selectedMethod.kind === "heleket") {
         const r = await api.heleketCreatePayment(state.token, base);
         url = r.payUrl;
+      } else if (selectedMethod.kind === "paritypay") {
+        const r = await api.paritypayCreatePayment(state.token, base);
+        url = r.payUrl;
       } else if (selectedMethod.kind === "rollypay") {
         const r = await api.rollypayCreatePayment(state.token, base);
         url = r.payUrl;
       } else if (selectedMethod.kind === "lava") {
         const r = await api.lavaCreatePayment(state.token, base);
+        url = r.payUrl;
+      } else if (selectedMethod.kind === "lavatop") {
+        const r = await api.lavatopCreatePayment(state.token, { ...base, amount: totalPrice, currency });
+        url = r.payUrl;
+      } else if (selectedMethod.kind === "overpay") {
+        const r = await api.overpayCreatePayment(state.token, { ...base, amount: totalPrice, currency });
         url = r.payUrl;
       } else if (selectedMethod.kind === "balance") {
         await api.clientPayByBalance(state.token, base);
@@ -475,26 +484,17 @@ export function AuroraTariffs() {
     cn(
       "rounded-[22px] p-4",
       tone === "amber" && "bg-[#FFF7E8] text-[#7A4E00]",
-      tone === "indigo" && "bg-[#EEF0FF] text-[#2C327A]",
-      tone === "accent" && "bg-[color-mix(in_srgb,var(--au-from)_9%,#ffffff)]",
+      (tone === "accent" || tone === "indigo") && "bg-[color-mix(in_srgb,var(--au-from)_9%,var(--au-bg))]",
     );
 
   /** Кнопка выбора внутри уведомления (устройства, триалы). */
   const choiceCls = (active: boolean) =>
     cn(
-      "w-full rounded-[16px] border-2 bg-white/70 p-3 text-left transition-colors",
+      "w-full rounded-[16px] border-2 bg-[var(--au-surface)] text-[var(--au-ink)] p-3 text-left transition-colors",
       active ? "border-[var(--au-from)]" : "border-transparent",
     );
 
-  return (
-    <div className="space-y-3">
-      <header className="px-1 pb-1">
-        <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">Тарифы</h1>
-        <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">
-          {extendTarget ? "Продление подписки — выберите срок" : "Выберите срок и способ оплаты"}
-        </p>
-      </header>
-
+  const renewalNotice = (<>
       {/* Режим продления: бейдж с подпиской, каталог сужен до её тарифа */}
       {extendTarget && (
         <motion.section
@@ -530,122 +530,9 @@ export function AuroraTariffs() {
         </motion.section>
       )}
 
-      {/* Категории (только если больше одной) */}
-      {displayCategories.length > 1 && (
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none" }}>
-          {displayCategories.map((c) => {
-            const active = c.id === selectedCatId;
-            return (
-              <button
-                key={c.id}
-                onClick={() => {
-                  setSelectedCatId(c.id);
-                  const firstT = c.tariffs[0];
-                  if (firstT) {
-                    setSelectedTariffId(firstT.id);
-                    const opts = (firstT as TariffLite).priceOptions ?? [];
-                    setSelectedPriceOptionId((opts.find((o) => o.durationDays === 30) ?? opts[0])?.id ?? null);
-                  }
-                }}
-                className={cn(
-                  "shrink-0 rounded-full px-4 py-2.5 text-[14px] font-semibold transition-all active:scale-95",
-                  active
-                    ? "bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white shadow-[0_8px_20px_-8px_color-mix(in_srgb,var(--au-from)_60%,transparent)]"
-                    : "bg-[var(--au-surface)] text-[var(--au-muted)]",
-                )}
-              >
-                {c.emoji ? `${c.emoji} ` : ""}{c.name}
-              </button>
-            );
-          })}
-        </div>
-      )}
+  </>);
 
-      {/* Тарифы внутри категории (если больше одного) */}
-      {currentCat && currentCat.tariffs.length > 1 && (
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: "none" }}>
-          {currentCat.tariffs.map((t) => {
-            const active = t.id === selectedTariffId;
-            return (
-              <button
-                key={t.id}
-                onClick={() => {
-                  setSelectedTariffId(t.id);
-                  const opts = (t as TariffLite).priceOptions ?? [];
-                  setSelectedPriceOptionId((opts.find((o) => o.durationDays === 30) ?? opts[0])?.id ?? null);
-                }}
-                className={cn(
-                  "shrink-0 rounded-full border-2 px-3.5 py-2 text-[13px] font-semibold transition-all active:scale-95",
-                  active
-                    ? "border-[var(--au-from)] bg-white text-[var(--au-from)]"
-                    : "border-transparent bg-[var(--au-surface)] text-[var(--au-muted)]",
-                )}
-              >
-                {t.name}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Главная карточка: срок и итоговая цена ── */}
-      <motion.section
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        className="relative overflow-hidden rounded-[26px] bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] p-5 text-white"
-      >
-        <div className="flex items-center justify-between gap-3">
-          <span className="truncate text-[15px] font-medium text-white/85">{currentTariff?.name ?? "Тариф"}</span>
-          <span className="shrink-0 rounded-full bg-white/20 px-3 py-1.5 text-[13px] font-semibold">
-            {days} {pluralDays(days)}
-          </span>
-        </div>
-
-        {/* Ряд пилюль — только когда есть из чего выбирать: при единственном
-            варианте срок уже написан в бейдже справа, дубль лишний. */}
-        {priceOptions.length > 1 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {[...priceOptions].sort((a, b) => a.durationDays - b.durationDays).map((opt) => {
-              const active = opt.id === selectedPriceOptionId;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setSelectedPriceOptionId(opt.id)}
-                  className={cn(
-                    // тап — на CSS, см. пояснение у плиток способов оплаты
-                    "min-w-[62px] rounded-full px-3.5 py-2 text-[13px] font-bold transition-colors active:scale-[0.94]",
-                    active ? "bg-white text-[var(--au-ink)]" : "bg-white/18 text-white/90",
-                  )}
-                >
-                  {opt.durationDays} дн.
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="mt-5 flex items-end justify-between gap-4">
-          <div>
-            <div className="text-[13px] text-white/75">К оплате</div>
-            <motion.div
-              key={totalPrice}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="text-[40px] font-extrabold leading-none tracking-tight tabular-nums"
-            >
-              {fmtPrice(totalPrice, currency)}
-            </motion.div>
-          </div>
-          <div className="pb-1 text-right">
-            <div className="text-[19px] font-bold tabular-nums">{fmtPricePerDay(pricePerDay, currency)}</div>
-            <div className="text-[13px] text-white/75">в день</div>
-          </div>
-        </div>
-      </motion.section>
-
+  const purchaseNotices = (<>
       {/* покупка заменяет активный триал (выбор при нескольких). */}
       {!extendTarget && !convPreview?.willConvert && (() => {
         const trialsOwned = mySubs.filter((s) => s.isTrial);
@@ -690,11 +577,11 @@ export function AuroraTariffs() {
             <p className="text-[14px] font-bold">У вас уже есть подписка с этим тарифом</p>
             <p className="mt-1 text-[13px] leading-relaxed opacity-80">
               «{dup.label}»{dup.expireAt ? ` — до ${new Date(dup.expireAt).toLocaleDateString("ru-RU")}` : ""}.
-              Можно продлить её (дни сложатся) — или продолжить ниже и купить ещё одну отдельную подписку.
+              {config?.multiSubscriptionsEnabled ? "Можно продлить её или купить ещё одну отдельную подписку." : "Можно продлить текущую подписку — дни сложатся."}
             </p>
             <button
-              onClick={() => navigate(`/cabinet/tariffs?extend=${encodeURIComponent(dup.id)}`)}
-              className="mt-3 inline-flex items-center gap-2 rounded-[16px] bg-white px-4 py-2.5 text-[13px] font-bold active:scale-95 transition-transform"
+              onClick={() => { setPaySheet(false); navigate(`/cabinet/tariffs?extend=${encodeURIComponent(dup.id)}`); }}
+              className="mt-3 inline-flex items-center gap-2 rounded-[16px] bg-[var(--au-surface)] text-[var(--au-ink)] px-4 py-2.5 text-[13px] font-bold active:scale-95 transition-transform"
             >
               <RefreshCw className="h-4 w-4" />
               Продлить «{dup.label}»
@@ -794,34 +681,51 @@ export function AuroraTariffs() {
         </motion.section>
       )}
 
-      {/* Главное действие: видно сразу, без прокрутки — оплата открывается шторкой */}
-      <button
-        type="button"
-        onClick={() => setPaySheet(true)}
-        disabled={!currentTariff || totalPrice <= 0}
-        className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] px-5 py-4 text-[17px] font-bold text-white shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--au-from)_70%,transparent)] transition-transform active:scale-[0.99] disabled:opacity-45"
-      >
-        Оплатить {fmtPrice(totalPrice, currency)}
-      </button>
+  </>);
 
-      {/* ── Что входит ── */}
-      <section className="rounded-[22px] bg-[var(--au-surface)] p-4">
-        <p className="text-[13px] font-semibold text-[var(--au-muted)]">Что входит</p>
-        <ul className="mt-2.5 space-y-2">
-          {[
-            currentTariff?.includedDevices ? `До ${currentTariff.includedDevices} устройств` : "Поддержка нескольких устройств",
-            currentTariff?.trafficLimitBytes && currentTariff.trafficLimitBytes !== "0" ? "Ограниченный трафик" : "Безлимитный трафик",
-            "Минимальные задержки",
-          ].map((b, i) => (
-            <li key={i} className="flex items-center gap-2.5 text-[14px]">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--au-from),var(--au-to))]">
-                <Check className="h-3 w-3 text-white" strokeWidth={3} />
-              </span>
-              {b}
-            </li>
-          ))}
-        </ul>
-      </section>
+  return (
+    <div className="space-y-3">
+      <header className="px-1 pb-1">
+        <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">Тарифы</h1>
+        <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">
+          {extendTarget ? "Продление подписки — выберите срок" : "Выберите категорию и сравните, что входит в каждый тариф"}
+        </p>
+      </header>
+
+      {renewalNotice}
+
+      <div className="au-tariff-catalog" data-tour="tariff-list">
+        <nav className="au-tariff-categories" aria-label="Категории тарифов">
+          {displayCategories.map((category) => <button key={category.id} type="button" aria-pressed={currentCat?.id === category.id} aria-controls="au-category-plans" onClick={() => setSelectedCatId(category.id)}>
+            <span>{category.emoji ? `${category.emoji} ` : ""}{category.name}</span><small>{category.tariffs.length}</small>
+          </button>)}
+        </nav>
+        {currentCat && <section id="au-category-plans" aria-labelledby="au-category-title" className="space-y-4 min-w-0">
+          <div className="au-tariff-category-heading"><h2 id="au-category-title">{currentCat.name}</h2><span>Тарифов: {currentCat.tariffs.length}</span></div>
+          <div className="au-tariff-cards">
+            {currentCat.tariffs.map((tariff) => <AuroraTariffCard
+              key={tariff.id}
+              tariff={tariff}
+              owned={mySubs.some((sub) => sub.tariffId === tariff.id && !sub.isTrial)}
+              canBuy={!!state.token}
+              extraMonthlyPrice={extendTarget?.tariffId === tariff.id && extKeepExtras && extendTarget.extraDevices > 0 ? extendTarget.extraDevicesMonthlyPrice : 0}
+              onPeriodChange={extendTarget?.tariffId === tariff.id ? setSelectedPriceOptionId : undefined}
+              onChoose={(chosen, optionId) => {
+                setSelectedTariffId(chosen.id);
+                setSelectedPriceOptionId(optionId ?? null);
+                setConvPreview(null);
+                setPreviewKey(null);
+                setPreviewError(false);
+                setPayError(null);
+                setConvKeepExtras(true);
+                setReplaceTrialChoice(null);
+                setPromoInput(""); setPromoApplied(null); setPromoMsg(null);
+                setPaySheet(true);
+              }}
+            />)}
+          </div>
+        </section>}
+      </div>
 
       {/* Подтверждение балансовой оплаты: списание мгновенное и необратимое */}
       {balConfirm && (
@@ -830,7 +734,7 @@ export function AuroraTariffs() {
           onClick={() => setBalConfirm(null)}
         >
           <div
-            className="w-full max-w-sm space-y-4 rounded-[26px] bg-white p-5 shadow-2xl"
+            className="w-full max-w-sm space-y-4 rounded-[26px] bg-[var(--au-bg)] p-5 shadow-2xl"
             style={{ marginBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -873,6 +777,10 @@ export function AuroraTariffs() {
           onClick={() => setPaySheet(false)}
         >
           <motion.div
+            ref={paySheetRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Оплата тарифа"
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             transition={{ type: "spring", stiffness: 340, damping: 34 }}
@@ -880,12 +788,13 @@ export function AuroraTariffs() {
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)" }}
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="flex justify-end"><button type="button" aria-label="Закрыть оплату" onClick={()=>setPaySheet(false)} className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--au-surface)]"><X size={20}/></button></div>
             {/* «ручка» шторки */}
             <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[var(--au-surface)]" />
 
-            <div className="flex items-baseline justify-between gap-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate text-[17px] font-extrabold">{currentTariff?.name ?? "Тариф"}</p>
+                <p className="break-words text-[17px] font-extrabold">{currentTariff?.name ?? "Тариф"}</p>
                 <p className="text-[13px] text-[var(--au-muted)]">
                   {days} {pluralDays(days)} · {fmtPricePerDay(pricePerDay, currency)} в день
                 </p>
@@ -893,16 +802,20 @@ export function AuroraTariffs() {
               <span className="shrink-0 text-[26px] font-extrabold tabular-nums">{fmtPrice(totalPrice, currency)}</span>
             </div>
 
-            {/* Предупреждения дублируем в шторке: наверху страницы их могли пролистать */}
-            {(convPreview?.willConvert || (!extendTarget && mySubs.some((s2) => s2.isTrial))) && (
-              <p className="mt-3 rounded-[16px] bg-[#FFF7E8] px-3.5 py-2.5 text-[13px] leading-relaxed text-[#7A4E00]">
-                {convPreview?.mode === "extend"
-                  ? "Этот тариф у вас уже есть — подписка будет продлена, дни сложатся."
-                  : convPreview?.willConvert
-                    ? "Покупка обновит текущую подписку, а не создаст вторую."
-                    : "Пробная подписка будет заменена этой покупкой."}
-              </p>
-            )}
+            {currentTariff && <dl className="au-tariff-checkout-facts">
+              <div><dt>Устройства в тарифе</dt><dd>{auroraDevices(currentTariff)}</dd></div>
+              <div><dt>Трафик</dt><dd>{auroraTraffic(currentTariff).value}</dd></div>
+            </dl>}
+            <dl className="au-tariff-checkout-breakdown">
+              <div><dt>Тариф на {auroraDays(days)}</dt><dd>{fmtPrice(basePrice, currency)}</dd></div>
+              {(extendExtrasCost + convExtendExtrasCost) > 0 && <div><dt>Сохранённые устройства</dt><dd>+{fmtPrice(extendExtrasCost + convExtendExtrasCost, currency)}</dd></div>}
+            </dl>
+            <div className="mt-4 space-y-3">
+              {extendTarget ? renewalNotice : previewReady ? purchaseNotices : previewError ? <div role="alert" className="rounded-[20px] bg-[var(--au-surface)] p-4 text-[13px]">
+                <p>Не удалось проверить условия покупки. Повторите проверку перед оплатой.</p>
+                <button type="button" className="mt-3 min-h-11 rounded-xl bg-[var(--au-bg)] px-4 font-bold" onClick={() => setPreviewRetry((value) => value + 1)}>Повторить проверку</button>
+              </div> : <p role="status" className="flex items-center gap-2 text-[13px] text-[var(--au-muted)]"><Loader2 className="h-4 w-4 animate-spin" />Проверяем условия вашей подписки…</p>}
+            </div>
 
             <div className="mt-4 space-y-3">
               {/* ── Промокод ── */}
@@ -921,7 +834,7 @@ export function AuroraTariffs() {
                 <button
                   onClick={applyPromo}
                   disabled={promoBusy || !promoInput.trim()}
-                  className="shrink-0 whitespace-nowrap rounded-[15px] bg-white px-4 py-2.5 text-[13px] font-bold transition disabled:opacity-45"
+                  className="shrink-0 whitespace-nowrap rounded-[15px] bg-[var(--au-surface)] px-4 py-2.5 text-[13px] font-bold transition disabled:opacity-45"
                 >
                   {promoBusy ? "…" : promoApplied ? <Check className="inline h-4 w-4" /> : "Применить"}
                 </button>
@@ -954,7 +867,7 @@ export function AuroraTariffs() {
                           // анимировать её вместе с рамкой WebKit не успевает.
                           "flex flex-col items-center gap-2 rounded-[20px] border-2 px-3 py-4 transition-colors active:scale-[0.97]",
                           active
-                            ? "border-[var(--au-from)] bg-white"
+                            ? "border-[var(--au-from)] bg-[var(--au-surface)]"
                             : "border-transparent bg-[var(--au-surface)]",
                         )}
                       >
@@ -973,7 +886,7 @@ export function AuroraTariffs() {
                       className={cn(
                         "flex flex-col items-center gap-1.5 rounded-[20px] border-2 px-3 py-4 transition-colors enabled:active:scale-[0.97]",
                         selectedMethod?.kind === "balance"
-                          ? "border-[#0F9D58] bg-white"
+                          ? "border-[#0F9D58] bg-[var(--au-surface)]"
                           : canPayByBalance
                             ? "border-transparent bg-[var(--au-surface)]"
                             : "cursor-not-allowed border-transparent bg-[var(--au-surface)] opacity-55",
@@ -1003,7 +916,7 @@ export function AuroraTariffs() {
               <button
                 type="button"
                 onClick={pay}
-                disabled={paying || !selectedMethod || !currentTariff}
+                disabled={paying || !selectedMethod || !currentTariff || !previewReady}
                 className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] px-5 py-4 text-[17px] font-bold text-white shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--au-from)_70%,transparent)] transition-transform active:scale-[0.99] disabled:opacity-45"
               >
                 {paying && <Loader2 className="h-[18px] w-[18px] animate-spin" />}

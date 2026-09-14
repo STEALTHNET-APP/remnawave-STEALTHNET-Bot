@@ -1,3 +1,4 @@
+import { AuroraTickets } from "./aurora/aurora-tickets";
 import { useEffect, useRef, useState } from "react";
 import { MessageSquarePlus, Inbox, Loader2, Send, ArrowLeft, CircleDot, CircleCheck, User, Paperclip, X as XIcon, ImageIcon } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
@@ -5,7 +6,6 @@ import { api, type TicketAttachmentDto, type TicketMessageDto } from "@/lib/api"
 import { Button } from "@/components/ui/button";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthTickets } from "@/pages/cabinet/stealth/stealth-tickets";
-import { AuroraTickets } from "@/pages/cabinet/aurora/aurora-tickets";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,8 +45,8 @@ function AttachmentsGallery({ items, align }: { items: TicketAttachmentDto[]; al
 
 export function ClientTicketsPage() {
   const design = useCabinetDesign();
-  if (design === "stealth") return <StealthTickets />;
   if (design === "aurora") return <AuroraTickets />;
+  if (design === "stealth") return <StealthTickets />;
   return <ClassicTicketsPage />;
 }
 

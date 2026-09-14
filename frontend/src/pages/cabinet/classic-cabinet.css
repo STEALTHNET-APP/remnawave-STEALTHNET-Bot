@@ -1,0 +1,56 @@
+/* Classic cabinet: layout and legibility only. Palette, gradients, borders and
+   elevation remain controlled by the existing components and theme settings. */
+.classic-cabinet .cabinet-desktop-bar { gap: 16px; }
+.classic-cabinet .cabinet-desktop-bar nav > a,
+.classic-cabinet .cabinet-desktop-bar nav > div > button { min-height: 40px; }
+.classic-cabinet main { min-width: 0; }
+.classic-dashboard .dashboard-welcome { padding: 28px 32px; }
+.classic-dashboard .dashboard-welcome-title {
+  font-size: clamp(24px, 2.3vw, 32px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.classic-dashboard .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+.classic-dashboard .dashboard-card { min-width: 0; grid-column: auto; }
+.classic-dashboard .dashboard-card > .dashboard-card-header { padding: 20px 20px 16px; }
+.classic-dashboard .dashboard-card > div:last-child { padding: 0 20px 20px; }
+.classic-dashboard .dashboard-card h3 { line-height: 1.25; font-size: 18px; }
+.classic-dashboard .dashboard-subscription-heading { flex-wrap: wrap; row-gap: 12px; }
+.classic-dashboard .dashboard-balance-amount {
+  font-size: clamp(30px, 3.2vw, 44px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  padding-top: 6px;
+}
+.classic-dashboard .dashboard-balance-body > a:last-child { margin-top: auto; }
+.classic-dashboard .dashboard-referral-stats > div { min-width: 0; padding-inline: 6px; }
+.classic-dashboard .dashboard-referral-stats p { overflow-wrap: anywhere; }
+.classic-dashboard .dashboard-referral-stats p:first-of-type { font-size: 18px; line-height: 1.25; }
+.classic-dashboard .dashboard-card > div:last-child > a:last-child,
+.classic-dashboard .dashboard-referral-body > div:last-child > a { min-height: 48px; }
+.classic-dashboard .dashboard-subscription-body code { font-size: 13px; }
+.classic-dashboard button, .classic-dashboard a { scroll-margin-block: 96px; }
+@media (min-width: 768px) and (max-width: 1199px) {
+  .classic-dashboard .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .classic-dashboard .dashboard-subscription { grid-column: 1 / -1; }
+  .classic-dashboard .dashboard-subscription-body > .dashboard-subscription-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .classic-dashboard .dashboard-subscription-body > .dashboard-subscription-details > * { margin: 0; }
+  .classic-dashboard .dashboard-subscription-body > .dashboard-subscription-details > :first-child,
+  .classic-dashboard .dashboard-subscription-body > .dashboard-subscription-details > a:last-child { grid-column: 1 / -1; }
+}
+@media (min-width: 1200px) {
+  .classic-dashboard .dashboard-grid { grid-template-columns: minmax(0, 1.1fr) repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 767px) {
+  .classic-dashboard .dashboard-welcome { padding: 24px 20px; }
+  .classic-dashboard .dashboard-welcome > div:last-child { gap: 20px; }
+  .classic-dashboard .dashboard-welcome > div:last-child > div:last-child { min-width: 0; }
+  .classic-dashboard .dashboard-balance-amount { font-size: 36px; }
+  .classic-dashboard .dashboard-card h3 { font-size: 18px; }
+  .classic-dashboard .dashboard-referral-stats p:first-of-type { font-size: 17px; }
+}
+
+.classic-dashboard .dashboard-secondary .dashboard-card-header h3 { flex-wrap: wrap; row-gap: 12px; }
+
+.classic-cabinet header button[aria-label="Настройки кабинета"] { min-height: 40px; min-width: 40px; }

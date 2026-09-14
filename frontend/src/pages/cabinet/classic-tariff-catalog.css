@@ -1,0 +1,41 @@
+/* Use the cabinet's existing theme surfaces and buttons; only catalogue
+   composition is scoped here. Admin gradients and elevation remain in charge. */
+.classic-tariff-catalog { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 28px; align-items: start; }
+.tariff-category-rail { min-width: 0; }
+.tariff-category-list { display: flex; gap: 8px; overflow-x: auto; padding: 3px 3px 8px; }
+.tariff-category-button { display: flex; align-items: center; gap: 12px; padding: 14px; min-width: 200px; max-width: 280px; flex-shrink: 0; }
+.tariff-plan-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.tariff-plan-card { display: flex; flex-direction: column; min-width: 0; padding: 28px; }
+.tariff-plan-heading { min-height: 32px; }
+.tariff-plan-price { padding-block: 24px; }
+.tariff-price-amount { font-size: clamp(36px, 3.5vw, 48px); line-height: 1.1; overflow-wrap: anywhere; }
+.tariff-duration-picker { min-width: 0; margin-bottom: 24px; }
+.tariff-plan-features { display: grid; gap: 20px; padding-top: 24px; margin-bottom: 28px; }
+.tariff-plan-action { margin-top: auto; }
+@media (min-width: 640px) {
+  .tariff-plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tariff-plan-grid[data-count="1"] { grid-template-columns: minmax(0, 520px); }
+}
+@media (min-width: 1024px) {
+  .classic-tariff-catalog { grid-template-columns: 224px minmax(0, 1fr); gap: 32px; }
+  .tariff-category-rail { position: sticky; top: 104px; }
+  .tariff-category-list { flex-direction: column; overflow: visible; }
+  .tariff-category-button { min-width: 0; max-width: none; width: 100%; }
+}
+@media (min-width: 1440px) {
+  .tariff-plan-grid[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tariff-plan-grid[data-count="3"] .tariff-plan-card { padding: 24px; }
+}
+@media (max-width: 639px) {
+  .classic-tariff-catalog { gap: 20px; }
+  .tariff-plan-card { padding: 24px; }
+  .tariff-category-button { padding: 12px; }
+}
+
+/* Shared tracks align prices and included features when descriptions or the
+   number of duration options differ. Older browsers keep the flex layout. */
+@supports (grid-template-rows: subgrid) {
+  @media (min-width: 640px) {
+    .tariff-plan-card { display: grid; grid-template-rows: subgrid; grid-row: span 5; row-gap: 0; }
+  }
+}

@@ -1,0 +1,14 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),ts=require('typescript');
+const source=fs.readFileSync('src/lib/telegram-viewport.ts','utf8');
+const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const calls=[],events=new Map(),dataset={},styles=new Map();
+const tg={initData:'test',isFullscreen:false,ready:()=>calls.push('ready'),expand:()=>calls.push('expand'),disableVerticalSwipes:()=>{},requestFullscreen:()=>calls.push('request'),exitFullscreen:()=>calls.push('exit'),onEvent:(e,f)=>events.set(e,f),offEvent:(e)=>events.delete(e),safeAreaInset:{top:24,bottom:12},contentSafeAreaInset:{top:40,bottom:0}};
+const out={};vm.runInNewContext(js,{exports:out,window:{Telegram:{WebApp:tg}},document:{documentElement:{dataset,style:{setProperty:(k,v)=>styles.set(k,v),removeProperty:k=>styles.delete(k)}}}});
+out.initTelegramViewport();assert.deepEqual(calls,['ready','expand']);assert.equal(dataset.tgFullscreen,undefined);
+const cleanup=out.enterAuroraFullscreen();assert.equal(calls.at(-1),'request');assert.equal(dataset.tgFullscreen,undefined);
+tg.isFullscreen=true;events.get('fullscreenChanged')();assert.equal(dataset.tgFullscreen,'1');assert.equal(styles.get('--app-tg-top'),'64px');
+tg.safeAreaInset.top=0;events.get('safeAreaChanged')();assert.equal(styles.get('--app-tg-top'),'40px');
+cleanup();assert.equal(calls.at(-1),'exit');assert.equal(events.size,0);assert.equal(styles.size,0);assert.equal(dataset.tgFullscreen,undefined);
+tg.initData='';calls.length=0;out.initTelegramViewport();out.enterAuroraFullscreen()();assert.equal(calls.length,0);
+tg.initData='test';tg.isFullscreen=false;tg.requestFullscreen=()=>{throw Error('unsupported')};out.enterAuroraFullscreen()();assert.equal(dataset.tgFullscreen,undefined);
+console.log('PASS: Classic/Stealth expansion only, Aurora actual fullscreen events, inset updates, exit cleanup, browser and unsupported Telegram');

@@ -81,6 +81,7 @@ export const BLOCK_SCHEMAS: Record<string, BlockSchema> = {
     description: "Заголовок, подзаголовок и две кнопки. Первое, что видит пользователь.",
     variants: [
       { value: "split", label: "Две колонки" },
+      { value: "centered", label: "По центру" },
     ],
     propsFields: [
       { key: "ctaUrl", label: "Главная CTA-ссылка", type: "url", placeholder: "/cabinet/register" },
@@ -88,9 +89,9 @@ export const BLOCK_SCHEMAS: Record<string, BlockSchema> = {
       { key: "showRightCard", label: "Показывать карточку справа", type: "bool" },
     ],
     i18nFields: [
-      { key: "badge", label: "Бейдж", type: "text", hint: "Маленький текст над заголовком (uppercase)" },
+      { key: "badge", label: "Бейдж", type: "text", hint: "Подпись в нижней строке главного экрана" },
       { key: "headline1", label: "Заголовок (часть 1)", type: "text" },
-      { key: "headline2", label: "Заголовок (часть 2 — акцент)", type: "text", hint: "Подсветится градиентом" },
+      { key: "headline2", label: "Заголовок (часть 2 — акцент)", type: "text", hint: "Выделяется акцентным цветом секции" },
       { key: "title", label: "Имя сервиса в подзаголовке", type: "text" },
       { key: "subtitle", label: "Подзаголовок", type: "textarea", rows: 3 },
       { key: "hint", label: "Подсказка под кнопками", type: "text" },
@@ -332,6 +333,7 @@ export const BLOCK_SCHEMAS: Record<string, BlockSchema> = {
     variants: [
       { value: "journey", label: "Шаги — как это работает" },
       { value: "footer", label: "Подвал лендинга" },
+      { value: "content", label: "Текст и изображение" },
     ],
     propsFields: [],
     i18nFields: [],
@@ -372,6 +374,60 @@ export const CUSTOM_VARIANT_SCHEMAS: Record<string, { propsFields: FieldSchema[]
   },
 };
 
+export const SECTION_FIELDS: FieldSchema[] = [
+  { key: "anchor", label: "Якорь для навигации", type: "text", hint: "Например, benefits. В меню ссылка будет #benefits." },
+  { key: "backgroundColor", label: "Фон секции", type: "color" },
+  { key: "textColor", label: "Цвет текста секции", type: "color" },
+  { key: "accentColor", label: "Акцент секции", type: "color" },
+  { key: "backgroundImage", label: "Фоновое изображение", type: "image" },
+  { key: "spacing", label: "Отступы сверху и снизу, px", type: "number", placeholder: "100" },
+  { key: "columns", label: "Количество колонок на компьютере", type: "number", placeholder: "3" },
+  { key: "align", label: "Выравнивание текста", type: "select", options: [{value:"left",label:"Слева"},{value:"center",label:"По центру"}] },
+  { key: "hideMobile", label: "Скрыть на телефоне", type: "bool" },
+  { key: "hideDesktop", label: "Скрыть на компьютере", type: "bool" },
+];
+export const BRAND_FIELDS: FieldSchema[] = [
+  { key: "brandName", label: "Название бренда", type: "text", hint: "Если не задано — название из настроек панели." },
+  { key: "brandLogo", label: "Логотип лендинга", type: "image" },
+  { key: "showHeader", label: "Показывать шапку", type: "bool" },
+  { key: "stickyHeader", label: "Закрепить шапку при прокрутке", type: "bool" },
+  { key: "navigation", label: "Ссылки в меню", type: "list-pair", maxItems: 8, itemFields: [{key:"label",label:"Название",type:"text"},{key:"href",label:"Ссылка",type:"url"}] },
+  { key: "seoTitle", label: "Заголовок страницы для поиска", type: "text" },
+  { key: "seoDescription", label: "Описание для поиска", type: "textarea" },
+];
+BLOCK_SCHEMAS.hero.propsFields.push(
+  { key: "layout", label: "Композиция первого экрана", type: "select", options: [{value:"split",label:"Текст слева, 3D справа"},{value:"reversed",label:"3D слева, текст справа"},{value:"centered",label:"По центру"}] },
+  { key: "sceneType", label: "Изображение первого экрана", type: "select", options: [{value:"spatial",label:"Пространственный интерфейс"},{value:"image",label:"Своё изображение"},{value:"none",label:"Только текст"}] },
+  { key: "sceneColor", label: "Цвет 3D-сцены", type: "color" },
+  { key: "sceneMaterial", label: "Материал 3D", type: "select", options: [{value:"glass",label:"Стекло и свет"},{value:"matte",label:"Матовые поверхности"},{value:"chrome",label:"Металлические края"}] },
+  { key: "sceneMotion", label: "Объёмное движение сайта", type: "bool" },
+  { key: "spatialDepth", label: "Глубина всего сайта (0–2)", type: "number" },
+  { key: "imageUrl", label: "Своё изображение", type: "image" },
+  { key: "imageAlt", label: "Описание изображения", type: "text" },
+  { key: "showSecondary", label: "Показывать вторую кнопку", type: "bool" },
+);
+BLOCK_SCHEMAS.benefits.i18nFields = BLOCK_SCHEMAS.benefits.i18nFields.filter(f => f.key !== "badge");
+BLOCK_SCHEMAS.cta.i18nFields = BLOCK_SCHEMAS.cta.i18nFields.filter(f => f.key !== "eyebrow");
+BLOCK_SCHEMAS.hero.i18nFields = BLOCK_SCHEMAS.hero.i18nFields.filter(f => !["title", "rightCardEyebrow"].includes(f.key));
+BLOCK_SCHEMAS.hero.i18nFields.push({key:"tags",label:"Краткие подписи под кнопками",type:"list-text",maxItems:8});
+BLOCK_SCHEMAS.benefits.propsFields.push({key:"layout",label:"Расположение преимуществ",type:"select",options:[{value:"editorial",label:"Первое преимущество крупнее"},{value:"grid",label:"Равные колонки"}]});
+for (const type of ["features","benefits"]) {
+  const f=BLOCK_SCHEMAS[type].i18nFields.find(f=>f.key==="items")!;
+  f.maxItems=12; f.hint="Можно добавить свои пункты и выбрать иконку.";
+  f.itemFields=[...(f.itemFields ?? []),{key:"icon",label:"Иконка",type:"select",options:[{value:"shield",label:"Щит"},{value:"lock",label:"Замок"},{value:"globe",label:"Глобус"},{value:"speed",label:"Скорость"},{value:"monitor",label:"Компьютер"},{value:"phone",label:"Телефон"},{value:"payment",label:"Оплата"},{value:"support",label:"Поддержка"},{value:"wifi",label:"Wi-Fi"}]}];
+  if(type === "benefits") f.itemFields.push({key:"imageUrl",label:"Изображение вместо иконки",type:"image"});
+}
+BLOCK_SCHEMAS.devices.propsFields[0].itemFields = [...ITEM_NAME,{key:"href",label:"Ссылка на скачивание",type:"url"}];
+CUSTOM_VARIANT_SCHEMAS.journey.propsFields[0].maxItems=8;
+CUSTOM_VARIANT_SCHEMAS.footer.propsFields.push({key:"links",label:"Дополнительные ссылки",type:"list-pair",itemFields:[{key:"label",label:"Название",type:"text"},{key:"href",label:"Ссылка",type:"url"}]});
+CUSTOM_VARIANT_SCHEMAS.footer.i18nFields.push({key:"offerLabel",label:"Название ссылки на оферту",type:"text"},{key:"privacyLabel",label:"Название ссылки на политику",type:"text"});
+CUSTOM_VARIANT_SCHEMAS.content = {
+  propsFields: [{key:"imageUrl",label:"Изображение",type:"image"},{key:"imageAlt",label:"Описание изображения",type:"text"},{key:"ctaUrl",label:"Ссылка кнопки",type:"url"},{key:"layout",label:"Композиция",type:"select",options:[{value:"split",label:"Две колонки"},{value:"centered",label:"По центру"}]}],
+  i18nFields: [{key:"title",label:"Заголовок",type:"text"},{key:"subtitle",label:"Подзаголовок",type:"textarea"},{key:"body",label:"Основной текст",type:"textarea",rows:7},{key:"ctaText",label:"Текст кнопки (пусто — скрыть)",type:"text"}],
+};
+VARIANT_DESCRIPTIONS["custom/content"] = "Свободная секция: свой текст, изображение и кнопка.";
+BLOCK_SCHEMAS.spacer.propsFields.push({key:"height",label:"Высота, px",type:"number"});
+
 /** Получает schema для конкретного блока (с учётом custom-вариантов). */
 export function getBlockSchema(type: string, variant: string): BlockSchema | null {
   const base = BLOCK_SCHEMAS[type];
@@ -383,3 +439,6 @@ export function getBlockSchema(type: string, variant: string): BlockSchema | nul
   }
   return base;
 }
+
+BLOCK_SCHEMAS.hero.i18nFields.push({key:"sceneLabel",label:"Подпись иллюстрации",type:"text"},{key:"tariffLinkText",label:"Ссылка на тарифы внизу экрана",type:"text"});
+BLOCK_SCHEMAS.tariffs.i18nFields.push({key:"durationLabel",label:"Срок доступа · {days} — число дней",type:"text"},{key:"devicesLabel",label:"Устройства · {count} — лимит",type:"text"},{key:"unlimitedLabel",label:"Безлимитный трафик",type:"text"});

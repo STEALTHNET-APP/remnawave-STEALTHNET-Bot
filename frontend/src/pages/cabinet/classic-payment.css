@@ -1,0 +1,117 @@
+.dialog-content-solid.classic-payment-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, calc(100vw - 48px));
+  max-width: none;
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 24px;
+  transition-property: opacity, transform;
+}
+
+.classic-payment-header {
+  flex: none;
+  padding: 22px 68px 20px 24px;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+}
+
+.classic-payment-dialog > button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+}
+
+.classic-payment-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px;
+}
+
+.classic-payment-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: start;
+  gap: 28px;
+}
+
+.classic-payment-summary,
+.classic-payment-methods {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.classic-payment-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.classic-payment-method-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.classic-payment-method-grid > .classic-payment-method {
+  height: auto;
+  min-height: 72px;
+  padding: 14px;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.classic-payment-method > span {
+  min-width: 0;
+}
+
+.classic-payment-method-grid > .classic-payment-balance {
+  grid-column: 1 / -1;
+  height: auto;
+  min-height: 64px;
+  padding: 16px;
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
+.classic-payment-footer {
+  flex: none;
+  padding: 12px 24px;
+}
+
+.dialog-content-solid.classic-payment-dialog-ready {
+  width: min(640px, calc(100vw - 48px));
+}
+
+@media (max-width: 900px) {
+  .classic-payment-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+}
+
+@media (max-width: 600px) {
+  .dialog-content-solid.classic-payment-dialog {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    border-radius: 20px;
+  }
+
+  .classic-payment-header {
+    padding: 16px 64px 16px 16px;
+  }
+
+  .classic-payment-body {
+    padding: 16px;
+  }
+
+  .classic-payment-method-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

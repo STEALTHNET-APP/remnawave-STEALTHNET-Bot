@@ -1397,6 +1397,105 @@ function richSubStats(subscription: unknown): {
   return { status, daysLeft, trafficUsedGb, trafficLimitGb, trafficPct, devicesUsed, deviceLimit };
 }
 
+/**
+ * Кнопки ВНУТРИ rich-сообщения (Bot API 10.3, RichBlockButtons).
+ *
+ * Схема выяснена на живом API 25.08.2026 (rich_message валидируется ДО поиска
+ * чата, поэтому её можно прощупать, ничего никому не отправляя):
+ *   • блок  — {"type":"buttons","buttons":[…]}; массив ПЛОСКИЙ, вложенные ряды
+ *     отбиваются ("InlineButton must be an Object") — раскладку Telegram
+ *     делает сам, поэтому buttonsPerRow здесь не применим;
+ *   • кнопка — text + ОДНО действие (callback_data | url | web_app |
+ *     copy_text | switch_inline_query). Кнопка без действия отбивается
+ *     ("Text buttons are not allowed in the inline keyboard");
+ *   • style — ровно четыре значения: primary | success | danger | default
+ *     (secondary/warning → "Invalid button style specified");
+ *   • disabled — булево, принимается.
+ */
+// Сколько кнопок уезжает ВНУТРЬ рич-сообщения. Раскладкой управлять нельзя
+// (проверено: Telegram выбрасывает columns/per_row/layout/is_compact и решает
+// сам), поэтому единственный рычаг — количество: на 2 подписи читаются
+// целиком, дальше он ужимает их в круглые иконки и режет текст.
+// Технический потолок API — 8 (9 → RICH_MESSAGE_BUTTONS_TOO_MANY).
+const RICH_BUTTONS_PER_ROW = 2;
+const RICH_BUTTONS_MAX = 8;
+
+type RichButton = Record<string, unknown>;
+
+function richButtonsBlock(markup?: RichInlineKeyboard): Record<string, unknown> | null {
+  const rows = markup?.inline_keyboard;
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+  const buttons: RichButton[] = [];
+  for (const row of rows) {
+    if (!Array.isArray(row)) continue;
+    for (const raw of row) {
+      const b = raw as RichButton;
+      if (!b || typeof b !== "object") continue;
+      // Пропускаем кнопки без действия — API такие отвергает и роняет ВСЁ сообщение.
+      const hasAction = ["callback_data", "url", "web_app", "copy_text", "switch_inline_query"]
+        .some((k) => b[k] != null);
+      if (!hasAction) continue;
+      buttons.push(b);
+    }
+  }
+  // ⚠️ Предел — 8 кнопок на сообщение (замерено на живом API 25.08.2026:
+  // 9 → RICH_MESSAGE_BUTTONS_TOO_MANY, 8 → ok). Ошибка приходит только при
+  // ОТПРАВКЕ, до неё payload проходит валидацию, поэтому поймать её можно
+  // лишь на реальном чате. Если кнопок больше — отдаём null, и вызывающий
+  // код кладёт их обычной клавиатурой под сообщением (она тоже цветная).
+  if (buttons.length === 0 || buttons.length > RICH_BUTTONS_MAX) return null;
+  return { type: "buttons", buttons };
+}
+
+/**
+ * Делит клавиатуру: первые RICH_BUTTONS_INSIDE кнопок (в порядке, заданном
+ * админкой) уезжают ВНУТРЬ сообщения, остальные остаются обычной клавиатурой
+ * снизу. Кнопки без действия отбрасываем — API их не принимает и роняет всё
+ * сообщение целиком.
+ */
+function flattenMenuButtons(markup?: RichInlineKeyboard): Record<string, unknown>[] {
+  const rows = markup?.inline_keyboard;
+  if (!Array.isArray(rows)) return [];
+  const out: Record<string, unknown>[] = [];
+  for (const row of rows) {
+    if (!Array.isArray(row)) continue;
+    for (const raw of row) {
+      const b = raw as Record<string, unknown>;
+      if (!b || typeof b !== "object") continue;
+      // Кнопку без действия API не принимает и роняет ВСЁ сообщение — отбрасываем.
+      const hasAction = ["callback_data", "url", "web_app", "copy_text", "switch_inline_query"].some((k) => b[k] != null);
+      if (hasAction) out.push(b);
+    }
+  }
+  return out;
+}
+
+/** Отправка rich-сообщения, собранного БЛОКАМИ (кнопки внутри). */
+async function sendRichBlocks(
+  ctx: { api: { raw?: unknown }; chat?: { id: number } },
+  blocks: Record<string, unknown>[],
+  reply_markup?: RichInlineKeyboard,
+): Promise<unknown> {
+  const chatId = ctx.chat?.id;
+  if (chatId == null) throw new Error("sendRichBlocks: no chat id");
+  const payload: Record<string, unknown> = { chat_id: chatId, rich_message: { blocks } };
+  if (reply_markup) payload.reply_markup = reply_markup;
+  const raw = (ctx.api as { raw?: Record<string, unknown> }).raw;
+  const fn = raw?.sendRichMessage;
+  if (typeof fn === "function") {
+    return (fn as (p: Record<string, unknown>) => Promise<unknown>).call(raw, payload);
+  }
+  const token = process.env.BOT_TOKEN ?? "";
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendRichMessage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = (await res.json()) as { ok?: boolean; description?: string };
+  if (!data.ok) throw new Error(`sendRichMessage(blocks) failed: ${data.description ?? ""}`);
+  return data;
+}
+
 /** Отправка rich-сообщения (Rich Markdown) с inline-клавиатурой. */
 async function sendRichMarkdown(
   ctx: { api: { raw?: unknown }; chat?: { id: number } },
@@ -1405,6 +1504,13 @@ async function sendRichMarkdown(
 ): Promise<unknown> {
   const chatId = ctx.chat?.id;
   if (chatId == null) throw new Error("sendRichMarkdown: no chat id");
+  // ⚠️ НЕ класть кнопки в blocks вместе с markdown: при передаче обоих полей
+  // Telegram МОЛЧА отбрасывает разметку и оставляет только блоки — уходит
+  // сообщение без единой строчки текста (проверено 25.08.2026: в ответе
+  // rich_message.blocks вернулся один блок "buttons"). Кнопки внутри возможны
+  // только если ВСЁ сообщение собрано блоками (heading/paragraph/table/
+  // divider/buttons), и не более 8 штук. Здесь — разметка + обычная
+  // клавиатура снизу, она тоже цветная.
   const payload: Record<string, unknown> = { chat_id: chatId, rich_message: { markdown } };
   if (reply_markup) payload.reply_markup = reply_markup;
   const raw = (ctx.api as { raw?: Record<string, unknown> }).raw;
@@ -1425,6 +1531,116 @@ async function sendRichMarkdown(
 }
 
 /** Главное меню в формате Rich Markdown (логотип + заголовок + баланс + таблица подписок). */
+/**
+ * Главное меню БЛОКАМИ (Bot API 10.3) — чтобы кнопки были ВНУТРИ сообщения.
+ *
+ * Почему отдельная сборка, а не переиспользование markdown-версии:
+ * при передаче `markdown` и `blocks` вместе Telegram МОЛЧА выбрасывает
+ * разметку и оставляет только блоки — уходит сообщение без текста.
+ * Поэтому либо разметка + клавиатура снизу, либо ВСЁ блоками.
+ *
+ * Формы выяснены на живом API 25.08.2026:
+ *   heading   {type:"heading", text, size}
+ *   photo     {type:"photo", photo:{type:"photo", media:"<url>"}}
+ *   paragraph {type:"paragraph", text, entities?}
+ *   table     {type:"table", cells:[[{text,is_header?,align?}]], is_bordered?, is_striped?}
+ *   divider   {type:"divider"}
+ *   buttons   {type:"buttons", buttons:[…]}  — не более RICH_BUTTONS_MAX
+ */
+function buildMainMenuRichBlocks(opts: {
+  serviceName: string;
+  balance: number;
+  currency: string;
+  logoUrl: string | null;
+  allSubs?: { items: Array<{ type: "root" | "secondary"; subscriptionIndex: number | null; subscription: unknown; tariffDisplayName: string; tariffMenuEmoji?: string | null; }> } | null;
+  infoBlock?: string | null;
+  menuTexts?: Record<string, string> | null;
+  buttons: Record<string, unknown>[];
+}): Record<string, unknown>[] {
+  const { serviceName, balance, currency, logoUrl, allSubs, infoBlock, menuTexts, buttons } = opts;
+  const mt = menuTexts ?? null;
+  const name = serviceName.trim() || "Кабинет";
+  const blocks: Record<string, unknown>[] = [];
+
+  const title = `${t(mt, "welcomeGreeting")} в ${t(mt, "welcomeTitlePrefix")}${name}`;
+  blocks.push({ type: "heading", text: title, size: 1 });
+  if (logoUrl) blocks.push({ type: "photo", photo: { type: "photo", media: logoUrl } });
+
+  const bal = `${t(mt, "balancePrefix")}${formatMoney(balance, currency)}`;
+  blocks.push({ type: "paragraph", text: bal, entities: [{ type: "bold", offset: 0, length: bal.length }] });
+
+  const items = allSubs?.items ?? [];
+  if (items.length > 0) {
+    blocks.push({ type: "heading", text: "🔢 Ваши подписки", size: 2 });
+    const sorted = [...items].sort((a, b) => {
+      if (a.type !== b.type) return a.type === "root" ? -1 : 1;
+      return (a.subscriptionIndex ?? 0) - (b.subscriptionIndex ?? 0);
+    });
+    const cells: Record<string, unknown>[][] = [[
+      { text: "Подписка", is_header: true },
+      { text: "Осталось", is_header: true, align: "center" },
+      { text: "Трафик", is_header: true, align: "center" },
+      { text: "Устр.", is_header: true, align: "center" },
+    ]];
+    for (const it of sorted) {
+      const st = richSubStats(it.subscription);
+      const badge =
+        st.status === "ACTIVE" ? "🟢"
+        : st.status === "EXPIRED" ? "🔴"
+        : st.status === "LIMITED" ? "🟠"
+        : st.status === "DISABLED" ? "⚪"
+        : "🟡";
+      const emoji = it.tariffMenuEmoji ? `${it.tariffMenuEmoji} ` : "";
+      const left = st.daysLeft != null ? `${st.daysLeft} ${pluralDays(st.daysLeft)}` : "—";
+      const traffic =
+        st.trafficUsedGb != null && st.trafficLimitGb != null
+          ? `${gbCompact(st.trafficUsedGb)}/${gbCompact(st.trafficLimitGb)} GB`
+          : st.trafficUsedGb != null ? `${gbCompact(st.trafficUsedGb)} GB` : "—";
+      const devices = st.deviceLimit != null ? `${st.devicesUsed ?? 0}/${st.deviceLimit}` : "—";
+      cells.push([
+        { text: `${badge} ${emoji}${richCell(it.tariffDisplayName)}` },
+        { text: left, align: "center" },
+        { text: traffic, align: "center" },
+        { text: devices, align: "center" },
+      ]);
+    }
+    blocks.push({ type: "table", cells, is_bordered: true, is_striped: true });
+  } else {
+    blocks.push({ type: "paragraph", text: "Активных подписок пока нет — выбери тариф ниже." });
+  }
+
+  const info = infoBlock?.trim();
+  if (info) {
+    blocks.push({ type: "divider" });
+    for (const line of info.split("\n")) {
+      const clean = richCell(line);
+      if (clean) blocks.push({ type: "paragraph", text: clean });
+    }
+  }
+
+  // Кнопки ВНУТРИ сообщения (10.3), сеткой по RICH_BUTTONS_PER_ROW в ряд.
+  //
+  // Раскладкой управлять нечем: поля columns/per_row/layout/is_compact API
+  // молча выбрасывает (проверено по ответу — сохраняются только type и
+  // buttons), а один блок из 8 кнопок Telegram ужимает в круглые иконки с
+  // обрезанными подписями. Приём: КАЖДЫЙ РЯД — отдельный блок buttons, тогда
+  // подписи читаются целиком.
+  //
+  // ⚠️ Предел в 8 кнопок действует НА БЛОК, а не на сообщение (проверено
+  // 25.08.2026: 9 в одном блоке → RICH_MESSAGE_BUTTONS_TOO_MANY, а четыре
+  // блока по 2 проходят). Так что рядов может быть сколько угодно.
+  //
+  // ⚠️ Нужен свежий клиент Telegram. На версии старше 10.3 (24.08.2026)
+  // сообщение с блоком buttons НЕ РИСУЕТСЯ ВООБЩЕ — приходит пустой пузырь,
+  // без всякого «обновите приложение». API при этом отвечает ok и честно
+  // сохраняет блоки, так что по логам не поймать: спрашивать версию Telegram.
+  for (let i = 0; i < buttons.length; i += RICH_BUTTONS_PER_ROW) {
+    const row = buttons.slice(i, i + RICH_BUTTONS_PER_ROW);
+    if (row.length) blocks.push({ type: "buttons", buttons: row });
+  }
+  return blocks;
+}
+
 function buildMainMenuRichMarkdown(opts: {
   serviceName: string;
   balance: number;
@@ -1878,7 +2094,10 @@ composer.command("start", async (ctx) => {
   const refCode = !isPromo ? (parsed.refCode ?? bareRefFallback) : undefined;
 
   try {
+    const __T0 = Date.now();
+    const __lap = (m: string) => console.log(`[/start timing] ${m}: ${Date.now() - __T0}ms`);
     const config = await api.getPublicConfig();
+    __lap("getPublicConfig");
     if (config?.translations) setTranslations(config.translations);
     const name = config?.serviceName?.trim() || "Кабинет";
 
@@ -1894,6 +2113,7 @@ composer.command("start", async (ctx) => {
       utm_content: parsed.utm_content,
       utm_term: parsed.utm_term,
     });
+    __lap("registerByTelegram");
 
     setToken(from.id, auth.token);
     const client = auth.client;
@@ -1962,15 +2182,17 @@ composer.command("start", async (ctx) => {
 
     const [subRes, proxyRes, singboxRes, allSubsRes] = await Promise.all([
       api.getSubscription(auth.token).catch(() => ({ subscription: null })),
-      api.getPublicProxyTariffs().catch(() => ({ items: [] })),
-      api.getPublicSingboxTariffs().catch(() => ({ items: [] })),
+      (async () => { const t = Date.now(); const r = await api.getPublicProxyTariffs().catch(() => ({ items: [] })); console.log(`[/start timing] __lap4 proxy: ${Date.now()-t}ms`); return r; })(),
+      (async () => { const t = Date.now(); const r = await api.getPublicSingboxTariffs().catch(() => ({ items: [] })); console.log(`[/start timing] __lap4 singbox: ${Date.now()-t}ms`); return r; })(),
       // тянем все подписки клиента для блок подписок в welcome (нагрузка + список).
-      api.getAllSubscriptions(auth.token).catch(() => ({ items: [] })),
+      (async () => { const t = Date.now(); const r = await api.getAllSubscriptions(auth.token).catch(() => ({ items: [] })); console.log(`[/start timing] __lap4 allSubs: ${Date.now()-t}ms`); return r; })(),
     ]);
+    __lap("subs+proxy+singbox+allSubs");
     const vpnUrl = getSubscriptionUrl(subRes.subscription);
     // если в админке настроены trials → используем их (скрываем
     // кнопку когда юзер всё взял); иначе fallback на legacy single-trial.
     const trialAvail = await api.getAvailableTrials(auth.token).catch(() => ({ items: [], hasAnyEnabled: false }));
+    __lap("getAvailableTrials");
     const showTrial = trialAvail.hasAnyEnabled
       ? trialAvail.items.length > 0
       : Boolean(config?.trialEnabled && !client?.trialUsed);
@@ -2022,21 +2244,41 @@ composer.command("start", async (ctx) => {
     let richMenuSent = false;
     if (process.env.BOT_RICH_MENU === "on") {
       try {
-        const richMd = buildMainMenuRichMarkdown({
-          serviceName: name,
-          balance: client?.balance ?? 0,
-          currency: client?.preferredCurrency ?? config?.defaultCurrency ?? "usd",
-          logoUrl: botLogoUrl(config),
-          allSubs: allSubsRes,
-          infoBlock: config?.botInfoBlock ?? null,
-          menuTexts: config?.botMenuTexts ?? config?.resolvedBotMenuTexts ?? null,
-        });
-        await sendRichMarkdown(ctx, richMd, markup as unknown as RichInlineKeyboard);
+        // Кнопки помещаются внутрь сообщения только если их не больше
+        // RICH_BUTTONS_MAX И всё сообщение собрано блоками (markdown с blocks
+        // несовместим — разметка молча отбрасывается). Иначе — прежний путь:
+        // разметка + цветная клавиатура снизу.
+        if (true) {
+          const __allBtns = flattenMenuButtons(markup as unknown as RichInlineKeyboard);
+          const blocks = buildMainMenuRichBlocks({
+            serviceName: name,
+            balance: client?.balance ?? 0,
+            currency: client?.preferredCurrency ?? config?.defaultCurrency ?? "usd",
+            logoUrl: botLogoUrl(config),
+            allSubs: allSubsRes,
+            infoBlock: config?.botInfoBlock ?? null,
+            menuTexts: config?.botMenuTexts ?? config?.resolvedBotMenuTexts ?? null,
+            buttons: __allBtns,
+          });
+          await sendRichBlocks(ctx, blocks, undefined);
+        } else {
+          const richMd = buildMainMenuRichMarkdown({
+            serviceName: name,
+            balance: client?.balance ?? 0,
+            currency: client?.preferredCurrency ?? config?.defaultCurrency ?? "usd",
+            logoUrl: botLogoUrl(config),
+            allSubs: allSubsRes,
+            infoBlock: config?.botInfoBlock ?? null,
+            menuTexts: config?.botMenuTexts ?? config?.resolvedBotMenuTexts ?? null,
+          });
+          await sendRichMarkdown(ctx, richMd, markup as unknown as RichInlineKeyboard);
+        }
         richMenuSent = true;
       } catch (richErr) {
         console.error("[/start rich] failed, fallback to plain:", richErr instanceof Error ? richErr.message : richErr);
       }
     }
+    __lap("before send");
     if (!richMenuSent) {
       const media = logoToMediaSource(config?.logoBot);
       if (media) {
@@ -2398,7 +2640,7 @@ async function showPaymentMethodsForTariff(ctx: any, userId: number, tariff: Tar
   if (trialsCount <= 1) trialReplaceChoice.delete(userId);
   // convNote добавляется СУФФИКСОМ: префикс сместил бы offsets pay.entities (custom emoji).
   const finalText = `${desc && opts.length === 1 ? `${desc}\n\n${pay.text}` : pay.text}${convNote}`;
-  const markup = tariffPaymentMethodButtons(tariff.id, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, balanceLabel, !!config?.yoomoneyEnabled, !!config?.yookassaEnabled, !!config?.cryptopayEnabled, tariff.currency, !!config?.heleketEnabled, !!config?.rollypayEnabled, !!config?.lavaEnabled, !!config?.lavatopEnabled, config?.botEmojis ?? null);
+  const markup = tariffPaymentMethodButtons(tariff.id, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, balanceLabel, !!config?.yoomoneyEnabled, !!config?.yookassaEnabled, !!config?.cryptopayEnabled, tariff.currency, !!config?.heleketEnabled, !!config?.rollypayEnabled, !!config?.lavaEnabled, !!config?.lavatopEnabled, config?.botEmojis ?? null, !!config?.paritypayEnabled);
   for (let i = extraRows.length - 1; i >= 0; i--) markup.inline_keyboard.unshift(extraRows[i]!);
   await editMessageContent(ctx, finalText, markup, pay.entities);
 }
@@ -2477,6 +2719,7 @@ async function showGiftPaymentConfirm(ctx: any, userId: number, tariff: TariffIt
     !!config?.heleketEnabled, !!config?.rollypayEnabled,
     !!config?.lavaEnabled,
     tariff.currency,
+    !!config?.paritypayEnabled,
   ));
 }
 
@@ -4634,6 +4877,80 @@ if (data.startsWith("pay_tariff_rollypay:")) {
       }
       return;
     }
+if (data.startsWith("pay_tariff_paritypay:")) {
+      const tariffId = data.slice("pay_tariff_paritypay:".length);
+      const { items } = await api.getPublicTariffs();
+      const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
+      if (!tariff) {
+        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      try {
+        const discountInfo = activeDiscountCode.get(userId);
+        const promoCode = discountInfo?.code;
+        const sel = selectedTariffOption.get(userId);
+        const opts = sortedPriceOptions(tariff.priceOptions);
+        const eff = sel?.tariffId === tariff.id ? sel.option : (opts.length === 1 ? opts[0]! : null);
+        const unitPrice = eff?.price ?? tariff.price;
+        const effectiveDays = eff?.durationDays ?? tariff.durationDays;
+        const extraDevices = sel?.tariffId === tariff.id ? sel.extraDevices : 0;
+        const { extrasTotal } = applyExtraDevicesPriceBot(tariff.pricePerExtraDevice ?? 0, extraDevices, tariff.deviceDiscountTiers, effectiveDays);
+        const effectivePrice = unitPrice + extrasTotal;
+        // см. yoomoney handler.
+        const asAdditional = addsubPending.get(userId) === tariff.id;
+        const extPairT = extendingSecondaryPending.get(userId);
+        const extendsSecondarySubId = extPairT && extPairT.tariffId === tariff.id ? extPairT.secondaryId : undefined;
+        // юзер выбрал «продлить без устройств».
+        // Флаг прокидываем в backend — там после успешной активации helper удалит устройства.
+        // НЕ удаляем здесь — юзер может закрыть экран оплаты и устройства останутся при нём.
+        const removeExtrasOnActivate = !!(extendsSecondarySubId && pendingDropExtras.get(userId) === extendsSecondarySubId) || (!extendsSecondarySubId && convDropExtras.has(userId));
+        const replaceTrialSubId = !extendsSecondarySubId ? trialReplaceChoice.get(userId) : undefined;
+        let subExtrasForPeriod = 0;
+        if (extendsSecondarySubId && !removeExtrasOnActivate) {
+          try {
+            const allSubs = await api.getAllSubscriptions(token);
+            const target = allSubs.items?.find((it) => it.id === extendsSecondarySubId);
+            const monthly = target?.extraDevicesMonthlyPrice ?? 0;
+            if (monthly > 0 && effectiveDays > 0) {
+              subExtrasForPeriod = Math.round(monthly * (effectiveDays / 30) * 100) / 100;
+            }
+          } catch { /* ignore */ }
+        }
+        const totalPrice = effectivePrice + subExtrasForPeriod;
+        // см. yoomoney handler.
+        const meHeleket = await api.getMe(token);
+        const pdHeleket = meHeleket?.personalDiscountPercent ?? 0;
+        const { discountArg, finalPrice: priceWithDiscountHeleket } = buildTariffDiscountArg(totalPrice, pdHeleket, discountInfo, tariff.currency);
+        const payment = await api.createParitypayPayment(token, {
+          amount: totalPrice,
+          currency: tariff.currency,
+          tariffId: tariff.id,
+          tariffPriceOptionId: eff?.id,
+          deviceCount: extraDevices,
+          promoCode,
+          asAdditional: asAdditional || undefined,
+          extendsSecondarySubId,
+          removeExtrasOnActivate,
+          replaceTrialSubId,
+        });
+        if (promoCode) activeDiscountCode.delete(userId);
+        selectedTariffOption.delete(userId);
+        if (extendsSecondarySubId && removeExtrasOnActivate) extendingSecondaryPending.delete(userId);
+        if (asAdditional) addsubPending.delete(userId);
+        if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
+        convDropExtras.delete(userId);
+        trialReplaceChoice.delete(userId);
+        const nameWithDays = (opts.length > 1 || (sel?.tariffId === tariff.id))
+          ? `${tariff.name} · ${formatRuDays(effectiveDays)}`
+          : tariff.name;
+        const msg = buildPaymentMessage(config, { name: nameWithDays, price: formatMoney(priceWithDiscountHeleket, tariff.currency), amount: String(priceWithDiscountHeleket), currency: tariff.currency, action: "Нажмите кнопку ниже для оплаты:" }, discountArg);
+        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
+      } catch (e: unknown) {
+        const m = e instanceof Error ? e.message : "Ошибка создания платежа ParityPay";
+        await editMessageContent(ctx, `❌ ${m}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
 
     if (data === "menu:extra_options") {
       const options = config?.sellOptions ?? [];
@@ -6358,6 +6675,24 @@ if (data.startsWith("topup_rollypay:")) {
       }
       return;
     }
+if (data.startsWith("topup_paritypay:")) {
+      const amountStr = data.slice("topup_paritypay:".length);
+      const amount = Number(amountStr);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      const client = await api.getMe(token);
+      try {
+        const payment = await api.createParitypayPayment(token, { amount, currency: client.preferredCurrency ?? "RUB" });
+        const rpTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
+        await editMessageContent(ctx, rpTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), rpTopup.entities);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка создания платежа ParityPay";
+        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
 
     if (data.startsWith("topup:")) {
       const rest = data.slice("topup:".length);
@@ -6398,14 +6733,17 @@ if (data.startsWith("topup_rollypay:")) {
       const cryptopayEnabled = !!config?.cryptopayEnabled;
       const heleketEnabled = !!config?.heleketEnabled;
       const rollypayEnabled = !!config?.rollypayEnabled;
+      const paritypayEnabled = !!config?.paritypayEnabled;
       const lavaEnabled = !!config?.lavaEnabled;
-      const lavatopEnabled = !!config?.lavatopEnabled;
       // Если есть >1 способа любого типа — показываем выбор
-      const anyOnline = yooEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || lavaEnabled || lavatopEnabled;
-      const enabledOnlineCount = [yooEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, lavaEnabled, lavatopEnabled].filter(Boolean).length;
-      if (methods.length > 1 || (methods.length >= 1 && anyOnline) || (methods.length === 0 && enabledOnlineCount >= 2)) {
+      const anyOnline = yooEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled;
+      if (methods.length > 1 || anyOnline) {
         const topupPay2 = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency)}\n\nВыберите способ оплаты:`, config?.botEmojis);
-        await editMessageContent(ctx, topupPay2.text, topupPaymentMethodButtons(amountStr, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, yooEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, lavaEnabled, lavatopEnabled), topupPay2.entities);
+        await editMessageContent(ctx, topupPay2.text, topupPaymentMethodButtons(amountStr, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, { yoomoneyEnabled: yooEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, rollypayEnabled, paritypayEnabled, lavaEnabled }), topupPay2.entities);
+        return;
+      }
+      if (methods.length === 0 && !anyOnline) {
+        await editMessageContent(ctx, "Пополнение временно недоступно.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
       // Если ЮMoney единственный способ (нет platega, нет ЮKassa) — сразу создаём платёж ЮMoney
@@ -7500,11 +7838,12 @@ if (data.startsWith("topup_rollypay:")) {
     // покупка подарочной через внешние платёжки.
     // Создаём обычный pay_tariff* платёж с флагом asGift=true. Webhook при оплате
     // создаст Subscription с purchasedAsGift=true (попадёт в «🎁 Мои подарки» юзера).
-    if (data.startsWith("gift_pay_yookassa:") || data.startsWith("gift_pay_yoomoney:") || data.startsWith("gift_pay_cryptopay:") || data.startsWith("gift_pay_heleket:") || data.startsWith("gift_pay_lava:")) {
+    if (data.startsWith("gift_pay_yookassa:") || data.startsWith("gift_pay_yoomoney:") || data.startsWith("gift_pay_cryptopay:") || data.startsWith("gift_pay_heleket:") || data.startsWith("gift_pay_lava:") || data.startsWith("gift_pay_paritypay:")) {
       const provider = data.startsWith("gift_pay_yookassa:") ? "yookassa"
         : data.startsWith("gift_pay_yoomoney:") ? "yoomoney"
         : data.startsWith("gift_pay_cryptopay:") ? "cryptopay"
         : data.startsWith("gift_pay_heleket:") ? "heleket"
+        : data.startsWith("gift_pay_paritypay:") ? "paritypay"
         : "lava";
       const tariffId = data.slice(data.indexOf(":") + 1);
       try {
@@ -7569,6 +7908,9 @@ if (data.startsWith("topup_rollypay:")) {
           payUrl = p.payUrl;
         } else if (provider === "heleket") {
           const p = await api.createHeleketPayment(token, { amount: effectivePrice, currency: tariff.currency, tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
+          payUrl = p.payUrl;
+        } else if (provider === "paritypay") {
+          const p = await api.createParitypayPayment(token, { amount: effectivePrice, currency: "RUB", tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
           payUrl = p.payUrl;
         } else {
           const p = await api.createLavaPayment(token, { amount: effectivePrice, currency: "RUB", tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
@@ -8129,12 +8471,15 @@ composer.on("message:text", async (ctx) => {
         cfgT?.botBackLabel ?? null,
         undefined,
         undefined,
-        !!cfgT?.yoomoneyEnabled,
-        !!cfgT?.yookassaEnabled,
-        !!cfgT?.cryptopayEnabled,
-        !!cfgT?.heleketEnabled,
-        !!cfgT?.lavaEnabled,
-        !!cfgT?.lavatopEnabled,
+        {
+          yoomoneyEnabled: !!cfgT?.yoomoneyEnabled,
+          yookassaEnabled: !!cfgT?.yookassaEnabled,
+          cryptopayEnabled: !!cfgT?.cryptopayEnabled,
+          heleketEnabled: !!cfgT?.heleketEnabled,
+          rollypayEnabled: !!cfgT?.rollypayEnabled,
+          paritypayEnabled: !!cfgT?.paritypayEnabled,
+          lavaEnabled: !!cfgT?.lavaEnabled,
+        },
       ),
     });
     return;
@@ -8246,9 +8591,10 @@ composer.on("message:text", async (ctx) => {
     const yookassaEnabledMsg = !!config?.yookassaEnabled;
     const cryptopayEnabledMsg = !!config?.cryptopayEnabled;
     const heleketEnabledMsg = !!config?.heleketEnabled;
+    const rollypayEnabledMsg = !!config?.rollypayEnabled;
+    const paritypayEnabledMsg = !!config?.paritypayEnabled;
     const lavaEnabledMsg = !!config?.lavaEnabled;
-    const lavatopEnabledMsg = !!config?.lavatopEnabled;
-    if (!methods.length && !yooEnabled && !yookassaEnabledMsg && !cryptopayEnabledMsg && !heleketEnabledMsg && !lavaEnabledMsg && !lavatopEnabledMsg) {
+    if (!methods.length && !yooEnabled && !yookassaEnabledMsg && !cryptopayEnabledMsg && !heleketEnabledMsg && !rollypayEnabledMsg && !paritypayEnabledMsg && !lavaEnabledMsg) {
       await ctx.reply("Пополнение временно недоступно.");
       return;
     }
@@ -8266,13 +8612,13 @@ composer.on("message:text", async (ctx) => {
           connect: botEmojis.SERVERS?.tgEmojiId || botEmojis.CONNECT?.tgEmojiId,
         }
       : undefined;
-    const enabledOnlineMsg = [yooEnabled, yookassaEnabledMsg, cryptopayEnabledMsg, heleketEnabledMsg, lavaEnabledMsg, lavatopEnabledMsg].filter(Boolean).length;
+    const enabledOnlineMsg = [yooEnabled, yookassaEnabledMsg, cryptopayEnabledMsg, heleketEnabledMsg, rollypayEnabledMsg, paritypayEnabledMsg, lavaEnabledMsg].filter(Boolean).length;
     const anyOnlineMsg = enabledOnlineMsg > 0;
-    if (methods.length > 1 || (methods.length >= 1 && anyOnlineMsg) || (methods.length === 0 && enabledOnlineMsg >= 2)) {
+    if (methods.length > 1 || anyOnlineMsg) {
       const topupMsg1 = titleWithEmoji("CARD", `Пополнение на ${formatMoney(num, client.preferredCurrency)}\n\nВыберите способ оплаты:`, config?.botEmojis);
       await ctx.reply(topupMsg1.text, {
         entities: topupMsg1.entities.length ? topupMsg1.entities : undefined,
-        reply_markup: topupPaymentMethodButtons(String(num), methods, config?.botBackLabel ?? null, backStyle, msgEmojiIds, yooEnabled, yookassaEnabledMsg, cryptopayEnabledMsg, heleketEnabledMsg, lavaEnabledMsg, lavatopEnabledMsg),
+        reply_markup: topupPaymentMethodButtons(String(num), methods, config?.botBackLabel ?? null, backStyle, msgEmojiIds, { yoomoneyEnabled: yooEnabled, yookassaEnabled: yookassaEnabledMsg, cryptopayEnabled: cryptopayEnabledMsg, heleketEnabled: heleketEnabledMsg, rollypayEnabled: rollypayEnabledMsg, paritypayEnabled: paritypayEnabledMsg, lavaEnabled: lavaEnabledMsg }),
       });
       return;
     }

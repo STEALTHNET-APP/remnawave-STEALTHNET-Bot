@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthDashboard } from "@/pages/cabinet/stealth/stealth-dashboard";
-import { AuroraDashboard } from "@/pages/cabinet/aurora/aurora-dashboard";
 import {
   
   Package,
@@ -133,7 +132,7 @@ export function ClientDashboardPage() {
   return (
     <>
       <LinkTelegramPrompt />
-      {design === "stealth" ? <StealthDashboard /> : design === "aurora" ? <AuroraDashboard /> : <ClassicDashboardPage />}
+      {design === "stealth" ? <StealthDashboard /> : <ClassicDashboardPage compact={design === "aurora"} />}
     </>
   );
 }
@@ -218,7 +217,7 @@ function LinkTelegramPrompt() {
   );
 }
 
-function ClassicDashboardPage() {
+function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   const { t } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
   const config = useCabinetConfig();
@@ -272,7 +271,7 @@ function ClassicDashboardPage() {
       searchParams.get("yoomoney_form") === "success" ||
       searchParams.get("yookassa") === "success" ||
       searchParams.get("heleket") === "success" ||
-      searchParams.get("rollypay") === "success" ||
+      searchParams.get("rollypay") === "success" || searchParams.get("paritypay") === "success" ||
       searchParams.get("lava") === "success" ||
       searchParams.get("lavatop") === "success" ||
       searchParams.get("overpay") === "return";
@@ -546,6 +545,7 @@ function ClassicDashboardPage() {
             <span className="flex items-center gap-2 shrink-0">
               {autoRenewTogglingId === sub.id && <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />}
               <Switch
+                aria-label={`Автосписание: ${sub.name}`}
                 checked={sub.enabled}
                 disabled={autoRenewTogglingId === sub.id}
                 onCheckedChange={(v) => toggleSubAutoRenew(sub, v)}
@@ -694,7 +694,7 @@ function ClassicDashboardPage() {
     </Dialog>
   );
 
-  if (isMiniapp) {
+  if (isMiniapp || compact) {
     return (
       <>
       <div className="w-full min-w-0 overflow-hidden flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1107,20 +1107,20 @@ function ClassicDashboardPage() {
   // DESKTOP LAYOUT
   return (
     <>
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl mx-auto">
+    <div className="classic-dashboard flex flex-col gap-6 w-full min-w-0 mx-auto">
       {/* Hero + CTA */}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="relative overflow-hidden rounded-3xl bg-card/40 backdrop-blur-2xl border border-border/50 p-8 sm:p-10 shadow-xl"
+        className="dashboard-welcome relative overflow-hidden rounded-3xl bg-card/40 backdrop-blur-2xl border border-border/50 p-8 sm:p-10 shadow-xl"
       >
         {/* Декоративное свечение */}
         <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full bg-primary/20 blur-[80px] pointer-events-none" />
         
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl text-foreground">
+          <div className="flex-1 min-w-0">
+            <h1 className="dashboard-welcome-title text-3xl font-bold tracking-tight text-foreground">
               {t("cabinet.dashboard.welcome")}{client.email ? `, ${client.email.split("@")[0]}` : client.telegramUsername ? `, @${client.telegramUsername}` : ""}
             </h1>
             <p className="mt-3 text-[16px] text-muted-foreground max-w-xl leading-relaxed">
@@ -1184,11 +1184,11 @@ function ClassicDashboardPage() {
       )}
 
       {/* Cards grid */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="dashboard-grid grid gap-6">
         {/* Подписка / тариф */}
-        <Card data-tour="subscription" className="rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 sm:col-span-2 lg:col-span-1 flex flex-col">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center justify-between gap-2 text-xl text-foreground">
+        <Card data-tour="subscription" className="dashboard-card dashboard-subscription rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 sm:col-span-2 lg:col-span-1 flex flex-col">
+          <CardHeader className="dashboard-card-header pb-4">
+            <CardTitle className="dashboard-subscription-heading flex items-center justify-between gap-2 text-xl text-foreground">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="p-2.5 bg-primary/20 rounded-xl shrink-0">
                   <Package className="h-6 w-6 text-primary" />
@@ -1202,13 +1202,13 @@ function ClassicDashboardPage() {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex-1 flex flex-col justify-center">
+          <CardContent className="dashboard-subscription-body flex-1 flex flex-col">
             {loading ? (
               <div className="flex justify-center py-6"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
             ) : subscriptionError || !subscription || typeof subscription !== "object" ? (
               <NoSubscriptionState />
             ) : (
-              <div className="space-y-4">
+              <div className="dashboard-subscription-details space-y-4">
                 <div className="flex items-center gap-2 flex-wrap mb-2">
                   {hasActiveSubscription ? (
                     <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-semibold bg-green-500/15 text-green-700 dark:text-green-400 border border-green-500/20">
@@ -1223,7 +1223,7 @@ function ClassicDashboardPage() {
                   )}
                   {daysLeft != null && (
                     <span className="text-sm font-semibold text-foreground bg-foreground/5 px-3 py-1.5 rounded-full border border-border/50 shadow-sm">
-                      {daysLeft} {daysLeft === 1 ? t("cabinet.common.day_one") : daysLeft < 5 ? t("cabinet.common.day_few") : t("cabinet.common.day_many")}
+                      {formatRuDays(daysLeft)}
                     </span>
                   )}
                   {subParsed.hwidDeviceLimit != null && subParsed.hwidDeviceLimit > 0 && deviceCount != null && (
@@ -1233,38 +1233,38 @@ function ClassicDashboardPage() {
                   )}
                 </div>
                 {((tariffDisplayName ?? subParsed.productName) || client?.trialUsed) && (
-                  <div className="flex items-center gap-4 bg-background/40 p-4 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <div className="flex items-center gap-3 bg-background/40 p-3.5 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <Package className="h-6 w-6" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">{rootTrial.isTrial ? "TRIAL" : t("cabinet.dashboard.tariff_label")}</p>
-                      <p className="text-[15px] font-semibold truncate text-foreground">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{rootTrial.isTrial ? "TRIAL" : t("cabinet.dashboard.tariff_label")}</p>
+                      <p className="text-base font-semibold break-words text-foreground">
                         {((tariffDisplayName ?? subParsed.productName?.trim() ?? "").trim()) || t("cabinet.dashboard.test_label")}
                       </p>
                     </div>
                   </div>
                 )}
                 {subParsed.expireAt && (
-                  <div className="flex items-center gap-4 bg-background/40 p-4 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <div className="flex items-center gap-3 bg-background/40 p-3.5 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <Calendar className="h-6 w-6" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">{t("cabinet.dashboard.valid_until")}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{t("cabinet.dashboard.valid_until")}</p>
                       <p className="text-[15px] font-semibold text-foreground">
                         {formatDate(subParsed.expireAt)}
                       </p>
                     </div>
                   </div>
                 )}
-                <div className="bg-background/40 p-4 rounded-2xl border border-border/50 space-y-3 transition-colors hover:bg-background/60 shadow-sm">
+                <div className="bg-background/40 p-3.5 rounded-2xl border border-border/50 space-y-3 transition-colors hover:bg-background/60 shadow-sm">
                   <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <Wifi className="h-6 w-6" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">{t("cabinet.dashboard.traffic")}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{t("cabinet.dashboard.traffic")}</p>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[15px] font-semibold text-foreground">
                           {subParsed.trafficLimitBytes != null && subParsed.trafficLimitBytes > 0
@@ -1288,7 +1288,7 @@ function ClassicDashboardPage() {
                       <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={vpnUrl}>
                         {vpnUrl}
                       </code>
-                      <Button size="icon" variant="outline" className="shrink-0 h-auto w-11 rounded-xl bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { navigator.clipboard.writeText(vpnUrl || ""); }}>
+                      <Button size="icon" variant="outline" aria-label="Скопировать ссылку подписки" className="shrink-0 h-auto min-h-11 w-11 rounded-xl bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { navigator.clipboard.writeText(vpnUrl || ""); }}>
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>
@@ -1313,13 +1313,13 @@ function ClassicDashboardPage() {
         </Card>
 
         {/* Баланс + пополнение */}
-        <Card data-tour="balance" className="group relative overflow-hidden rounded-3xl border border-primary/15 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl hover:border-primary/30 transition-all duration-500 flex flex-col justify-between">
+        <Card data-tour="balance" className="dashboard-card dashboard-balance group relative overflow-hidden rounded-3xl border border-primary/15 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl hover:border-primary/30 transition-all duration-500 flex flex-col justify-between">
           {/* декоративные блобы */}
           <div className="pointer-events-none absolute -top-20 -right-16 h-48 w-48 rounded-full bg-primary/15 blur-3xl transition-opacity duration-700 group-hover:opacity-100 opacity-60" aria-hidden />
           <div className="pointer-events-none absolute -bottom-24 -left-16 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" aria-hidden />
           {/* градиентный хайлайт по верхней кромке */}
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" aria-hidden />
-          <CardHeader className="relative pb-4">
+          <CardHeader className="dashboard-card-header relative pb-4">
             <CardTitle className="flex items-center gap-3 text-xl text-foreground">
               <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/25 to-violet-500/20 ring-1 ring-primary/25 shadow-[0_0_20px_-6px] shadow-primary/40">
                 <Wallet className="h-6 w-6 text-primary" />
@@ -1327,9 +1327,9 @@ function ClassicDashboardPage() {
               {t("cabinet.dashboard.balance")}
             </CardTitle>
           </CardHeader>
-          <CardContent className="relative space-y-6 flex-1 flex flex-col justify-center text-center">
+          <CardContent className="dashboard-balance-body relative flex-1 flex flex-col gap-5">
             <div>
-              <p className="bg-gradient-to-br from-foreground via-foreground to-primary bg-clip-text text-transparent text-5xl font-extrabold tracking-tight tabular-nums drop-shadow-sm">
+              <p className="dashboard-balance-amount bg-gradient-to-br from-foreground via-foreground to-primary bg-clip-text text-transparent text-5xl font-extrabold tracking-tight tabular-nums drop-shadow-sm">
                 {formatMoney(client.balance, client.preferredCurrency)}
               </p>
               <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-background/40 border border-border/40 px-3 py-1 text-[12px] text-muted-foreground">
@@ -1390,12 +1390,12 @@ function ClassicDashboardPage() {
         </Card>
 
         {/* Справа от баланса: Рефералы или Подключение */}
-        <Card className="group relative overflow-hidden rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl hover:border-violet-500/25 transition-all duration-500 sm:col-span-2 lg:col-span-1">
+        <Card className="dashboard-card dashboard-referral flex flex-col group relative overflow-hidden rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl hover:border-violet-500/25 transition-all duration-500 sm:col-span-2 lg:col-span-1">
           {/* декоративные блобы */}
           <div className="pointer-events-none absolute -top-20 -left-16 h-48 w-48 rounded-full bg-violet-500/10 blur-3xl" aria-hidden />
           <div className="pointer-events-none absolute -bottom-24 -right-16 h-48 w-48 rounded-full bg-primary/10 blur-3xl" aria-hidden />
           <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-violet-500/40 to-transparent" aria-hidden />
-          <CardHeader className="relative pb-4">
+          <CardHeader className="dashboard-card-header relative pb-4">
             <CardTitle className="flex items-center gap-3 text-xl text-foreground">
               <div className="p-2.5 rounded-xl bg-gradient-to-br from-violet-500/25 to-primary/20 ring-1 ring-violet-500/25 shadow-[0_0_20px_-6px] shadow-violet-500/40">
                 {hasReferralLinks ? <Users className="h-6 w-6 text-primary" /> : <Wifi className="h-6 w-6 text-primary" />}
@@ -1403,12 +1403,12 @@ function ClassicDashboardPage() {
               {hasReferralLinks ? t("cabinet.dashboard.referrals") : t("cabinet.dashboard.connection")}
             </CardTitle>
           </CardHeader>
-          <CardContent className="relative space-y-5 pt-2 flex flex-col justify-center h-[calc(100%-5rem)]">
+          <CardContent className="dashboard-referral-body relative flex-1 flex flex-col gap-5">
             {hasReferralLinks ? (
               <>
                 <p className="text-[14px] text-muted-foreground leading-relaxed">Делитесь ссылкой и получайте <strong className="bg-gradient-to-r from-primary to-violet-400 bg-clip-text text-transparent font-bold">бонус на баланс</strong> за каждого приглашённого друга!</p>
                 {referralStats && (
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="dashboard-referral-stats grid grid-cols-3 gap-2">
                     {[
                       { label: "Приглашено", value: referralStats.referralCount.toLocaleString("ru-RU"), icon: UserPlus, tint: "text-primary", ring: "ring-primary/20", glow: "shadow-primary/25", bg: "from-primary/10" },
                       { label: "Заработано", value: `${referralStats.totalEarnings.toLocaleString("ru-RU")} ₽`, icon: Coins, tint: "text-emerald-500 dark:text-emerald-400", ring: "ring-emerald-500/20", glow: "shadow-emerald-500/25", bg: "from-emerald-500/10" },
@@ -1417,7 +1417,7 @@ function ClassicDashboardPage() {
                       <div key={tile.label} className={`rounded-2xl bg-gradient-to-b ${tile.bg} to-background/40 border border-border/40 ring-1 ${tile.ring} backdrop-blur-xl px-2 py-3.5 text-center shadow-[0_0_24px_-12px] ${tile.glow} hover:-translate-y-0.5 transition-transform duration-300`}>
                         <tile.icon className={`h-4 w-4 mx-auto mb-1.5 ${tile.tint}`} />
                         <p className="text-lg font-extrabold tracking-tight text-foreground leading-none tabular-nums">{tile.value}</p>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1.5">{tile.label}</p>
+                        <p className="text-xs text-muted-foreground mt-1.5">{tile.label}</p>
                       </div>
                     ))}
                   </div>
@@ -1428,13 +1428,14 @@ function ClassicDashboardPage() {
                       type="button"
                       onClick={() => copyReferral("site")}
                       title={referralLinkSite}
+                      aria-label={referralCopied === "site" ? "Ссылка на сайт скопирована" : "Скопировать реферальную ссылку на сайт"}
                       className="group/row w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-primary/[0.06] transition-colors"
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
                         <Globe className="h-4 w-4 text-primary" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Сайт</span>
+                        <span className="block text-xs font-semibold text-muted-foreground">Сайт</span>
                         <span className="block truncate font-mono text-[13px] text-foreground/85">{referralLinkSite}</span>
                       </span>
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-background/40 text-foreground/60 group-hover/row:text-primary group-hover/row:border-primary/30 group-hover/row:scale-105 transition-all">
@@ -1447,13 +1448,14 @@ function ClassicDashboardPage() {
                       type="button"
                       onClick={() => copyReferral("bot")}
                       title={referralLinkBot}
+                      aria-label={referralCopied === "bot" ? "Ссылка на бота скопирована" : "Скопировать реферальную ссылку на бота"}
                       className="group/row w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-violet-500/[0.06] transition-colors"
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
                         <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Бот</span>
+                        <span className="block text-xs font-semibold text-muted-foreground">Бот</span>
                         <span className="block truncate font-mono text-[13px] text-foreground/85">{referralLinkBot}</span>
                       </span>
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-background/40 text-foreground/60 group-hover/row:text-violet-400 group-hover/row:border-violet-500/30 group-hover/row:scale-105 transition-all">
@@ -1462,7 +1464,7 @@ function ClassicDashboardPage() {
                     </button>
                   )}
                 </div>
-                <div className="pt-1">
+                <div className="mt-auto pt-1">
                   <Button variant="outline" className="group/btn w-full rounded-2xl h-12 text-[15px] font-medium bg-background/30 hover:bg-gradient-to-r hover:from-primary/10 hover:to-violet-500/10 hover:border-primary/30 transition-all duration-300 border-border/50 [&_svg]:self-center [&_span]:leading-none" asChild>
                      <Link to="/cabinet/referral" className="inline-flex items-center justify-center gap-2 leading-none">
                        <span className="inline-flex items-center leading-none">Подробная статистика</span>
@@ -1522,8 +1524,8 @@ function ClassicDashboardPage() {
               const secTrafficPercent = secParsed.trafficLimitBytes && secParsed.trafficLimitBytes > 0 && secParsed.trafficUsed != null ? Math.min(100, Math.round((secParsed.trafficUsed / secParsed.trafficLimitBytes) * 100)) : null;
 
               return (
-                <Card key={sec.id} className="rounded-3xl border border-indigo-500/30 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col">
-                  <CardHeader className="pb-4">
+                <Card key={sec.id} className="dashboard-card dashboard-secondary rounded-3xl border border-indigo-500/30 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col">
+                  <CardHeader className="dashboard-card-header pb-4">
                     <CardTitle className="flex items-center justify-between gap-2 text-lg text-foreground">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="p-2.5 bg-indigo-500/20 rounded-xl shrink-0">
@@ -1552,12 +1554,12 @@ function ClassicDashboardPage() {
                       </div>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="flex-1 flex flex-col justify-center">
-                    <div className="space-y-4">
+                  <CardContent className="dashboard-subscription-body flex-1 flex flex-col">
+                    <div className="dashboard-subscription-details space-y-4">
                       <div className="flex items-center gap-2 flex-wrap mb-2">
                         {secDaysLeft != null && (
                           <span className="text-sm font-semibold text-foreground bg-foreground/5 px-3 py-1.5 rounded-full border border-border/50 shadow-sm">
-                            {secDaysLeft} {secDaysLeft === 1 ? t("cabinet.common.day_one") : secDaysLeft < 5 ? t("cabinet.common.day_few") : t("cabinet.common.day_many")}
+                            {formatRuDays(secDaysLeft)}
                           </span>
                         )}
                         {secParsed.hwidDeviceLimit != null && secParsed.hwidDeviceLimit > 0 && (
@@ -1568,13 +1570,13 @@ function ClassicDashboardPage() {
                       </div>
                       
                       {sec.tariffDisplayName && (
-                        <div className="flex items-center gap-4 bg-background/40 p-4 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
+                        <div className="flex items-center gap-3 bg-background/40 p-3.5 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
                             <Package className="h-6 w-6" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">{sec.trialId ? "TRIAL" : t("cabinet.dashboard.tariff_label")}</p>
-                            <p className="text-[15px] font-semibold truncate text-foreground">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{sec.trialId ? "TRIAL" : t("cabinet.dashboard.tariff_label")}</p>
+                            <p className="text-base font-semibold break-words text-foreground">
                               {sec.tariffDisplayName}
                             </p>
                           </div>
@@ -1582,12 +1584,12 @@ function ClassicDashboardPage() {
                       )}
                       
                       {secParsed.expireAt && (
-                        <div className="flex items-center gap-4 bg-background/40 p-4 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
+                        <div className="flex items-center gap-3 bg-background/40 p-3.5 rounded-2xl border border-border/50 transition-colors hover:bg-background/60 shadow-sm">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
                             <Calendar className="h-6 w-6" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">{t("cabinet.dashboard.valid_until")}</p>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{t("cabinet.dashboard.valid_until")}</p>
                             <p className="text-[15px] font-semibold text-foreground">
                               {formatDate(secParsed.expireAt)}
                             </p>
@@ -1595,13 +1597,13 @@ function ClassicDashboardPage() {
                         </div>
                       )}
                       
-                      <div className="bg-background/40 p-4 rounded-2xl border border-border/50 space-y-3 transition-colors hover:bg-background/60 shadow-sm">
+                      <div className="bg-background/40 p-3.5 rounded-2xl border border-border/50 space-y-3 transition-colors hover:bg-background/60 shadow-sm">
                         <div className="flex items-center gap-4">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
                             <Wifi className="h-6 w-6" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">{t("cabinet.dashboard.traffic")}</p>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">{t("cabinet.dashboard.traffic")}</p>
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-[15px] font-semibold text-foreground">
                                 {secParsed.trafficLimitBytes != null && secParsed.trafficLimitBytes > 0
@@ -1625,7 +1627,7 @@ function ClassicDashboardPage() {
                           <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={secParsed.subscriptionUrl}>
                             {secParsed.subscriptionUrl}
                           </code>
-                          <Button size="icon" variant="outline" className="shrink-0 h-auto w-11 rounded-xl bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { navigator.clipboard.writeText(secParsed.subscriptionUrl || ""); window.Telegram?.WebApp?.showPopup?.({ title: t("cabinet.dashboard.copied_title"), message: t("cabinet.dashboard.copied_message") }); }}>
+                          <Button size="icon" variant="outline" aria-label="Скопировать ссылку подписки" className="shrink-0 h-auto min-h-11 w-11 rounded-xl bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { navigator.clipboard.writeText(secParsed.subscriptionUrl || ""); window.Telegram?.WebApp?.showPopup?.({ title: t("cabinet.dashboard.copied_title"), message: t("cabinet.dashboard.copied_message") }); }}>
                             <Copy className="h-4 w-4" />
                           </Button>
                         </div>
