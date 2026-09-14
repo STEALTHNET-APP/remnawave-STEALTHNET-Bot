@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type AdminListItem, MANAGER_SECTIONS, MANAGER_SECTION_CATEGORIES } from "@/lib/api";
 import { adminPermissionsApi, type ActionDef } from "@/lib/admin-extras-api";
 import { Card } from "@/components/ui/card";
@@ -14,9 +15,20 @@ import { cn } from "@/lib/utils";
 export function AdminsPage() {
   const { state } = useAuth();
   const token = state.accessToken;
-  const [list, setList] = useState<AdminListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const listQuery = useQuery({
+    queryKey: ["admin", "admins-list"] as const,
+    queryFn: () => api.getAdmins(token!).catch(() => [] as AdminListItem[]),
+    enabled: !!token,
+  });
+  const actionsQuery = useQuery({
+    queryKey: ["admin", "admin-permission-actions"] as const,
+    queryFn: () => adminPermissionsApi.actions(token!).catch(() => ({ actions: [] as ActionDef[] })),
+    enabled: !!token,
+  });
+  const list = listQuery.data ?? [];
+  const loading = listQuery.isLoading;
   const [error, setError] = useState("");
+  const queryClient = useQueryClient();
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
@@ -24,17 +36,11 @@ export function AdminsPage() {
   const [allowedSections, setAllowedSections] = useState<string[]>([]);
   // actions в той же форме что и секции.
   const [selectedActions, setSelectedActions] = useState<string[]>([]);
-  const [actionCatalog, setActionCatalog] = useState<ActionDef[]>([]);
-  const [actionsLoading, setActionsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const actionCatalog = actionsQuery.data?.actions ?? [];
+  const actionsLoading = actionsQuery.isLoading;
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!token) return;
-    api.getAdmins(token).then(setList).catch(() => setError("Нет доступа")).finally(() => setLoading(false));
-    // Каталог критических action-прав — грузим один раз при заходе.
-    adminPermissionsApi.actions(token).then((r) => setActionCatalog(r.actions ?? [])).catch(() => {});
-  }, [token]);
 
   function openCreate() {
     setModal("create");
@@ -56,14 +62,11 @@ export function AdminsPage() {
     setAllowedSections(item.allowedSections ?? []);
     // Подгружаем текущие granted actions.
     if (token) {
-      setActionsLoading(true);
       try {
         const cur = await adminPermissionsApi.get(token, item.id);
         setSelectedActions(Array.isArray(cur.actions) ? cur.actions : []);
       } catch {
         setSelectedActions([]);
-      } finally {
-        setActionsLoading(false);
       }
     }
   }
@@ -97,7 +100,7 @@ export function AdminsPage() {
       if (selectedActions.length > 0) {
         await adminPermissionsApi.set(token, created.id, selectedActions).catch(() => {});
       }
-      setList((prev) => [created, ...prev]);
+      void queryClient.invalidateQueries({ queryKey: ["admin", "admins-list"], exact: false });
       setModal(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка создания");
@@ -111,7 +114,7 @@ export function AdminsPage() {
     setSaving(true);
     setError("");
     try {
-      const updated = await api.updateManager(token, editingId, {
+      await api.updateManager(token, editingId, {
         allowedSections,
         ...(password.trim() ? { password: password.trim() } : {}),
       });
@@ -119,7 +122,7 @@ export function AdminsPage() {
       // На бэке PATCH /admins/:id уже сохраняет существующие actions при изменении секций
       // (мерж), а потом PUT /admin-permissions/:adminId перезаписывает их новыми.
       await adminPermissionsApi.set(token, editingId, selectedActions).catch(() => {});
-      setList((prev) => prev.map((a) => (a.id === editingId ? { ...a, ...updated } : a)));
+      void queryClient.invalidateQueries({ queryKey: ["admin", "admins-list"], exact: false });
       setModal(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка сохранения");
@@ -134,7 +137,7 @@ export function AdminsPage() {
     setError("");
     try {
       await api.deleteManager(token, id);
-      setList((prev) => prev.filter((a) => a.id !== id));
+      void queryClient.invalidateQueries({ queryKey: ["admin", "admins-list"], exact: false });
       setDeleteConfirm(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка удаления");

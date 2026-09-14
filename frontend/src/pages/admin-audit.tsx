@@ -3,15 +3,16 @@
  * пагинация по cursor'у, JSON payload в дровере.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { auditApi, type AdminEvent } from "@/lib/admin-extras-api";
 import { Loader2, Search, RefreshCw, ChevronRight } from "lucide-react";
-import { auditApi, type AdminEvent, type AuditFacets } from "@/lib/admin-extras-api";
 import { fmtMsk } from "@/lib/datetime";
 import { motion } from "framer-motion";
 
@@ -44,46 +45,57 @@ export function AdminAuditPage() {
   const { state } = useAuth();
   const token = state.accessToken;
 
-  const [items, setItems] = useState<AdminEvent[]>([]);
-  const [facets, setFacets] = useState<AuditFacets | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [prevItems, setPrevItems] = useState<AdminEvent[]>([]);
   const [selected, setSelected] = useState<AdminEvent | null>(null);
 
   const [filters, setFilters] = useState({ kind: "", actorId: "", targetType: "", q: "" });
+  const [appliedQ, setAppliedQ] = useState("");
 
-  const load = useCallback(async (reset = true) => {
-    if (!token) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await auditApi.list(token, {
+  const facetsQuery = useQuery({
+    queryKey: ["admin", "audit-facets"] as const,
+    queryFn: () => auditApi.facets(token!).catch(() => null),
+    enabled: !!token,
+  });
+  const facets = facetsQuery.data ?? null;
+
+  const listQuery = useQuery({
+    queryKey: ["admin", "audit", filters.kind, filters.actorId, filters.targetType, appliedQ, cursor ?? ""] as const,
+    queryFn: () =>
+      auditApi.list(token!, {
         kind: filters.kind || undefined,
         actorId: filters.actorId || undefined,
         targetType: filters.targetType || undefined,
-        q: filters.q || undefined,
-        cursor: reset ? undefined : cursor || undefined,
+        q: appliedQ || undefined,
+        cursor: cursor ?? undefined,
         limit: 50,
-      });
-      setItems((prev) => (reset ? result.items : [...prev, ...result.items]));
-      setCursor(result.nextCursor);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [token, filters, cursor]);
+      }),
+    enabled: !!token,
+  });
+  const items = useMemo(
+    () => [...prevItems, ...(listQuery.data?.items ?? [])],
+    [prevItems, listQuery.data],
+  );
+  const loading = listQuery.isFetching;
+  const error = listQuery.error ? String(listQuery.error) : null;
+  const nextCursor = listQuery.data?.nextCursor ?? null;
 
+  // смена фильтров — сброс пагинации (аналог load(true))
   useEffect(() => {
-    if (!token) return;
-    auditApi.facets(token).then(setFacets).catch(() => {});
-  }, [token]);
+    setPrevItems([]);
+    setCursor(null);
+  }, [filters.kind, filters.actorId, filters.targetType, appliedQ]);
 
-  useEffect(() => {
-    void load(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.kind, filters.actorId, filters.targetType]);
+  const loadReset = () => {
+    setPrevItems([]);
+    setCursor(null);
+    void listQuery.refetch();
+  };
+  const loadMore = () => {
+    if (!nextCursor) return;
+    setPrevItems(items);
+    setCursor(nextCursor);
+  };
 
   return (
     <div className="flex flex-col gap-3.5 relative">
@@ -99,7 +111,7 @@ export function AdminAuditPage() {
             <p className="text-[12.5px] text-muted-foreground mt-[3px]">Журнал действий администраторов — кто, что и когда менял.</p>
           </div>
         </div>
-        <Button onClick={() => load(true)} variant="outline" size="sm" disabled={loading} className="gap-1.5 rounded-xl">
+        <Button onClick={loadReset} variant="outline" size="sm" disabled={loading} className="gap-1.5 rounded-xl">
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Обновить
         </Button>
@@ -147,7 +159,7 @@ export function AdminAuditPage() {
               <Input
                 value={filters.q}
                 onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
-                onKeyDown={(e) => e.key === "Enter" && load(true)}
+                onKeyDown={(e) => e.key === "Enter" && setAppliedQ(filters.q)}
                 placeholder="kind, actor, targetId…"
                 className="pl-8 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
               />
@@ -195,9 +207,9 @@ export function AdminAuditPage() {
                 <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
               </button>
             ))}
-            {cursor ? (
+            {nextCursor ? (
               <div className="p-3 text-center">
-                <Button onClick={() => load(false)} variant="outline" size="sm" disabled={loading} className="rounded-xl">
+                <Button onClick={loadMore} variant="outline" size="sm" disabled={loading} className="rounded-xl">
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Загрузить ещё"}
                 </Button>
               </div>

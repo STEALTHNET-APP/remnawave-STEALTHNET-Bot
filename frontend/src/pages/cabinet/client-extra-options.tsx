@@ -18,6 +18,7 @@ import {
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
 import { PayNowPanel } from "@/components/payment/pay-now-panel";
 import { cn } from "@/lib/utils";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 function formatMoney(amount: number, currency: string) {
   return new Intl.NumberFormat("ru-RU", {
@@ -75,7 +76,7 @@ export function ClientExtraOptionsPage() {
   const isMobileOrMiniapp = useCabinetMiniapp();
 
   useEffect(() => {
-    api.getPublicConfig().then((c) => {
+    getPublicConfigCached().then((c) => {
       setSellOptionsEnabled(Boolean(c.sellOptionsEnabled));
       setOptions(c.sellOptions ?? []);
       setPlategaMethods(c.plategaMethods ?? []);
@@ -605,9 +606,9 @@ async function startParitypayPayment(option: PublicSellOption) {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
             transition={{ duration: 0.2 }}
-            className="space-y-8 max-w-6xl mx-auto pb-24"
+            className="space-y-8 max-w-7xl mx-auto pb-24"
           >
-            <div className="relative overflow-hidden rounded-3xl bg-card/40 backdrop-blur-2xl border border-border/50 p-8 sm:p-10 shadow-xl">
+            <div className="relative overflow-hidden rounded-3xl glass-card border border-border/50 p-8 sm:p-10 shadow-xl">
               <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full bg-primary/20 blur-[80px] pointer-events-none" />
               <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
                 <div className="flex-1">
@@ -631,7 +632,7 @@ async function startParitypayPayment(option: PublicSellOption) {
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {trafficOptions.map((opt) => (
-                    <Card key={`traffic-${opt.id}`} className="rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col group hover:-translate-y-1">
+                    <Card key={`traffic-${opt.id}`} className="rounded-3xl glass-card-hover border border-border/50 shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col group hover:-translate-y-1">
                       <CardContent className="flex-1 flex flex-col p-5 min-h-0 min-w-0">
                         <div className="flex items-center gap-3 mb-4">
                           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">
@@ -666,7 +667,7 @@ async function startParitypayPayment(option: PublicSellOption) {
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {deviceOptions.map((opt) => (
-                    <Card key={`devices-${opt.id}`} className="rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col group hover:-translate-y-1">
+                    <Card key={`devices-${opt.id}`} className="rounded-3xl glass-card-hover border border-border/50 shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col group hover:-translate-y-1">
                       <CardContent className="flex-1 flex flex-col p-5 min-h-0 min-w-0">
                         <div className="flex items-center gap-3 mb-4">
                           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">
@@ -703,7 +704,7 @@ async function startParitypayPayment(option: PublicSellOption) {
                 </h2>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {serverOptions.map((opt) => (
-                    <Card key={`servers-${opt.id}`} className="rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col group hover:-translate-y-1">
+                    <Card key={`servers-${opt.id}`} className="rounded-3xl glass-card-hover border border-border/50 shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col group hover:-translate-y-1">
                       <CardContent className="flex-1 flex flex-col p-5 min-h-0 min-w-0">
                         <div className="flex items-center gap-3 mb-4">
                           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">

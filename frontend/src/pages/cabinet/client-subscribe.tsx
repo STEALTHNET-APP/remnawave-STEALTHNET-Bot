@@ -34,6 +34,7 @@ import type { SubscriptionPageConfig } from "@/lib/api";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 const DEFAULT_SUBSCRIPTION_PAGE_CONFIG: SubscriptionPageConfig = {
   platforms: {
@@ -238,7 +239,7 @@ function ClassicSubscribePage() {
     Promise.all([
       subscriptionPromise,
       api.getPublicSubscriptionPageConfig(),
-      api.getPublicConfig().then((c) => c?.publicAppUrl ?? null).catch(() => null),
+      getPublicConfigCached().then((c) => c?.publicAppUrl ?? null).catch(() => null),
     ])
       .then(([subRes, config, appUrl]) => {
         setSubscription(subRes.subscription ?? null);

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
@@ -7,11 +8,10 @@ import {
   RefreshCw, Wifi, WifiOff, Monitor, Clock, Server, Users,
   ArrowUpDown, ChevronDown, ChevronUp, Pause, Play,
 } from "lucide-react";
-import { useAuth } from "@/contexts/auth";
-import { api } from "@/lib/api";
-import type { GeoMapResponse, GeoMapNode } from "@/lib/api";
+import { api, type GeoMapNode } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useRemnaCapabilities } from "@/lib/use-remna-capabilities";
+import { useAuth } from "@/contexts/auth";
 
 const TILE_URL = "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>';
@@ -116,45 +116,32 @@ export function GeoMapPage() {
   const { state } = useAuth();
   const caps = useRemnaCapabilities();
   const token = state.accessToken ?? "";
-  const [data, setData] = useState<GeoMapResponse | null>(null);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [autoPolling, setAutoPolling] = useState(true);
   const [pollingInterval] = useState(30);
   const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
   const [panelOpen, setPanelOpen] = useState(true);
 
-  const fetchData = useCallback(async (force = false) => {
-    if (!token) return;
-    try {
-      const result = force
-        ? await api.refreshGeoMap(token)
-        : await api.getGeoMapData(token);
-      setData(result);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load map data");
-    }
-  }, [token]);
-
-  useEffect(() => {
-    setLoading(true);
-    fetchData().finally(() => setLoading(false));
-  }, [fetchData]);
-
-  useEffect(() => {
-    if (!autoPolling || !token) return;
-    const id = window.setInterval(() => fetchData(), pollingInterval * 1000);
-    return () => window.clearInterval(id);
-  }, [autoPolling, pollingInterval, fetchData, token]);
+  const mapQuery = useQuery({
+    queryKey: ["admin", "geo-map"] as const,
+    queryFn: () => api.getGeoMapData(token),
+    enabled: !!token,
+    refetchInterval: autoPolling ? pollingInterval * 1000 : false,
+  });
+  const data = mapQuery.data ?? null;
+  const loading = mapQuery.isPending;
+  const error = mapQuery.error ? (mapQuery.error instanceof Error ? mapQuery.error.message : "Failed to load map data") : null;
 
   const handleRefresh = async () => {
+    if (!token) return;
     setRefreshing(true);
-    await fetchData(true);
-    setRefreshing(false);
+    try {
+      await api.refreshGeoMap(token);
+      await mapQuery.refetch();
+    } finally {
+      setRefreshing(false);
+    }
   };
-
   const filteredConnections = useMemo(() => {
     if (!data) return [];
     if (selectedNodes.size === 0) return data.connections;
@@ -248,7 +235,7 @@ export function GeoMapPage() {
             </>
           )}
           <button
-            onClick={() => fetchData()}
+            onClick={() => void mapQuery.refetch()}
             className="mt-5 inline-flex items-center gap-1.5 rounded-xl border border-border bg-foreground/5 hover:bg-foreground/10 px-4 py-2 text-sm font-medium transition-colors"
           >
             <RefreshCw className="h-4 w-4" />

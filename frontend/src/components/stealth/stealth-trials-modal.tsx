@@ -6,8 +6,9 @@
  * на карточку триала (название, длительность, трафик, устройства, описание).
  */
 
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import gsap from "gsap";
+import { reducedMotion } from "@/lib/gsap-utils";
 import { Gift, Sparkles, Clock, Wifi, Smartphone, Loader2, AlertCircle, Infinity as InfinityIcon } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type ClientTrialOption } from "@/lib/api";
@@ -53,6 +54,22 @@ export function StealthTrialsModal({ open, onClose, onActivated }: Props) {
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [open, state.token]);
+
+  // Появление карточек триалов — gsap stagger вместо framer-motion
+  // AnimatePresence (re-run при каждом открытии модалки → без застревания).
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el || items.length === 0 || reducedMotion()) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        el.children,
+        { y: 8, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.25, stagger: 0.04, ease: "power2.out", clearProps: "transform" },
+      );
+    }, el);
+    return () => ctx.revert();
+  }, [items]);
 
   async function activate(trial: ClientTrialOption) {
     if (!state.token || activatingId) return;
@@ -100,21 +117,16 @@ export function StealthTrialsModal({ open, onClose, onActivated }: Props) {
         )}
 
         {!loading && items.length > 0 && (
-          <div className="space-y-2.5">
-            <AnimatePresence>
-              {items.map((trial, idx) => {
+          <div ref={listRef} className="space-y-2.5">
+              {items.map((trial) => {
                 const isActivating = activatingId === trial.id;
                 const isDisabled = activatingId !== null && !isActivating;
                 const traffic = formatTrafficLabel(trial.trafficLimitBytes);
                 const devices = trial.deviceLimit ?? trial.includedDevices ?? null;
                 return (
-                  <motion.button
+                  <button
                     key={trial.id}
                     type="button"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.22, delay: idx * 0.04 }}
                     onClick={() => activate(trial)}
                     disabled={isDisabled || isActivating}
                     className={cn(
@@ -164,10 +176,9 @@ export function StealthTrialsModal({ open, onClose, onActivated }: Props) {
                         </div>
                       </div>
                     </div>
-                  </motion.button>
+                  </button>
                 );
               })}
-            </AnimatePresence>
           </div>
         )}
       </div>

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { Sun, Moon, Monitor, Settings2, User, Gift, SlidersHorizontal, Shield, Network, LogOut, X, ChevronRight } from "lucide-react";
@@ -8,6 +9,45 @@ import { useClientAuth } from "@/contexts/client-auth";
 import { useTheme } from "@/contexts/theme";
 import { enterAuroraFullscreen } from "@/lib/telegram-viewport";
 import "./aurora.css";
+=======
+/**
+ * AuroraLayout — обёртка третьего дизайна кабинета (мини-апп «Aurora»).
+ *
+ * Отличается от Classic и Stealth: светлый фон, крупная градиентная карточка
+ * подписки, плитки-метрики и плавающее нижнее меню из четырёх вкладок.
+ *
+ * Структура:
+ *   ┌──────────────────────────────┐
+ *   │  <Outlet/> — контент страницы │
+ *   │──────────────────────────────│
+ *   │  AuroraTabs (плавающее меню)  │
+ *   └──────────────────────────────┘
+ *
+ * Акцент берётся из настройки панели (тот же `stealthAccent`, что и у Stealth —
+ * чтобы владелец задавал фирменный цвет один раз для всех мини-аппов).
+ * Из него считается градиент: основной цвет → более светлый/голубой оттенок.
+ */
+
+import { Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import type { PublicConfig } from "@/lib/api";
+import { AuroraTabs } from "@/components/aurora/aurora-tabs";
+import { getPublicConfigCached } from "@/lib/public-config";
+
+/** hex → [r,g,b]; при мусоре — индиго по умолчанию (#5B4BE8). */
+function hexToRgb(hex: string | null | undefined): [number, number, number] {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec((hex ?? "").trim());
+  if (!m) return [91, 75, 232];
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** Осветляет цвет и уводит в голубой — вторая точка градиента, как в макете. */
+function toGradientEnd([r, g, b]: [number, number, number]): string {
+  const mix = (c: number, target: number) => Math.round(c + (target - c) * 0.45);
+  return `rgb(${mix(r, 56)} ${mix(g, 170)} ${mix(b, 225)})`;
+}
+>>>>>>> 3d6b243 (feat(frontend): TanStack Query + Zustand everywhere, GSAP animations, UI redesign)
 
 export function AuroraLayout() {
   const config = useCabinetConfig();
@@ -26,12 +66,21 @@ export function AuroraLayout() {
   const gradientEnd = dark ? "#17683e" : `color-mix(in srgb, ${accent} 55%, #38aae1)`;
   useEffect(enterAuroraFullscreen, []);
   useEffect(() => {
+<<<<<<< HEAD
     document.documentElement.dataset.auActive = "1";
     document.documentElement.style.setProperty("--au-accent", accent);
     return () => { delete document.documentElement.dataset.auActive; document.documentElement.style.removeProperty("--au-accent"); };
   }, [accent]);
   useEffect(() => { setMenu(false); }, [location.pathname]);
   useEffect(() => { if(menu) dialog.current?.showModal(); else dialog.current?.close(); }, [menu]);
+=======
+    getPublicConfigCached().then(setConfig).catch(() => {});
+  }, []);
+
+  // Aurora светлый, а в полноэкранном режиме иконки статус-бара Telegram
+  // рисует по цвету шапки. Не сказать ему про белый фон — белые часы и
+  // батарея сольются с белой полосой отступа.
+>>>>>>> 3d6b243 (feat(frontend): TanStack Query + Zustand everywhere, GSAP animations, UI redesign)
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (!tg?.initData?.trim()) return;

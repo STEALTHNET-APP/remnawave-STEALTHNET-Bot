@@ -1,6 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
+import { useAdminSalesReport } from "@/lib/admin-queries";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,9 +90,6 @@ const DATE_PRESETS = [
 export function SalesReportPage() {
   const { state } = useAuth();
   const token = state.accessToken;
-  const [data, setData] = useState<SalesData | null>(null);
-  const [loading, setLoading] = useState(true);
-
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [provider, setProvider] = useState("");
@@ -101,27 +100,31 @@ export function SalesReportPage() {
   const [actionsPaymentId, setActionsPaymentId] = useState<string | null>(null);
   const limit = 50;
 
-  const load = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const res = await api.getSalesReport(token, {
-        from: dateFrom || undefined,
-        to: dateTo || undefined,
-        provider: provider || undefined,
-        search: searchApplied || undefined,
-        page,
-        limit,
-      });
-      setData(res);
-    } catch {
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [token, dateFrom, dateTo, provider, searchApplied, page]);
+  const paramsJson = JSON.stringify({
+    from: dateFrom || undefined,
+    to: dateTo || undefined,
+    provider: provider || undefined,
+    search: searchApplied || undefined,
+    page,
+    limit,
+  });
+  const qc = useQueryClient();
+  const reportQuery = useAdminSalesReport(token, paramsJson);
+  // api.getSalesReport возвращает Promise<any> — приводим к локальному контракту.
+  const data = (reportQuery.data ?? null) as SalesData | null;
+  const loading = reportQuery.isFetching;
 
-  useEffect(() => { load(); }, [load]);
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deleteSalePayment(token!, id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["admin", "sales-report"], exact: false }),
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+  });
+
+  function deletePayment(id: string) {
+    if (!token) return;
+    if (!confirm("Удалить этот платёж? Это действие необратимо.")) return;
+    deleteMutation.mutate(id);
+  }
 
   function applySearch() {
     setSearchApplied(search);
@@ -164,17 +167,6 @@ export function SalesReportPage() {
     URL.revokeObjectURL(url);
   }
 
-  async function deletePayment(id: string) {
-    if (!token) return;
-    if (!confirm("Удалить этот платёж? Это действие необратимо.")) return;
-    try {
-      await api.deleteSalePayment(token, id);
-      load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    }
-  }
-
   const totalPages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
   const hasFilters = dateFrom || dateTo || provider || searchApplied;
   const avgAmount = data && data.totalCount > 0 ? data.totalAmount / data.totalCount : 0;
@@ -197,7 +189,7 @@ export function SalesReportPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1.5 rounded-xl">
+          <Button variant="outline" size="sm" onClick={() => void reportQuery.refetch()} disabled={loading} className="gap-1.5 rounded-xl">
             <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
             <span className="hidden sm:inline">Обновить</span>
           </Button>
@@ -472,7 +464,7 @@ export function SalesReportPage() {
       <PaymentActionsDrawer
         paymentId={actionsPaymentId}
         onClose={() => setActionsPaymentId(null)}
-        onRefreshList={() => load()}
+        onRefreshList={() => void reportQuery.refetch()}
       />
     </div>
   );

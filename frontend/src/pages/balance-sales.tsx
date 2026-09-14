@@ -4,9 +4,9 @@
  * через начисление баланса вручную (provider=balance), без всех остальных платёжек.
  * Доступ — через action `view_balance_sales`.
  */
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
-import { api } from "@/lib/api";
+import { useAdminBalanceSales } from "@/lib/admin-queries";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,18 +23,6 @@ function fmtMoney(n: number) {
   return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(n);
 }
 
-interface BalanceSaleItem {
-  id: string;
-  amount: number;
-  currency: string;
-  tariffName: string | null;
-  clientId: string | null;
-  clientEmail: string | null;
-  clientTelegramId: string | null;
-  clientTelegramUsername: string | null;
-  paidAt: string | null;
-}
-
 export function BalanceSalesPage() {
   const { state } = useAuth();
   const token = state.accessToken;
@@ -45,37 +33,22 @@ export function BalanceSalesPage() {
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
 
-  const [items, setItems] = useState<BalanceSaleItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [totalAmount, setTotalAmount] = useState(0);
-  const [totalCount, setTotalCount] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await api.getBalanceSales(token, {
-        from: from || undefined,
-        to: to || undefined,
-        search: search || undefined,
-        page,
-        limit,
-      });
-      setItems(res.items);
-      setTotal(res.total);
-      setTotalAmount(res.totalAmount);
-      setTotalCount(res.totalCount);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
-  }, [token, from, to, search, page, limit]);
-
-  useEffect(() => { load(); }, [load]);
+  const paramsJson = JSON.stringify({
+    from: from || undefined,
+    to: to || undefined,
+    search: search || undefined,
+    page,
+    limit,
+  });
+  const salesQuery = useAdminBalanceSales(token, paramsJson);
+  const items = salesQuery.data?.items ?? [];
+  const total = salesQuery.data?.total ?? 0;
+  const totalAmount = salesQuery.data?.totalAmount ?? 0;
+  const totalCount = salesQuery.data?.totalCount ?? 0;
+  const loading = salesQuery.isFetching;
+  const error = salesQuery.error
+    ? salesQuery.error instanceof Error ? salesQuery.error.message : "Ошибка загрузки"
+    : null;
 
   function resetFilters() {
     setFrom("");
@@ -105,7 +78,7 @@ export function BalanceSalesPage() {
             </p>
           </div>
         </div>
-        <Button onClick={() => load()} variant="outline" className="gap-2 rounded-xl">
+        <Button onClick={() => void salesQuery.refetch()} variant="outline" className="gap-2 rounded-xl">
           <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} /> Обновить
         </Button>
       </motion.div>

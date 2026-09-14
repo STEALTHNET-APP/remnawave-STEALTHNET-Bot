@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { getPublicConfigCached } from "@/lib/public-config";
 import type { PublicConfig } from "@/lib/api";
 
 type CabinetConfigValue = PublicConfig | null;
@@ -11,7 +11,7 @@ export function CabinetConfigProvider({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     let cancelled = false;
-    api.getPublicConfig().then((c) => {
+    getPublicConfigCached().then((c) => {
       if (!cancelled) setConfig(c);
     }).catch(() => {});
     return () => { cancelled = true; };

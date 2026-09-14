@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
-import { api, type ContestListItem, type ContestDetail, type ContestFormPayload, type ContestPrizeType, type ContestDrawType } from "@/lib/api";
+import { api, type ContestListItem, type ContestFormPayload, type ContestPrizeType, type ContestDrawType } from "@/lib/api";
 import { contestExtrasApi } from "@/lib/contest-extras-api";
+import { useAdminContests, useAdminContestDetail, useAdminContestParticipantsPreview } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,10 +132,12 @@ export function ContestsPage() {
   const { state } = useAuth();
   const token = state.accessToken!;
 
-  const [list, setList] = useState<ContestListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
+
+  const contestsQuery = useAdminContests(token);
+  const list = contestsQuery.data ?? [];
+  const loading = contestsQuery.isLoading;
+
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ContestFormPayload>(emptyForm);
@@ -142,33 +147,24 @@ export function ContestsPage() {
   const [buttonAction, setButtonAction] = useState<string>("");
   const [buttonCustomUrl, setButtonCustomUrl] = useState<string>("");
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<ContestDetail | null>(null);
-  const [participantsPreview, setParticipantsPreview] = useState<{ total: number; participants: { clientId: string; totalDaysBought: number; paymentsCount: number; referralsCount?: number }[] } | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [drawingId, setDrawingId] = useState<string | null>(null);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.getContests(token);
-      setList(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
+  const detailQuery = useAdminContestDetail(token, detailId);
+  const previewQuery = useAdminContestParticipantsPreview(token, previewId);
+  const detail = detailQuery.data ?? null;
+  const participantsPreview = previewQuery.data ?? null;
+
+  const errText = (e: unknown, fallback: string) => (e instanceof Error ? e.message : fallback);
+  const queryError = contestsQuery.error instanceof Error ? contestsQuery.error.message : null;
+  const error = actionError ?? queryError;
+
+  const invalidateContests = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.admin.contests() });
   };
-
-  useEffect(() => {
-    load();
-  }, [token]);
-
-  useEffect(() => {
-    if (!detailId || !token) return;
-    api.getContest(token, detailId).then(setDetail).catch(() => setDetail(null));
-  }, [detailId, token]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -216,61 +212,56 @@ export function ContestsPage() {
     setShowForm(true);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const conditionsJson = stringifyConditions({
-        minTariffDays: minTariffDays ? parseInt(minTariffDays, 10) : undefined,
-        minPaymentsCount: minPaymentsCount ? parseInt(minPaymentsCount, 10) : undefined,
-        minReferrals: minReferrals ? parseInt(minReferrals, 10) : undefined,
-      });
-      let resolvedButtonUrl: string | null = null;
-      if (buttonAction === "cabinet") resolvedButtonUrl = "/cabinet";
-      else if (buttonAction === "referral") resolvedButtonUrl = "/cabinet/referral";
-      else if (buttonAction === "custom" && buttonCustomUrl.trim()) resolvedButtonUrl = buttonCustomUrl.trim();
-
-      const payload: ContestFormPayload = {
-        ...form,
-        startAt: fromFormDatetime(form.startAt),
-        endAt: fromFormDatetime(form.endAt),
-        conditionsJson,
-        buttonText: buttonAction ? (form.buttonText || null) : null,
-        buttonUrl: resolvedButtonUrl,
-      };
-      if (editingId) {
-        await api.updateContest(token, editingId, payload);
-      } else {
-        await api.createContest(token, payload);
-      }
+  const saveMutation = useMutation({
+    mutationFn: async (payload: ContestFormPayload) => {
+      if (editingId) await api.updateContest(token, editingId, payload);
+      else await api.createContest(token, payload);
+    },
+    onSuccess: () => {
       setShowForm(false);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setSaving(false);
-    }
+      setActionError(null);
+      invalidateContests();
+    },
+    onError: (e) => setActionError(errText(e, "Ошибка сохранения")),
+  });
+
+  const handleSave = () => {
+    const conditionsJson = stringifyConditions({
+      minTariffDays: minTariffDays ? parseInt(minTariffDays, 10) : undefined,
+      minPaymentsCount: minPaymentsCount ? parseInt(minPaymentsCount, 10) : undefined,
+      minReferrals: minReferrals ? parseInt(minReferrals, 10) : undefined,
+    });
+    let resolvedButtonUrl: string | null = null;
+    if (buttonAction === "cabinet") resolvedButtonUrl = "/cabinet";
+    else if (buttonAction === "referral") resolvedButtonUrl = "/cabinet/referral";
+    else if (buttonAction === "custom" && buttonCustomUrl.trim()) resolvedButtonUrl = buttonCustomUrl.trim();
+
+    const payload: ContestFormPayload = {
+      ...form,
+      startAt: fromFormDatetime(form.startAt),
+      endAt: fromFormDatetime(form.endAt),
+      conditionsJson,
+      buttonText: buttonAction ? (form.buttonText || null) : null,
+      buttonUrl: resolvedButtonUrl,
+    };
+    saveMutation.mutate(payload);
   };
 
-  const loadParticipantsPreview = async (id: string) => {
-    try {
-      const data = await api.getContestParticipantsPreview(token, id);
-      setParticipantsPreview(data);
-      setDetailId(id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки участников");
-    }
+  const loadParticipantsPreview = (id: string) => {
+    setPreviewId(id);
+    setDetailId(id);
   };
 
   const runDraw = async (id: string) => {
     setDrawingId(id);
+    setActionError(null);
     try {
       await api.runContestDraw(token, id);
-      await load();
+      invalidateContests();
       setDetailId(id);
-      const d = await api.getContest(token, id);
-      setDetail(d);
+      await queryClient.invalidateQueries({ queryKey: qk.admin.contestDetail(id) });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка розыгрыша");
+      setActionError(errText(e, "Ошибка розыгрыша"));
     } finally {
       setDrawingId(null);
     }
@@ -279,14 +270,14 @@ export function ContestsPage() {
   const undoDraw = async (id: string) => {
     if (!confirm("Отменить розыгрыш? Balance-призы будут возвращены клиентам, vpn_days и custom призы остаются — отзывайте вручную.")) return;
     setDrawingId(id);
+    setActionError(null);
     try {
       const r = await contestExtrasApi.undoDraw(token, id);
-      await load();
-      const d = await api.getContest(token, id);
-      setDetail(d);
+      invalidateContests();
+      await queryClient.invalidateQueries({ queryKey: qk.admin.contestDetail(id) });
       alert(r.message + (r.refunded > 0 ? ` (возвращено ${r.refunded})` : ""));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка отмены розыгрыша");
+      setActionError(errText(e, "Ошибка отмены розыгрыша"));
     } finally {
       setDrawingId(null);
     }
@@ -295,11 +286,10 @@ export function ContestsPage() {
   const applyPrize = async (contestId: string, winnerId: string) => {
     try {
       const r = await contestExtrasApi.applyPrize(token, contestId, winnerId);
-      const d = await api.getContest(token, contestId);
-      setDetail(d);
+      await queryClient.invalidateQueries({ queryKey: qk.admin.contestDetail(contestId) });
       alert(r.message);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка применения приза");
+      setActionError(errText(e, "Ошибка применения приза"));
     }
   };
 
@@ -307,40 +297,39 @@ export function ContestsPage() {
     if (!confirm("Удалить победителя? Balance-приз (если был применён) будет возвращён.")) return;
     try {
       await contestExtrasApi.removeWinner(token, contestId, winnerId);
-      const d = await api.getContest(token, contestId);
-      setDetail(d);
+      await queryClient.invalidateQueries({ queryKey: qk.admin.contestDetail(contestId) });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка удаления победителя");
+      setActionError(errText(e, "Ошибка удаления победителя"));
     }
   };
 
   const handleLaunch = async (id: string) => {
     setLaunchingId(id);
-    setError(null);
+    setActionError(null);
     try {
       await api.launchContest(token, id);
-      await load();
+      invalidateContests();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка запуска");
+      setActionError(errText(e, "Ошибка запуска"));
     } finally {
       setLaunchingId(null);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    setSaving(true);
-    try {
-      await api.deleteContest(token, id);
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deleteContest(token, id),
+    onSuccess: (_r, id) => {
       setDeleteConfirmId(null);
-      setDetailId(null);
-      setDetail(null);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка удаления");
-    } finally {
-      setSaving(false);
-    }
-  };
+      if (detailId === id) setDetailId(null);
+      setActionError(null);
+      invalidateContests();
+    },
+    onError: (e) => setActionError(errText(e, "Ошибка удаления")),
+  });
+  const saving = saveMutation.isPending || deleteMutation.isPending;
+
+  const handleDelete = (id: string) => deleteMutation.mutate(id);
+
 
   const now = new Date();
   const canDraw = (c: ContestListItem) =>
@@ -757,7 +746,7 @@ export function ContestsPage() {
                   <p className="text-xs text-muted-foreground">Превью и победители</p>
                 </div>
               </div>
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => { setDetailId(null); setDetail(null); setParticipantsPreview(null); }}>
+              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => { setDetailId(null); setPreviewId(null); }}>
                 <X className="h-4 w-4" />
               </Button>
             </div>

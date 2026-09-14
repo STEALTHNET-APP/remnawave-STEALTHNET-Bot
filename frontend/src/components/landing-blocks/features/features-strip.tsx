@@ -3,9 +3,9 @@
  * Текст: items[]: { label, sub, desc?, chips? }.
  */
 
-import { motion } from "framer-motion";
 import { Shield, Lock, Star, Zap, Smartphone, type LucideIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { useScrollReveal } from "../scroll-reveal";
 import { arr, useLandingTheme } from "../utils";
 import type { LandingApiBlock } from "../types";
 
@@ -27,20 +27,15 @@ interface Item {
 export function FeaturesStrip({ block }: { block: LandingApiBlock }) {
   const { accentTheme } = useLandingTheme();
   const items = arr<Item>(block.text, "items", DEFAULT_ITEMS);
+  const gridRef = useScrollReveal<HTMLDivElement>([items.length], { y: 16, dur: 0.4, stagger: 0.05 });
 
   return (
-    <section className="container mx-auto px-4 pb-10 md:pb-16">
-      <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-5">
+    <section className="max-w-7xl mx-auto px-4 pb-10 md:pb-16">
+      <div ref={gridRef} className="grid gap-3 md:grid-cols-3 lg:grid-cols-5">
         {items.slice(0, 5).map((item, idx) => {
           const Icon = DEFAULT_ICONS[idx % DEFAULT_ICONS.length];
           return (
-            <motion.div
-              key={`${item.label}-${idx}`}
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.4, delay: idx * 0.05 }}
-            >
+            <div key={`${item.label}-${idx}`}>
               <Card className="h-full border-slate-200/70 dark:border-border bg-card dark:bg-card transition-shadow">
                 <CardContent className="p-5">
                   <div
@@ -53,7 +48,7 @@ export function FeaturesStrip({ block }: { block: LandingApiBlock }) {
                   <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{item.sub}</p>
                 </CardContent>
               </Card>
-            </motion.div>
+            </div>
           );
         })}
       </div>

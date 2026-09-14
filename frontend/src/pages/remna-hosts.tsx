@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
 import type { RemnaConfigProfile, RemnaHost } from "@/lib/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRemnaHosts, useRemnaConfigProfiles, useRemnaHostTags } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,63 +58,73 @@ const ALPN_OPTIONS = ["h3", "h2", "http/1.1", "h2,http/1.1", "h3,h2,http/1.1", "
 
 export function RemnaHostsPage() {
   const { state } = useAuth();
-  const token = state.accessToken!;
+  const token = state.accessToken ?? null;
+  const qc = useQueryClient();
+  const invalidateHosts = () => {
+    void qc.invalidateQueries({ queryKey: qk.admin.remnaHosts(), exact: false });
+    void qc.invalidateQueries({ queryKey: qk.admin.remnaHostTags(), exact: false });
+  };
 
-  const [hosts, setHosts] = useState<RemnaHost[]>([]);
-  const [profiles, setProfiles] = useState<RemnaConfigProfile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
+  const hostsQuery = useRemnaHosts(token);
+  const profilesQuery = useRemnaConfigProfiles(token);
+  const tagsQuery = useRemnaHostTags(token);
 
+  const error = hostsQuery.error instanceof Error ? hostsQuery.error.message
+    : profilesQuery.error instanceof Error ? profilesQuery.error.message : null;
+
+  const hosts: RemnaHost[] = (() => {
+    const raw = hostsQuery.data?.response;
+    return Array.isArray(raw) ? raw : raw?.hosts ?? [];
+  })();
+  const profiles: RemnaConfigProfile[] = profilesQuery.data?.response?.configProfiles ?? [];
+  const tags: string[] = tagsQuery.data?.response?.tags ?? [];
+
+  const loading = hostsQuery.isLoading;
   const [showForm, setShowForm] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [editingUuid, setEditingUuid] = useState<string | null>(null);
   const [form, setForm] = useState<HostForm>(EMPTY);
   // Bulk-выделение хостов (API 2.8 /hosts/bulk/{enable|disable|delete}).
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkBusy, setBulkBusy] = useState(false);
-  const [tags, setTags] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const toggleSel = (uuid: string) => setSelected((prev) => { const n = new Set(prev); n.has(uuid) ? n.delete(uuid) : n.add(uuid); return n; });
-  const bulkAction = async (action: "enable" | "disable" | "delete") => {
+
+  const bulkMutation = useMutation({
+    mutationFn: ({ action, uuids }: { action: "enable" | "disable" | "delete"; uuids: string[] }) =>
+      api.remnaHostsBulk(token!, action, uuids),
+    onSuccess: (_data, variables) => {
+      setSelected(new Set());
+      if (variables.action === "delete") invalidateHosts();
+      else void qc.invalidateQueries({ queryKey: qk.admin.remnaHosts(), exact: false });
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка массового действия"),
+  });
+  const bulkAction = (action: "enable" | "disable" | "delete") => {
     const uuids = [...selected];
     if (uuids.length === 0) return;
     if (action === "delete" && !confirm(`Удалить ${uuids.length} хост(ов)? Действие необратимо.`)) return;
-    setBulkBusy(true);
-    try { await api.remnaHostsBulk(token, action, uuids); setSelected(new Set()); await load(); }
-    catch (e) { alert(e instanceof Error ? e.message : "Ошибка массового действия"); }
-    finally { setBulkBusy(false); }
+    bulkMutation.mutate({ action, uuids });
   };
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [hostsRes, profRes, tagsRes] = await Promise.all([
-        api.getRemnaHosts(token),
-        api.getRemnaConfigProfiles(token),
-        api.getRemnaHostTags(token).catch(() => null),
-      ]);
-      const raw = hostsRes.response;
-      const list = Array.isArray(raw) ? raw : raw?.hosts ?? [];
-      setHosts(list);
-      setProfiles(profRes.response?.configProfiles ?? []);
-      setTags(tagsRes?.response?.tags ?? []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, [token]);
+  const saveMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      editingUuid ? api.remnaHostUpdate(token!, editingUuid, body) : api.remnaHostCreate(token!, body),
+    onSuccess: () => {
+      setShowForm(false);
+      invalidateHosts();
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (uuid: string) => api.remnaHostDelete(token!, uuid),
+    onSuccess: () => invalidateHosts(),
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+  });
 
   const selectedProfile = useMemo(
     () => profiles.find((p) => p.uuid === form.configProfileUuid),
     [profiles, form.configProfileUuid],
   );
-
   const inboundTag = (h: RemnaHost): string => {
     const iu = h.inbound?.configProfileInboundUuid;
     if (!iu) return "—";
@@ -172,53 +185,33 @@ export function RemnaHostsPage() {
     setForm((f) => ({ ...f, configProfileInboundUuid: inboundUuid, port: ib?.port ?? f.port }));
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const body: Record<string, unknown> = {
-        remark: form.remark.trim(),
-        address: form.address.trim(),
-        port: form.port,
-        inbound: {
-          configProfileUuid: form.configProfileUuid,
-          configProfileInboundUuid: form.configProfileInboundUuid,
-        },
-        isDisabled: form.isDisabled,
-      };
-      if (form.sni.trim()) body.sni = form.sni.trim();
-      if (form.host.trim()) body.host = form.host.trim();
-      if (form.path.trim()) body.path = form.path.trim();
-      const tags = form.tags.split(/[\s,;]+/).map((t) => t.trim().toUpperCase().replace(/[^A-Z0-9_:]/g, "")).filter(Boolean);
-      if (tags.length) body.tags = tags;
-      if (form.security) body.securityLayer = form.security;
-      if (form.alpn) body.alpn = form.alpn;
-      if (form.fingerprint) body.fingerprint = form.fingerprint;
-      if (editingUuid) {
-        await api.remnaHostUpdate(token, editingUuid, body);
-      } else {
-        await api.remnaHostCreate(token, body);
-      }
-      setShowForm(false);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setSaving(false);
-    }
+  const handleSave = () => {
+    const body: Record<string, unknown> = {
+      remark: form.remark.trim(),
+      address: form.address.trim(),
+      port: form.port,
+      inbound: {
+        configProfileUuid: form.configProfileUuid,
+        configProfileInboundUuid: form.configProfileInboundUuid,
+      },
+      isDisabled: form.isDisabled,
+    };
+    if (form.sni.trim()) body.sni = form.sni.trim();
+    if (form.host.trim()) body.host = form.host.trim();
+    if (form.path.trim()) body.path = form.path.trim();
+    const tags = form.tags.split(/[\s,;]+/).map((t) => t.trim().toUpperCase().replace(/[^A-Z0-9_:]/g, "")).filter(Boolean);
+    if (tags.length) body.tags = tags;
+    if (form.security) body.securityLayer = form.security;
+    if (form.alpn) body.alpn = form.alpn;
+    if (form.fingerprint) body.fingerprint = form.fingerprint;
+    saveMutation.mutate(body);
   };
 
-  const handleDelete = async (h: RemnaHost) => {
+  const handleDelete = (h: RemnaHost) => {
     if (!confirm(`Удалить хост «${h.remark || h.address}»?`)) return;
-    setBusy(h.uuid);
-    try {
-      await api.remnaHostDelete(token, h.uuid);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    } finally {
-      setBusy(null);
-    }
+    deleteMutation.mutate(h.uuid);
   };
+
 
   if (loading) {
     return (
@@ -268,14 +261,14 @@ export function RemnaHostsPage() {
             <CheckSquare className="h-4 w-4" /> Выбрано: {selected.size}
           </span>
           <span className="flex-1" />
-          <Button variant="outline" size="sm" className="rounded-lg gap-1.5" disabled={bulkBusy} onClick={() => bulkAction("enable")}>
-            {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />} Включить
+          <Button variant="outline" size="sm" className="rounded-lg gap-1.5" disabled={bulkMutation.isPending} onClick={() => bulkAction("enable")}>
+            {bulkMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />} Включить
           </Button>
-          <Button variant="outline" size="sm" className="rounded-lg gap-1.5" disabled={bulkBusy} onClick={() => bulkAction("disable")}>
-            {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />} Отключить
+          <Button variant="outline" size="sm" className="rounded-lg gap-1.5" disabled={bulkMutation.isPending} onClick={() => bulkAction("disable")}>
+            {bulkMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />} Отключить
           </Button>
-          <Button variant="outline" size="sm" className="rounded-lg gap-1.5 text-red-500 dark:text-red-400 hover:bg-red-500/10" disabled={bulkBusy} onClick={() => bulkAction("delete")}>
-            {bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Удалить
+          <Button variant="outline" size="sm" className="rounded-lg gap-1.5 text-red-500 dark:text-red-400 hover:bg-red-500/10" disabled={bulkMutation.isPending} onClick={() => bulkAction("delete")}>
+            {bulkMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />} Удалить
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Снять выделение" onClick={() => setSelected(new Set())}>
             <X className="h-4 w-4" />
@@ -332,8 +325,8 @@ export function RemnaHostsPage() {
                     <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Редактировать" onClick={() => openEdit(h)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10" title="Удалить" disabled={busy === h.uuid} onClick={() => handleDelete(h)}>
-                      {busy === h.uuid ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10" title="Удалить" disabled={deleteMutation.isPending && deleteMutation.variables === h.uuid} onClick={() => handleDelete(h)}>
+                      {deleteMutation.isPending && deleteMutation.variables === h.uuid ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                     </Button>
                   </div>
                 </div>
@@ -472,8 +465,8 @@ export function RemnaHostsPage() {
 
             <DialogFooter className="mt-2 gap-2">
               <Button variant="outline" onClick={() => setShowForm(false)} className="rounded-xl">Отмена</Button>
-              <Button onClick={handleSave} disabled={saving || !form.remark.trim() || !form.address.trim() || !form.configProfileInboundUuid} className="gap-2 rounded-xl">
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              <Button onClick={handleSave} disabled={saveMutation.isPending || !form.remark.trim() || !form.address.trim() || !form.configProfileInboundUuid} className="gap-2 rounded-xl">
+                {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {editingUuid ? "Сохранить" : "Добавить"}
               </Button>
             </DialogFooter>

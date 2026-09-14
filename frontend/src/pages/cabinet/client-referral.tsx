@@ -131,7 +131,7 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="relative overflow-hidden rounded-3xl bg-card/40 backdrop-blur-2xl border border-border/50 p-8 sm:p-10 shadow-xl"
+        className="relative overflow-hidden rounded-3xl glass-card border border-border/50 p-8 sm:p-10 shadow-xl"
       >
         <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-primary/20 blur-[80px] pointer-events-none -mr-20 -mt-20" />
         <div className="absolute bottom-0 left-0 w-64 h-64 rounded-full bg-blue-500/10 blur-[80px] pointer-events-none -ml-20 -mb-20" />
@@ -216,7 +216,7 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {hasReferralLinks ? (
           <motion.div
             initial={{ opacity: 0, y: 12 }}

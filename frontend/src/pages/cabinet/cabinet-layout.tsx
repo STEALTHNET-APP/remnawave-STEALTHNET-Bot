@@ -8,9 +8,10 @@ import { createContext, useContext } from "react";
 import { useIsMiniapp } from "@/hooks/use-is-miniapp";
 import { useLanguageSync } from "@/i18n/use-language-sync";
 import { api } from "@/lib/api";
+import { getPublicConfigCached } from "@/lib/public-config";
 import { Button } from "@/components/ui/button";
 import { GlassSelect } from "@/components/ui/glass-select";
-import { LayoutDashboard, Package, User, LogOut, Shield, Users, Sun, Moon, PlusCircle, Globe, KeyRound, MessageSquare, Palette, Monitor, Check, Loader2, Settings, Layers, MoreHorizontal, ChevronDown, Wallet, Gift } from "lucide-react";
+import { LayoutDashboard, Package, User, LogOut, Shield, Users, Sun, Moon, PlusCircle, Globe, KeyRound, MessageSquare, Monitor, Check, Loader2, Layers, MoreHorizontal, ChevronDown, Wallet, Gift } from "lucide-react";
 import { useTheme, ACCENT_PALETTES, type ThemeMode, type ThemeAccent } from "@/contexts/theme";
 import { cn } from "@/lib/utils";
 import { FloatingChat } from "@/components/floating-chat";
@@ -31,7 +32,7 @@ function formatMoney(amount: number, currency: string) {
 
 function AnalyticsScripts() {
   useEffect(() => {
-    api.getPublicConfig().then((c) => {
+    getPublicConfigCached().then((c) => {
       if (c.googleAnalyticsId?.trim()) {
         const id = c.googleAnalyticsId.trim();
         if (document.getElementById("ga4-script")) return;
@@ -174,12 +175,20 @@ function useThemeModeOptions() {
   ], [t]);
 }
 
-function ThemePopover() {
+
+/**
+ * Единое меню пользователя в шапке кабинета: тема (режим + акцент), язык,
+ * валюта и логаут — вместо трёх отдельных иконок (палитра/шестерёнка/выход),
+ * которые раньше висели на КАЖДОЙ странице. Один щиток с аватаром-иконкой.
+ */
+function UserMenu() {
   const [show, setShow] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const { t } = useTranslation();
-  const { config: themeConfig, setMode, setAccent, resolvedMode, allowUserThemeChange } = useTheme();
+  const { state, logout, refreshProfile } = useClientAuth();
+  const { config: themeConfig, setMode, setAccent, allowUserThemeChange } = useTheme();
   const MODE_OPTIONS = useThemeModeOptions();
+<<<<<<< HEAD
 
   useEffect(() => {
     if (!show) return;
@@ -295,6 +304,8 @@ function SettingsPopover() {
   const { t } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
 
+=======
+>>>>>>> 3d6b243 (feat(frontend): TanStack Query + Zustand everywhere, GSAP animations, UI redesign)
   const [activeLanguages, setActiveLanguages] = useState<string[]>([]);
   const [activeCurrencies, setActiveCurrencies] = useState<string[]>([]);
   const [preferredLang, setPreferredLang] = useState(state.client?.preferredLang ?? "ru");
@@ -302,21 +313,13 @@ function SettingsPopover() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!show) {
-      if (state.client) {
-        setPreferredLang(state.client.preferredLang);
-        setPreferredCurrency(state.client.preferredCurrency);
-      }
-      return;
-    }
-
-    api.getPublicConfig()
+    if (!show) return;
+    getPublicConfigCached()
       .then((c) => {
         setActiveLanguages(c.activeLanguages?.length ? c.activeLanguages : ["ru", "en"]);
         setActiveCurrencies(c.activeCurrencies?.length ? c.activeCurrencies : ["usd", "rub"]);
       })
       .catch(() => { });
-
     function handleClick(e: MouseEvent) {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
         setShow(false);
@@ -324,7 +327,7 @@ function SettingsPopover() {
     }
     const timer = setTimeout(() => document.addEventListener("mousedown", handleClick), 0);
     return () => { clearTimeout(timer); document.removeEventListener("mousedown", handleClick); };
-  }, [show, state.client]);
+  }, [show]);
 
   async function handleSave() {
     if (!state.token) return;
@@ -342,30 +345,97 @@ function SettingsPopover() {
 
   const langs = activeLanguages.length ? activeLanguages : ["ru", "en"];
   const currencies = activeCurrencies.length ? activeCurrencies : ["usd", "rub"];
+  const clientLabel = state.client?.email?.trim() || (state.client?.telegramUsername ? `@${state.client.telegramUsername}` : "");
 
   return (
     <div className="relative" ref={popoverRef} data-tour="language-currency">
+<<<<<<< HEAD
       <Button aria-label="Настройки кабинета" aria-expanded={show} aria-controls="cabinet-settings-panel" variant="ghost" size="sm" className="gap-1.5 text-xs h-8 px-2 bg-background/20 hover:bg-background/40" onClick={() => setShow(!show)}>
         <Settings className="h-3.5 w-3.5" />
+=======
+      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 bg-background/20 hover:bg-background/40 transition-all duration-300" onClick={() => setShow(!show)} aria-label={t("cabinet.layout.settings")}>
+        <User className="h-4 w-4" />
+>>>>>>> 3d6b243 (feat(frontend): TanStack Query + Zustand everywhere, GSAP animations, UI redesign)
       </Button>
       <div id="cabinet-settings-panel"
         className={cn(
+<<<<<<< HEAD
           "absolute -right-2 sm:right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[260px] max-w-[260px] rounded-[2rem] border border-white/40 dark:border-white/10 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-[32px] p-5 shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)] transition-all duration-300 origin-top-right",
           show ? "visible opacity-100 scale-100 pointer-events-auto translate-y-0" : "invisible opacity-0 scale-95 pointer-events-none -translate-y-2"
+=======
+          "absolute -right-2 sm:right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[320px] max-w-[320px] rounded-2xl p-5 shadow-[0_16px_60px_rgba(0,0,0,0.35)] transition-all duration-300 origin-top-right bg-card/95 backdrop-blur-2xl",
+          show ? "opacity-100 scale-100 pointer-events-auto translate-y-0" : "opacity-0 scale-95 pointer-events-none -translate-y-2"
+>>>>>>> 3d6b243 (feat(frontend): TanStack Query + Zustand everywhere, GSAP animations, UI redesign)
         )}
       >
-        <div className="flex items-center gap-3 mb-5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
-            <Settings className="h-5 w-5" />
+        {/* Идентификация */}
+        {clientLabel && (
+          <div className="flex items-center gap-3 mb-4 pb-4 border-b border-border/60">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary shrink-0">
+              <User className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground truncate">{clientLabel}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{t("cabinet.layout.settings_subtitle")}</p>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <h4 className="text-base font-bold tracking-tight text-foreground truncate">{t("cabinet.layout.settings")}</h4>
-            <p className="text-[10px] text-muted-foreground mt-[1px] uppercase tracking-wider font-semibold truncate">{t("cabinet.layout.settings_subtitle")}</p>
-          </div>
+        )}
+
+        {/* Тема: режим (светлая/тёмная/система) — доступен юзеру ВСЕГДА: заказчик —
+            «клиенты видят в белой и тёмной теме». Акцент (цвет бренда) — только
+            если админ разрешил смену (allowUserThemeChange); иначе цвет жёстко серверный. */}
+        <h4 className="mb-2 text-xs font-semibold tracking-tight text-muted-foreground uppercase">{t("cabinet.layout.theme_heading")}</h4>
+        <div className="flex rounded-xl bg-muted/60 p-1 border border-border/50 mb-4">
+          {MODE_OPTIONS.map((opt) => {
+            const isActive = themeConfig.mode === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setMode(opt.value)}
+                className={cn(
+                  "flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition-all duration-300",
+                  isActive
+                    ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
+                    : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+                )}
+              >
+                <opt.icon className="h-3.5 w-3.5" />
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
 
-        <div className="space-y-4 mb-5">
-          <div className="space-y-1.5">
+        {/* Акцент — только с разрешения админа */}
+        {allowUserThemeChange && (
+          <>
+            <h4 className="mb-2 text-xs font-semibold tracking-tight text-muted-foreground uppercase">{t("cabinet.layout.color_accent")}</h4>
+            <div className="grid grid-cols-6 gap-1.5 mb-4">
+              {(Object.entries(ACCENT_PALETTES) as [ThemeAccent, typeof ACCENT_PALETTES["default"]][]).map(([key, palette]) => {
+                const isActive = themeConfig.accent === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setAccent(key)}
+                    title={palette.label}
+                    aria-label={palette.label}
+                    className={cn(
+                      "group relative flex h-8 w-8 items-center justify-center rounded-full transition-transform duration-300",
+                      isActive ? "scale-110 ring-2 ring-primary/40 ring-offset-2 ring-offset-background" : "hover:scale-110"
+                    )}
+                    style={{ backgroundColor: palette.swatch }}
+                  >
+                    {isActive && <Check className="h-3.5 w-3.5 text-white drop-shadow-md" />}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* Язык и валюта */}
+        <div className="space-y-3 mb-4">
+          <div className="space-y-1">
             <label className="text-xs text-muted-foreground font-medium pl-1 flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> {t("cabinet.layout.language")}</label>
             <GlassSelect
               value={preferredLang}
@@ -373,7 +443,7 @@ function SettingsPopover() {
               options={langs.map((l) => ({ value: l, label: l === "ru" ? "Русский" : l === "en" ? "English" : l.toUpperCase() }))}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <label className="text-xs text-muted-foreground font-medium pl-1 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {t("cabinet.layout.currency")}</label>
             <GlassSelect
               value={preferredCurrency}
@@ -383,9 +453,22 @@ function SettingsPopover() {
           </div>
         </div>
 
-        <Button onClick={handleSave} disabled={saving} className="w-full h-10 rounded-xl shadow-md bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-semibold transition-all hover:scale-[1.02] active:scale-95">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
+        <Button onClick={handleSave} disabled={saving} className="w-full h-9 rounded-xl text-sm font-semibold mb-2">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
           {t("cabinet.layout.save")}
+        </Button>
+
+        {/* Логаут */}
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-2 h-9 rounded-xl text-sm font-medium text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          onClick={() => logout()}
+          asChild
+        >
+          <Link to="/cabinet/login">
+            <LogOut className="w-4 h-4 shrink-0" />
+            {t("cabinet.nav.logout")}
+          </Link>
         </Button>
       </div>
     </div>
@@ -469,8 +552,7 @@ function MobileCabinetShell() {
             {serviceName ? <span className="truncate">{serviceName}</span> : null}
           </Link>
           <div className="flex items-center gap-1.5 shrink-0">
-            <ThemePopover />
-            <SettingsPopover />
+            <UserMenu />
             {!isMiniapp && (
               <Button variant="ghost" size="icon" className="shrink-0 bg-background/20 hover:bg-background/40 text-muted-foreground hover:text-foreground" asChild>
                 <Link to="/cabinet/login" onClick={() => logout()} title={t("cabinet.nav.logout")}>
@@ -611,9 +693,16 @@ function CabinetShell() {
   return (
     <div className="classic-cabinet tg-fs-pad min-h-svh flex flex-col bg-transparent">
       <FloatingChat />
+<<<<<<< HEAD
       {/* Navigation and page content share the same width. Theme styling is preserved. */}
       <header className="sticky top-2 sm:top-3 z-50 px-2 sm:px-4 transition-all duration-300">
         <div className="cabinet-desktop-bar relative w-full max-w-7xl mx-auto flex h-16 items-center justify-between gap-4 px-3 sm:px-5 rounded-2xl border border-border/60 bg-card/55 backdrop-blur-xl shadow-lg shadow-black/5">
+=======
+      {/* левитирующая glass-капсула: max-w-7xl — ровно как main под ней,
+          чтобы левый край шапки совпадал с левым краем контента. */}
+      <header className="sticky top-2 sm:top-3 z-50 w-full max-w-7xl mx-auto px-4 transition-all duration-300">
+        <div className="relative w-full flex h-16 items-center justify-between gap-4 px-3 sm:px-5 rounded-2xl border border-border/60 bg-card/55 backdrop-blur-xl shadow-lg shadow-black/5">
+>>>>>>> 3d6b243 (feat(frontend): TanStack Query + Zustand everywhere, GSAP animations, UI redesign)
           <Link to="/cabinet/dashboard" className="flex items-center gap-2.5 font-semibold text-lg tracking-tight shrink-0 hover:opacity-80 transition-opacity">
             {logo ? (
               <span className="flex items-center justify-center h-9 px-2 rounded-lg shrink-0">
@@ -665,7 +754,11 @@ function CabinetShell() {
                   <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", moreOpen && "rotate-180")} />
                 </Button>
                 {moreOpen && (
+<<<<<<< HEAD
                   <div id="cabinet-more-links" className="absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border bg-card py-1.5 shadow-lg">
+=======
+                  <div className="absolute left-0 top-full z-50 mt-2 min-w-[190px] rounded-xl py-1.5 bg-card/95 backdrop-blur-2xl shadow-[0_16px_50px_rgba(0,0,0,0.4)] transition-all duration-200 origin-top-left">
+>>>>>>> 3d6b243 (feat(frontend): TanStack Query + Zustand everywhere, GSAP animations, UI redesign)
                     {moreNav.map(({ to, label, icon: Icon }) => {
                       const active = location.pathname === to;
                       return (
@@ -675,8 +768,8 @@ function CabinetShell() {
                           data-tour={ROUTE_TOUR_MAP[to]}
                           onClick={() => setMoreOpen(false)}
                           className={cn(
-                            "flex items-center gap-2 px-4 py-2.5 text-sm transition-colors",
-                            active ? "bg-primary/20 text-primary" : "hover:bg-muted/60"
+                            "flex items-center gap-2.5 px-3.5 py-2.5 text-sm font-medium transition-colors",
+                            active ? "bg-primary/20 text-primary" : "text-foreground/85 hover:bg-muted/60 hover:text-foreground"
                           )}
                         >
                           <Icon className="h-4 w-4 shrink-0" />
@@ -690,9 +783,14 @@ function CabinetShell() {
             )}
           </nav>
           <div className="flex items-center gap-2 shrink-0">
+<<<<<<< HEAD
             <ThemePopover />
             <SettingsPopover />
             <Link to="/cabinet/profile#topup" aria-label={`Баланс: ${headerBalance ?? "—"}. Пополнить баланс`} className="hidden xl:flex h-10 items-center gap-3 rounded-full border border-border/60 bg-background/35 px-4 shadow-sm backdrop-blur-xl transition-all hover:bg-background/50">
+=======
+            <UserMenu />
+            <div className="hidden lg:flex h-9 items-center gap-3 rounded-full border border-border/60 bg-background/35 px-4 shadow-sm backdrop-blur-xl transition-all hover:bg-background/50">
+>>>>>>> 3d6b243 (feat(frontend): TanStack Query + Zustand everywhere, GSAP animations, UI redesign)
               <span className="max-w-[120px] xl:max-w-[160px] truncate text-sm font-medium text-muted-foreground" title={state.client?.email?.trim() || (state.client?.telegramUsername ? `@${state.client.telegramUsername}` : "")}>
                 {state.client?.email?.trim() ? state.client.email : state.client?.telegramUsername ? `@${state.client.telegramUsername}` : "—"}
               </span>
@@ -707,8 +805,13 @@ function CabinetShell() {
               className="group h-9 rounded-full border-border/60 bg-background/35 p-0 shadow-sm backdrop-blur-xl transition-all duration-300 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive"
               asChild
             >
+<<<<<<< HEAD
               <Link to="/cabinet/login" onClick={() => logout()} aria-label={t("cabinet.nav.logout")} className="flex h-full items-center">
                 <div className="flex h-full w-9 shrink-0 items-center justify-center">
+=======
+              <Link to="/cabinet/login" onClick={() => logout()} className="flex h-9 items-center">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center">
+>>>>>>> 3d6b243 (feat(frontend): TanStack Query + Zustand everywhere, GSAP animations, UI redesign)
                   <LogOut className="h-[18px] w-[18px]" />
                 </div>
                 <div className="grid grid-cols-[0fr] opacity-0 transition-all duration-300 group-hover:grid-cols-[1fr] group-hover:opacity-100">

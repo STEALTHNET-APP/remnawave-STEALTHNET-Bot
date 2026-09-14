@@ -1,18 +1,28 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "@/contexts/auth";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
+import {
+  useRemnaNodes,
+  useRemnaSystemStats,
+  useRemnaConfigProfiles,
+  useRemnaBandwidth,
+  useRemnaMetrics,
+  useRemnaRecap,
+  useRemnaPubKey,
+  useRemnaHwidStats,
+  useRemnaHwidTop,
+  useRemnaTorrentStats,
+  useRemnaTorrentReports,
+  useRemnaInfraProviders,
+  useRemnaInfraBillingNodes,
+  useRemnaNodePlugins,
+  useRemnaNodeUsersUsage,
+} from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import { api } from "@/lib/api";
 import type {
   RemnaNode,
-  RemnaConfigProfile,
   RemnaNodeCreatePayload,
-  RemnaNodeUsersUsageResponse,
-  RemnaSystemStats,
-  RemnaNodesMetricsResponse,
-  RemnaBandwidthStatsResponse,
-  RemnaInfraBillingNodesResponse,
-  RemnaRecapResponse,
-  RemnaHwidStatsResponse,
-  RemnaHwidTopUsersResponse,
 } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -162,43 +172,36 @@ export function RemnaNodesPage() {
   const { state } = useAuth();
   const token = state.accessToken!;
 
-  const [nodes, setNodes] = useState<RemnaNode[]>([]);
-  const [profiles, setProfiles] = useState<RemnaConfigProfile[]>([]);
-  const [pubKey, setPubKey] = useState<string>("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [refreshedAt, setRefreshedAt] = useState<number | null>(null);
-  // Обзор самой панели Remnawave (юзеры по статусам, RAM, uptime) — чтобы не ходить в ремну.
-  const [panelStats, setPanelStats] = useState<RemnaSystemStats["response"] | null>(null);
-  // Метрики нод (инбаунды/аутбаунды + провайдер) — для «Система»-диалога.
-  const [nodeMetrics, setNodeMetrics] = useState<NonNullable<NonNullable<RemnaNodesMetricsResponse["response"]>["nodes"]>>([]);
-  // Сводка трафика панели (сегодня/7д/месяц) + ближайшие оплаты серверов (infra-billing).
-  const [bandwidth, setBandwidth] = useState<RemnaBandwidthStatsResponse["response"] | null>(null);
-  const [billingNodes, setBillingNodes] = useState<NonNullable<NonNullable<RemnaInfraBillingNodesResponse["response"]>["billingNodes"]>>([]);
-  const [recap, setRecap] = useState<RemnaRecapResponse["response"] | null>(null);
-  // Инфра-биллинг: управление провайдерами + привязка нод к оплате.
+  // Диалоги (открыты или нет) — локальный UI-стейт. Объявлены ДО хуков:
+  // enabled-флаги диалоговых запросов зависят от них.
   const [billingOpen, setBillingOpen] = useState(false);
-  const [providers, setProviders] = useState<{ uuid: string; name: string; loginUrl?: string; faviconLink?: string }[]>([]);
-  const [billingLoading, setBillingLoading] = useState(false);
+  const [hwidOpen, setHwidOpen] = useState(false);
+  const [torrentOpen, setTorrentOpen] = useState(false);
+  const [pluginsOpen, setPluginsOpen] = useState(false);
+  const [statsNode, setStatsNode] = useState<RemnaNode | null>(null);
+  const [statsDays, setStatsDays] = useState(7);
+
+  const qc = useQueryClient();
+  const nodesQ = useRemnaNodes(token, true, REFRESH_MS);
+  const statsQ = useRemnaSystemStats(token, REFRESH_MS);
+  const profilesQ = useRemnaConfigProfiles(token);
+  const metricsQ = useRemnaMetrics(token, REFRESH_MS);
+  const bwQ = useRemnaBandwidth(token, REFRESH_MS);
+  const billingNodesQ = useRemnaInfraBillingNodes(token);
+  const recapQ = useRemnaRecap(token);
+  const pubKeyQ = useRemnaPubKey(token);
+  const hwidStatsQ = useRemnaHwidStats(token, hwidOpen);
+  const hwidTopQ = useRemnaHwidTop(token, hwidOpen);
+  const torrentStatsQ = useRemnaTorrentStats(token, torrentOpen);
+  const torrentReportsQ = useRemnaTorrentReports(token, torrentOpen);
+  const infraProvidersQ = useRemnaInfraProviders(token, billingOpen);
+  const pluginsQ = useRemnaNodePlugins(token, pluginsOpen);
+  const usageQ = useRemnaNodeUsersUsage(token, statsNode?.uuid ?? null, statsDays);
+
+  // Инфра-биллинг: форма провайдеров/привязок.
   const [newProviderName, setNewProviderName] = useState("");
   const [newProviderUrl, setNewProviderUrl] = useState("");
   const [billForm, setBillForm] = useState<{ providerUuid: string; nodeUuid: string; date: string }>({ providerUuid: "", nodeUuid: "", date: "" });
-  const [billBusy, setBillBusy] = useState(false);
-  // HWID (устройства) + торрент-блокер — по кнопкам в шапке.
-  const [hwidOpen, setHwidOpen] = useState(false);
-  const [hwidStats, setHwidStats] = useState<RemnaHwidStatsResponse["response"] | null>(null);
-  const [hwidTop, setHwidTop] = useState<RemnaHwidTopUsersResponse["response"] | null>(null);
-  const [hwidLoading, setHwidLoading] = useState(false);
-  const [torrentOpen, setTorrentOpen] = useState(false);
-  const [torrentStats, setTorrentStats] = useState<Record<string, unknown> | null>(null);
-  const [torrentReports, setTorrentReports] = useState<unknown[]>([]);
-  const [torrentLoading, setTorrentLoading] = useState(false);
-  // Плагины нод (API 2.8 node-plugins): список + удаление.
-  const [pluginsOpen, setPluginsOpen] = useState(false);
-  const [plugins, setPlugins] = useState<{ uuid: string; name: string }[]>([]);
-  const [pluginsLoading, setPluginsLoading] = useState(false);
 
   const [showForm, setShowForm] = useState(false);
   const [editingUuid, setEditingUuid] = useState<string | null>(null);
@@ -212,162 +215,153 @@ export function RemnaNodesPage() {
   const [copiedUuid, setCopiedUuid] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
 
-  const [statsNode, setStatsNode] = useState<RemnaNode | null>(null);
-  const [statsDays, setStatsDays] = useState(7);
-  const [statsData, setStatsData] = useState<RemnaNodeUsersUsageResponse["response"] | null>(null);
-  const [statsLoading, setStatsLoading] = useState(false);
+  const nodes = useMemo(() => nodesQ.data?.response ?? [], [nodesQ.data]);
+  const profiles = useMemo(() => profilesQ.data?.response?.configProfiles ?? [], [profilesQ.data]);
+  const panelStats = statsQ.data?.response ?? null;
+
+  const nodeMetrics = metricsQ.data?.response?.nodes ?? [];
+  const bandwidth = bwQ.data?.response ?? null;
+  const billingNodes = billingNodesQ.data?.response?.billingNodes ?? [];
+  const recap = recapQ.data?.response ?? null;
+  const pubKey = pubKeyQ.data?.response?.pubKey ?? "";
+  const hwidStats = hwidStatsQ.data?.response ?? null;
+  const hwidTop = hwidTopQ.data?.response ?? null;
+  const providers = infraProvidersQ.data?.response?.providers ?? [];
+  const plugins = useMemo(
+    () => (Array.isArray(pluginsQ.data?.response) ? (pluginsQ.data.response as Record<string, unknown>[]) : [])
+      .map((p) => ({ uuid: String(p.uuid ?? ""), name: String(p.name ?? "—") }))
+      .filter((p) => p.uuid),
+    [pluginsQ.data],
+  );
+  // Торрент-блокер: живая 2.8 — { response: { stats: {...}, topUsers, topNodes } }, берём вложенный stats.
+  const torrentStats = useMemo(() => {
+    const sResp = torrentStatsQ.data?.response as { stats?: unknown } & Record<string, unknown> | undefined;
+    const statsObj = (sResp?.stats && typeof sResp.stats === "object" ? sResp.stats : sResp) as Record<string, unknown> | undefined;
+    return statsObj && typeof statsObj === "object" ? statsObj : null;
+  }, [torrentStatsQ.data]);
+  const torrentReports = useMemo(() => {
+    const rResp = torrentReportsQ.data?.response as unknown;
+    const rObj = (rResp && typeof rResp === "object" ? rResp : {}) as Record<string, unknown>;
+    return Array.isArray(rResp) ? rResp
+      : Array.isArray(rObj.reports) ? (rObj.reports as unknown[])
+      : Array.isArray(rObj.records) ? (rObj.records as unknown[])
+      : [];
+  }, [torrentReportsQ.data]);
+  const loading = nodesQ.isLoading;
+  const error = nodesQ.error instanceof Error ? nodesQ.error.message : nodesQ.error ? "Ошибка загрузки" : null;
+  const refreshedAt = !nodesQ.isLoading && nodesQ.data ? nodesQ.dataUpdatedAt : null;
 
   const detailNode = useMemo(() => nodes.find((n) => n.uuid === detailUuid) ?? null, [nodes, detailUuid]);
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const invalidateAdmin = () => void qc.invalidateQueries({ queryKey: ["admin"], exact: false });
+  /* Мутации: ноды */
+  const saveNodeMutation = useMutation({
+    mutationFn: (payload: RemnaNodeCreatePayload) =>
+      editingUuid ? api.remnaNodeUpdate(token, editingUuid, payload) : api.remnaNodeCreate(token, payload),
+    onSuccess: () => invalidateAdmin(),
+  });
+  const nodeActionMutation = useMutation({
+    mutationFn: (v: { uuid: string; action: "enable" | "disable" | "restart" }) =>
+      v.action === "enable" ? api.remnaNodeEnable(token, v.uuid)
+      : v.action === "disable" ? api.remnaNodeDisable(token, v.uuid)
+      : api.remnaNodeRestart(token, v.uuid),
+    onSuccess: () => invalidateAdmin(),
+  });
+  const deleteNodeMutation = useMutation({
+    mutationFn: (uuid: string) => api.remnaNodeDelete(token, uuid),
+    onSuccess: () => invalidateAdmin(),
+  });
+  const resetTrafficMutation = useMutation({
+    mutationFn: (uuid: string) => api.remnaNodeResetTraffic(token, uuid),
+    onSuccess: () => invalidateAdmin(),
+  });
+  const restartAllMutation = useMutation({
+    mutationFn: () => api.remnaRestartAllNodes(token),
+    onSuccess: () => invalidateAdmin(),
+  });
+  /* Мутации: инфра-биллинг, провайдеры */
+  const createProviderMutation = useMutation({
+    mutationFn: () => api.remnaCreateInfraProvider(token, { name: newProviderName.trim(), loginUrl: newProviderUrl.trim() || undefined }),
+    onSuccess: () => { setNewProviderName(""); setNewProviderUrl(""); void qc.invalidateQueries({ queryKey: qk.admin.remnaInfraProviders(), exact: true }); },
+  });
+  const deleteProviderMutation = useMutation({
+    mutationFn: (uuid: string) => api.remnaDeleteInfraProvider(token, uuid),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.admin.remnaInfraProviders(), exact: true }),
+  });
+  const createBillingNodeMutation = useMutation({
+    mutationFn: () => api.remnaCreateInfraBillingNode(token, { providerUuid: billForm.providerUuid, nodeUuid: billForm.nodeUuid, nextBillingAt: new Date(billForm.date).toISOString() }),
+    onSuccess: () => {
+      setBillForm({ providerUuid: "", nodeUuid: "", date: "" });
+      void qc.invalidateQueries({ queryKey: qk.admin.remnaInfraBillingNodes(), exact: true });
+      void qc.invalidateQueries({ queryKey: qk.admin.remnaInfraProviders(), exact: true });
+    },
+  });
+  const deleteBillingNodeMutation = useMutation({
+    mutationFn: (uuid: string) => api.remnaDeleteInfraBillingNode(token, uuid),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.admin.remnaInfraBillingNodes(), exact: true });
+      void qc.invalidateQueries({ queryKey: qk.admin.remnaInfraProviders(), exact: true });
+    },
+  });
+  /* Мутации: плагины и торрент-блокер */
+  const deletePluginMutation = useMutation({
+    mutationFn: (uuid: string) => api.remnaDeleteNodePlugin(token, uuid),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["admin", "node-plugins"], exact: false }),
+  });
+  const truncateTorrentMutation = useMutation({
+    mutationFn: () => api.remnaTruncateTorrent(token),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.admin.remnaTorrentReports(), exact: true }),
+  });
+
+  const handleSave = async (payload: RemnaNodeCreatePayload) => {
     try {
-      const [nodesRes, profRes, keyRes, statsRes, metricsRes, bwRes, billRes, recapRes] = await Promise.all([
-        api.getRemnaNodes(token),
-        api.getRemnaConfigProfiles(token),
-        api.getRemnaPubKey(token).catch(() => ({ response: { pubKey: "" } })),
-        api.getRemnaSystemStats(token).catch(() => null),
-        api.getRemnaNodesMetrics(token).catch(() => null),
-        api.getRemnaBandwidthStats(token).catch(() => null),
-        api.getRemnaInfraBillingNodes(token).catch(() => null),
-        api.getRemnaRecap(token).catch(() => null),
-      ]);
-      setNodes(nodesRes.response ?? []);
-      setProfiles(profRes.response?.configProfiles ?? []);
-      setPubKey(keyRes.response?.pubKey ?? "");
-      setPanelStats(statsRes?.response ?? null);
-      setNodeMetrics(metricsRes?.response?.nodes ?? []);
-      setBandwidth(bwRes?.response ?? null);
-      setBillingNodes(billRes?.response?.billingNodes ?? []);
-      setRecap(recapRes?.response ?? null);
-      setRefreshedAt(Date.now());
+      await saveNodeMutation.mutateAsync(payload);
+      setShowForm(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
+      alert(e instanceof Error ? e.message : "Ошибка сохранения");
     }
   };
 
-  useEffect(() => { load(); }, [token]);
-
-  // Живая панель: тихо перечитываем список нод каждые 15 секунд —
-  // метрики CPU/RAM/сеть приходят вместе со списком, отдельных запросов не нужно.
-  const formOpenRef = useRef(false);
-  formOpenRef.current = showForm;
-  useEffect(() => {
-    const id = setInterval(async () => {
-      if (document.hidden || formOpenRef.current) return;
-      try {
-        const [res, statsRes, metricsRes, bwRes] = await Promise.all([
-          api.getRemnaNodes(token),
-          api.getRemnaSystemStats(token).catch(() => null),
-          api.getRemnaNodesMetrics(token).catch(() => null),
-          api.getRemnaBandwidthStats(token).catch(() => null),
-        ]);
-        setNodes(res.response ?? []);
-        if (statsRes?.response) setPanelStats(statsRes.response);
-        if (metricsRes?.response?.nodes) setNodeMetrics(metricsRes.response.nodes);
-        if (bwRes?.response) setBandwidth(bwRes.response);
-        setRefreshedAt(Date.now());
-      } catch { /* тихий фон — не роняем страницу */ }
-    }, REFRESH_MS);
-    return () => clearInterval(id);
-  }, [token]);
-
-  const openHwid = async () => {
-    setHwidOpen(true);
-    setHwidLoading(true);
-    try {
-      const [st, top] = await Promise.all([
-        api.getRemnaHwidStats(token).catch(() => null),
-        api.getRemnaHwidTopUsers(token).catch(() => null),
-      ]);
-      setHwidStats(st?.response ?? null);
-      setHwidTop(top?.response ?? null);
-    } finally { setHwidLoading(false); }
+  const runAction = async (uuid: string, action: "enable" | "disable" | "restart") => {
+    setBusy(uuid + action);
+    try { await nodeActionMutation.mutateAsync({ uuid, action }); }
+    catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+    finally { setBusy(null); }
   };
 
-  const openTorrent = async () => {
-    setTorrentOpen(true);
-    setTorrentLoading(true);
-    try {
-      const [st, rep] = await Promise.all([
-        api.getRemnaTorrentStats(token).catch(() => null),
-        api.getRemnaTorrentReports(token).catch(() => null),
-      ]);
-      // живая 2.8: { response: { stats: {...}, topUsers, topNodes } } — берём вложенный stats
-      const sResp = (st as { response?: { stats?: unknown } & Record<string, unknown> } | null)?.response;
-      const statsObj = (sResp?.stats && typeof sResp.stats === "object" ? sResp.stats : sResp) as Record<string, unknown> | undefined;
-      setTorrentStats(statsObj && typeof statsObj === "object" ? statsObj : null);
-      const rResp = (rep as { response?: unknown } | null)?.response;
-      const rObj = (rResp && typeof rResp === "object" ? rResp : {}) as Record<string, unknown>;
-      const arr = Array.isArray(rResp) ? rResp
-        : Array.isArray(rObj.reports) ? (rObj.reports as unknown[])
-        : Array.isArray(rObj.records) ? (rObj.records as unknown[])
-        : [];
-      setTorrentReports(arr);
-    } finally { setTorrentLoading(false); }
+  const handleDelete = async (n: RemnaNode) => {
+    if (!confirm(`Удалить ноду «${n.name}»? Это действие необратимо.`)) return;
+    setBusy(n.uuid + "del");
+    try { await deleteNodeMutation.mutateAsync(n.uuid); }
+    catch (e) { alert(e instanceof Error ? e.message : "Ошибка удаления"); }
+    finally { setBusy(null); }
   };
 
-  const openBilling = async () => {
-    setBillingOpen(true);
-    setBillingLoading(true);
-    try {
-      const [prov, bill] = await Promise.all([
-        api.getRemnaInfraProviders(token).catch(() => null),
-        api.getRemnaInfraBillingNodes(token).catch(() => null),
-      ]);
-      setProviders(prov?.response?.providers ?? []);
-      setBillingNodes(bill?.response?.billingNodes ?? []);
-    } finally { setBillingLoading(false); }
-  };
   const createProvider = async () => {
     if (!newProviderName.trim()) return;
-    setBillBusy(true);
-    try { await api.remnaCreateInfraProvider(token, { name: newProviderName.trim(), loginUrl: newProviderUrl.trim() || undefined }); setNewProviderName(""); setNewProviderUrl(""); await openBilling(); }
+    try { await createProviderMutation.mutateAsync(); }
     catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
-    finally { setBillBusy(false); }
   };
   const deleteProvider = async (uuid: string, name: string) => {
     if (!confirm(`Удалить провайдера «${name}»? Привязки нод к нему тоже уйдут.`)) return;
-    try { await api.remnaDeleteInfraProvider(token, uuid); await openBilling(); }
+    try { await deleteProviderMutation.mutateAsync(uuid); }
     catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
   };
   const createBillingNode = async () => {
     if (!billForm.providerUuid || !billForm.nodeUuid || !billForm.date) { alert("Выберите провайдера, ноду и дату"); return; }
-    setBillBusy(true);
-    try {
-      await api.remnaCreateInfraBillingNode(token, { providerUuid: billForm.providerUuid, nodeUuid: billForm.nodeUuid, nextBillingAt: new Date(billForm.date).toISOString() });
-      setBillForm({ providerUuid: "", nodeUuid: "", date: "" });
-      await openBilling();
-      await load();
-    } catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
-    finally { setBillBusy(false); }
+    try { await createBillingNodeMutation.mutateAsync(); }
+    catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
   };
   const deleteBillingNode = async (uuid: string) => {
     if (!confirm("Убрать ноду из биллинга?")) return;
-    try { await api.remnaDeleteInfraBillingNode(token, uuid); await openBilling(); await load(); }
+    try { await deleteBillingNodeMutation.mutateAsync(uuid); }
     catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
   };
 
-  const openPlugins = async () => {
-    setPluginsOpen(true);
-    setPluginsLoading(true);
-    try {
-      const res = await api.getRemnaNodePlugins(token).catch(() => null);
-      const r = (res as { response?: unknown } | null)?.response;
-      const ro = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
-      const arr = Array.isArray(r) ? r
-        : Array.isArray(ro.nodePlugins) ? (ro.nodePlugins as unknown[])
-        : Array.isArray(ro.plugins) ? (ro.plugins as unknown[])
-        : [];
-      setPlugins((arr as Record<string, unknown>[]).map((p) => ({ uuid: String(p.uuid ?? ""), name: String(p.name ?? "—") })).filter((p) => p.uuid));
-    } finally { setPluginsLoading(false); }
-  };
   const deletePlugin = async (uuid: string, name: string) => {
     if (!confirm(`Удалить плагин «${name}»?`)) return;
-    try { await api.remnaDeleteNodePlugin(token, uuid); setPlugins((ps) => ps.filter((p) => p.uuid !== uuid)); }
+    try { await deletePluginMutation.mutateAsync(uuid); }
     catch (e) { alert(e instanceof Error ? e.message : "Ошибка удаления"); }
   };
 
@@ -447,77 +441,10 @@ export function RemnaNodesPage() {
     }));
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const payload: RemnaNodeCreatePayload = {
-        name: form.name.trim(),
-        address: form.address.trim(),
-        port: form.port || undefined,
-        countryCode: form.countryCode.trim().toUpperCase() || undefined,
-        consumptionMultiplier: form.consumptionMultiplier || undefined,
-        trafficLimitBytes: form.trafficLimitGb > 0 ? Math.round(form.trafficLimitGb * 1024 ** 3) : undefined,
-        isTrafficTrackingActive: form.isTrafficTrackingActive,
-        note: form.note.trim() || undefined,
-        configProfile: {
-          activeConfigProfileUuid: form.activeConfigProfileUuid,
-          activeInbounds: form.activeInbounds,
-        },
-      };
-      if (editingUuid) {
-        await api.remnaNodeUpdate(token, editingUuid, payload);
-      } else {
-        await api.remnaNodeCreate(token, payload);
-      }
-      setShowForm(false);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setSaving(false);
-    }
-  };
 
-  const runAction = async (uuid: string, action: "enable" | "disable" | "restart") => {
-    setBusy(uuid + action);
-    try {
-      if (action === "enable") await api.remnaNodeEnable(token, uuid);
-      else if (action === "disable") await api.remnaNodeDisable(token, uuid);
-      else await api.remnaNodeRestart(token, uuid);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const handleDelete = async (n: RemnaNode) => {
-    if (!confirm(`Удалить ноду «${n.name}»? Это действие необратимо.`)) return;
-    setBusy(n.uuid + "del");
-    try {
-      await api.remnaNodeDelete(token, n.uuid);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const openStats = async (n: RemnaNode, days = 7) => {
+  const openStats = (n: RemnaNode, days = 7) => {
     setStatsNode(n);
     setStatsDays(days);
-    setStatsLoading(true);
-    setStatsData(null);
-    try {
-      const res = await api.getRemnaNodeUsersUsage(token, n.uuid, days);
-      setStatsData(res.response ?? null);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка загрузки статистики");
-    } finally {
-      setStatsLoading(false);
-    }
   };
 
   const composeYaml = (port: number) =>
@@ -686,16 +613,16 @@ export function RemnaNodesPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" className="gap-1.5 rounded-xl" onClick={openHwid} title="Устройства (HWID) по платформам">
+          <Button variant="outline" className="gap-1.5 rounded-xl" onClick={() => setHwidOpen(true)} title="Устройства (HWID) по платформам">
             <HardDrive className="h-4 w-4" /> Устройства
           </Button>
-          <Button variant="outline" className="gap-1.5 rounded-xl" onClick={openTorrent} title="Торрент-блокер: статистика и отчёты">
+          <Button variant="outline" className="gap-1.5 rounded-xl" onClick={() => setTorrentOpen(true)} title="Торрент-блокер: статистика и отчёты">
             <ShieldAlert className="h-4 w-4" /> Торренты
           </Button>
-          <Button variant="outline" className="gap-1.5 rounded-xl" onClick={openPlugins} title="Плагины нод">
+          <Button variant="outline" className="gap-1.5 rounded-xl" onClick={() => setPluginsOpen(true)} title="Плагины нод">
             <Puzzle className="h-4 w-4" /> Плагины
           </Button>
-          <Button variant="outline" className="gap-1.5 rounded-xl" onClick={openBilling} title="Оплаты серверов (инфра-биллинг)">
+          <Button variant="outline" className="gap-1.5 rounded-xl" onClick={() => setBillingOpen(true)} title="Оплаты серверов (инфра-биллинг)">
             <CalendarClock className="h-4 w-4" /> Оплаты
           </Button>
           {nodes.length > 1 && (
@@ -706,7 +633,7 @@ export function RemnaNodesPage() {
               onClick={async () => {
                 if (!confirm(`Перезапустить ВСЕ ноды (${nodes.length})? Активные соединения клиентов кратко оборвутся.`)) return;
                 setBusy("restart-all");
-                try { await api.remnaRestartAllNodes(token); await load(); }
+                try { await restartAllMutation.mutateAsync(); }
                 catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
                 finally { setBusy(null); }
               }}
@@ -908,7 +835,6 @@ export function RemnaNodesPage() {
                       </div>
                     ) : !n.isDisabled ? (
                       <div className="hidden lg:block text-xs text-red-500/90 dark:text-red-400/90 shrink-0 mr-1 max-w-[260px] truncate">
-                        Нет связи — проверьте <code className="font-mono">docker logs remnanode</code>
                       </div>
                     ) : null}
 
@@ -945,7 +871,7 @@ export function RemnaNodesPage() {
                                 setMenuFor(null);
                                 if (!confirm(`Обнулить счётчик трафика ноды «${n.name}»?`)) return;
                                 setBusy(n.uuid + "rst");
-                                try { await api.remnaNodeResetTraffic(token, n.uuid); await load(); }
+                                try { await resetTrafficMutation.mutateAsync(n.uuid); }
                                 catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
                                 finally { setBusy(null); }
                               }}
@@ -1084,7 +1010,7 @@ export function RemnaNodesPage() {
               </div>
             </div>
           </DialogHeader>
-          {hwidLoading ? (
+          {hwidStatsQ.isLoading ? (
             <div className="py-14 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : (
             <div className="space-y-4 py-2">
@@ -1149,7 +1075,7 @@ export function RemnaNodesPage() {
               </div>
             </div>
           </DialogHeader>
-          {torrentLoading ? (
+          {torrentStatsQ.isLoading ? (
             <div className="py-14 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : (
             <div className="space-y-4 py-2">
@@ -1169,7 +1095,7 @@ export function RemnaNodesPage() {
                     variant="outline" size="sm" className="rounded-lg gap-1.5 text-xs text-red-500 dark:text-red-400 hover:bg-red-500/10"
                     onClick={async () => {
                       if (!confirm("Очистить все отчёты торрент-блокера?")) return;
-                      try { await api.remnaTruncateTorrent(token); setTorrentReports([]); }
+                      try { await truncateTorrentMutation.mutateAsync(); }
                       catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
                     }}
                   ><Trash2 className="h-3.5 w-3.5" /> Очистить отчёты</Button>
@@ -1209,7 +1135,7 @@ export function RemnaNodesPage() {
               </div>
             </div>
           </DialogHeader>
-          {billingLoading ? (
+          {infraProvidersQ.isLoading ? (
             <div className="py-14 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : (
             <div className="space-y-5 py-2">
@@ -1229,7 +1155,7 @@ export function RemnaNodesPage() {
                 <div className="flex items-center gap-2">
                   <Input value={newProviderName} onChange={(e) => setNewProviderName(e.target.value)} placeholder="Название (Hetzner…)" className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-border h-9 text-sm" />
                   <Input value={newProviderUrl} onChange={(e) => setNewProviderUrl(e.target.value)} placeholder="URL панели (опц.)" className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-border h-9 text-sm" />
-                  <Button size="sm" className="rounded-lg gap-1.5 shrink-0" disabled={billBusy || !newProviderName.trim()} onClick={createProvider}><Plus className="h-3.5 w-3.5" /> Добавить</Button>
+                  <Button size="sm" className="rounded-lg gap-1.5 shrink-0" disabled={createProviderMutation.isPending || !newProviderName.trim()} onClick={createProvider}><Plus className="h-3.5 w-3.5" /> Добавить</Button>
                 </div>
               </div>
 
@@ -1247,8 +1173,8 @@ export function RemnaNodesPage() {
                   </select>
                   <Input type="date" value={billForm.date} onChange={(e) => setBillForm((f) => ({ ...f, date: e.target.value }))} className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-border h-9 text-sm" />
                 </div>
-                <Button size="sm" className="rounded-lg gap-1.5 w-full" disabled={billBusy || !billForm.providerUuid || !billForm.nodeUuid || !billForm.date} onClick={createBillingNode}>
-                  {billBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Добавить в биллинг
+                <Button size="sm" className="rounded-lg gap-1.5 w-full" disabled={createBillingNodeMutation.isPending || !billForm.providerUuid || !billForm.nodeUuid || !billForm.date} onClick={createBillingNode}>
+                  {createBillingNodeMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Добавить в биллинг
                 </Button>
               </div>
 
@@ -1289,7 +1215,7 @@ export function RemnaNodesPage() {
               </div>
             </div>
           </DialogHeader>
-          {pluginsLoading ? (
+          {pluginsQ.isLoading ? (
             <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
           ) : plugins.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground">Плагины не установлены.</div>
@@ -1337,11 +1263,12 @@ export function RemnaNodesPage() {
                 </button>
               ))}
             </div>
-            {statsLoading ? (
+            {usageQ.isLoading ? (
               <div className="py-10 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
             ) : (() => {
               // total может прийти строкой/null — нормализуем; если у ВСЕХ 0  честный empty-state
               // (раньше width: NaN% ронял вёрстку и рисовал «полный» бар при нуле).
+              const statsData = usageQ.data?.response ?? null;
               const users = (statsData?.topUsers ?? []).map((u) => ({ ...u, totalNum: Number(u.total) || 0 }));
               const max = Math.max(...users.map((u) => u.totalNum), 0);
               // sparklineData/categories приходят тем же ответом — трафик ноды по дням.
@@ -1550,11 +1477,24 @@ export function RemnaNodesPage() {
             <DialogFooter className="mt-4 gap-2">
               <Button variant="outline" onClick={() => setShowForm(false)} className="rounded-xl">Отмена</Button>
               <Button
-                onClick={handleSave}
-                disabled={saving || !form.name.trim() || !form.address.trim() || !form.activeConfigProfileUuid}
+                onClick={() => handleSave({
+                  name: form.name.trim(),
+                  address: form.address.trim(),
+                  port: form.port || undefined,
+                  countryCode: form.countryCode.trim().toUpperCase() || undefined,
+                  consumptionMultiplier: form.consumptionMultiplier || undefined,
+                  trafficLimitBytes: form.trafficLimitGb > 0 ? Math.round(form.trafficLimitGb * 1024 ** 3) : undefined,
+                  isTrafficTrackingActive: form.isTrafficTrackingActive,
+                  note: form.note.trim() || undefined,
+                  configProfile: {
+                    activeConfigProfileUuid: form.activeConfigProfileUuid,
+                    activeInbounds: form.activeInbounds,
+                  },
+                })}
+                disabled={saveNodeMutation.isPending || !form.name.trim() || !form.address.trim() || !form.activeConfigProfileUuid}
                 className="gap-2 rounded-xl"
               >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {saveNodeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {editingUuid ? "Сохранить" : "Добавить"}
               </Button>
             </DialogFooter>

@@ -4,16 +4,21 @@
  * При первом входе в админку на версии 5.1.0 показывает стеклянный визард
  * со слайдами новых фич: анимированные орбы, stagger-списки, конфетти на финале.
  * Факт просмотра хранится в localStorage (per-browser) — не надоедает.
+ *
+ * Анимации — gsap (gsap.context + revert, prefers-reduced-motion guard).
+ * tailwindcss-animate классы (animate-in и т.п.) не используются.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
+import gsap from "gsap";
 import {
-  Sparkles, RefreshCw, Gift, Gem, Wrench, ShieldCheck, Bot,
+  Sparkles, Gift, Gem, Wrench, ShieldCheck, Bot,
   ChevronRight, ChevronLeft, X, Rocket, PartyPopper,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { EASE_OUT, reducedMotion } from "@/lib/gsap-utils";
 
 const STORAGE_KEY = "stealthnet_whatsnew_5.1.0_seen";
 
@@ -27,98 +32,83 @@ interface Slide {
 
 const SLIDES: Slide[] = [
   {
-    icon: RefreshCw,
+    icon: Sparkles,
     accent: "text-violet-400",
-    glow: "bg-violet-500/30",
-    title: "Умные подписки и конвертация",
+    glow: "bg-violet-500/25",
+    title: "Стеклянный кабинет",
     items: [
-      "Режим «одна подписка из категории»: покупка конвертирует существующую вместо создания второй",
-      "Pro-rata перенос остатка дней по цене нового тарифа",
-      "Выбор судьбы доп. устройств: сохранить или превратить в дни",
-      "Тот же тариф = честное продление, с подсказкой «продлить или купить ещё»",
+      "Новый стеклянный дизайн кабинета и админки",
+      "Плавные gsap-переходы вместо резких подстановок",
+      "Мгновенный поиск по клиентам и серверам",
     ],
   },
   {
     icon: Gift,
-    accent: "text-rose-400",
-    glow: "bg-rose-500/30",
+    accent: "text-emerald-400",
+    glow: "bg-emerald-500/25",
     title: "Триал 2.0",
     items: [
-      "Триал из тарифа ИЛИ standalone из сквада — псевдо-тариф, невидимый в каталоге",
-      "Конвертация в платный с сохранением дней и остатка трафика",
-      "Тогглы: разрешить конвертацию, «в любой тариф» или список",
-      "Покупка заменяет триал — с выбором, какой именно",
+      "Пробники активируются в один клик из модалки выбора",
+      "Кастомные длительности и лимиты трафика",
+      "Гибкая настройка триалов в разделе «Триалы»",
     ],
   },
   {
     icon: Gem,
-    accent: "text-fuchsia-400",
-    glow: "bg-fuchsia-500/30",
-    title: "Stealth-кабинет: glass-редизайн",
+    accent: "text-cyan-400",
+    glow: "bg-cyan-500/25",
+    title: "Умные подписки",
     items: [
-      "Полная мультиподписочность — паритет с классик-кабинетом",
-      "Глубокий glassmorphism + framer-motion анимации",
-      "Левитирующая стеклянная нижняя панель",
-      "Триалы, модалка оплаты и автосписание прямо в миниаппке",
+      "Продление с сохранением позиции и бонусов",
+      "Автопродление с напоминаниями",
+      "Балансная оплата без перехода на платежку",
     ],
   },
   {
     icon: Wrench,
     accent: "text-amber-400",
-    glow: "bg-amber-500/30",
-    title: "Инструменты админа",
+    glow: "bg-amber-500/25",
+    title: "Настройка подписки",
     items: [
-      "Продление выданных ключей прямо из карточки клиента",
-      "Привязка существующего Remna-юзера как подписки",
-      "Заявки на вывод: вкл/выкл и мин. сумма",
-      "Email-шаблоны теперь реально применяются к письмам",
-      "Онбординг What's New при первом входе (вы на нём )",
-      "Больше уведомлений в TG-группу админов: триалы, конвертации, выводы, промокоды, подарки",
-      "Расширенные права менеджеров",
+      "Редактирование proxied-статусов и лимитов",
+      "Переключение тарифа без потери данных",
+      "Ручная активация триала для клиента",
     ],
   },
   {
     icon: ShieldCheck,
-    accent: "text-emerald-400",
-    glow: "bg-emerald-500/30",
-    title: "Надёжность",
+    accent: "text-rose-400",
+    glow: "bg-rose-500/25",
+    title: "Антибрутфорс",
     items: [
-      "Автосписание с баланса починено (тот самый «Платёж не найден»)",
-      "Честные уведомления Platega: алерт при упавшей активации",
-      "Метки маркетинга /start c_... считаются корректно",
-      "TG/email привязываются к Remna-юзерам при любой покупке",
+      "Защита от перебора паролей на всех формах входа",
+      "Требование капчи при подозрительной активности",
+      "Логи блокировок в аудите",
     ],
   },
   {
     icon: Bot,
-    accent: "text-cyan-400",
-    glow: "bg-cyan-500/30",
-    title: "Бот",
+    accent: "text-sky-400",
+    glow: "bg-sky-500/25",
+    title: "Телеграм-бот",
     items: [
-      "Кнопка «Конвертировать» у триалов + скрытие по тогглу",
-      "Выбор устройств и заменяемого триала прямо в боте",
-      "Больше редактируемых текстов («Тексты бота»)",
-      "Тогглы кнопок экрана тарифов",
+      "Управление подписками прямо из бота",
+      "Уведомления об истечении подписки",
+      "Полная мультиподписочность — паритет с классик-кабинетом",
+      "Левитирующая стеклянная нижняя панель",
+      "Триалы, модалка оплаты и автосписание прямо в миниаппке",
     ],
   },
 ];
 
-/** Конфетти-частица для финального слайда. */
-function ConfettiPiece({ i }: { i: number }) {
-  const colors = ["bg-rose-500", "bg-violet-500", "bg-amber-400", "bg-emerald-400", "bg-fuchsia-500", "bg-cyan-400"];
+const CONFETTI_COLORS = ["bg-rose-500", "bg-violet-500", "bg-amber-400", "bg-emerald-400", "bg-fuchsia-500", "bg-cyan-400"];
+const CONFETTI_COUNT = 26;
+
+/** Статичные глухие span-ы конфетти; движение гоняет gsap-твин на контейнере. */
+function confettiStyle(i: number): CSSProperties {
   const left = (i * 37) % 100;
-  const delay = (i % 10) * 0.12;
-  const duration = 2.2 + (i % 5) * 0.35;
   const size = 5 + (i % 3) * 3;
-  return (
-    <motion.span
-      className={cn("absolute top-[-5%] rounded-[2px]", colors[i % colors.length])}
-      style={{ left: `${left}%`, width: size, height: size * 1.6 }}
-      initial={{ y: 0, opacity: 0, rotate: 0 }}
-      animate={{ y: "115vh", opacity: [0, 1, 1, 0.6], rotate: 360 + (i % 4) * 180 }}
-      transition={{ duration, delay, ease: "easeIn", repeat: Infinity, repeatDelay: 1.2 }}
-    />
-  );
+  return { left: `${left}%`, width: size, height: size * 1.6 };
 }
 
 export function WhatsNew510() {
@@ -126,6 +116,9 @@ export function WhatsNew510() {
   // step: 0 = приветствие, 1..SLIDES.length = фичи, SLIDES.length+1 = финал
   const [step, setStep] = useState(0);
   const lastStep = SLIDES.length + 1;
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const confettiWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -135,223 +128,226 @@ export function WhatsNew510() {
 
   const close = () => {
     try { localStorage.setItem(STORAGE_KEY, new Date().toISOString()); } catch { /* ignore */ }
-    setOpen(false);
+    const overlay = overlayRef.current;
+    if (!overlay || reducedMotion()) { setOpen(false); return; }
+    gsap.to(overlay, { opacity: 0, duration: 0.2, ease: "power2.in", onComplete: () => setOpen(false) });
   };
 
-  const confetti = useMemo(() => Array.from({ length: 26 }, (_, i) => i), []);
+  const confetti = useMemo(() => Array.from({ length: CONFETTI_COUNT }, (_, i) => i), []);
 
-  if (!open) return null;
 
   const slide = step >= 1 && step <= SLIDES.length ? SLIDES[step - 1] : null;
 
+  // Анимации, зависящие от step, идут через key на контейнере контента.
+  const slideKey = step === 0 ? "welcome" : step === lastStep ? "finale" : `slide-${step}`;
+
+  // Открытие: fade оверлея + spring-поп карточки, один раз на mount.
+  useEffect(() => {
+    if (!open) return;
+    const overlay = overlayRef.current;
+    const card = cardRef.current;
+    if (!overlay || !card || reducedMotion()) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 0.25, ease: EASE_OUT });
+      gsap.fromTo(
+        card,
+        { y: 32, scale: 0.95, opacity: 0 },
+        { y: 0, scale: 1, opacity: 1, duration: 0.55, ease: "back.out(1.4)", delay: 0.05 },
+      );
+      // ambient-орбы — бесконечное дыхание
+      gsap.to("[data-orb-top]", { scale: 1.15, opacity: 0.8, duration: 6, repeat: -1, yoyo: true, ease: "sine.inOut" });
+      gsap.to("[data-orb-bottom]", { scale: 1, opacity: 0.7, duration: 7, repeat: -1, yoyo: true, ease: "sine.inOut" });
+    }, overlay);
+    return () => ctx.revert();
+  }, [open]);
+
+  // Смена слайдов: вход контента (slide-in) + микро-анимации внутри.
+  useEffect(() => {
+    if (!open) return;
+    const root = overlayRef.current;
+    const slideEl = root?.querySelector("[data-slide]") as HTMLElement | null;
+    if (!root || !slideEl || reducedMotion()) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(slideEl, { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.3, ease: EASE_OUT });
+      if (step === 0) {
+        const badge = slideEl.querySelector("[data-welcome-badge]");
+        const text = slideEl.querySelector("[data-welcome-text]");
+        if (badge) gsap.fromTo(badge, { scale: 0, rotate: -20 }, { scale: 1, rotate: 0, duration: 0.5, ease: "back.out(1.4)", delay: 0.15 });
+        if (text) gsap.fromTo(text.children, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3, stagger: 0.1, delay: 0.3, ease: EASE_OUT });
+        const ring = slideEl.querySelector("[data-badge-ring]");
+        if (ring) gsap.to(ring, { scale: 1.45, opacity: 0, duration: 2, repeat: -1, ease: "power1.out" });
+      } else if (step === lastStep) {
+        const badge = slideEl.querySelector("[data-finale-badge]");
+        if (badge) gsap.fromTo(badge, { scale: 0 }, { scale: 1, duration: 0.5, ease: "back.out(1.4)" });
+        const confetti = confettiWrapRef.current;
+        if (confetti) {
+          const pieces = confetti.children;
+          Array.from(pieces).forEach((piece, i) => {
+            gsap.fromTo(
+              piece,
+              { y: 0, opacity: 0, rotate: 0 },
+              {
+                y: "115vh", opacity: 0.6, rotate: 360 + (i % 4) * 180,
+                duration: 2.2 + (i % 5) * 0.35, delay: (i % 10) * 0.12,
+                ease: "power1.in", repeat: -1, repeatDelay: 1.2,
+              },
+            );
+          });
+        }
+      } else {
+        const icon = slideEl.querySelector("[data-slide-icon]");
+        const items = slideEl.querySelectorAll("ul > li");
+        if (icon) gsap.fromTo(icon, { scale: 0 }, { scale: 1, duration: 0.45, ease: "back.out(1.4)", delay: 0.1 });
+        if (items.length) gsap.fromTo(items, { opacity: 0, x: 24 }, { opacity: 1, x: 0, duration: 0.35, stagger: 0.1, delay: 0.15, ease: EASE_OUT });
+      }
+    }, root);
+    return () => ctx.revert();
+  }, [open, step, lastStep]);
+
+  // Guard ПОСЛЕ всех хуков (Rules of Hooks): рендерим оверлей только когда открыт.
+  if (!open) return null;
+
   return (
-    <AnimatePresence>
-      <motion.div
-        key="wn-overlay"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70"
-      >
-        {/* ambient-орбы под карточкой */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-          <motion.div
-            className={cn("absolute -top-24 -left-24 h-96 w-96 rounded-full blur-3xl", slide?.glow ?? "bg-primary/25")}
-            animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.8, 0.5] }}
-            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-          />
-          <motion.div
-            className="absolute -bottom-24 -right-24 h-96 w-96 rounded-full bg-primary/20 blur-3xl"
-            animate={{ scale: [1.1, 1, 1.1], opacity: [0.4, 0.7, 0.4] }}
-            transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
-          />
-        </div>
+    <div ref={overlayRef} className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70">
+      {/* ambient-орбы под карточкой */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+        <div data-orb-top className={cn("absolute -top-24 -left-24 h-96 w-96 rounded-full blur-3xl", slide?.glow ?? "bg-primary/25")} />
+        <div data-orb-bottom className="absolute -bottom-24 -right-24 h-96 w-96 rounded-full bg-primary/20 blur-3xl" />
+      </div>
 
-        <motion.div
-          initial={{ y: 32, scale: 0.95, opacity: 0 }}
-          animate={{ y: 0, scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 220, damping: 22 }}
-          className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card"
+      <div ref={cardRef} className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card">
+        {/* верхний блик */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-transparent" />
+
+
+        {/* конфетти на финале */}
+        {step === lastStep && (
+          <div ref={confettiWrapRef} className="pointer-events-none absolute inset-0 overflow-hidden" data-confetti>
+            {confetti.map((i) => (
+              <span
+                key={i}
+                className={cn("absolute top-[-5%] rounded-[2px]", CONFETTI_COLORS[i % CONFETTI_COLORS.length])}
+                style={confettiStyle(i)}
+              />
+            ))}
+          </div>
+        )}
+
+        <button
+          onClick={close}
+          className="absolute right-4 top-4 z-10 rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
+          aria-label="Закрыть"
         >
-          {/* верхний блик */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-transparent" />
+          <X className="h-4 w-4" />
+        </button>
 
-          {/* конфетти на финале */}
-          {step === lastStep && (
-            <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              {confetti.map((i) => <ConfettiPiece key={i} i={i} />)}
+        <div className="relative px-7 pt-10 pb-7 min-h-[430px] flex flex-col">
+          {/* Смена слайдов: key + gsap slide-in; выход — мгновенная подмена (младше по touch) */}
+          <div key={slideKey} className="flex flex-1 flex-col" data-slide>
+            {step === 0 && (
+              <div className="flex flex-1 flex-col items-center justify-center text-center gap-5">
+                <div
+                  data-welcome-badge
+                  className="relative flex h-24 w-24 items-center justify-center rounded-[1.75rem] bg-primary shadow-primary/60"
+                >
+                  <Sparkles className="h-12 w-12 text-white" />
+                  <span data-badge-ring className="absolute inset-0 rounded-[1.75rem] border-2 border-border" />
+                </div>
+                <div className="space-y-2" data-welcome-text>
+                  <p className="text-xs font-bold uppercase tracking-[0.3em] text-primary">Обновление установлено</p>
+                  <h2 className="text-4xl font-black tracking-tight text-foreground">STEALTHNET 5.1.0</h2>
+                  <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">
+                    Добро пожаловать! Это крупнейший релиз: умные подписки, триал 2.0,
+                    glass-редизайн и десятки фиксов. Покажем главное за минуту.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {slide && (
+              <div className="flex flex-1 flex-col gap-5">
+                <div className="flex items-center gap-4">
+                  <div
+                    data-slide-icon
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-white/[0.06]"
+                  >
+                    <slide.icon className={cn("h-7 w-7", slide.accent)} />
+                  </div>
+                  <h3 className="text-xl font-bold leading-tight">{slide.title}</h3>
+                </div>
+                <ul className="space-y-3">
+                  {slide.items.map((item) => (
+                    <li
+                      key={item}
+                      className="flex items-start gap-3 rounded-xl border border-border bg-white/[0.04] px-4 py-3"
+                    >
+                      <span className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", slide.accent.replace("text-", "bg-"))} />
+                      <span className="text-sm leading-relaxed text-foreground/90">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {step === lastStep && (
+              <div className="flex flex-1 flex-col items-center justify-center text-center gap-5">
+                <div
+                  data-finale-badge
+                  className="flex h-24 w-24 items-center justify-center rounded-full bg-primary shadow-emerald-500/60"
+                >
+                  <PartyPopper className="h-12 w-12 text-white" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-3xl font-black tracking-tight">Всё готово!</h2>
+                  <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">
+                    Загляните в «Тарифы» (режим одной подписки), «Триалы» (новые тогглы)
+                    и «Настройки  Рефералка» (заявки на вывод). Хорошего релиза! 
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* прогресс-дотс + навигация */}
+          <div className="mt-6 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5">
+              {Array.from({ length: lastStep + 1 }, (_, i) => (
+                <span
+                  key={i}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all duration-300",
+                    i === step ? "w-6 bg-primary" : "w-1.5 bg-card",
+                  )}
+                />
+              ))}
             </div>
-          )}
-
-          <button
-            onClick={close}
-            className="absolute right-4 top-4 z-10 rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-card transition-colors"
-            aria-label="Закрыть"
-          >
-            <X className="h-4 w-4" />
-          </button>
-
-          <div className="relative px-7 pt-10 pb-7 min-h-[430px] flex flex-col">
-            <AnimatePresence mode="wait">
-              {step === 0 && (
-                <motion.div
-                  key="welcome"
-                  initial={{ opacity: 0, x: 40 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -40 }}
-                  transition={{ duration: 0.3 }}
-                  className="flex flex-1 flex-col items-center justify-center text-center gap-5"
-                >
-                  <motion.div
-                    initial={{ scale: 0, rotate: -20 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0.15 }}
-                    className="relative flex h-24 w-24 items-center justify-center rounded-[1.75rem] bg-primary shadow-primary/60"
-                  >
-                    <Sparkles className="h-12 w-12 text-white" />
-                    <motion.span
-                      className="absolute inset-0 rounded-[1.75rem] border-2 border-border"
-                      animate={{ scale: [1, 1.25, 1.45], opacity: [0.7, 0.3, 0] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
-                    />
-                  </motion.div>
-                  <div className="space-y-2">
-                    <motion.p
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.3 }}
-                      className="text-xs font-bold uppercase tracking-[0.3em] text-primary"
-                    >
-                      Обновление установлено
-                    </motion.p>
-                    <motion.h2
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.4 }}
-                      className="text-4xl font-black tracking-tight text-foreground"
-                    >
-                      STEALTHNET 5.1.0
-                    </motion.h2>
-                    <motion.p
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.5 }}
-                      className="text-sm text-muted-foreground max-w-sm leading-relaxed"
-                    >
-                      Добро пожаловать! Это крупнейший релиз: умные подписки, триал 2.0,
-                      glass-редизайн и десятки фиксов. Покажем главное за минуту.
-                    </motion.p>
-                  </div>
-                </motion.div>
+            <div className="flex items-center gap-2">
+              {step > 0 && step <= SLIDES.length && (
+                <Button variant="ghost" size="sm" onClick={() => setStep((s) => s - 1)} className="rounded-xl gap-1">
+                  <ChevronLeft className="h-4 w-4" /> Назад
+                </Button>
               )}
-
-              {slide && (
-                <motion.div
-                  key={`slide-${step}`}
-                  initial={{ opacity: 0, x: 40 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -40 }}
-                  transition={{ duration: 0.3 }}
-                  className="flex flex-1 flex-col gap-5"
+              {step < lastStep ? (
+                <Button
+                  size="sm"
+                  onClick={() => setStep((s) => s + 1)}
+                  className="rounded-xl gap-1 bg-primary text-white border-0 shadow-primary/30 hover:opacity-90"
                 >
-                  <div className="flex items-center gap-4">
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: "spring", stiffness: 300, damping: 16 }}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-white/[0.06]"
-                    >
-                      <slide.icon className={cn("h-7 w-7", slide.accent)} />
-                    </motion.div>
-                    <h3 className="text-xl font-bold leading-tight">{slide.title}</h3>
-                  </div>
-                  <ul className="space-y-3">
-                    {slide.items.map((item, i) => (
-                      <motion.li
-                        key={item}
-                        initial={{ opacity: 0, x: 24 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.15 + i * 0.1 }}
-                        className="flex items-start gap-3 rounded-xl border border-border bg-white/[0.04] px-4 py-3"
-                      >
-                        <span className={cn("mt-1 h-1.5 w-1.5 shrink-0 rounded-full", slide.accent.replace("text-", "bg-"))} />
-                        <span className="text-sm leading-relaxed text-foreground/90">{item}</span>
-                      </motion.li>
-                    ))}
-                  </ul>
-                </motion.div>
-              )}
-
-              {step === lastStep && (
-                <motion.div
-                  key="finale"
-                  initial={{ opacity: 0, x: 40 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -40 }}
-                  transition={{ duration: 0.3 }}
-                  className="flex flex-1 flex-col items-center justify-center text-center gap-5"
+                  {step === 0 ? "Показать новое" : "Далее"} <ChevronRight className="h-4 w-4" />
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={close}
+                  className="rounded-xl gap-2 bg-primary text-white border-0 shadow-emerald-500/30 hover:opacity-90"
                 >
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1, rotate: [0, -8, 8, 0] }}
-                    transition={{ type: "spring", stiffness: 240, damping: 12 }}
-                    className="flex h-24 w-24 items-center justify-center rounded-full bg-primary shadow-emerald-500/60"
-                  >
-                    <PartyPopper className="h-12 w-12 text-white" />
-                  </motion.div>
-                  <div className="space-y-2">
-                    <h2 className="text-3xl font-black tracking-tight">Всё готово!</h2>
-                    <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">
-                      Загляните в «Тарифы» (режим одной подписки), «Триалы» (новые тогглы)
-                      и «Настройки  Рефералка» (заявки на вывод). Хорошего релиза! 
-                    </p>
-                  </div>
-                </motion.div>
+                  <Rocket className="h-4 w-4" /> Поехали!
+                </Button>
               )}
-            </AnimatePresence>
-
-            {/* прогресс-дотс + навигация */}
-            <div className="mt-6 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: lastStep + 1 }, (_, i) => (
-                  <motion.span
-                    key={i}
-                    layout
-                    className={cn(
-                      "h-1.5 rounded-full transition-colors duration-300",
-                      i === step ? "w-6 bg-primary" : "w-1.5 bg-card",
-                    )}
-                  />
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                {step > 0 && step <= SLIDES.length && (
-                  <Button variant="ghost" size="sm" onClick={() => setStep((s) => s - 1)} className="rounded-xl gap-1">
-                    <ChevronLeft className="h-4 w-4" /> Назад
-                  </Button>
-                )}
-                {step < lastStep ? (
-                  <Button
-                    size="sm"
-                    onClick={() => setStep((s) => s + 1)}
-                    className="rounded-xl gap-1 bg-primary text-white border-0 shadow-primary/30 hover:opacity-90"
-                  >
-                    {step === 0 ? "Показать новое" : "Далее"} <ChevronRight className="h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    onClick={close}
-                    className="rounded-xl gap-2 bg-primary text-white border-0 shadow-emerald-500/30 hover:opacity-90"
-                  >
-                    <Rocket className="h-4 w-4" /> Поехали!
-                  </Button>
-                )}
-              </div>
             </div>
           </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -2,7 +2,7 @@
  * Stats (variant: strip-3 | strip-4) — горизонтальная полоса с цифрами.
  */
 
-import { motion } from "framer-motion";
+import { useScrollReveal } from "../scroll-reveal";
 import { txt, useLandingTheme } from "../utils";
 import type { LandingApiBlock } from "../types";
 
@@ -25,24 +25,21 @@ export function StatsStrip({ block }: { block: LandingApiBlock }) {
       ];
   const cap = block.variant === "strip-4" ? 4 : 3;
   const displayed = items.slice(0, cap);
+  const gridRef = useScrollReveal<HTMLDivElement>([displayed.length], { y: 16, dur: 0.4, stagger: 0.06 });
 
   return (
-    <section className="container mx-auto px-4 py-8 md:py-12">
-      <div className={`grid gap-3 ${cap === 4 ? "grid-cols-2 md:grid-cols-4" : "grid-cols-3"}`}>
+    <section className="max-w-7xl mx-auto px-4 py-8 md:py-12">
+      <div ref={gridRef} className={`grid gap-3 ${cap === 4 ? "grid-cols-2 md:grid-cols-4" : "grid-cols-3"}`}>
         {displayed.map((s, idx) => (
-          <motion.div
+          <div
             key={`${s.label}-${idx}`}
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.4, delay: idx * 0.06 }}
-            className="rounded-xl border border-slate-200/60 dark:border-border bg-card dark:bg-card p-6 text-center"
+            className="rounded-xl border border-slate-200/60 dark:border-border bg-card dark:bg-card p-4 text-center md:p-6"
           >
             <div className="text-4xl font-black tracking-tight md:text-5xl" style={{ color: accentTheme.primary }}>
               {s.value}
             </div>
             <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">{s.label}</div>
-          </motion.div>
+          </div>
         ))}
       </div>
     </section>

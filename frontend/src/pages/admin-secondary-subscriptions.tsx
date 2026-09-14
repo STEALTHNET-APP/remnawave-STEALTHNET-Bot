@@ -1,12 +1,12 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/auth";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { qk } from "@/lib/query-client";
 import { motion } from "framer-motion";
 import {
   api,
   type AdminSecondarySubscriptionFilters,
-  type AdminSecondarySubscriptionsResponse,
-  type AdminSecondarySubscriptionDetail,
   type TariffRecord,
   type ClientRecord,
 } from "@/lib/api";
@@ -94,15 +94,25 @@ export function AdminSecondarySubscriptionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialSearch = searchParams.get("search")?.trim() ?? "";
   
-  const [data, setData] = useState<AdminSecondarySubscriptionsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  
   const [filters, setFilters] = useState<AdminSecondarySubscriptionFilters>({
     page: 1,
     limit: 20,
     search: initialSearch || undefined,
   });
-  
+
+  const queryClient = useQueryClient();
+  const listQuery = useQuery({
+    queryKey: qk.admin.secondarySubscriptions(filters),
+    queryFn: () => api.getSecondarySubscriptions(token, filters),
+    enabled: !!token,
+    placeholderData: (prev) => prev,
+  });
+  const data = listQuery.data ?? null;
+  const loading = listQuery.isLoading;
+  const fetchItems = () => {
+    void queryClient.invalidateQueries({ queryKey: ["admin", "secondary-subscriptions"], exact: false });
+  };
+
   const [searchInput, setSearchInput] = useState(initialSearch);
 
   // live-search с debounce 300мс. Раньше фильтрация шла только
@@ -129,8 +139,13 @@ export function AdminSecondarySubscriptionsPage() {
   
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [detailData, setDetailData] = useState<AdminSecondarySubscriptionDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const detailQuery = useQuery({
+    queryKey: qk.admin.secondarySubscription(detailId ?? ""),
+    queryFn: () => api.getSecondarySubscription(token, detailId!),
+    enabled: !!token && !!detailId,
+  });
+  const detailData = detailQuery.data ?? null;
+  const detailLoading = detailQuery.isLoading;
   
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
@@ -161,23 +176,6 @@ export function AdminSecondarySubscriptionsPage() {
   const [createNotify, setCreateNotify] = useState<boolean>(true);
   const [createGiftUrl, setCreateGiftUrl] = useState<string | null>(null);
 
-  const fetchItems = useCallback(async () => {
-    if (!token) return;
-    try {
-      setLoading(true);
-      const res = await api.getSecondarySubscriptions(token, filters);
-      setData(res);
-      setSelectedIds(new Set());
-    } catch (err) {
-      console.error("Failed to fetch secondary subscriptions", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [token, filters]);
-
-  useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
 
   const handleSearch = () => {
     const nextSearch = searchInput.trim();
@@ -233,7 +231,7 @@ export function AdminSecondarySubscriptionsPage() {
     
     try {
       await api.deleteSecondarySubscriptionsBulk(token, Array.from(selectedIds));
-      await fetchItems();
+      fetchItems();
     } catch (err) {
       console.error("Failed to bulk delete", err);
       alert("Ошибка при удалении");
@@ -245,26 +243,15 @@ export function AdminSecondarySubscriptionsPage() {
     if (!confirm("Удалить эту подписку?")) return;
     try {
       await api.deleteSecondarySubscription(token, id);
-      await fetchItems();
+      fetchItems();
     } catch (err) {
       console.error("Failed to delete", err);
       alert("Ошибка при удалении");
     }
   };
 
-  const openDetail = async (id: string) => {
+  const openDetail = (id: string) => {
     setDetailId(id);
-    if (!token) return;
-    setDetailLoading(true);
-    setDetailData(null);
-    try {
-      const res = await api.getSecondarySubscription(token, id);
-      setDetailData(res);
-    } catch (err) {
-      console.error("Failed to fetch detail", err);
-    } finally {
-      setDetailLoading(false);
-    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -1045,9 +1032,8 @@ export function AdminSecondarySubscriptionsPage() {
                     if (trafficLimitBytes !== undefined) body.trafficLimitBytes = trafficLimitBytes;
                     await api.editSecondarySubscription(token, detailId, body);
                     setEditOpen(false);
-                    // Перезагружаем detail чтобы увидеть свежие данные из Remna.
-                    const refreshed = await api.getSecondarySubscription(token, detailId);
-                    setDetailData(refreshed);
+                    // Свежие данные Remna подтянет инвалидация detail-запроса.
+                    void queryClient.invalidateQueries({ queryKey: qk.admin.secondarySubscription(detailId), exact: false });
                   } catch (e: unknown) {
                     setEditError(e instanceof Error ? e.message : "Ошибка сохранения");
                   } finally {

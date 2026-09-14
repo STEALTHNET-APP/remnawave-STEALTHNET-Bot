@@ -12,7 +12,9 @@
  * Все вызовы идут на `/admin/subscriptions/:subId/remna/...`. Если подписка
  * ещё не привязана к Remna (remnawaveUuid=null) — рисуется warning-плашка.
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { qk } from "@/lib/query-client";
 import {
   api,
   type AdminClientSubscriptionItem,
@@ -116,72 +118,81 @@ function unwrapRemnaUser(raw: unknown): RemnaUserFull | null {
 }
 
 export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onChanged }: Props) {
+  const queryClient = useQueryClient();
+
   const [innerTab, setInnerTab] = useState<InnerTab>("overview");
-  const [remnaUser, setRemnaUser] = useState<RemnaUserFull | null>(null);
-  const [activeSquads, setActiveSquads] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState<UpdateClientRemnaPayload>({});
 
-  const loadRemna = useCallback(async () => {
-    if (!subscription.remnawaveUuid) {
-      setRemnaUser(null);
-      setActiveSquads([]);
-      return;
-    }
-    setLoading(true);
-    try {
+  // Данные Remna-пользователя — React Query с per-subscription ключом.
+  const remnaQ = useQuery({
+    queryKey: qk.admin.clientRemna(subscription.id),
+    queryFn: async () => {
       const raw = await api.getSubscriptionRemna(token, subscription.id);
       const user = unwrapRemnaUser(raw);
-      setRemnaUser(user);
-      const ids = (user?.activeInternalSquads ?? []).map((s) => s.uuid);
-      setActiveSquads(ids);
-      if (user) {
-        setEditForm({
-          trafficLimitBytes: user.trafficLimitBytes ?? 0,
-          hwidDeviceLimit: user.hwidDeviceLimit,
-          trafficLimitStrategy: user.trafficLimitStrategy as UpdateClientRemnaPayload["trafficLimitStrategy"],
-          expireAt: user.expireAt ?? undefined,
-        });
-      }
-    } catch (e) {
-      setActionMsg(` ${e instanceof Error ? e.message : "Ошибка загрузки"}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [subscription.id, subscription.remnawaveUuid, token]);
+      return user;
+    },
+    enabled: !!subscription.remnawaveUuid,
+  });
+  const remnaUser = remnaQ.data ?? null;
+  const loading = remnaQ.isFetching;
+  // Ошибка загрузки данных Remna — в ту же строку сообщений (как прежний loadRemna catch).
+  const loadError = remnaQ.error instanceof Error ? remnaQ.error.message : remnaQ.error ? String(remnaQ.error) : null;
+  const activeSquads = (remnaUser?.activeInternalSquads ?? []).map((s) => s.uuid);
 
+  // Форма лимитов синхронизируется с пришедшими данными (как прежний loadRemna).
   useEffect(() => {
-    loadRemna();
-  }, [loadRemna]);
+    if (remnaUser) {
+      setEditForm({
+        trafficLimitBytes: remnaUser.trafficLimitBytes ?? 0,
+        hwidDeviceLimit: remnaUser.hwidDeviceLimit,
+        trafficLimitStrategy: remnaUser.trafficLimitStrategy as UpdateClientRemnaPayload["trafficLimitStrategy"],
+        expireAt: remnaUser.expireAt ?? undefined,
+      });
+    }
+  }, [remnaUser?.id, remnaUser?.updatedAt, remnaUser]);
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["admin"], exact: false });
+  };
+
+  // ── Мутации ──
+  const applyLimitsMutation = useMutation({
+    mutationFn: (payload: UpdateClientRemnaPayload) =>
+      api.updateSubscriptionRemna(token, subscription.id, payload),
+    onSuccess: () => {
+      invalidate();
+      setActionMsg(" Лимиты применены");
+      onChanged?.();
+    },
+    onError: (e) => setActionMsg(` ${e instanceof Error ? e.message : "Ошибка"}`),
+  });
 
   async function applyLimits() {
-    setSaving(true);
     setActionMsg(null);
-    try {
-      const payload: UpdateClientRemnaPayload = {};
-      if (editForm.trafficLimitBytes !== undefined) payload.trafficLimitBytes = editForm.trafficLimitBytes;
-      if (editForm.hwidDeviceLimit !== undefined) payload.hwidDeviceLimit = editForm.hwidDeviceLimit;
-      if (editForm.trafficLimitStrategy) payload.trafficLimitStrategy = editForm.trafficLimitStrategy;
-      if (editForm.expireAt) payload.expireAt = editForm.expireAt;
-      await api.updateSubscriptionRemna(token, subscription.id, payload);
-      setActionMsg(" Лимиты применены");
-      await loadRemna();
-      onChanged?.();
-    } catch (e) {
-      setActionMsg(` ${e instanceof Error ? e.message : "Ошибка"}`);
-    } finally {
-      setSaving(false);
-    }
+    const payload: UpdateClientRemnaPayload = {};
+    if (editForm.trafficLimitBytes !== undefined) payload.trafficLimitBytes = editForm.trafficLimitBytes;
+    if (editForm.hwidDeviceLimit !== undefined) payload.hwidDeviceLimit = editForm.hwidDeviceLimit;
+    if (editForm.trafficLimitStrategy) payload.trafficLimitStrategy = editForm.trafficLimitStrategy;
+    if (editForm.expireAt) payload.expireAt = editForm.expireAt;
+    await applyLimitsMutation.mutateAsync(payload);
   }
+
+  // Универсальная обёртка быстрых действий (enable/disable/revoke/...) —
+  // useMutation создаётся на каждый вызов через makeActionMutation.
+  const actionMutation = useMutation({
+    mutationFn: async (fn: () => Promise<unknown>) => {
+      await fn();
+    },
+    onSuccess: (_d, _fn) => undefined, // метки успеха ставит runAction ниже
+  });
 
   async function runAction(successLabel: string, fn: () => Promise<unknown>) {
     setActionMsg(null);
     try {
-      await fn();
+      await actionMutation.mutateAsync(fn);
+      invalidate();
       setActionMsg(` ${successLabel}`);
-      await loadRemna();
       onChanged?.();
     } catch (e) {
       setActionMsg(` ${e instanceof Error ? e.message : "Ошибка"}`);
@@ -189,13 +200,27 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
   }
 
   async function squadAdd(uuid: string) {
-    await runAction("Сквад добавлен", () => api.subscriptionRemnaSquadAdd(token, subscription.id, uuid));
-    setActiveSquads((prev) => (prev.includes(uuid) ? prev : [...prev, uuid]));
+    setActionMsg(null);
+    try {
+      await actionMutation.mutateAsync(() => api.subscriptionRemnaSquadAdd(token, subscription.id, uuid));
+      invalidate();
+      setActionMsg(" Сквад добавлен");
+      onChanged?.();
+    } catch (e) {
+      setActionMsg(` ${e instanceof Error ? e.message : "Ошибка"}`);
+    }
   }
 
   async function squadRemove(uuid: string) {
-    await runAction("Сквад удалён", () => api.subscriptionRemnaSquadRemove(token, subscription.id, uuid));
-    setActiveSquads((prev) => prev.filter((u) => u !== uuid));
+    setActionMsg(null);
+    try {
+      await actionMutation.mutateAsync(() => api.subscriptionRemnaSquadRemove(token, subscription.id, uuid));
+      invalidate();
+      setActionMsg(" Сквад удалён");
+      onChanged?.();
+    } catch (e) {
+      setActionMsg(` ${e instanceof Error ? e.message : "Ошибка"}`);
+    }
   }
 
   // Нет привязки к Remna  плашка.
@@ -369,9 +394,9 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
               size="sm"
               className="mt-3 rounded-xl border-border bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]"
               onClick={applyLimits}
-              disabled={saving}
+              disabled={applyLimitsMutation.isPending}
             >
-              {saving ? "Применяем…" : "Применить лимиты"}
+              {applyLimitsMutation.isPending ? "Применяем…" : "Применить лимиты"}
             </Button>
           </div>
         </TabsContent>
@@ -435,7 +460,10 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
                 <Wifi className="h-4 w-4" /> Сбросить трафик
               </Button>
               <Button variant="outline" className="justify-start gap-2 rounded-lg border-border bg-card hover:bg-muted text-[12.8px] font-semibold h-9"
-                onClick={() => loadRemna()}>
+                onClick={() => {
+                  setActionMsg(null);
+                  void remnaQ.refetch();
+                }}>
                 <RefreshCw className="h-4 w-4" /> Обновить данные
               </Button>
             </div>
@@ -472,7 +500,7 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
         </TabsContent>
       </Tabs>
 
-      {actionMsg && <p className="text-sm text-muted-foreground">{actionMsg}</p>}
+      {(actionMsg || loadError) && <p className="text-sm text-muted-foreground">{actionMsg || loadError}</p>}
     </div>
   );
 }

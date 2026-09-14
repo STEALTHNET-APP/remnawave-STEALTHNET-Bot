@@ -12,9 +12,10 @@
  * `Telegram.WebApp.openLink` (иначе кастомные схемы заблокированы).
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import gsap from "gsap";
+import { EASE_OUT, reducedMotion } from "@/lib/gsap-utils";
 import { Laptop, Download, Key, Copy, Check, ArrowRight, Smartphone, MonitorSmartphone, Apple, Tv, ExternalLink, Plus } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type SubscriptionPageConfig } from "@/lib/api";
@@ -22,6 +23,7 @@ import { ConcentricRings } from "@/components/stealth/concentric-rings";
 import { WizardHeader } from "@/components/stealth/wizard-header";
 import { StadiumButton } from "@/components/stealth/stadium-button";
 import { cn } from "@/lib/utils";
+import { getPublicConfigCached } from "@/lib/public-config";
 
 // Платформы — strict lowercase для соответствия конфигу
 type Platform = "windows" | "macos" | "android" | "ios" | "linux";
@@ -128,6 +130,9 @@ export function StealthSubscribe() {
   const [showOtherDevices, setShowOtherDevices] = useState(false);
   const [selectedAppIdx, setSelectedAppIdx] = useState(0);
   const [copied, setCopied] = useState(false);
+  // Смена шага wizard'а: gsap slide-in на контейнер шага (бывший
+  // AnimatePresence mode="wait": slide-out → unmount → slide-in).
+  const stepRef = useRef<HTMLDivElement>(null);
 
   // мультиподписки. Грузим ВСЕ подписки клиента (единый код
   // для любой — без спецслучаев на «нулевую») и даём выбрать, какую настраивать.
@@ -156,7 +161,7 @@ export function StealthSubscribe() {
     Promise.all([
       api.clientAllSubscriptions(state.token).catch((): { items: [] } => ({ items: [] })),
       api.getPublicSubscriptionPageConfig().catch(() => null),
-      api.getPublicConfig().catch(() => null),
+      getPublicConfigCached().catch(() => null),
     ]).then(([all, cfg, pub]) => {
       if (!alive) return;
       const list = (all.items ?? []).map((it) => {
@@ -210,6 +215,40 @@ export function StealthSubscribe() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apps.length]);
 
+  // Смена шага: gsap slide-in контейнера шага (x 24→0) — один твин на шаг,
+  // вместо AnimatePresence mode="wait" (slide-out 0.3s + slide-in 0.3s).
+  useEffect(() => {
+    const el = stepRef.current;
+    if (!el) return;
+    if (reducedMotion()) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        el,
+        { opacity: 0, x: 24 },
+        { opacity: 1, x: 0, duration: 0.3, ease: EASE_OUT, clearProps: "transform" },
+      );
+    }, el);
+    return () => ctx.revert();
+  }, [step]);
+
+  // Карточки выбора клиента — stagger-появление (бывший framer-motion
+  // initial/animate с delay idx * 0.05). Выбор карточки — CSS transition
+  // (scale-2 уже был в hover/tap классах).
+  useEffect(() => {
+    const el = stepRef.current;
+    if (!el) return;
+    const cards = el.querySelectorAll<HTMLElement>("[data-app-card]");
+    if (!cards.length || reducedMotion()) return;
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        cards,
+        { opacity: 0, y: 12 },
+        { opacity: 1, y: 0, duration: 0.3, stagger: 0.05, ease: EASE_OUT, overwrite: "auto", clearProps: "transform" },
+      );
+    }, el);
+    return () => ctx.revert();
+  }, [platform, apps.length, loading]);
+
   function copyUrl() {
     if (!subUrl) return;
     navigator.clipboard.writeText(subUrl);
@@ -250,17 +289,10 @@ export function StealthSubscribe() {
         onClose={() => navigate("/cabinet/dashboard")}
       />
 
-      <AnimatePresence mode="wait">
+      <div ref={stepRef} className="space-y-5">
       {/* Step 1: choose client */}
       {step === 1 && (
-        <motion.div
-          key="step-1"
-          initial={{ opacity: 0, x: 24 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -24 }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
-          className="space-y-5"
-        >
+        <div className="space-y-5">
           <div className="pt-4">
             <ConcentricRings icon={PlatformIcon} />
           </div>
@@ -311,19 +343,11 @@ export function StealthSubscribe() {
                   const active = idx === selectedAppIdx;
                   const isFeatured = idx === featuredIdx || app.isFeatured;
                   return (
-                    <motion.button
+                    <button
                       key={`${app.name}-${idx}`}
                       type="button"
                       onClick={() => setSelectedAppIdx(idx)}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0, scale: active ? 1.02 : 1 }}
-                      whileHover={{ scale: 1.035 }}
-                      whileTap={{ scale: 0.97 }}
-                      transition={{
-                        opacity: { duration: 0.3, delay: idx * 0.05, ease: "easeOut" },
-                        y: { duration: 0.3, delay: idx * 0.05, ease: "easeOut" },
-                        scale: { duration: 0.2, ease: "easeOut" },
-                      }}
+                      data-app-card
                       className={cn(
                         "relative rounded-2xl border-2 bg-white/[0.03] backdrop-blur-xl p-3.5 text-left transition-colors duration-300",
                         // Активный (не featured) → ярко-розовый акцент
@@ -379,7 +403,7 @@ export function StealthSubscribe() {
                           </div>
                         </div>
                       </div>
-                    </motion.button>
+                    </button>
                   );
                 })}
               </div>
@@ -405,15 +429,12 @@ export function StealthSubscribe() {
               Другое устройство
             </StadiumButton>
 
-            <AnimatePresence>
-            {showOtherDevices && (
-              <motion.div
-                initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -8, scale: 0.98 }}
-                transition={{ duration: 0.25, ease: "easeOut" }}
-                className="rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl p-3 space-y-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
-              >
+            <div
+              className={cn(
+                "overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl p-3 space-y-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition-all duration-200 ease-out",
+                showOtherDevices ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2 hidden",
+              )}
+            >
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">Выберите устройство</p>
                 <div className="grid grid-cols-2 gap-2">
                   {(Object.keys(PLATFORM_LABELS) as Platform[]).map((p) => {
@@ -444,23 +465,14 @@ export function StealthSubscribe() {
                     </StadiumButton>
                   </>
                 )}
-              </motion.div>
-            )}
-            </AnimatePresence>
+            </div>
           </div>
-        </motion.div>
+        </div>
       )}
 
       {/* Step 2: install client */}
       {step === 2 && (
-        <motion.div
-          key="step-2"
-          initial={{ opacity: 0, x: 24 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -24 }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
-          className="space-y-5"
-        >
+        <div className="space-y-5">
           <div className="pt-4"><ConcentricRings icon={Download} /></div>
 
           <div className="text-center space-y-1.5">
@@ -495,19 +507,12 @@ export function StealthSubscribe() {
               Далее
             </StadiumButton>
           </div>
-        </motion.div>
+        </div>
       )}
 
       {/* Step 3: add subscription */}
       {step === 3 && (
-        <motion.div
-          key="step-3"
-          initial={{ opacity: 0, x: 24 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -24 }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
-          className="space-y-5"
-        >
+        <div className="space-y-5">
           <div className="pt-4"><ConcentricRings icon={Key} /></div>
 
           <div className="text-center space-y-1.5">
@@ -553,9 +558,9 @@ export function StealthSubscribe() {
               Завершить
             </StadiumButton>
           </div>
-        </motion.div>
+        </div>
       )}
-      </AnimatePresence>
+      </div>
     </div>
   );
 }

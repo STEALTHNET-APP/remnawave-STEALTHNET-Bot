@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
 import type { RemnaSubTemplate, RemnaTemplateType } from "@/lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRemnaSubTemplates } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,65 +47,74 @@ const TYPE_META: Record<RemnaTemplateType, { label: string; kind: "json" | "yaml
   CLASH: { label: "Clash", kind: "yaml", cls: "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20" },
   SINGBOX: { label: "sing-box", kind: "yaml", cls: "bg-violet-500/10 text-violet-500 dark:text-violet-400 border-violet-500/20" },
 };
-
 export function RemnaSubTemplatesPage() {
   const { state } = useAuth();
-  const token = state.accessToken!;
+  const token = state.accessToken ?? null;
+  const qc = useQueryClient();
 
-  const [templates, setTemplates] = useState<RemnaSubTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const templatesQuery = useRemnaSubTemplates(token);
+  const loading = templatesQuery.isLoading;
+  const error = templatesQuery.error instanceof Error ? templatesQuery.error.message : null;
+  const templates: RemnaSubTemplate[] = templatesQuery.data?.response?.templates ?? [];
 
   const [editing, setEditing] = useState<RemnaSubTemplate | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [name, setName] = useState("");
   const [text, setText] = useState(""); // JSON-строка или YAML (декодированный)
   const [kind, setKind] = useState<"json" | "yaml">("json");
-  const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Настройки страницы подписки (API 2.8 /subscription-settings)
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [subSettings, setSubSettings] = useState<Record<string, unknown> | null>(null);
-  const [settingsLoading, setSettingsLoading] = useState(false);
-  const [savingSettings, setSavingSettings] = useState(false);
-  const openSettings = async () => {
+  const settingsQuery = useQuery({
+    queryKey: qk.admin.remnaSubSettings(),
+    queryFn: () => api.getRemnaSubSettings(token!).catch(() => null),
+    enabled: !!token && settingsOpen,
+  });
+  const settingsLoading = settingsQuery.isLoading;
+  const settingsMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) => api.remnaUpdateSubSettings(token!, body),
+    onSuccess: () => {
+      setSettingsOpen(false);
+      void qc.invalidateQueries({ queryKey: qk.admin.remnaSubSettings(), exact: false });
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+  });
+  const openSettings = () => {
     setSettingsOpen(true);
-    setSettingsLoading(true);
-    try { const res = await api.getRemnaSubSettings(token); setSubSettings(res.response ?? null); }
-    finally { setSettingsLoading(false); }
+    // затягиваем свежие данные при каждом открытии
+    void settingsQuery.refetch().then((r) => {
+      const res = r.data as { response?: Record<string, unknown> } | null | undefined;
+      setSubSettings(res?.response ?? null);
+    });
   };
   const setS = (k: string, v: unknown) => setSubSettings((s) => ({ ...(s ?? {}), [k]: v }));
-  const saveSettings = async () => {
+  const saveSettings = () => {
     if (!subSettings) return;
-    setSavingSettings(true);
-    try {
-      await api.remnaUpdateSubSettings(token, {
-        uuid: subSettings.uuid,
-        profileTitle: subSettings.profileTitle,
-        supportLink: subSettings.supportLink,
-        profileUpdateInterval: Number(subSettings.profileUpdateInterval) || undefined,
-        isProfileWebpageUrlEnabled: !!subSettings.isProfileWebpageUrlEnabled,
-        serveJsonAtBaseSubscription: !!subSettings.serveJsonAtBaseSubscription,
-      });
-      setSettingsOpen(false);
-    } catch (e) { alert(e instanceof Error ? e.message : "Ошибка сохранения"); }
-    finally { setSavingSettings(false); }
+    settingsMutation.mutate({
+      uuid: subSettings.uuid,
+      profileTitle: subSettings.profileTitle,
+      supportLink: subSettings.supportLink,
+      profileUpdateInterval: Number(subSettings.profileUpdateInterval) || undefined,
+      isProfileWebpageUrlEnabled: !!subSettings.isProfileWebpageUrlEnabled,
+      serveJsonAtBaseSubscription: !!subSettings.serveJsonAtBaseSubscription,
+    });
   };
 
-  const load = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await api.getRemnaSubTemplates(token);
-      setTemplates(res.response?.templates ?? []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка загрузки");
-    } finally {
-      setLoading(false);
-    }
+  const invalidateTemplates = () => {
+    void qc.invalidateQueries({ queryKey: qk.admin.remnaSubTemplates(), exact: false });
   };
-  useEffect(() => { load(); }, [token]);
+  const saveMutation = useMutation({
+    mutationFn: (body: { uuid: string; name?: string; templateJson?: unknown; encodedTemplateYaml?: string }) =>
+      api.remnaUpdateSubTemplate(token!, body),
+    onSuccess: (_data, variables) => {
+      setEditing(null);
+      invalidateTemplates();
+      void qc.invalidateQueries({ queryKey: qk.admin.remnaSubTemplate(variables.uuid), exact: false });
+    },
+    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+  });
 
   const jsonValidation = useMemo(() => {
     if (kind !== "json") return { valid: true as const };
@@ -110,53 +122,47 @@ export function RemnaSubTemplatesPage() {
     catch (e) { return { valid: false as const, error: e instanceof Error ? e.message : "Некорректный JSON" }; }
   }, [text, kind]);
 
-  const openEdit = async (t: RemnaSubTemplate) => {
+  const openEdit = (t: RemnaSubTemplate) => {
     setEditing(t);
     setName(t.name);
     setKind(TYPE_META[t.templateType]?.kind ?? "json");
     setText("");
     setEditLoading(true);
-    try {
-      const res = await api.getRemnaSubTemplate(token, t.uuid);
-      const full = res.response;
-      if (TYPE_META[t.templateType]?.kind === "yaml") {
-        setText(full?.encodedTemplateYaml ? b64decode(full.encodedTemplateYaml) : "");
-      } else {
-        setText(full?.templateJson != null ? JSON.stringify(full.templateJson, null, 2) : "{}");
-      }
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Не удалось загрузить шаблон");
-      setEditing(null);
-    } finally {
-      setEditLoading(false);
-    }
+    void qc
+      .fetchQuery({
+        queryKey: qk.admin.remnaSubTemplate(t.uuid),
+        queryFn: () => api.getRemnaSubTemplate(token!, t.uuid).catch(() => null),
+      })
+      .then((res) => {
+        const full = res?.response;
+        if (TYPE_META[t.templateType]?.kind === "yaml") {
+          setText(full?.encodedTemplateYaml ? b64decode(full.encodedTemplateYaml) : "");
+        } else {
+          setText(full?.templateJson != null ? JSON.stringify(full.templateJson, null, 2) : "{}");
+        }
+      })
+      .catch(() => {
+        setEditing(null);
+        alert("Не удалось загрузить шаблон");
+      })
+      .finally(() => setEditLoading(false));
+  };
+  const handleSave = () => {
+    if (!editing) return;
+    if (kind === "json" && !jsonValidation.valid) { alert("JSON невалиден."); return; }
+    const body: { uuid: string; name?: string; templateJson?: unknown; encodedTemplateYaml?: string } = {
+      uuid: editing.uuid,
+      name: name.trim() || editing.name,
+    };
+    if (kind === "yaml") body.encodedTemplateYaml = b64encode(text);
+    else body.templateJson = JSON.parse(text);
+    saveMutation.mutate(body);
   };
 
   const formatJson = () => {
-    try { setText(JSON.stringify(JSON.parse(text), null, 2)); } catch { /* disabled при невалидном */ }
+    if (kind !== "json" || !jsonValidation.valid) return;
+    try { setText(JSON.stringify(JSON.parse(text), null, 2)); } catch { /* already validated */ }
   };
-
-  const handleSave = async () => {
-    if (!editing) return;
-    if (kind === "json" && !jsonValidation.valid) { alert("JSON невалиден."); return; }
-    setSaving(true);
-    try {
-      const body: { uuid: string; name?: string; templateJson?: unknown; encodedTemplateYaml?: string } = {
-        uuid: editing.uuid,
-        name: name.trim() || editing.name,
-      };
-      if (kind === "yaml") body.encodedTemplateYaml = b64encode(text);
-      else body.templateJson = JSON.parse(text);
-      await api.remnaUpdateSubTemplate(token, body);
-      setEditing(null);
-      await load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка сохранения");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const copyText = () => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); };
   const downloadText = () => {
     if (!editing) return;
@@ -241,8 +247,8 @@ export function RemnaSubTemplatesPage() {
               </label>
               <DialogFooter className="mt-2 gap-2">
                 <Button variant="outline" onClick={() => setSettingsOpen(false)} className="rounded-xl">Отмена</Button>
-                <Button onClick={saveSettings} disabled={savingSettings} className="gap-2 rounded-xl">
-                  {savingSettings ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Сохранить
+                <Button onClick={saveSettings} disabled={settingsMutation.isPending} className="gap-2 rounded-xl">
+                  {settingsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Сохранить
                 </Button>
               </DialogFooter>
             </div>
@@ -340,8 +346,8 @@ export function RemnaSubTemplatesPage() {
               )}
               <DialogFooter className="mt-2 gap-2">
                 <Button variant="outline" onClick={() => setEditing(null)} className="rounded-xl">Отмена</Button>
-                <Button onClick={handleSave} disabled={saving || (kind === "json" && !jsonValidation.valid)} className="gap-2 rounded-xl">
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                <Button onClick={handleSave} disabled={saveMutation.isPending || (kind === "json" && !jsonValidation.valid)} className="gap-2 rounded-xl">
+                  {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Сохранить
                 </Button>
               </DialogFooter>

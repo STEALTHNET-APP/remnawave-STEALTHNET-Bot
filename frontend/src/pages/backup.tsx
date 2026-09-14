@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,28 +43,34 @@ export function BackupPage() {
   const [restoreFromPath, setRestoreFromPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [list, setList] = useState<BackupItem[]>([]);
-  const [listLoading, setListLoading] = useState(true);
+  const token = state.accessToken;
+  if (!token) return null;
 
-  const [autoBackupEnabled, setAutoBackupEnabled] = useState(false);
-  const [autoBackupCron, setAutoBackupCron] = useState("0 7 * * *");
+  const queryClient = useQueryClient();
+  const listQuery = useQuery({
+    queryKey: qk.admin.backupList(),
+    queryFn: () => api.getBackupList(token!).catch(() => ({ items: [] as BackupItem[] })),
+    enabled: !!token,
+  });
+  const settingsQuery = useQuery({
+    queryKey: qk.admin.settings(),
+    queryFn: () => api.getSettings(token!),
+    enabled: !!token,
+  });
+  const list = listQuery.data?.items ?? [];
+  const listLoading = listQuery.isLoading;
+
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState<boolean | null>(null);
+  const [autoBackupCron, setAutoBackupCron] = useState<string | null>(null);
   const [autoBackupSaving, setAutoBackupSaving] = useState(false);
   const [autoBackupSending, setAutoBackupSending] = useState(false);
   const [autoBackupMsg, setAutoBackupMsg] = useState<string | null>(null);
 
-  const token = state.accessToken;
-  if (!token) return null;
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
-  async function loadAutoBackupSettings() {
-    const t = state.accessToken;
-    if (!t) return;
-    try {
-      const s = await api.getSettings(t);
-      setAutoBackupEnabled((s as any).autoBackupEnabled ?? false);
-      setAutoBackupCron((s as any).autoBackupCron || "0 7 * * *");
-    } catch { /* ignore */ }
-  }
+  const serverSettings = settingsQuery.data as any;
+  const autoBackupEnabledValue = autoBackupEnabled ?? (serverSettings?.autoBackupEnabled ?? false);
+  const autoBackupCronValue = autoBackupCron ?? (serverSettings?.autoBackupCron || "0 7 * * *");
 
   async function saveAutoBackup() {
     const t = state.accessToken;
@@ -70,10 +78,11 @@ export function BackupPage() {
     setAutoBackupSaving(true);
     try {
       await api.updateSettings(t, {
-        autoBackupEnabled,
-        autoBackupCron: autoBackupCron.trim() || "0 7 * * *",
+        autoBackupEnabled: autoBackupEnabledValue,
+        autoBackupCron: autoBackupCronValue.trim() || "0 7 * * *",
       } as any);
-      flashAutoBackup(autoBackupEnabled ? "Авто-бэкапы включены" : "Авто-бэкапы выключены");
+      void queryClient.invalidateQueries({ queryKey: qk.admin.settings(), exact: false });
+      flashAutoBackup(autoBackupEnabledValue ? "Авто-бэкапы включены" : "Авто-бэкапы выключены");
     } catch {
       flashAutoBackup("Ошибка сохранения");
     } finally {
@@ -89,7 +98,7 @@ export function BackupPage() {
     try {
       const res = await api.sendBackupToTelegram(t);
       flashAutoBackup(res.message || "Бэкап отправлен");
-      await loadList();
+      void queryClient.invalidateQueries({ queryKey: qk.admin.backupList(), exact: false });
     } catch (e) {
       flashAutoBackup(e instanceof Error ? e.message : "Ошибка отправки");
     } finally {
@@ -102,24 +111,6 @@ export function BackupPage() {
     setTimeout(() => setAutoBackupMsg(null), 4000);
   }
 
-  async function loadList() {
-    const t = state.accessToken;
-    if (!t) return;
-    setListLoading(true);
-    try {
-      const res = await api.getBackupList(t);
-      setList(res.items);
-    } catch {
-      setList([]);
-    } finally {
-      setListLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadList();
-    loadAutoBackupSettings();
-  }, [state.accessToken]);
 
   async function handleCreateBackup() {
     const t = state.accessToken;
@@ -136,7 +127,7 @@ export function BackupPage() {
       a.click();
       URL.revokeObjectURL(url);
       setSuccess("Бэкап создан, сохранён на сервере и загружен.");
-      await loadList();
+      void queryClient.invalidateQueries({ queryKey: qk.admin.backupList(), exact: false });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка создания бэкапа");
     } finally {
@@ -176,7 +167,7 @@ export function BackupPage() {
     try {
       const result = await api.restoreBackupFromServer(t, restoreFromPath);
       setSuccess(result.message);
-      await loadList();
+      void queryClient.invalidateQueries({ queryKey: qk.admin.backupList(), exact: false });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка восстановления");
     } finally {
@@ -214,7 +205,7 @@ export function BackupPage() {
       const result = await api.restoreBackup(t, restoreFile);
       setSuccess(result.message);
       setRestoreFile(null);
-      await loadList();
+      void queryClient.invalidateQueries({ queryKey: qk.admin.backupList(), exact: false });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ошибка восстановления");
     } finally {
@@ -334,7 +325,7 @@ export function BackupPage() {
         <div className="flex items-center gap-3 mb-4">
           <div className={cn(
             "h-9 w-9 rounded-lg flex items-center justify-center border border-border shrink-0 transition-colors",
-            autoBackupEnabled
+            autoBackupEnabledValue
               ? "bg-muted text-emerald-500 dark:text-emerald-400"
               : "bg-muted text-muted-foreground"
           )}>
@@ -343,7 +334,7 @@ export function BackupPage() {
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-bold tracking-tight flex items-center gap-2">
               Авто-бэкап в Telegram
-              {autoBackupEnabled && (
+              {autoBackupEnabledValue && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-medium border border-emerald-500/20">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
                   Активно
@@ -355,15 +346,15 @@ export function BackupPage() {
             </p>
           </div>
           <button
-            onClick={() => setAutoBackupEnabled((v) => !v)}
+            onClick={() => setAutoBackupEnabled(!autoBackupEnabledValue)}
             className={cn(
               "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
-              autoBackupEnabled ? "bg-emerald-500" : "bg-muted-foreground/30"
+              autoBackupEnabledValue ? "bg-emerald-500" : "bg-muted-foreground/30"
             )}
           >
             <span className={cn(
               "pointer-events-none inline-block h-5 w-5 rounded-full bg-white ring-0 transition-transform",
-              autoBackupEnabled ? "translate-x-5" : "translate-x-0"
+              autoBackupEnabledValue ? "translate-x-5" : "translate-x-0"
             )} />
           </button>
         </div>
@@ -372,7 +363,7 @@ export function BackupPage() {
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Расписание (cron)</Label>
             <Input
-              value={autoBackupCron}
+              value={autoBackupCronValue}
               onChange={(e) => setAutoBackupCron(e.target.value)}
               placeholder="0 7 * * *"
               className="max-w-xs font-mono text-sm h-9 rounded-xl bg-card border-border focus-visible:ring-primary/50"
