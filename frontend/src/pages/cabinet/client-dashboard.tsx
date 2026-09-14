@@ -272,7 +272,11 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
     at: subQuery.data?.autoRenewNextChargeAt ?? null,
     currency: subQuery.data?.autoRenewCurrency ?? null,
   };
-  const secondarySubscriptions = (allSubQuery.data?.items ?? []).filter((s) => s.type === "secondary");
+  // issue #118: при multiSubscriptionsEnabled=false сервер всё равно может отдать подписки с index>0
+  // (legacy/консолидация) — не показываем их как secondary в single-режиме.
+  const secondarySubscriptions = config?.multiSubscriptionsEnabled === false
+    ? []
+    : (allSubQuery.data?.items ?? []).filter((s) => s.type === "secondary");
   const rootItem = (allSubQuery.data?.items ?? []).find((s) => s.type === "root");
   const rootSubId = rootItem?.id ?? null;
   const rootTrial = { isTrial: Boolean(rootItem?.trialId), convertEnabled: rootItem?.trialConvertEnabled ?? true };
@@ -842,7 +846,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                   <span className="inline-flex p-1.5 bg-indigo-500/20 rounded-lg shrink-0">
                     <Package className="h-4 w-4 shrink-0 text-indigo-400" />
                   </span>
-                  <span className="truncate">Подписка #{sec.subscriptionIndex ?? ""}</span>
+                  <span className="truncate">{sec.tariffDisplayName?.trim() || `Подписка #${(sec.subscriptionIndex ?? 0) + 1}`}</span>
                 </span>
                 {secActionNode(
                   sec,
@@ -1560,7 +1564,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                         <div className="p-2.5 bg-indigo-500/20 rounded-xl shrink-0">
                           <Package className="h-5 w-5 text-indigo-400" />
                         </div>
-                        <span className="truncate">Подписка #{sec.subscriptionIndex ?? ""}</span>
+                        <span className="truncate">{sec.tariffDisplayName?.trim() || `Подписка #${(sec.subscriptionIndex ?? 0) + 1}`}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {secHasActive ? (
