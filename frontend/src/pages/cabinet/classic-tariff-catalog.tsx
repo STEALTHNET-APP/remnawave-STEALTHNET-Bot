@@ -81,8 +81,10 @@ function TariffPlan({ tariff, canBuy, onChoose, getExtraCost }: Omit<CatalogProp
   const traffic = tariff.trafficLimitBytes && tariff.trafficLimitBytes > 0
     ? `${new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 1 }).format(tariff.trafficLimitBytes / 1024 ** 3)} ${t("cabinet.tariffs.gb_unit")}${["monthly", "monthly_rolling"].includes(tariff.trafficResetMode ?? "") ? t("cabinet.tariffs.per_month") : ""}`
     : t("cabinet.tariffs.unlimited_traffic");
-  const devices = tariff.deviceLimit && tariff.deviceLimit > 0
-    ? t("cabinet.tariffs.catalog.device_count", { count: tariff.deviceLimit })
+  // issue #128/#131: превью учитывает и deviceLimit, и includedDevices — безлимит только если оба пустые/нулевые
+  const deviceCount = Math.max(tariff.deviceLimit ?? 0, tariff.includedDevices ?? 0);
+  const devices = deviceCount > 0
+    ? t("cabinet.tariffs.catalog.device_count", { count: deviceCount })
     : t("cabinet.tariffs.catalog.unlimited_devices");
   const canAddDevices = tariff.pricePerExtraDevice > 0 && tariff.maxExtraDevices > 0;
 

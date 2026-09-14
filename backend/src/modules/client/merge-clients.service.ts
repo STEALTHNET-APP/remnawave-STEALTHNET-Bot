@@ -11,11 +11,14 @@
  *
  * ВСЁ выполняется одной транзакцией: перенос FK-строк → чистка pending-заявок →
  * удаление поглощаемого клиента (освобождает unique telegramId/email) →
- * обновление полей основного. Каждая подписка несёт собственный remnawaveUuid,
- * поэтому поход в Remnawave при слиянии не нужен.
+ * обновление полей основного. Каждая подписка несёт собственный remnawaveUuid.
+ * После транзакции root-юзер поглощаемого в Remnawave (если остался ничейным)
+ * удаляется (issue #84) — best-effort, падение НЕ роняет уже успешный merge.
  */
 
 import { prisma } from "../../db.js";
+
+import { isRemnaConfigured, remnaDeleteUser } from "../remna/remna.client.js";
 
 export interface MergeAssignFields {
   /** Присвоить основному telegramId (обычно — телеграм поглощаемого). */
@@ -38,7 +41,11 @@ export async function mergeClients(
 ): Promise<MergeClientsResult> {
   if (primaryId === absorbedId) throw new Error("Нельзя объединить аккаунт сам с собой");
 
-  return await prisma.$transaction(
+  // ISSUE #84: фиксируем root-uuid поглощаемого — он нужен для удаления из Remna ПОСЛЕ транзакции.
+  let absorbedRemnawaveUuid: string | null = null;
+  let primaryRemnawaveUuid: string | null = null;
+
+  const result = await prisma.$transaction(
     async (tx) => {
       const [primary, absorbed] = await Promise.all([
         tx.client.findUnique({ where: { id: primaryId } }),
@@ -46,6 +53,9 @@ export async function mergeClients(
       ]);
       if (!primary) throw new Error("Основной аккаунт не найден");
       if (!absorbed) throw new Error("Объединяемый аккаунт не найден");
+      // ISSUE #84: запоминаем root-uuid до того, как строка поглощаемого будет удалена.
+      absorbedRemnawaveUuid = absorbed.remnawaveUuid;
+      primaryRemnawaveUuid = primary.remnawaveUuid;
 
       // ── Подписки: unique(ownerId, subscriptionIndex) → переносим по одной с реиндексацией ──
       const primaryMax = await tx.subscription.aggregate({
@@ -172,6 +182,27 @@ export async function mergeClients(
     },
     { timeout: 30000, maxWait: 10000 },
   );
+
+  // ── ISSUE #84: после успешной транзакции удаляем ничейный root-юзер поглощаемого из Remna ──
+  // Подписки несут собственные remnawaveUuid, они независимы от root-указателя. Root-uuid
+  // поглощаемого остаётся ничейным (строка Client удалена), только если он НЕ переехал в поле
+  // основного. Если удаление падает — только warning, НЕ роняем merge (транзакция уже успешна).
+  if (
+    absorbedRemnawaveUuid &&
+    primaryRemnawaveUuid &&
+    absorbedRemnawaveUuid !== primaryRemnawaveUuid &&
+    isRemnaConfigured()
+  ) {
+    const del = await remnaDeleteUser(absorbedRemnawaveUuid);
+    if (del.error && del.status !== 404) {
+      console.warn(
+        `[merge-clients] ISSUE #84: не удалось удалить ничейный root-юзер поглощаемого ${absorbedRemnawaveUuid} из Remna:`,
+        del.error,
+      );
+    }
+  }
+
+  return result;
 }
 
 /**

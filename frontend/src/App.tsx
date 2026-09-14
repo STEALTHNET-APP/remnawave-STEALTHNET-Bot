@@ -91,6 +91,7 @@ import { ClientSingboxPage } from "@/pages/cabinet/client-singbox";
 import { ClientTicketsPage } from "@/pages/cabinet/client-tickets";
 import { ClientCustomBuildPage } from "@/pages/cabinet/client-custom-build";
 import { ClientGiftsPage } from "@/pages/cabinet/client-gifts";
+import { ClientLegalDocsPage } from "@/pages/cabinet/client-legal-docs";
 import { GiftActivatePage } from "@/pages/gift-activate";
 import { LandingPage } from "@/pages/landing";
 import type { PublicConfig } from "@/lib/api";
@@ -351,6 +352,10 @@ function AppRoutes() {
         <Route path="forgot-password" element={<ClientForgotPasswordPage />} />
         <Route path="reset-password" element={<ClientResetPasswordPage />} />
         <Route path="verify-email" element={<ClientVerifyEmailPage />} />
+        {/* issue #112/#127: legal-документы — публичные (до auth-гейта), redirect на external link из настроек */}
+        <Route path="documents/privacy" element={<ClientLegalDocsPage kind="privacy" />} />
+        <Route path="documents/offer" element={<ClientLegalDocsPage kind="offer" />} />
+        <Route path="documents/refund" element={<ClientLegalDocsPage kind="refund" />} />
         <Route path="verify-link-email" element={<ClientVerifyLinkEmailPage />} />
         <Route
           path="dashboard"
