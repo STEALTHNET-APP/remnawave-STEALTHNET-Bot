@@ -14,7 +14,7 @@
 
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Globe, Wallet, UserPlus, MessageCircle } from "lucide-react";
+import { Globe, Wallet, UserPlus, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Tab {
@@ -29,6 +29,7 @@ const TABS: Tab[] = [
   { to: "/cabinet/tariffs", label: "Тарифы", icon: Wallet },
   { to: "/cabinet/referral", label: "Друзья", icon: UserPlus },
   { to: "/cabinet/tickets", label: "Поддержка", icon: MessageCircle },
+  { to: "/cabinet/profile", label: "Профиль", icon: User },
 ];
 
 export function AuroraTabs() {
@@ -38,16 +39,16 @@ export function AuroraTabs() {
     <nav
       aria-label="Основная навигация"
       className="au-nav fixed inset-x-0 bottom-0 z-30 pointer-events-none px-5"
-      style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+      style={{ paddingBottom: "calc(max(env(safe-area-inset-bottom, 0px), var(--app-tg-bottom, 0px)) + 12px)" }}
     >
       <div
         className="pointer-events-auto mx-auto flex max-w-[340px] items-center justify-between gap-1 rounded-full px-2 py-2"
         style={{
           // «Жидкое стекло»: размытие фона + лёгкая заливка + блик по верхней кромке
-          background: "rgba(255, 255, 255, 0.62)",
+          background: "color-mix(in srgb, var(--au-nav) 85%, transparent)",
           backdropFilter: "blur(22px) saturate(180%)",
           WebkitBackdropFilter: "blur(22px) saturate(180%)",
-          border: "1px solid rgba(255, 255, 255, 0.75)",
+          border: "1px solid color-mix(in srgb, var(--au-muted) 20%, transparent)",
           boxShadow:
             "0 8px 32px -8px rgba(17, 24, 39, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.85)",
         }}

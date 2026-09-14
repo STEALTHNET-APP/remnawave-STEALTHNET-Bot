@@ -133,7 +133,7 @@ export function AuroraReferral() {
         </div>
 
         <div className="mt-5 flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--au-bg)]/20">
             <Users className="h-[18px] w-[18px]" />
           </span>
           <div>
@@ -150,7 +150,7 @@ export function AuroraReferral() {
       {/* ── Ссылка ── */}
       <section className="rounded-[22px] bg-[var(--au-surface)] p-4">
         <p className="text-[13px] font-semibold text-[var(--au-muted)]">Ваша ссылка</p>
-        <div className="mt-2.5 rounded-[16px] bg-white p-3.5">
+        <div className="mt-2.5 rounded-[16px] bg-[var(--au-bg)] p-3.5">
           <p className="break-all font-mono text-[13px] leading-relaxed">
             {link ?? "Ссылка появится после привязки аккаунта"}
           </p>
@@ -161,7 +161,7 @@ export function AuroraReferral() {
             onClick={copy}
             disabled={!link}
             className={cn(
-              "flex items-center justify-center gap-2 rounded-[16px] border-2 bg-white px-4 py-3.5 text-[15px] font-bold transition-colors disabled:opacity-45",
+              "flex items-center justify-center gap-2 rounded-[16px] border-2 bg-[var(--au-bg)] px-4 py-3.5 text-[15px] font-bold transition-colors disabled:opacity-45",
               copied ? "border-[#0F9D58] text-[#0F9D58]" : "border-transparent text-[var(--au-ink)] enabled:active:scale-[0.97]",
             )}
           >
@@ -205,7 +205,7 @@ export function AuroraReferral() {
           <p className="text-[13px] font-semibold text-[var(--au-muted)]">Сколько начисляем</p>
           <div className="mt-2.5 space-y-2">
             {levels.map((l) => (
-              <div key={l.n} className="flex items-center gap-3 rounded-[16px] bg-white px-3.5 py-3">
+              <div key={l.n} className="flex items-center gap-3 rounded-[16px] bg-[var(--au-bg)] px-3.5 py-3">
                 <span className="shrink-0 text-[19px] font-extrabold tabular-nums text-[var(--au-from)]">
                   {Math.round(l.percent)}%
                 </span>

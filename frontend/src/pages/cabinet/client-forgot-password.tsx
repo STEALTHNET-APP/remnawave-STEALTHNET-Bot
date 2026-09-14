@@ -73,7 +73,7 @@ export function ClientForgotPasswordPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
-                      className="h-12 rounded-xl bg-background/50 border-white/10 focus-visible:ring-primary/50"
+                      className="h-12 rounded-xl bg-card border-muted-foreground/75 text-base shadow-sm dark:bg-background/50 dark:border-white/15 focus-visible:ring-primary/50"
                     />
                   </div>
                   <Button type="submit" className="w-full h-14 rounded-2xl text-base font-bold shadow-xl gap-2" disabled={loading}>

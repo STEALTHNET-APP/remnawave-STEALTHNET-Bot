@@ -17,14 +17,15 @@ export interface BlockDefaults {
 export function getBlockDefaults(type: string, variant: string): BlockDefaults {
   const key = `${type}/${variant}`;
   switch (key) {
+    case "hero/centered":
     case "hero/split":
       return {
-        props: { ctaUrl: "/cabinet/register", secondaryCtaUrl: "/cabinet/login", showRightCard: true },
+        props: { ctaUrl: "/cabinet/register", secondaryCtaUrl: "/cabinet/login", showRightCard: true, sceneType: "spatial", sceneColor: "#a0a3ff", sceneMaterial: "glass", sceneMotion: true, showSecondary: true, layout: variant === "centered" ? "centered" : "split" },
         i18n: {
           ru: {
             badge: "Приватность · Скорость · Доступ",
-            headline1: "Подключение, которое",
-            headline2: "выглядит дорого",
+            headline1: "Интернет.",
+            headline2: "На вашей стороне.",
             title: "STEALTHNET",
             subtitle: "Telegram, YouTube, видеозвонки и доступ к любым сервисам в одной подписке. Без ограничений и сложных настроек.",
             hint: "Регистрация за минуту · Карта · СБП · Кошелёк · Крипта",
@@ -37,6 +38,8 @@ export function getBlockDefaults(type: string, variant: string): BlockDefaults {
         },
       };
 
+    case "custom/content":
+      return { props: { layout: "split" }, i18n: { ru: { title: "Больше возможностей", body: "Расскажите о своём сервисе и добавьте изображение.", ctaText: "" } } };
     case "features/strip":
       return {
         i18n: {

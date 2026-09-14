@@ -5,7 +5,7 @@
  * Для list-pair добавляет/удаляет элементы массива через кнопки.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { Plus, Trash2, Upload, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,14 +50,16 @@ interface FieldInputProps {
 }
 
 function FieldInput({ field, value, onChange }: FieldInputProps) {
+  const fieldId = useId();
   switch (field.type) {
     case "text":
     case "url":
       return (
-        <FieldWrapper field={field}>
+        <FieldWrapper field={field} fieldId={fieldId}>
           <Input
+            id={fieldId} aria-label={field.label}
             value={typeof value === "string" ? value : ""}
-            onChange={(e) => onChange(e.target.value || undefined)}
+            onChange={(e) => onChange(e.target.value)}
             placeholder={field.placeholder}
           />
         </FieldWrapper>
@@ -65,8 +67,9 @@ function FieldInput({ field, value, onChange }: FieldInputProps) {
 
     case "number":
       return (
-        <FieldWrapper field={field}>
+        <FieldWrapper field={field} fieldId={fieldId}>
           <Input
+            id={fieldId} aria-label={field.label}
             type="number"
             value={typeof value === "number" ? value : ""}
             onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
@@ -77,10 +80,11 @@ function FieldInput({ field, value, onChange }: FieldInputProps) {
 
     case "textarea":
       return (
-        <FieldWrapper field={field}>
+        <FieldWrapper field={field} fieldId={fieldId}>
           <Textarea
+            id={fieldId} aria-label={field.label}
             value={typeof value === "string" ? value : ""}
-            onChange={(e) => onChange(e.target.value || undefined)}
+            onChange={(e) => onChange(e.target.value)}
             rows={field.rows ?? 3}
             placeholder={field.placeholder}
           />
@@ -94,13 +98,13 @@ function FieldInput({ field, value, onChange }: FieldInputProps) {
             <Label className="text-sm font-medium">{field.label}</Label>
             {field.hint ? <p className="mt-0.5 text-xs text-muted-foreground">{field.hint}</p> : null}
           </div>
-          <Switch checked={!!value} onCheckedChange={(v) => onChange(v || undefined)} />
+          <Switch aria-label={field.label} checked={!!value} onCheckedChange={(v) => onChange(v)} />
         </div>
       );
 
     case "color":
       return (
-        <FieldWrapper field={field}>
+        <FieldWrapper field={field} fieldId={fieldId}>
           <div className="flex gap-2">
             <Input
               type="color"
@@ -110,7 +114,7 @@ function FieldInput({ field, value, onChange }: FieldInputProps) {
             />
             <Input
               value={typeof value === "string" ? value : ""}
-              onChange={(e) => onChange(e.target.value || undefined)}
+              onChange={(e) => onChange(e.target.value)}
               placeholder="#7c3aed"
               className="font-mono"
             />
@@ -120,17 +124,18 @@ function FieldInput({ field, value, onChange }: FieldInputProps) {
 
     case "image":
       return (
-        <FieldWrapper field={field}>
-          <ImageField value={typeof value === "string" ? value : ""} onChange={(v) => onChange(v || undefined)} />
+        <FieldWrapper field={field} fieldId={fieldId}>
+          <ImageField value={typeof value === "string" ? value : ""} onChange={(v) => onChange(v)} />
         </FieldWrapper>
       );
 
     case "select":
       return (
-        <FieldWrapper field={field}>
+        <FieldWrapper field={field} fieldId={fieldId}>
           <select
+            id={fieldId} aria-label={field.label}
             value={typeof value === "string" ? value : ""}
-            onChange={(e) => onChange(e.target.value || undefined)}
+            onChange={(e) => onChange(e.target.value)}
             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
             <option value="">— не выбрано —</option>
@@ -213,10 +218,10 @@ function ImageField({ value, onChange }: { value: string; onChange: (v: string) 
   );
 }
 
-function FieldWrapper({ field, children }: { field: FieldSchema; children: React.ReactNode }) {
+function FieldWrapper({ field, children, fieldId }: { field: FieldSchema; children: React.ReactNode; fieldId: string }) {
   return (
     <div>
-      <Label className="text-sm font-medium">{field.label}</Label>
+      <Label htmlFor={fieldId} className="text-sm font-medium">{field.label}</Label>
       <div className="mt-1.5">{children}</div>
       {field.hint ? <p className="mt-1 text-xs text-muted-foreground">{field.hint}</p> : null}
     </div>
@@ -239,7 +244,7 @@ function ListTextField({ field, value, onChange }: { field: FieldSchema; value: 
               onChange={(e) => {
                 const next = [...items];
                 next[idx] = e.target.value;
-                onChange(next.filter((x) => x.length > 0).length === 0 ? undefined : next);
+                onChange(next);
               }}
               placeholder={field.placeholder}
             />
@@ -248,7 +253,7 @@ function ListTextField({ field, value, onChange }: { field: FieldSchema; value: 
               size="icon"
               onClick={() => {
                 const next = items.filter((_, i) => i !== idx);
-                onChange(next.length === 0 ? undefined : next);
+                onChange(next);
               }}
               className="shrink-0"
             >
@@ -297,7 +302,7 @@ function ListPairField({
                 size="sm"
                 onClick={() => {
                   const next = value.filter((_, i) => i !== idx);
-                  onChange(next.length === 0 ? undefined : next);
+                  onChange(next);
                 }}
                 className="h-7 gap-1 text-red-600 hover:text-red-700"
               >

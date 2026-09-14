@@ -549,7 +549,7 @@ export function ClientRegisterPage() {
                   required
                   autoComplete="off"
                   data-form-type="other"
-                   className={cn("h-12 rounded-xl bg-background/50 backdrop-blur-sm border-white/10 focus-visible:ring-primary/50 transition-all", emailError ? "border-destructive focus-visible:ring-destructive" : "")}
+                   className={cn("h-12 rounded-xl bg-card border-muted-foreground/75 text-base shadow-sm dark:bg-background/50 dark:border-white/15 focus-visible:ring-primary/50 transition-all", emailError ? "border-destructive dark:border-destructive focus-visible:ring-destructive" : "")}
                 />
                 {emailError && <p className="text-xs text-destructive">{emailError}</p>}
               </div>
@@ -561,8 +561,8 @@ export function ClientRegisterPage() {
                 </div>
               )}
               {/* Согласие с обработкой персональных данных (обязательно при регистрации) */}
-              <div className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-background/30 p-3">
-                <Checkbox id="agree-privacy" checked={agreedToPrivacy} onCheckedChange={(v) => setAgreedToPrivacy(v === true)} className="mt-0.5 shrink-0 border-white/50 bg-white/10 data-[state=checked]:bg-fuchsia-500 data-[state=checked]:border-fuchsia-500 data-[state=checked]:text-white" />
+              <div className="flex items-start gap-2.5 rounded-xl border border-border bg-card/60 dark:bg-background/30 p-3">
+                <Checkbox id="agree-privacy" checked={agreedToPrivacy} onCheckedChange={(v) => setAgreedToPrivacy(v === true)} className="mt-0.5 shrink-0 border-muted-foreground/75 bg-card dark:border-white/50 dark:bg-white/10 data-[state=checked]:bg-fuchsia-500 data-[state=checked]:border-fuchsia-500 data-[state=checked]:text-white" />
                 <Label htmlFor="agree-privacy" className="text-xs font-normal leading-relaxed text-muted-foreground cursor-pointer">
                   Регистрируясь, я подтверждаю, что ознакомился и согласен с{" "}
                   <Link to="/cabinet/documents/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">Политикой обработки персональных данных</Link>.

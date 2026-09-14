@@ -1,3 +1,4 @@
+import { createParitypayPayment, isParitypayConfigured } from "../paritypay/paritypay.service.js";
 import { randomBytes, createHmac } from "crypto";
 import { randomUUID } from "crypto";
 import { generateSecret, generateURI, verify } from "otplib";
@@ -376,7 +377,7 @@ clientAuthRouter.post("/register", async (req, res) => {
   if (hasTelegram) {
     const existing = await prisma.client.findFirst({
       where: asClientWhere({ telegramId: data.telegramId! }),
-      select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true },
+      select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
     });
     if (existing) {
       if (!existing.isBlocked) {
@@ -513,7 +514,7 @@ clientAuthRouter.post("/verify-email", async (req, res) => {
 
   const existingClient = await prisma.client.findUnique({
     where: { email: pending.email },
-    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true },
+    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
   });
   if (existingClient) {
     await prisma.pendingEmailRegistration.delete({ where: { id: pending.id } }).catch(() => {});
@@ -589,7 +590,7 @@ clientAuthRouter.post("/login", async (req, res) => {
 
   const full = await prisma.client.findUnique({
     where: { id: client.id },
-    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true },
+    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
   });
   if (!full) return res.status(401).json({ message: "Неверный email или пароль" });
   const auth = buildAuthResponse(full);
@@ -709,15 +710,8 @@ clientAuthRouter.post("/telegram-miniapp", async (req, res) => {
   });
   if (existing) {
     if (existing.isBlocked) return res.status(403).json({ message: "Аккаунт заблокирован" });
-    // см. /telegram-login-check — тот же триггер.
-    // passwordHash из условия убран: у бот-юзеров может быть dummy-пароль.
-    if (existing.onboardingCompleted && !existing.email) {
-      await prisma.client.update({
-        where: { id: existing.id },
-        data: { onboardingCompleted: false },
-      }).catch(() => {});
-      existing.onboardingCompleted = false;
-    }
+    // Existing account onboarding state remains authoritative across devices.
+
     const auth = buildAuthResponse(existing);
     return res.json(auth);
   }
@@ -762,7 +756,7 @@ clientAuthRouter.post("/2fa-login", async (req, res) => {
   if (!payload) return res.status(401).json({ message: "Сессия истекла. Войдите снова." });
   const client = await prisma.client.findUnique({
     where: { id: payload.clientId },
-    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpSecret: true, totpEnabled: true, createdAt: true, onboardingCompleted: true },
+    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpSecret: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
   });
   if (!client?.totpEnabled || !client.totpSecret) return res.status(401).json({ message: "2FA не включена. Войдите снова." });
   const result = await verify({ secret: client.totpSecret, token: body.data.code });
@@ -844,7 +838,7 @@ clientAuthRouter.post("/by-subscription", async (req, res) => {
 
   const full = await prisma.client.findUnique({
     where: { id: clientId },
-    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true },
+    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
   });
   if (!full || full.isBlocked) return res.status(403).json({ message: "Аккаунт недоступен" });
 
@@ -972,7 +966,7 @@ clientAuthRouter.post("/google", async (req, res) => {
 
   const existing = await prisma.client.findUnique({
     where: { googleId },
-    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true },
+    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
   });
   if (existing) {
     if (existing.isBlocked) return res.status(403).json({ message: "Аккаунт заблокирован" });
@@ -983,7 +977,7 @@ clientAuthRouter.post("/google", async (req, res) => {
   if (googleEmail && emailVerified) {
     const byEmail = await prisma.client.findUnique({
       where: { email: googleEmail },
-      select: { id: true, email: true, googleId: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true },
+      select: { id: true, email: true, googleId: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
     });
     if (byEmail) {
       if (byEmail.isBlocked) return res.status(403).json({ message: "Аккаунт заблокирован" });
@@ -1052,7 +1046,7 @@ clientAuthRouter.post("/apple", async (req, res) => {
 
   const existing = await prisma.client.findUnique({
     where: { appleId: appleSub },
-    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true },
+    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
   });
   if (existing) {
     if (existing.isBlocked) return res.status(403).json({ message: "Аккаунт заблокирован" });
@@ -1063,7 +1057,7 @@ clientAuthRouter.post("/apple", async (req, res) => {
   if (appleEmail) {
     const byEmail = await prisma.client.findUnique({
       where: { email: appleEmail },
-      select: { id: true, email: true, appleId: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true },
+      select: { id: true, email: true, appleId: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
     });
     if (byEmail) {
       if (byEmail.isBlocked) return res.status(403).json({ message: "Аккаунт заблокирован" });
@@ -1203,16 +1197,8 @@ clientAuthRouter.get("/telegram-login-check", async (req, res) => {
       if (telegramUsername && existing.telegramUsername !== telegramUsername) {
         await prisma.client.update({ where: { id: existing.id }, data: { telegramUsername } }).catch(() => {});
       }
-      // TG-юзер впервые на сайте без привязанного email.
-      // Запускаем онбординг чтобы попросить ввести почту. Условие про passwordHash убрано —
-      // у бот-юзеров может быть dummy-пароль (созданный ботом), но они всё равно «голые».
-      if (existing.onboardingCompleted && !existing.email) {
-        await prisma.client.update({
-          where: { id: existing.id },
-          data: { onboardingCompleted: false },
-        }).catch(() => {});
-        existing.onboardingCompleted = false;
-      }
+      // Do not restart completed onboarding when email was skipped.
+
       const auth = buildAuthResponse(existing);
       return res.json({ confirmed: true, ...auth });
     }
@@ -1539,13 +1525,13 @@ clientRouter.patch("/profile", async (req, res) => {
   if (body.data.preferredLang !== undefined) updates.preferredLang = body.data.preferredLang;
   if (body.data.preferredCurrency !== undefined) updates.preferredCurrency = body.data.preferredCurrency;
   if (Object.keys(updates).length === 0) {
-    const current = await prisma.client.findUnique({ where: { id: client.id }, select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, createdAt: true, onboardingCompleted: true } });
+    const current = await prisma.client.findUnique({ where: { id: client.id }, select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, createdAt: true, onboardingCompleted: true, passwordHash: true } });
     return res.json(current ? toClientShape(current) : { message: "Не найдено" });
   }
   const updated = await prisma.client.update({
     where: { id: client.id },
     data: updates,
-    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, createdAt: true, onboardingCompleted: true },
+    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
   });
   return res.json(toClientShape(updated));
 });
@@ -1907,7 +1893,7 @@ clientRouter.post("/link-email-direct", async (req, res) => {
   const updated = await prisma.client.update({
     where: { id: client.id },
     data: { email },
-    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true },
+    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
   });
   return res.json({ message: "Почта привязана", client: toClientShape(updated) });
 });
@@ -2293,7 +2279,7 @@ clientRouter.post("/trial", async (req, res) => {
       .then((m) => m.notifyAdminsAboutTrialActivated(client.id, "Бесплатный тест", trialDays))
       .catch((e) => console.error("[trial] admin notify failed:", e));
 
-    const updated = await prisma.client.findUnique({ where: { id: client.id }, select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, createdAt: true, onboardingCompleted: true } });
+    const updated = await prisma.client.findUnique({ where: { id: client.id }, select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, createdAt: true, onboardingCompleted: true, passwordHash: true } });
     return res.json({ message: "Бесплатный тест активирован", client: updated ? toClientShape(updated) : null });
   }
 
@@ -2304,7 +2290,7 @@ clientRouter.post("/trial", async (req, res) => {
 
   // Финальный update trialUsed убран — атомик guard выше уже всё сделал.
   // Отдельный write был чисто легаси-страховкой.
-  const updated = await prisma.client.findUnique({ where: { id: client.id }, select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, createdAt: true, onboardingCompleted: true } });
+  const updated = await prisma.client.findUnique({ where: { id: client.id }, select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, createdAt: true, onboardingCompleted: true, passwordHash: true } });
   return res.json({ message: "Бесплатный тест активирован", client: updated ? toClientShape(updated) : null });
 });
 
@@ -5538,7 +5524,7 @@ clientRouter.post("/yookassa/unlink-payment-method", async (req, res) => {
     const updated = await prisma.client.update({
       where: { id: clientId },
       data: { yookassaPaymentMethodId: null, yookassaPaymentMethodTitle: null },
-      select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, yookassaPaymentMethodTitle: true, onboardingCompleted: true },
+      select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, yookassaPaymentMethodTitle: true, onboardingCompleted: true, passwordHash: true },
     });
     return res.json({ client: toClientShape(updated as Parameters<typeof toClientShape>[0]) });
   } catch (err) {
@@ -6380,6 +6366,265 @@ clientRouter.post("/rollypay/create-payment", async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[rollypay/create-payment]", message, err);
+    return res.status(500).json({ message: message || "Ошибка создания платежа" });
+  }
+});
+
+clientRouter.post("/paritypay/create-payment", async (req, res) => {
+  try {
+    const clientId = (req as unknown as { clientId: string }).clientId;
+    const parsed = heleketCreatePaymentSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Неверные параметры", errors: parsed.error.flatten() });
+    const config = await getSystemConfig();
+    const paritypayConfig = {
+      apiKey: (config as { paritypayApiKey?: string | null }).paritypayApiKey ?? "",
+      signingSecret: (config as { paritypaySigningSecret?: string | null }).paritypaySigningSecret ?? "",
+      shopId: config.paritypayShopId ?? "",
+      enabled: config.paritypayEnabled,
+    };
+    if (!isParitypayConfigured(paritypayConfig)) return res.status(503).json({ message: "ParityPay не настроен" });
+    const { extendsSecondarySubId, removeExtrasOnActivate, asGift, asAdditional } = parsed.data;
+
+    const { amount: amountBody, currency: currencyBody, tariffId: tariffIdBody, proxyTariffId: proxyTariffIdBody, singboxTariffId: singboxTariffIdBody, promoCode: promoCodeStr, extraOption, customBuild: customBuildBody } = parsed.data;
+    let amountRounded: number;
+    let currencyUpper: string;
+    let tariffIdToStore: string | null = null;
+    let proxyTariffIdToStore: string | null = null;
+    let singboxTariffIdToStore: string | null = null;
+    let metadataObj: Record<string, unknown> = promoCodeStr ? { promoCode: promoCodeStr } : {};
+
+    if (customBuildBody) {
+      const cfg = getCustomBuildConfig(config);
+      if (!cfg) return res.status(400).json({ message: "Гибкий тариф отключён" });
+      let { days, devices, trafficGb } = customBuildBody;
+      if (days > cfg.maxDays || devices > cfg.maxDevices) {
+        return res.status(400).json({ message: `Дни: 1–${cfg.maxDays}, устройств: 1–${cfg.maxDevices}` });
+      }
+      const trafficLimitBytes =
+        cfg.trafficMode === "per_gb" && trafficGb != null && trafficGb >= 0
+          ? Math.round(trafficGb * 1024 ** 3)
+          : null;
+      amountRounded = days * cfg.pricePerDay + devices * cfg.pricePerDevice;
+      if (cfg.trafficMode === "per_gb" && trafficGb != null && trafficGb > 0) amountRounded += trafficGb * cfg.pricePerGb;
+      amountRounded = Math.round(amountRounded * 100) / 100;
+      currencyUpper = cfg.currency.toUpperCase();
+      metadataObj = {
+        customBuild: {
+          durationDays: days,
+          deviceLimit: devices,
+          trafficLimitBytes,
+          internalSquadUuids: [cfg.squadUuid],
+        },
+      };
+    } else if (extraOption) {
+      const cfg = config as { sellOptionsEnabled?: boolean; sellOptionsTrafficEnabled?: boolean; sellOptionsTrafficProducts?: SellOptionTrafficProduct[]; sellOptionsDevicesEnabled?: boolean; sellOptionsDevicesProducts?: SellOptionDeviceProduct[]; sellOptionsServersEnabled?: boolean; sellOptionsServersProducts?: SellOptionServerProduct[] };
+      if (!cfg.sellOptionsEnabled) return res.status(400).json({ message: "Продажа опций отключена" });
+      if (extraOption.kind === "traffic") {
+        const product = cfg.sellOptionsTrafficEnabled && cfg.sellOptionsTrafficProducts?.find((p) => p.id === extraOption.productId);
+        if (!product) return res.status(400).json({ message: "Опция не найдена" });
+        amountRounded = Math.round(product.price * 100) / 100;
+        currencyUpper = product.currency.toUpperCase();
+        metadataObj = { extraOption: { kind: "traffic", trafficBytes: Math.round(product.trafficGb * 1024 ** 3) } };
+      } else if (extraOption.kind === "devices") {
+        const product = cfg.sellOptionsDevicesEnabled && cfg.sellOptionsDevicesProducts?.find((p) => p.id === extraOption.productId);
+        if (!product) return res.status(400).json({ message: "Опция не найдена" });
+        // масштабируем цену для primary подписки
+        const prorataCoef = extraOption.targetSubscriptionId ? await calculateDevicesProrataPriceCoefficient(extraOption.targetSubscriptionId) : await calculateDevicesProrataPriceCoefficientForPrimary(clientId);
+        amountRounded = Math.floor(product.price * prorataCoef);
+        currencyUpper = product.currency.toUpperCase();
+        metadataObj = { extraOption: { kind: "devices", deviceCount: product.deviceCount, productPriceMonthly: product.price } };
+      } else {
+        const product = cfg.sellOptionsServersEnabled && cfg.sellOptionsServersProducts?.find((p) => p.id === extraOption.productId);
+        if (!product) return res.status(400).json({ message: "Опция не найдена" });
+        amountRounded = Math.round(product.price * 100) / 100;
+        currencyUpper = product.currency.toUpperCase();
+        metadataObj = { extraOption: { kind: "servers", squadUuid: product.squadUuid, ...((product.trafficGb ?? 0) > 0 && { trafficBytes: Math.round((product.trafficGb ?? 0) * 1024 ** 3) }) } };
+      }
+    } else {
+      currencyUpper = (currencyBody ?? "USD").toUpperCase();
+      if (tariffIdBody) {
+        const tariff = await prisma.tariff.findUnique({
+          where: { id: tariffIdBody },
+          include: { priceOptions: true },
+        });
+        if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
+        // Валюту берём У ТАРИФА: мини-аппы её в запросе не передают, а дефолт
+        // «USD» ломает RUB-only провайдера (ParityPay отвечает 400).
+        currencyUpper = (tariff.currency ?? currencyUpper).toUpperCase();
+        // кулдаун ПРОДЛЕНИЯ существующей подписки.
+        // Применяется только при продлении (extendsSecondarySubId) — новые покупки этого
+        // же тарифа как доп. подписок не блокируются.
+        if ("extendsSecondarySubId" in parsed.data && parsed.data.extendsSecondarySubId) {
+          const { checkSubscriptionRenewalCooldown } = await import("../tariff/tariff-cooldown.service.js");
+          const cd = await checkSubscriptionRenewalCooldown(parsed.data.extendsSecondarySubId!);
+          if (!cd.ok) return res.status(429).json({ message: cd.message, code: "TARIFF_COOLDOWN", daysLeft: cd.daysLeft });
+        }
+        tariffIdToStore = tariffIdBody;
+        // честный расчёт цены тарифа.
+        // Раньше: `amountBody ?? tariff.price` — игнорировались priceOption и extras (баг 149₽).
+        // Теперь: priceOption + extras (новая покупка) или extrasMonthlyPrice (продление).
+        let unitPriceCalc = tariff.price;
+        let effectiveDaysCalc = tariff.durationDays;
+        if (parsed.data.tariffPriceOptionId) {
+          const opt = (tariff.priceOptions ?? []).find((p) => p.id === parsed.data.tariffPriceOptionId);
+          if (opt) {
+            unitPriceCalc = opt.price;
+            effectiveDaysCalc = opt.durationDays;
+          }
+        }
+        // доплата за СУЩЕСТВУЮЩИЕ extras подписки при продлении.
+        // T-extras-universal: при «убрать устройства» (removeExtrasOnActivate) доплату НЕ берём —
+        // устройства удаляются при активации, юзер видел базовую цену.
+        if (parsed.data.extendsSecondarySubId && parsed.data.removeExtrasOnActivate !== true) {
+          const sub = await prisma.subscription.findUnique({
+            where: { id: parsed.data.extendsSecondarySubId },
+            select: { extraDevicesMonthlyPrice: true },
+          });
+          const monthlyPrice = sub?.extraDevicesMonthlyPrice ?? 0;
+          if (monthlyPrice > 0 && effectiveDaysCalc > 0) {
+            unitPriceCalc += Math.round(monthlyPrice * (effectiveDaysCalc / 30) * 100) / 100;
+          }
+        }
+        // НОВЫЕ устройства, выбранные при покупке — теперь для ЛЮБОЙ покупки
+        // (новая/конверт/продление): activation их честно выдаёт, значит и цена честная.
+        {
+          const newExtrasCalc = Math.max(0, parsed.data.deviceCount ?? 0);
+          if (newExtrasCalc > 0) {
+            const { calcExtrasPrice } = await import("../tariff/extras-pricing.js");
+            const r = calcExtrasPrice(
+              tariff.pricePerExtraDevice ?? 0,
+              newExtrasCalc,
+              tariff.deviceDiscountTiers,
+              effectiveDaysCalc,
+            );
+            unitPriceCalc += r.extrasTotal;
+          }
+        }
+        amountRounded = Math.round(unitPriceCalc * 100) / 100;
+      } else if (proxyTariffIdBody) {
+        const proxyTariff = await prisma.proxyTariff.findUnique({ where: { id: proxyTariffIdBody } });
+        if (!proxyTariff || !proxyTariff.enabled) return res.status(400).json({ message: "Прокси-тариф не найден" });
+        proxyTariffIdToStore = proxyTariffIdBody;
+        amountRounded = Math.round((amountBody ?? proxyTariff.price) * 100) / 100;
+      } else if (singboxTariffIdBody) {
+        const singboxTariff = await prisma.singboxTariff.findUnique({ where: { id: singboxTariffIdBody } });
+        if (!singboxTariff || !singboxTariff.enabled) return res.status(400).json({ message: "Тариф Sing-box не найден" });
+        singboxTariffIdToStore = singboxTariffIdBody;
+        amountRounded = Math.round((amountBody ?? singboxTariff.price) * 100) / 100;
+      } else {
+        if (amountBody == null) return res.status(400).json({ message: "Укажите сумму" });
+        amountRounded = Math.round(amountBody * 100) / 100;
+      }
+    }
+
+    if (amountRounded < 1) return res.status(400).json({ message: "Минимальная сумма платежа — 1" });
+
+    // Персональная скидка админа — на продуктовые оплаты, не на чистое пополнение.
+    const paritypayIsTopup = !tariffIdToStore && !proxyTariffIdToStore && !singboxTariffIdToStore && !customBuildBody && !extraOption;
+    if (!paritypayIsTopup) {
+      const originalBeforePersonal = amountRounded;
+      const pd = await applyPersonalDiscount(amountRounded, clientId);
+      if (pd.personalDiscountPercent > 0) {
+        amountRounded = pd.amount;
+        metadataObj = { ...metadataObj, personalDiscountPercent: pd.personalDiscountPercent, originalAmount: originalBeforePersonal };
+      }
+    }
+
+    // Применяем промокод на скидку (не для опций и гибких тарифов)
+    let promoCodeRecord: { id: string } | null = null;
+    if (promoCodeStr?.trim() && !extraOption && !customBuildBody) {
+      const result = await validatePromoCode(promoCodeStr.trim(), clientId);
+      if (!result.ok) return res.status(result.status).json({ message: result.error });
+      const promo = result.promo;
+      if (promo.type !== "DISCOUNT") return res.status(400).json({ message: "Этот промокод не даёт скидку на оплату" });
+      const originalAmount = (metadataObj as { originalAmount?: number }).originalAmount ?? amountRounded;
+      if (promo.discountPercent && promo.discountPercent > 0) {
+        amountRounded = Math.max(0, amountRounded - amountRounded * promo.discountPercent / 100);
+      }
+      if (promo.discountFixed && promo.discountFixed > 0) {
+        amountRounded = Math.max(0, amountRounded - promo.discountFixed);
+      }
+      amountRounded = Math.round(amountRounded * 100) / 100;
+      if (amountRounded <= 0) return res.status(400).json({ message: "Итоговая сумма не может быть 0" });
+      promoCodeRecord = promo;
+      metadataObj = { ...metadataObj, promoCodeId: promo.id, originalAmount };
+    }
+
+    const rpSnap = paritypayIsTopup ? await paymentSnapshotTopup(clientId, amountRounded) : await paymentSnapshotProduct(clientId, amountRounded);
+    const rpCharge = rpSnap.amount;
+
+    const orderId = randomUUID();
+    const payment = await createPayment({
+      data: asPaymentUncheckedCreate({
+        clientId,
+        orderId,
+        amount: rpSnap.amount,
+        currency: currencyUpper,
+        status: "PENDING",
+        provider: "paritypay",
+        tariffId: tariffIdToStore,
+        tariffPriceOptionId: parsed.data.tariffPriceOptionId ?? null,
+        deviceCount: parsed.data.deviceCount ?? null,
+        proxyTariffId: proxyTariffIdToStore,
+        singboxTariffId: singboxTariffIdToStore,
+        // see yookassa endpoint for explanation.
+        metadata: (() => {
+          const meta = { ...metadataObj };
+          if (asAdditional && tariffIdToStore) {
+            meta.isAdditionalSubscription = true;
+          }
+          if (asGift) {
+            meta.purchasedAsGift = true;
+          }
+          if (extendsSecondarySubId) {
+            meta.extendsSecondarySubId = extendsSecondarySubId;
+            // флаг удаления доп. устройств при активации.
+            if (removeExtrasOnActivate === true) {
+              meta.removeExtrasOnActivate = true;
+            }
+            // замена выбранного триала при покупке.
+            if (parsed.data.replaceTrialSubId) {
+              meta.replaceTrialSubId = parsed.data.replaceTrialSubId;
+            }
+          }
+          return Object.keys(meta).length > 0 ? JSON.stringify(meta) : null;
+        })(),
+      }),
+    });
+
+    const serviceName = config.serviceName?.trim() || "STEALTHNET";
+    const appUrl = (config.publicAppUrl || "").replace(/\/$/, "");
+    // Pass the public callback URL for this invoice.
+    const urlSuccess = appUrl ? `${appUrl}/cabinet?paritypay=success` : undefined;
+    const urlFail = appUrl ? `${appUrl}/cabinet?paritypay=fail` : undefined;
+
+    const result = await createParitypayPayment({
+      config: paritypayConfig,
+      amount: String(rpCharge),
+      currency: currencyUpper,
+      orderId,
+      description: `Оплата ${orderId}`,
+      customerId: clientId,
+      successRedirectUrl: urlSuccess,
+      failRedirectUrl: urlFail,
+      callbackUrl: appUrl ? `${appUrl}/api/webhooks/paritypay` : undefined,
+    });
+
+    if (!result.ok) {
+      // Keep the pending order: a timeout may still have created an invoice.
+      return res.status(500).json({ message: result.error });
+    }
+
+    await prisma.payment.update({ where: { id: payment.id }, data: { externalId: result.paymentId } });
+    const payUrl = await saveRedirectAndBuildUrl(payment.id, orderId, result.url, config.publicAppUrl);
+
+    return res.status(201).json({
+      paymentId: payment.id,
+      payUrl,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[paritypay/create-payment]", message, err);
     return res.status(500).json({ message: message || "Ошибка создания платежа" });
   }
 });
