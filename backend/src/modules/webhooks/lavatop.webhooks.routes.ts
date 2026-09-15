@@ -125,7 +125,7 @@ async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<void>
 
   // Идемпотентность: уже создали payment для этого contractId?
   const alreadyProcessed = await prisma.payment.findFirst({
-    where: { orderId: childOrderId, provider: "lavatop" },
+    where: { externalId: childOrderId, provider: "lavatop" },
     select: { id: true, status: true },
   });
   if (alreadyProcessed) {
@@ -138,7 +138,7 @@ async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<void>
 
   // Находим исходный (parent) платёж — берём из него clientId, tariffId
   const parent = await prisma.payment.findFirst({
-    where: { orderId: parentOrderId, provider: "lavatop" },
+    where: { externalId: parentOrderId, provider: "lavatop" },
     select: {
       id: true,
       clientId: true,
@@ -265,7 +265,7 @@ lavatopWebhooksRouter.post("/", async (req: Request, res: Response) => {
   }
 
   const payment = await prisma.payment.findFirst({
-    where: { orderId, provider: "lavatop" },
+    where: { externalId: contractId, provider: "lavatop" },
     select: { id: true, status: true, clientId: true, amount: true, currency: true, tariffId: true, proxyTariffId: true, singboxTariffId: true, metadata: true },
   });
 
