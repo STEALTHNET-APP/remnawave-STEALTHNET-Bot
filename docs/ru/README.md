@@ -13,7 +13,7 @@
 
 ---
 
-<h1 align="center">STEALTHNET 6.1.1</h1>
+<h1 align="center">STEALTHNET</h1>
 
 <p align="center">
   <img src="https://img.shields.io/badge/STEALTHNET-3.0-blueviolet?style=for-the-badge&logoColor=white" alt="STEALTHNET 3.0" />
@@ -70,11 +70,6 @@ git clone https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git
 cd remnawave-STEALTHNET-Bot
 bash install.sh
 ```
-
-> [!WARNING]
-> Если после запуска у вас **падает API** сервис, бот отвечает «**❌ fetch failed**», а в логах (`docker compose logs -f api`) видим ошибку «**Error: P1000: Authentication failed**» и если у вас на этом сервере не крутится ничего другого важного (других проектов), их можно и нужно удалить, чтобы освободить место следующей командой:
-> 
-> docker system prune -a --volumes
 
 Интерактивный установщик за 2 минуты настроит всё:
 
@@ -368,7 +363,7 @@ git pull origin lts
 
 # Обновление до конкретной версии (более стабильно, релиз версии)
 git fetch --tags
-git checkout v5.3.0
+git checkout v5.3.3
 git pull origin v5.3.0
 
 # Статус сервисов

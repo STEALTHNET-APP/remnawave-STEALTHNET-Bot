@@ -13,7 +13,7 @@
 
 ---
 
-<h1 align="center">STEALTHNET 6.1.1</h1>
+<h1 align="center">STEALTHNET</h1>
 
 <p align="center">
   <img src="https://img.shields.io/badge/STEALTHNET-3.0-blueviolet?style=for-the-badge&logoColor=white" alt="STEALTHNET 3.0" />
@@ -58,7 +58,7 @@
 
 ## 🚀 شروع سریع
 
->[!CAUTION]
+> [!CAUTION]
 > برای جلوگیری از هرگونه تداخل، اکیداً توصیه می‌شود این مجموعه روی یک **سرور اختصاصی** نصب شود!
 
 ```bash
@@ -69,11 +69,6 @@ git clone https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git
 cd remnawave-STEALTHNET-Bot
 bash install.sh
 ```
-
-> [!WARNING]
-> اگر پس از راه‌اندازی، **سرویس API شما متوقف شد**، ربات پاسخ داد "**❌ fetch failed**"، و در لاگ‌ها (`docker compose logs -f api`) خطای "**Error: P1000: Authentication failed**" را مشاهده کردید، در صورتی که پروژه مهم دیگری روی این سرور ندارید، می‌توانید با اجرای دستور زیر فضا را آزاد کنید:
-> 
-> docker system prune -a --volumes
 
 نصب‌کننده تعاملی همه چیز را در ۲ دقیقه پیکربندی می‌کند:
 
@@ -306,7 +301,7 @@ git pull origin lts
 
 # آپدیت به یک نسخه پایدار خاص
 git fetch --tags
-git checkout v5.3.0
+git checkout v5.3.5
 git pull origin v5.3.0
 
 # وضعیت سرویس‌ها
@@ -323,6 +318,9 @@ docker compose down
 
 # روشن کردن (با Nginx داخلی و SSL)
 docker compose --profile builtin-nginx up -d
+
+# خاموش کردن (با Nginx داخلی و SSL)
+docker compose --profile builtin-nginx down
 ```
 
 ### 🔄 راهنمای آپدیت (git pull)
