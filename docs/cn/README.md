@@ -362,7 +362,7 @@ git pull origin lts
 
 # 更新到特定版本（更稳定，发布版本）
 git fetch --tags
-git checkout v5.3.3
+git checkout v5.3.4
 git pull origin v5.3.0
 
 # 服务状态
@@ -522,6 +522,20 @@ node scripts/migrate-from-bedolaga.js ./backup_20260126_000000.tar.gz
 <p align="center">
   <a href="https://t.me/stealthnet_admin_panel"><img src="https://img.shields.io/badge/Telegram-@stealthnet__admin__panel-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram频道" /></a>
 </p>
+
+---
+
+## 感谢所有贡献者 ❤
+
+<a href="https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=STEALTHNET-APP/remnawave-STEALTHNET-Bot" />
+</a>
+
+---
+
+## Star 历史
+
+[![Star History Chart](https://api.star-history.com/chart?repos=stealthnet-app/remnawave-stealthnet-bot&type=date&legend=top-left)](https://www.star-history.com/?repos=stealthnet-app%2Fremnawave-stealthnet-bot&type=date&legend=top-left)
 
 ---
 
