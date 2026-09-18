@@ -6,7 +6,10 @@
 DOCKER_COMPOSE := docker compose
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
 
-SCRIPT_VERSION := v1.4.4
+SCRIPT_VERSION := v1.4.5
+PANEL_TAG := $(shell git describe --tags --exact-match 2>/dev/null)
+PANEL_VERSION := $(shell awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' version.json 2>/dev/null)
+PANEL_VERSION_DISPLAY := $(if $(PANEL_TAG),$(PANEL_TAG),$(if $(PANEL_VERSION),v$(PANEL_VERSION),unknown))
 
 MENU_TARGETS := checkout update rebuild watch docker frontend logs start stop restart ps status clean alias
 
@@ -27,12 +30,7 @@ menu: ## 🧭 Interactive command menu
 		printf "\033[0m\n"; \
 		branch=$$(git branch --show-current 2>/dev/null); \
 		[ -n "$$branch" ] || branch=$$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || printf "unknown"); \
-		script_version=$$(awk -F':=' '/^SCRIPT_VERSION[[:space:]]*:=/ {gsub(/^[ \t]+|[ \t]+$$/, "", $$2); print $$2; exit}' Makefile 2>/dev/null); \
-		[ -n "$$script_version" ] || script_version="$(SCRIPT_VERSION)"; \
-		panel_tag=$$(git describe --tags --exact-match 2>/dev/null || true); \
-		panel_version=$$(awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' version.json 2>/dev/null); \
-		if [ -n "$$panel_tag" ]; then panel_version_display="$$panel_tag"; elif [ -n "$$panel_version" ]; then panel_version_display="v$$panel_version"; else panel_version_display="unknown"; fi; \
-		printf "\033[1mSelect command:\033[0m    \033[2mScript %s • STEALTHNET %s\033[0m \033[36m[\033[0m\033[1;36m%s\033[0m\033[36m]\033[0m\n\n" "$$script_version" "$$panel_version_display" "$$branch"; \
+		printf "\033[1mSelect command:\033[0m    \033[2mScript $(SCRIPT_VERSION) • STEALTHNET $(PANEL_VERSION_DISPLAY)\033[0m \033[36m[\033[0m\033[1;36m%s\033[0m\033[36m]\033[0m\n\n" "$$branch"; \
 		i=1; \
 		for target in $$targets; do \
 			desc=$$(awk -v target="$$target" '\''BEGIN {FS=":.*##"} $$1 == target {gsub(/^[ \t]+/, "", $$2); print $$2; exit}'\'' $(MAKEFILE_LIST)); \
@@ -55,6 +53,7 @@ menu: ## 🧭 Interactive command menu
 		code=$$?; \
 		trap - INT; \
 		[ "$$code" -eq 130 ] && exit 0; \
+		case "$$selected" in checkout|switch|branch|update) [ "$$code" -eq 0 ] && exec $(MAKE) --no-print-directory ;; esac; \
 		done; \
 	'
 
