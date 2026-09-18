@@ -617,7 +617,7 @@ async function startTopUpParitypay() {
           <strong className="au-balance-amount">{formatMoney(client.balance, client.preferredCurrency)}</strong>
           <label className="au-amount-label" htmlFor="au-topup">Сумма пополнения, {currency.toUpperCase()}</label>
           <input id="au-topup" type="number" inputMode="decimal" min="1" step="0.01" placeholder="Введите сумму" value={topUpAmount} onChange={e=>setTopUpAmount(e.target.value)}/>
-          <div className="au-amount-presets">{[100,300,500,1000].map(n=><button key={n} aria-pressed={topUpAmount===String(n)} onClick={()=>setTopUpAmount(String(n))}>{n}</button>)}</div>
+          <div className="au-amount-presets">{[150,300,500,1000].map(n=><button key={n} aria-pressed={topUpAmount===String(n)} onClick={()=>setTopUpAmount(String(n))}>{n}</button>)}</div>
           <button className="au-balance-pay" onClick={()=>{const amount=Number(topUpAmount.replace(",","."));if(!Number.isFinite(amount)||amount<1){setTopUpError(t("cabinet.profile.top_up_min"));return;}setTopUpError(null);setTopUpModalOpen(true);}} disabled={!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled)}><CreditCard size={18}/>Пополнить баланс</button>
           {topUpError&&<p role="alert">{topUpError}</p>}
           {!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled)&&<p>Пополнение сейчас недоступно</p>}
@@ -1079,7 +1079,7 @@ async function startTopUpParitypay() {
                 </div>
 
                 <div className="grid grid-cols-4 gap-2">
-                  {[100, 300, 500, 1000].map((n) => {
+                  {[150, 300, 500, 1000].map((n) => {
                     const isActive = topUpAmount === String(n);
                     return (
                       <button
