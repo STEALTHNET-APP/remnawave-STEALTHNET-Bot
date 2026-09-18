@@ -1,12 +1,17 @@
-.PHONY: menu update watch rebuild docker frontend logs start stop restart \
-        ps status clean alias
+
+
+.PHONY: menu checkout update watch rebuild docker frontend logs start stop restart \
+        ps status clean alias switch branch
 
 DOCKER_COMPOSE := docker compose
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
-SCRIPT_VERSION := v1.0.5
+
+SCRIPT_VERSION := v1.3.0
+PANEL_TAG := $(shell git describe --tags --exact-match 2>/dev/null)
 PANEL_VERSION := $(shell awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' version.json 2>/dev/null)
-PANEL_VERSION_DISPLAY := $(if $(PANEL_VERSION),v$(PANEL_VERSION),unknown)
-MENU_TARGETS := update rebuild watch docker frontend logs start stop restart ps status clean alias
+PANEL_VERSION_DISPLAY := $(if $(PANEL_TAG),$(PANEL_TAG),$(if $(PANEL_VERSION),v$(PANEL_VERSION),unknown))
+
+MENU_TARGETS := checkout update rebuild watch docker frontend logs start stop restart ps status clean alias
 
 .DEFAULT_GOAL := menu
 
@@ -23,7 +28,7 @@ menu: ## 🧭 Interactive command menu
 		printf " ╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝   ╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝   ╚═╝\n"; \
 		printf "\033[0m\n"; \
 		branch=$$(git branch --show-current 2>/dev/null); \
-		[ -n "$$branch" ] || branch=$$(git rev-parse --short HEAD 2>/dev/null || printf "unknown"); \
+		[ -n "$$branch" ] || branch=$$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || printf "unknown"); \
 		printf "\033[1mSelect command:\033[0m    \033[2mScript $(SCRIPT_VERSION) • STEALTHNET $(PANEL_VERSION_DISPLAY)\033[0m \033[36m[\033[0m\033[1;36m%s\033[0m\033[36m]\033[0m\n\n" "$$branch"; \
 		i=1; \
 		for target in $$targets; do \
@@ -40,7 +45,8 @@ menu: ## 🧭 Interactive command menu
 			printf "Invalid choice\n"; \
 			exit 1; \
 		fi; \
-		eval selected="\$${$$choice}"; \
+		idx=$$choice; \
+		eval selected="\$${$$idx}"; \
 		trap "" INT; \
 		bash -c '\''trap - INT; exec "$$@"'\'' sh $(MAKE) --no-print-directory "$$selected"; \
 		code=$$?; \
@@ -107,6 +113,92 @@ clean: ## 🧹 Remove unused Docker resources
 		done; \
 		wait "$$pid"; \
 	'
+
+checkout: ## 🔀 Switch branch or release tag
+	@bash -c '\
+		trap "printf \"\\n\"; exit 0" INT; \
+		printf "Fetching branches and tags from origin...\n"; \
+		git fetch --prune --tags origin 2>/dev/null || git fetch --tags 2>/dev/null || true; \
+		branches=$$( { git for-each-ref --format="%(refname:short)" refs/heads/; git for-each-ref --format="%(refname:short)" refs/remotes/origin/ 2>/dev/null | grep -v "^origin/HEAD$$" | sed "s|^origin/||"; } | awk "!seen[\$$0]++" ); \
+		tags=$$(git tag -l --sort=-v:refname 2>/dev/null || git tag -l 2>/dev/null); \
+		curr_branch=$$(git branch --show-current 2>/dev/null); \
+		curr_tag=""; \
+		[ -z "$$curr_branch" ] && curr_tag=$$(git describe --tags --exact-match 2>/dev/null || true); \
+		item_names=(); \
+		item_types=(); \
+		if [ -n "$$branches" ]; then \
+			while IFS= read -r b || [ -n "$$b" ]; do \
+				[ -n "$$b" ] || continue; \
+				item_names+=("$$b"); \
+				item_types+=("branch"); \
+			done <<< "$$branches"; \
+		fi; \
+		if [ -n "$$tags" ]; then \
+			while IFS= read -r t || [ -n "$$t" ]; do \
+				[ -n "$$t" ] || continue; \
+				item_names+=("$$t"); \
+				item_types+=("tag"); \
+			done <<< "$$tags"; \
+		fi; \
+		total="$${#item_names[@]}"; \
+		if [ "$$total" -eq 0 ]; then \
+			printf "No branches or tags found\n"; \
+			exit 1; \
+		fi; \
+		num=1; \
+		printf "\n\033[1mBranches:\033[0m\n"; \
+		branch_count=0; \
+		for i in "$${!item_names[@]}"; do \
+			if [ "$${item_types[$$i]}" = "branch" ]; then \
+				name="$${item_names[$$i]}"; \
+				branch_count=$$((branch_count + 1)); \
+				cur=""; \
+				[ "$$name" = "$$curr_branch" ] && cur=" \033[32m(current)\033[0m"; \
+				printf "  \033[36m%2d)\033[0m %s%b\n" "$$num" "$$name" "$$cur"; \
+				num=$$((num + 1)); \
+			fi; \
+		done; \
+		[ "$$branch_count" -eq 0 ] && printf "  (none)\n"; \
+		printf "\n\033[1mTags:\033[0m\n"; \
+		tag_count=0; \
+		for i in "$${!item_names[@]}"; do \
+			if [ "$${item_types[$$i]}" = "tag" ]; then \
+				name="$${item_names[$$i]}"; \
+				tag_count=$$((tag_count + 1)); \
+				cur=""; \
+				[ -z "$$curr_branch" ] && [ "$$name" = "$$curr_tag" ] && cur=" \033[32m(current)\033[0m"; \
+				printf "  \033[36m%2d)\033[0m %s%b\n" "$$num" "$$name" "$$cur"; \
+				num=$$((num + 1)); \
+			fi; \
+		done; \
+		[ "$$tag_count" -eq 0 ] && printf "  (none)\n"; \
+		printf "\nSelect branch or tag number (q to quit): "; \
+		read -r choice; \
+		case "$$choice" in q|Q) exit 0 ;; esac; \
+		case "$$choice" in *[!0-9]*|"") printf "Invalid choice\n"; exit 1 ;; esac; \
+		if [ "$$choice" -lt 1 ] || [ "$$choice" -gt "$$total" ]; then \
+			printf "Invalid choice\n"; \
+			exit 1; \
+		fi; \
+		idx=$$((choice - 1)); \
+		target_type="$${item_types[$$idx]}"; \
+		target_name="$${item_names[$$idx]}"; \
+		if [ "$$target_type" = "branch" ]; then \
+			printf "Switching to branch %s...\n" "$$target_name"; \
+			git checkout "$$target_name" || exit 1; \
+			if git show-ref --verify --quiet "refs/remotes/origin/$$target_name"; then \
+				git pull origin "$$target_name" || true; \
+			else \
+				git pull 2>/dev/null || true; \
+			fi; \
+		else \
+			printf "Switching to tag %s...\n" "$$target_name"; \
+			git checkout "refs/tags/$$target_name" 2>/dev/null || git checkout "$$target_name" || exit 1; \
+		fi; \
+	'
+
+switch: checkout
+branch: checkout
 
 update: ## 🌿 Pull current branch or replace it with origin/current
 	@bash -c '\
