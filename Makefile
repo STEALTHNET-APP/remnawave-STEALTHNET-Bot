@@ -6,7 +6,7 @@
 DOCKER_COMPOSE := docker compose
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
 
-SCRIPT_VERSION := v1.4.0
+SCRIPT_VERSION := v1.4.3
 PANEL_TAG := $(shell git describe --tags --exact-match 2>/dev/null)
 PANEL_VERSION := $(shell awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' version.json 2>/dev/null)
 PANEL_VERSION_DISPLAY := $(if $(PANEL_TAG),$(PANEL_TAG),$(if $(PANEL_VERSION),v$(PANEL_VERSION),unknown))
@@ -96,23 +96,28 @@ status: ## ❤️  All containers
 
 clean: ## 🧹 Remove unused Docker resources
 	@bash -c '\
-		timeout_seconds=30; \
-		printf "Removing unused Docker resources (timeout %ss)...\n" "$$timeout_seconds"; \
-		docker system prune -f & \
+		output_file=$$(mktemp); \
+		printf "Please wait. Cleaning unused Docker resources...\n"; \
+		docker system prune -f > "$$output_file" 2>&1 & \
 		pid=$$!; \
-		stop_child() { kill "$$pid" 2>/dev/null || true; sleep 1; kill -9 "$$pid" 2>/dev/null || true; wait "$$pid" 2>/dev/null || true; }; \
-		trap "stop_child; exit 0" INT; \
-		elapsed=0; \
+		stop_child() { kill "$$pid" 2>/dev/null || true; wait "$$pid" 2>/dev/null || true; rm -f "$$output_file"; exit 0; }; \
+		trap stop_child INT; \
+		frame=0; \
 		while kill -0 "$$pid" 2>/dev/null; do \
-			if [ "$$elapsed" -ge "$$timeout_seconds" ]; then \
-				stop_child; \
-				printf "Docker prune timed out after %ss\n" "$$timeout_seconds"; \
-				exit 1; \
-			fi; \
-			sleep 1; \
-			elapsed=$$((elapsed + 1)); \
+			filled=$$((frame % 21)); \
+			bar=""; \
+			i=0; \
+			while [ "$$i" -lt "$$filled" ]; do bar="$${bar}#"; i=$$((i + 1)); done; \
+			printf "\r[%-20s] In progress..." "$$bar"; \
+			frame=$$((frame + 1)); \
+			sleep 0.2; \
 		done; \
 		wait "$$pid"; \
+		code=$$?; \
+		printf "\r[####################] Done.          \n"; \
+		cat "$$output_file"; \
+		rm -f "$$output_file"; \
+		exit "$$code"; \
 	'
 
 checkout: ## 🔀 Switch branch or release tag
