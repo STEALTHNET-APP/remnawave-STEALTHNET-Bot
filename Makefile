@@ -1,12 +1,10 @@
-
-
 .PHONY: menu checkout update watch rebuild docker frontend logs start stop restart \
         ps status clean alias switch branch
 
 DOCKER_COMPOSE := docker compose
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
 
-SCRIPT_VERSION := v1.4.6
+SCRIPT_VERSION := v1.4.7
 
 MENU_TARGETS := checkout update rebuild watch docker frontend logs start stop restart ps status clean alias
 
