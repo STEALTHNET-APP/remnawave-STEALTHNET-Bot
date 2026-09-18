@@ -6,7 +6,7 @@
 DOCKER_COMPOSE := docker compose
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
 
-SCRIPT_VERSION := v1.3.0
+SCRIPT_VERSION := v1.4.0
 PANEL_TAG := $(shell git describe --tags --exact-match 2>/dev/null)
 PANEL_VERSION := $(shell awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' version.json 2>/dev/null)
 PANEL_VERSION_DISPLAY := $(if $(PANEL_TAG),$(PANEL_TAG),$(if $(PANEL_VERSION),v$(PANEL_VERSION),unknown))
@@ -18,6 +18,7 @@ MENU_TARGETS := checkout update rebuild watch docker frontend logs start stop re
 menu: ## 🧭 Interactive command menu
 	@bash -c '\
 		trap "printf \"\\n\"; exit 0" INT; \
+		while :; do \
 		targets="$(MENU_TARGETS)"; \
 		printf "\n\033[1;36m"; \
 		printf " ███████╗████████╗███████╗ █████╗ ██╗  ████████╗██╗  ██╗███╗   ██╗███████╗████████╗\n"; \
@@ -39,11 +40,11 @@ menu: ## 🧭 Interactive command menu
 		printf "\nCommand number (q to quit): "; \
 		read -r choice; \
 		case "$$choice" in q|Q) exit 0 ;; esac; \
-		case "$$choice" in *[!0-9]*|"") printf "Invalid choice\n"; exit 1 ;; esac; \
+		case "$$choice" in *[!0-9]*|"") printf "Invalid choice\n"; continue ;; esac; \
 		set -- $$targets; \
 		if [ "$$choice" -lt 1 ] || [ "$$choice" -gt "$$#" ]; then \
 			printf "Invalid choice\n"; \
-			exit 1; \
+			continue; \
 		fi; \
 		idx=$$choice; \
 		eval selected="\$${$$idx}"; \
@@ -52,7 +53,7 @@ menu: ## 🧭 Interactive command menu
 		code=$$?; \
 		trap - INT; \
 		[ "$$code" -eq 130 ] && exit 0; \
-		exit "$$code"; \
+		done; \
 	'
 
 ##
