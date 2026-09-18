@@ -693,7 +693,7 @@ clientAuthRouter.post("/telegram-miniapp", async (req, res) => {
   if (!body.success) {
     return res.status(400).json({ message: "Проверьте введённые данные", errors: body.error.flatten() });
   }
-  // v5.0.0: Mini App initData подписан токеном единственного бота инсталляции
+  // v5.2.0: Mini App initData подписан токеном единственного бота инсталляции
   // (process.env.BOT_TOKEN). Раньше проверяли по каждому активному клону.
   const botToken = (process.env.BOT_TOKEN ?? "").trim();
   if (!botToken || !validateTelegramInitData(body.data.initData, botToken)) {

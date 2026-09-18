@@ -13,7 +13,7 @@
 
 ---
 
-<h1 align="center">STEALTHNET 6.1.1</h1>
+<h1 align="center">STEALTHNET</h1>
 
 <p align="center">
   <img src="https://img.shields.io/badge/STEALTHNET-3.0-blueviolet?style=for-the-badge&logoColor=white" alt="STEALTHNET 3.0" />
@@ -58,7 +58,7 @@
 
 ## 🚀 شروع سریع
 
->[!CAUTION]
+> [!CAUTION]
 > برای جلوگیری از هرگونه تداخل، اکیداً توصیه می‌شود این مجموعه روی یک **سرور اختصاصی** نصب شود!
 
 ```bash
@@ -69,11 +69,6 @@ git clone https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git
 cd remnawave-STEALTHNET-Bot
 bash install.sh
 ```
-
-> [!WARNING]
-> اگر پس از راه‌اندازی، **سرویس API شما متوقف شد**، ربات پاسخ داد "**❌ fetch failed**"، و در لاگ‌ها (`docker compose logs -f api`) خطای "**Error: P1000: Authentication failed**" را مشاهده کردید، در صورتی که پروژه مهم دیگری روی این سرور ندارید، می‌توانید با اجرای دستور زیر فضا را آزاد کنید:
-> 
-> docker system prune -a --volumes
 
 نصب‌کننده تعاملی همه چیز را در ۲ دقیقه پیکربندی می‌کند:
 
@@ -299,9 +294,15 @@ docker compose ps
 # بروزرسانی به آخرین نسخه (برنچ main)
 git pull origin main
 
-# آپدیت به یک نسخه پایدار خاص:
+# یا به‌روزرسانی به یک شاخهٔ مشخص (برای مثال، شاخهٔ LTS)
 git fetch --tags
-git checkout v3.1.3
+git checkout lts
+git pull origin lts
+
+# آپدیت به یک نسخه پایدار خاص
+git fetch --tags
+git checkout v6.2.0
+git pull origin v6.2.0
 
 # وضعیت سرویس‌ها
 docker compose ps
@@ -317,6 +318,9 @@ docker compose down
 
 # روشن کردن (با Nginx داخلی و SSL)
 docker compose --profile builtin-nginx up -d
+
+# خاموش کردن (با Nginx داخلی و SSL)
+docker compose --profile builtin-nginx down
 ```
 
 ### 🔄 راهنمای آپدیت (git pull)
@@ -407,6 +411,20 @@ node scripts/migrate-from-bedolaga.js ./backup_20260126_000000.tar.gz
 <p align="center">
   <a href="https://t.me/stealthnet_admin_panel"><img src="https://img.shields.io/badge/Telegram-@stealthnet__admin__panel-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="کانال تلگرام" /></a>
 </p>
+
+---
+
+## از همه مشارکت‌کنندگان سپاسگزاریم ❤
+
+<a href="https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=STEALTHNET-APP/remnawave-STEALTHNET-Bot" />
+</a>
+
+---
+
+## تاریخچه ستاره‌ها
+
+[![Star History Chart](https://api.star-history.com/chart?repos=stealthnet-app/remnawave-stealthnet-bot&type=date&legend=top-left)](https://www.star-history.com/?repos=stealthnet-app%2Fremnawave-stealthnet-bot&type=date&legend=top-left)
 
 ---
 

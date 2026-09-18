@@ -1,0 +1,75 @@
+﻿name: Label PR by commits
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Label by commit messages
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+
+            const commits = await github.paginate(
+              github.rest.pulls.listCommits,
+              {
+                owner,
+                repo,
+                pull_number: pr.number,
+              }
+            );
+
+            const labels = new Set();
+
+            for (const c of commits) {
+              const msg = c.commit.message;
+
+              // 💥 Breaking Change
+              if (/\b(major|breaking changes?)\b/i.test(msg) || /BREAKING CHANGE|!:/i.test(msg)) {
+                labels.add('💥 Breaking Change');
+              }
+
+              // ⭐ Feature
+              if (/\b(minor|feat(ure)?s?)\b/i.test(msg)) {
+                labels.add('⭐ Feature');
+              }
+
+              // 🐞 Bug Fix
+              if (/\b(bug(fix)?|(hot)?fix(ed|es)?|patch)\b/i.test(msg)) {
+                labels.add('🐞 Bug Fix');
+              }
+
+              // 🛠 Improvement
+              if (/\b(chore|refactor(ed|ing)?|style|test(s|ing)?|ci)\b/i.test(msg)) {
+                labels.add('🛠 Improvement');
+              }
+
+              // 📖 Docs
+              if (/\b(docs?|documentation|readme)\b/i.test(msg)) {
+                labels.add('📖 Docs');
+              }
+
+              // 🌍 i18n
+              if (/\b(lang(uage)?s?)\b/i.test(msg)) {
+                labels.add('🌍 i18n');
+              }
+            }
+
+            if (labels.size > 0) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: pr.number,
+                labels: [...labels],
+              });
+            }

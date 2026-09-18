@@ -13,7 +13,7 @@
 
 ---
 
-<h1 align="center">STEALTHNET 6.1.1</h1>
+<h1 align="center">STEALTHNET</h1>
 
 <p align="center">
   <img src="https://img.shields.io/badge/STEALTHNET-3.0-blueviolet?style=for-the-badge&logoColor=white" alt="STEALTHNET 3.0" />
@@ -70,11 +70,6 @@ git clone https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git
 cd remnawave-STEALTHNET-Bot
 bash install.sh
 ```
-
-> [!WARNING]
-> Если после запуска у вас **падает API** сервис, бот отвечает «**❌ fetch failed**», а в логах (`docker compose logs -f api`) видим ошибку «**Error: P1000: Authentication failed**» и если у вас на этом сервере не крутится ничего другого важного (других проектов), их можно и нужно удалить, чтобы освободить место следующей командой:
-> 
-> docker system prune -a --volumes
 
 Интерактивный установщик за 2 минуты настроит всё:
 
@@ -361,10 +356,15 @@ docker compose ps
 # Обновление до последнего коммита (до последней мастер ветки, не всегда стабильно)
 git pull origin main
 
-
-# Обновление до конкретной версии (более стабильно, релиз версии):
+# Или аналогичное обновление до конкретной ветки (например, ветки LTS)
 git fetch --tags
-git checkout v3.1.3
+git checkout lts
+git pull origin lts
+
+# Обновление до конкретной версии (более стабильно, релиз версии)
+git fetch --tags
+git checkout v6.2.0
+git pull origin v6.2.0
 
 # Статус сервисов
 docker compose ps
@@ -524,6 +524,20 @@ node scripts/migrate-from-bedolaga.js ./backup_20260126_000000.tar.gz
 <p align="center">
   <a href="https://t.me/stealthnet_admin_panel"><img src="https://img.shields.io/badge/Telegram-@stealthnet__admin__panel-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram канал" /></a>
 </p>
+
+---
+
+## Спасибо всем участникам ❤
+
+<a href="https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=STEALTHNET-APP/remnawave-STEALTHNET-Bot" />
+</a>
+
+---
+
+## История звёзд
+
+[![Star History Chart](https://api.star-history.com/chart?repos=stealthnet-app/remnawave-stealthnet-bot&type=date&legend=top-left)](https://www.star-history.com/?repos=stealthnet-app%2Fremnawave-stealthnet-bot&type=date&legend=top-left)
 
 ---
 

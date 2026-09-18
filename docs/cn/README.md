@@ -13,7 +13,7 @@
 
 ---
 
-<h1 align="center">STEALTHNET 6.1.1</h1>
+<h1 align="center">STEALTHNET</h1>
 
 <p align="center">
   <img src="https://img.shields.io/badge/STEALTHNET-3.0-blueviolet?style=for-the-badge&logoColor=white" alt="STEALTHNET 3.0" />
@@ -69,11 +69,6 @@ git clone https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git
 cd remnawave-STEALTHNET-Bot
 bash install.sh
 ```
-
-> [!WARNING]
-> 如果在启动后您的**API 服务崩溃**，机器人回复“**❌ fetch failed**”，并且在日志（`docker compose logs -f api`）中看到错误“**Error: P1000: Authentication failed**”，如果您在此服务器上没有运行其他重要项目，您可以使用以下命令删除它们以释放空间：
-> 
-> docker system prune -a --volumes
 
 交互式安装程序将在2分钟内配置好一切：
 
@@ -360,9 +355,15 @@ docker compose ps
 # 更新到最新的提交（最新的 main 分支，不一定稳定）
 git pull origin main
 
-# 更新到特定版本（更稳定，发布版本）：
+# 或更新到指定分支（例如 LTS 分支）
 git fetch --tags
-git checkout v3.1.3
+git checkout lts
+git pull origin lts
+
+# 更新到特定版本（更稳定，发布版本）
+git fetch --tags
+git checkout v5.3.4
+git pull origin v5.3.0
 
 # 服务状态
 docker compose ps
@@ -521,6 +522,20 @@ node scripts/migrate-from-bedolaga.js ./backup_20260126_000000.tar.gz
 <p align="center">
   <a href="https://t.me/stealthnet_admin_panel"><img src="https://img.shields.io/badge/Telegram-@stealthnet__admin__panel-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram频道" /></a>
 </p>
+
+---
+
+## 感谢所有贡献者 ❤
+
+<a href="https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=STEALTHNET-APP/remnawave-STEALTHNET-Bot" />
+</a>
+
+---
+
+## Star 历史
+
+[![Star History Chart](https://api.star-history.com/chart?repos=stealthnet-app/remnawave-stealthnet-bot&type=date&legend=top-left)](https://www.star-history.com/?repos=stealthnet-app%2Fremnawave-stealthnet-bot&type=date&legend=top-left)
 
 ---
 
