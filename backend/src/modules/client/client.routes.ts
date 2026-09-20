@@ -5,7 +5,7 @@ import { generateSecret, generateURI, verify } from "otplib";
 import { env } from "../../config/index.js";
 import { Router, type Request } from "express";
 import { z } from "zod";
-import { prisma, createPayment, asClientUncheckedCreate, asClientWhere, asClientSelect, asPaymentUncheckedCreate, asTelegramAuthUpdate, type TelegramAuthTokenRecord, type ClientEmptyCloneRow } from "../../db.js";
+import { prisma, createPayment, assertActiveExtraOptionTargetForPayment, asClientUncheckedCreate, asClientWhere, asClientSelect, asPaymentUncheckedCreate, asTelegramAuthUpdate, type TelegramAuthTokenRecord, type ClientEmptyCloneRow } from "../../db.js";
 import { mergeClients, isBotOnlyAccount } from "./merge-clients.service.js";
 import {
   hashPassword,
@@ -121,6 +121,11 @@ async function calculateDevicesProrataPriceCoefficient(targetSubId: string | nul
   const expireAt = await resolveSubExpireAt(sub.expireAt, sub.remnawaveUuid);
   if (!expireAt) return 1;
   const daysLeft = (expireAt.getTime() - Date.now()) / 86_400_000;
+  if (daysLeft <= 0) {
+    const error = new Error("Нельзя купить опцию для истёкшей подписки. Сначала продлите подписку.") as Error & { code?: string };
+    error.code = "SUBSCRIPTION_INACTIVE";
+    throw error;
+  }
   return Math.max(1, daysLeft / 30);
 }
 
@@ -142,6 +147,11 @@ async function calculateDevicesProrataPriceCoefficientForPrimary(clientId: strin
   const expireAt = await resolveSubExpireAt(primarySub?.expireAt ?? null, primarySub?.remnawaveUuid ?? client.remnawaveUuid);
   if (!expireAt) return 1;
   const daysLeft = (expireAt.getTime() - Date.now()) / 86_400_000;
+  if (daysLeft <= 0) {
+    const error = new Error("Нельзя купить опцию для истёкшей подписки. Сначала продлите подписку.") as Error & { code?: string };
+    error.code = "SUBSCRIPTION_INACTIVE";
+    throw error;
+  }
   return Math.max(1, daysLeft / 30);
 }
 
@@ -3923,6 +3933,15 @@ clientRouter.post("/payments/platega", async (req, res) => {
     paymentMetaObj.originalAmount = metadataExtra ? finalAmount : (originalAmount ?? finalAmount);
   }
   if (personalDiscountMeta) Object.assign(paymentMetaObj, personalDiscountMeta);
+  // Активация тарифа читает intent только из metadata. Без этих полей Platega
+  // превращала продление в новую подписку и теряла оплаченные доп. устройства.
+  if (parsed.data.asAdditional && tariffIdToStore) paymentMetaObj.isAdditionalSubscription = true;
+  if (parsed.data.asGift) paymentMetaObj.purchasedAsGift = true;
+  if (parsed.data.extendsSecondarySubId) {
+    paymentMetaObj.extendsSecondarySubId = parsed.data.extendsSecondarySubId;
+    if (parsed.data.removeExtrasOnActivate === true) paymentMetaObj.removeExtrasOnActivate = true;
+    if (parsed.data.replaceTrialSubId) paymentMetaObj.replaceTrialSubId = parsed.data.replaceTrialSubId;
+  }
   const paymentMeta = Object.keys(paymentMetaObj).length > 0 ? paymentMetaObj : null;
   const snap = isTopupOnlyPlatega ? await paymentSnapshotTopup(clientId, finalAmount) : await paymentSnapshotProduct(clientId, finalAmount);
   const payment = await createPayment({
@@ -4697,6 +4716,13 @@ clientRouter.post("/payments/balance/option", async (req, res) => {
     }
     metadataExtra.targetSubscriptionId = targetSubscriptionId;
   }
+
+  // Balance списывается до createPayment, поэтому DB-бэкстоп запускаем заранее,
+  // чтобы на неактивной подписке не пришлось возвращать деньги постфактум.
+  await assertActiveExtraOptionTargetForPayment({
+    clientId: clientDb.id,
+    metadata: JSON.stringify(metadataExtra),
+  });
 
   const pdOption = await applyPersonalDiscount(price, clientDb.id);
   const finalOptionPrice = pdOption.amount;
@@ -8255,4 +8281,3 @@ publicConfigRouter.get("/singbox-tariffs", async (req, res) => {
     return res.status(500).json({ message: "Ошибка загрузки тарифов Sing-box" });
   }
 });
-

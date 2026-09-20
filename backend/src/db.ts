@@ -10,6 +10,53 @@ const basePrisma =
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = basePrisma;
 
+type ExtraOptionPaymentTarget = {
+  clientId: string;
+  metadata: unknown;
+};
+
+function paymentTargetError(message: string, code: "SUBSCRIPTION_TARGET_INVALID" | "SUBSCRIPTION_INACTIVE") {
+  const error = new Error(message) as Error & { code?: string };
+  error.code = code;
+  return error;
+}
+
+/**
+ * Последний DB-бэкстоп перед созданием платежа за опцию. Внешние платёжные
+ * провайдеры вызываются только после createPayment, поэтому здесь ещё можно
+ * безопасно остановить оплату на истёкшую/чужую подписку.
+ */
+export async function assertActiveExtraOptionTargetForPayment({ clientId, metadata }: ExtraOptionPaymentTarget): Promise<void> {
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    const value = typeof metadata === "string" ? JSON.parse(metadata) : metadata;
+    if (value && typeof value === "object" && !Array.isArray(value)) parsed = value as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  if (!parsed?.extraOption || typeof parsed.extraOption !== "object") return;
+
+  const targetId = typeof parsed.targetSubscriptionId === "string" && parsed.targetSubscriptionId.trim()
+    ? parsed.targetSubscriptionId.trim()
+    : null;
+  const target = targetId
+    ? await basePrisma.subscription.findFirst({
+        where: { id: targetId, ownerId: clientId },
+        select: { remnawaveUuid: true, expireAt: true },
+      })
+    : await basePrisma.subscription.findUnique({
+        where: { ownerId_subscriptionIndex: { ownerId: clientId, subscriptionIndex: 0 } },
+        select: { remnawaveUuid: true, expireAt: true },
+      });
+
+  if (!target?.remnawaveUuid) {
+    throw paymentTargetError("Подписка для опции не найдена или не принадлежит вам.", "SUBSCRIPTION_TARGET_INVALID");
+  }
+  if (target.expireAt && target.expireAt.getTime() <= Date.now()) {
+    throw paymentTargetError("Нельзя купить опцию для истёкшей подписки. Сначала продлите подписку.", "SUBSCRIPTION_INACTIVE");
+  }
+}
+
 /**
  * Обёртка над prisma.payment.create. После выпила multi-bot (v5.0.0) botId-подстановки нет.
  * T-tariff-restriction (портировано из WolfVPN): бэкстоп — не создаём платёж за тариф,
@@ -18,6 +65,9 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = basePrisma;
  */
 export async function createPayment(args: Prisma.PaymentCreateArgs) {
   const data = args.data as Prisma.PaymentUncheckedCreateInput;
+  if (typeof data.clientId === "string") {
+    await assertActiveExtraOptionTargetForPayment({ clientId: data.clientId, metadata: data.metadata });
+  }
   if (data.tariffId && typeof data.clientId === "string") {
     const cl = await basePrisma.client.findUnique({
       where: { id: data.clientId },

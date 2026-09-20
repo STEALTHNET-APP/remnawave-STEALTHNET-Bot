@@ -111,6 +111,10 @@ export function ClientExtraOptionsPage() {
           expireAt,
           emoji: it.tariffMenuEmoji ?? null,
         };
+      }).filter((sub) => {
+        if (!sub.expireAt) return true;
+        const expireAt = new Date(sub.expireAt).getTime();
+        return Number.isNaN(expireAt) || expireAt > Date.now();
       });
       setUserSubs(list);
     }).catch(() => { /* not critical */ });

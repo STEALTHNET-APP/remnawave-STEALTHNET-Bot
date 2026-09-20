@@ -4995,7 +4995,19 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
       try {
         const subs = await api.getAllSubscriptions(token);
-        const subItems = subs.items ?? [];
+        const subItems = (subs.items ?? []).filter((sub) => {
+          const raw = sub.subscription as Record<string, unknown> | null;
+          const payload = raw
+            ? ((raw.response ?? raw.data ?? raw) as Record<string, unknown>)
+            : null;
+          const status = typeof payload?.status === "string" ? payload.status.toUpperCase() : null;
+          const expireAtRaw = payload?.expireAt ?? payload?.expire_at;
+          const expireAt = typeof expireAtRaw === "string" || typeof expireAtRaw === "number"
+            ? new Date(typeof expireAtRaw === "number" && expireAtRaw < 1_000_000_000_000 ? expireAtRaw * 1000 : expireAtRaw)
+            : null;
+          if (status && status !== "ACTIVE") return false;
+          return !expireAt || Number.isNaN(expireAt.getTime()) || expireAt.getTime() > Date.now();
+        });
         if (subItems.length === 0) {
           await editMessageContent(ctx, "❌ Сначала оформите подписку — потом сможете покупать опции.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
           return;
