@@ -53,6 +53,7 @@ import { ReferralNetworkPage } from "@/pages/referral-network";
 import { AdminReferralsPage } from "@/pages/admin-referrals";
 import { GramadsPromoPage } from "@/pages/gramads-promo";
 import { TrafficAbusePage } from "@/pages/traffic-abuse";
+import { AntiAbusePage } from "@/pages/anti-abuse";
 import { ApiKeysPage } from "@/pages/api-keys";
 import { AntibotPage } from "@/pages/antibot";
 import { ApiDocsPage } from "@/pages/api-docs";
@@ -287,6 +288,7 @@ function AppRoutes() {
         <Route path="referral-network" element={<ForceChangePassword><ReferralNetworkPage /></ForceChangePassword>} />
         <Route path="referrals" element={<ForceChangePassword><AdminReferralsPage /></ForceChangePassword>} />
         <Route path="traffic-abuse" element={<ForceChangePassword><TrafficAbusePage /></ForceChangePassword>} />
+        <Route path="anti-abuse" element={<ForceChangePassword><AntiAbusePage /></ForceChangePassword>} />
         <Route path="api-keys" element={<ForceChangePassword><ApiKeysPage /></ForceChangePassword>} />
         <Route path="antibot" element={<ForceChangePassword><AntibotPage /></ForceChangePassword>} />
         <Route path="languages" element={<ForceChangePassword><LanguagesPage /></ForceChangePassword>} />

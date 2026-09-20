@@ -1,4 +1,5 @@
 import { PrismaClient, Prisma } from "@prisma/client";
+import { parsePaymentIntentMetadata } from "./modules/payment/payment-intent.js";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
@@ -57,6 +58,32 @@ export async function assertActiveExtraOptionTargetForPayment({ clientId, metada
   }
 }
 
+export async function assertRenewalTargetForPayment(params: {
+  clientId: string;
+  tariffId: string | null | undefined;
+  metadata: unknown;
+}): Promise<void> {
+  const intent = parsePaymentIntentMetadata(params.metadata);
+  if (!intent.renewalTargetId) return;
+  if (!params.tariffId) {
+    throw paymentTargetError("Для продления не указан тариф.", "SUBSCRIPTION_TARGET_INVALID");
+  }
+
+  const target = await basePrisma.subscription.findFirst({
+    where: {
+      id: intent.renewalTargetId,
+      OR: [{ ownerId: params.clientId }, { giftedToClientId: params.clientId }],
+    },
+    select: { tariffId: true },
+  });
+  if (!target) {
+    throw paymentTargetError("Подписка для продления не найдена или не принадлежит вам.", "SUBSCRIPTION_TARGET_INVALID");
+  }
+  if (target.tariffId !== params.tariffId) {
+    throw paymentTargetError("Продление возможно только для текущего тарифа подписки.", "SUBSCRIPTION_TARGET_INVALID");
+  }
+}
+
 /**
  * Обёртка над prisma.payment.create. После выпила multi-bot (v5.0.0) botId-подстановки нет.
  * T-tariff-restriction (портировано из WolfVPN): бэкстоп — не создаём платёж за тариф,
@@ -67,6 +94,11 @@ export async function createPayment(args: Prisma.PaymentCreateArgs) {
   const data = args.data as Prisma.PaymentUncheckedCreateInput;
   if (typeof data.clientId === "string") {
     await assertActiveExtraOptionTargetForPayment({ clientId: data.clientId, metadata: data.metadata });
+    await assertRenewalTargetForPayment({
+      clientId: data.clientId,
+      tariffId: typeof data.tariffId === "string" ? data.tariffId : null,
+      metadata: data.metadata,
+    });
   }
   if (data.tariffId && typeof data.clientId === "string") {
     const cl = await basePrisma.client.findUnique({

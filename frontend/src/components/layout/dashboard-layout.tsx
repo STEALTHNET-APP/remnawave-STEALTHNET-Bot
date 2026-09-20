@@ -6,7 +6,7 @@ import {
   Shield, LayoutDashboard, Users, CreditCard, Settings, LogOut, KeyRound,
   Search, Megaphone, Tag, BarChart3, FileText, ExternalLink, Sun, Moon, Monitor,
   Palette, Menu, X, Database, Target, UserCog, Send, CalendarClock, Globe, Server, MessageSquare, Trophy,
-  Network, ShieldAlert, Key, Map, Video, Languages, Gift, Sparkles, Rocket, Bot,
+  Network, ShieldAlert, ShieldBan, Key, Map, Video, Languages, Gift, Sparkles, Rocket, Bot,
   ChevronRight, Check, ShoppingBag,
   Activity, Inbox, ClipboardList, TrendingUp, Mail,
   RefreshCw, Layers, FileCode2,
@@ -53,6 +53,7 @@ function useNavSections(): NavItem[] {
     // отчёт продаж только через баланс — для менеджеров с action'ом.
     { to: "/admin/balance-sales", label: "Продажи через баланс", icon: FileText, section: "balance-sales-virtual", category: "overview", requiredAction: "view_balance_sales" },
     { to: "/admin/traffic-abuse", label: t("admin.nav.traffic_abuse"), icon: ShieldAlert, section: "traffic-abuse", category: "overview" },
+    { to: "/admin/anti-abuse", label: "Анти-абьюз трафика", icon: ShieldBan, section: "anti-abuse", category: "management" },
     { to: "/admin/geo-map", label: t("admin.nav.geo_map"), icon: Map, section: "geo-map", category: "overview" },
     { to: "/admin/clients", label: t("admin.nav.clients"), icon: Users, section: "clients", category: "management" },
     { to: "/admin/proxy", label: t("admin.nav.proxy"), icon: Globe, section: "proxy", category: "management" },
