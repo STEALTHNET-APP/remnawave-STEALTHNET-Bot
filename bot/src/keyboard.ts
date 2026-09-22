@@ -3,6 +3,7 @@
  * Эмодзи в тексте кнопок (Unicode).
  */
 import { t as _t } from "./i18n.js";
+import type { DeviceScreen } from "./device-flow.js";
 
 type ButtonStyle = "primary" | "success" | "danger";
 
@@ -18,6 +19,48 @@ type UrlButton = { text: string; url: string; icon_custom_emoji_id?: string; sty
 export type InlineMarkup = { inline_keyboard: (InlineButton | WebAppButton | UrlButton)[][] };
 
 export type BotButtonConfig = { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean };
+
+type DeviceButtonTheme = {
+  botButtons?: (BotButtonConfig & { emojiKey?: string })[] | null;
+  botEmojis?: Record<string, { unicode?: string; tgEmojiId?: string }> | null;
+  botBackLabel?: string | null;
+  botInnerButtonStyles?: InnerButtonStyles | null;
+};
+
+/** Reuse the public menu binding, including a deliberately disabled emoji or neutral style. */
+function deviceButton(data: string, theme?: DeviceButtonTheme | null, label?: string): InlineButton {
+  const configured = theme?.botButtons?.find(b => b.id === "devices");
+  // Public config already resolves the binding; an absent key on an existing
+  // button can mean the admin disabled replacement or supplied a Unicode label.
+  const key = configured ? configured.emojiKey : "DEVICES";
+  const entry = key ? theme?.botEmojis?.[key] : undefined;
+  const icon = configured ? configured.iconCustomEmojiId : entry?.tgEmojiId;
+  const text = label ?? configured?.label ?? "Устройства";
+  const unicode = entry?.unicode?.trim() || (configured ? configured.label.match(LEADING_EMOJI_RE)?.[0].trim() || "" : "📱");
+  const styledText = icon || !unicode || /^\p{Extended_Pictographic}/u.test(text) ? text : `${unicode} ${text}`;
+  return btn(styledText, data, resolveStyle(toStyle(configured?.style), "primary"), icon);
+}
+
+/** Render internal appearance hints here; only Telegram fields leave this boundary. */
+export function deviceFlowButtons(screen: DeviceScreen, theme?: DeviceButtonTheme | null): InlineMarkup {
+  const emojis = theme?.botEmojis;
+  const backStyle = theme?.botInnerButtonStyles?.back;
+  return { inline_keyboard: screen.markup.inline_keyboard.map(row => row.map(button => {
+    const { text, callback_data: data, appearance } = button;
+    if (appearance === "menu") {
+      return backToMenu(theme?.botBackLabel, backStyle, { back: emojis?.BACK?.tgEmojiId }).inline_keyboard[0][0];
+    }
+    if (appearance === "device") return deviceButton(data, theme, text);
+    if (appearance === "back" || appearance === "subscription" || appearance === "subscriptions") {
+      const key = appearance === "subscription" ? "BACK_TO_SUB" : appearance === "subscriptions" ? "BACK_TO_SUBS_LIST" : "BACK";
+      const specific = emojis?.[key];
+      const entry = specific?.unicode?.trim() || specific?.tgEmojiId?.trim() ? specific : emojis?.BACK;
+      const icon = entry?.tgEmojiId?.trim();
+      return btn(icon ? text : `${entry?.unicode?.trim() || "◀️"} ${text}`, data, resolveStyle(toStyle(backStyle), "danger"), icon);
+    }
+    return btn(text, data, appearance === "choice" ? "primary" : undefined);
+  })) };
+}
 
 // ─── кастомные названия платёжных провайдеров ────────
 // Админ настраивает в /admin/settings → «Порядок и названия платёжных методов».
@@ -1120,6 +1163,7 @@ export function subDetailButtons(
   extraDevicesCount?: number, // для кнопки «Убрать дополнительные устройства»
   trialConvertEnabled?: boolean, // false → у триала вообще нет кнопки продления/конвертации
   isBanned?: boolean, // антиабуз: во время блокировки доступны только навигационные действия
+  deviceTheme?: DeviceButtonTheme | null,
 ): InlineMarkup {
   const connectId = emojiIds?.connect;
   const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
@@ -1152,7 +1196,7 @@ export function subDetailButtons(
     subscriptionUrl && subscriptionUrl.trim()
       ? [{ text: "📲 Инструкции по установке", url: subscriptionUrl.trim(), icon_custom_emoji_id: connectId } as UrlButton]
       : [btn("📲 Инструкции по установке", `sub:connect:${type}:${id}`, undefined, connectId)],
-    [btn("📱 Устройства", `dev:open:${id}`)],
+    [deviceButton(`dev:open:${id}`, deviceTheme)],
   ];
   if (hasLocations && tariffId) {
     // пробрасываем subType:subId в callback

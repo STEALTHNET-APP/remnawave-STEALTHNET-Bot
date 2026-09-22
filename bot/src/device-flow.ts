@@ -10,7 +10,10 @@ export type DeviceSource = {
   devices(id: string): Promise<{ total: number; devices: Device[] }>;
   remove(subscription: DeviceSubscription, hwid: string): Promise<unknown>;
 };
-type Button = { text: string; callback_data: string };
+type Button = {
+  text: string; callback_data: string;
+  appearance?: "menu" | "back" | "subscription" | "subscriptions" | "device" | "choice";
+};
 export type DeviceScreen = { text: string; markup: { inline_keyboard: Button[][] } };
 type State = {
   nonce: string; expires: number; subscriptions: DeviceSubscription[];
@@ -19,9 +22,9 @@ type State = {
 const PAGE_SIZE = 6;
 const TTL = 30 * 60_000;
 const MAX_SESSIONS = 5000;
-const TITLE = "◈ УСТРОЙСТВА";
-const menu: Button[] = [{ text: "⌂ Главное меню", callback_data: "menu:main" }];
-const back: Button[] = [{ text: "‹ Выбрать подписку", callback_data: "menu:devices" }];
+const TITLE = "Устройства";
+const menu: Button[] = [{ text: "Главное меню", callback_data: "menu:main", appearance: "menu" }];
+const back: Button[] = [{ text: "Выбрать подписку", callback_data: "menu:devices", appearance: "subscriptions" }];
 
 function clean(value: string, max = 55): string {
   return Array.from(Buffer.from(value, "utf8").toString("utf8").replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, " ")).slice(0, max).join("").trim();
@@ -92,9 +95,10 @@ export class DeviceFlow {
     const pages = Math.max(1, Math.ceil(subscriptions.length / PAGE_SIZE));
     page = Math.max(0, Math.min(page, pages - 1));
     const state = this.save(key, { subscriptions, devices: [], page });
-    const rows = subscriptions.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((sub, i) => [{
+    const rows: Button[][] = subscriptions.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((sub, i) => [{
       text: `${status(sub)} · #${sub.subscriptionIndex ?? 0} · ${clean(sub.tariffDisplayName, 28)}`,
       callback_data: this.callback(state, `sub:${page * PAGE_SIZE + i}`),
+      appearance: "choice",
     }]);
     this.pagination(rows, state, pages);
     rows.push(menu);
@@ -102,7 +106,7 @@ export class DeviceFlow {
   }
   private pagination(rows: Button[][], state: State, pages: number): void {
     const row: Button[] = [];
-    if (state.page > 0) row.push({ text: "‹ Назад", callback_data: this.callback(state, `page:${state.page - 1}`) });
+    if (state.page > 0) row.push({ text: "Назад", callback_data: this.callback(state, `page:${state.page - 1}`), appearance: "back" });
     if (state.page + 1 < pages) row.push({ text: "Далее ›", callback_data: this.callback(state, `page:${state.page + 1}`) });
     if (row.length) rows.push(row);
   }
@@ -121,8 +125,9 @@ export class DeviceFlow {
       else {
         lines.push("Выберите устройство, чтобы посмотреть детали или удалить его.", "Считаются добавленные устройства, даже когда VPN выключен.");
         devices.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).forEach((device, i) => rows.push([{
-          text: `📱 ${deviceLabel(device)} · ${tag(device)}`,
+          text: `${deviceLabel(device)} · ${tag(device)}`,
           callback_data: this.callback(state, `device:${page * PAGE_SIZE + i}`),
+          appearance: "device",
         }]));
       }
       if (pages > 1) lines.push("", `Страница ${page + 1} из ${pages}`);
@@ -133,7 +138,7 @@ export class DeviceFlow {
       lines.push("Устройства не удалось загрузить. Попробуйте обновить список.");
       rows.push([{ text: "↻ Повторить", callback_data: `dev:open:${selected.id}` }]);
     }
-    rows.push([{ text: "‹ К подписке", callback_data: `sub:detail:${selected.type}:${selected.id}` }], back);
+    rows.push([{ text: "К подписке", callback_data: `sub:detail:${selected.type}:${selected.id}`, appearance: "subscription" }], back);
     return screen(lines.join("\n"), rows);
   }
   async handle(key: string, data: string, source: DeviceSource): Promise<DeviceScreen> {
@@ -176,7 +181,7 @@ export class DeviceFlow {
       details.push("", "Удалить устройство из этой подписки?", "Оно освободит место в списке. При повторном подключении может добавиться снова.");
       return screen(details.join("\n"), [
         [{ text: "🗑 Да, удалить", callback_data: this.callback(next, "yes") }],
-        [{ text: "‹ Отмена", callback_data: this.callback(next, "cancel") }],
+        [{ text: "Отмена", callback_data: this.callback(next, "cancel"), appearance: "back" }],
       ]);
     }
     if (action === "yes" && state.confirmation) {

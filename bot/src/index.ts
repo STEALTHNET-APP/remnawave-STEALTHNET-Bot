@@ -15,6 +15,7 @@ import { shouldShowPurchaseChoice } from "./purchase-choice.js";
 import {
   mainMenu,
   backToMenu,
+  deviceFlowButtons,
   backToSubLabel,
   backToSubsListLabel,
   backButton,
@@ -6335,7 +6336,11 @@ if (data.startsWith("pay_tariff_paritypay:")) {
         devices: (id) => api.getSubscriptionDevices(token, id),
         remove: (subscription, hwid) => api.postClientDeviceDelete(token, hwid, subscription),
       });
-      await editMessageContent(ctx, screen.text, screen.markup);
+      const deviceConfig = config?.botButtons?.find(b => b.id === "devices");
+      const titleKey = deviceConfig ? deviceConfig.emojiKey : getMenuEmojiKey(config, "devices");
+      const title = titleWithOptionalEmoji(titleKey, screen.text.split("\n", 1)[0], botEmojis);
+      const text = title.text + screen.text.slice(screen.text.indexOf("\n"));
+      await editMessageContent(ctx, text, deviceFlowButtons(screen, config), title.entities);
       return;
     }
 
@@ -7323,7 +7328,7 @@ if (data.startsWith("topup_paritypay:")) {
           // T15.4: пробрасываем isTrialSub → CTA «Конвертировать в платную» вместо «Продлить».
           // пробрасываем subUrl — кнопка «📲 Инструкции по установке»
           // открывает его напрямую (без промежуточного экрана со ссылкой).
-          subDetailButtons(subType, subId, backToSubsListLabel(config?.botEmojis ?? null), innerStyles, innerEmojiIds, item.tariffId, tariffHasLocations, isTrialSub, item.autoRenewEnabled === true, subUrl, item.extraDevices ?? 0, item.trialConvertEnabled, isBanned),
+          subDetailButtons(subType, subId, backToSubsListLabel(config?.botEmojis ?? null), innerStyles, innerEmojiIds, item.tariffId, tariffHasLocations, isTrialSub, item.autoRenewEnabled === true, subUrl, item.extraDevices ?? 0, item.trialConvertEnabled, isBanned, config),
         );
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Ошибка";
