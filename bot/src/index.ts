@@ -1,4 +1,5 @@
 import { DeviceFlow, formatDeviceCount, subscriptionDeviceLimit } from "./device-flow.js";
+import { titleEmojiPrefix } from "./title-emoji.js";
 /**
  * STEALTHNET 4.2.0 — Telegram-бот
  * Полный функционал кабинета: главная, тарифы, профиль, пополнение, триал, реферальная ссылка, VPN.
@@ -795,16 +796,9 @@ function titleWithEmoji(
   if (/^\p{Extended_Pictographic}/u.test(rest.trimStart())) {
     return { text: rest, entities: [] };
   }
-  const entry = botEmojis?.[emojiKey];
-  const unicode = entry?.unicode?.trim() || DEFAULT_EMOJI_UNICODE[emojiKey] || "•";
+  const prefix = titleEmojiPrefix(emojiKey, botEmojis, DEFAULT_EMOJI_UNICODE);
   const space = rest.startsWith("\n") ? "" : " ";
-  const text = unicode + space + rest;
-  const entities: CustomEmojiEntity[] = [];
-  if (entry?.tgEmojiId) {
-    const len = firstCharLengthUtf16(unicode);
-    if (len > 0) entities.push({ type: "custom_emoji", offset: 0, length: len, custom_emoji_id: entry.tgEmojiId });
-  }
-  return { text, entities };
+  return { text: prefix.text + space + rest, entities: prefix.entities };
 }
 
 /**
@@ -919,16 +913,11 @@ function titleWithEmojiAndCustomEmojis(
   rest: string,
   botEmojis?: Record<string, { unicode?: string; tgEmojiId?: string }> | null
 ): { text: string; entities: CustomEmojiEntity[] } {
-  const entry = botEmojis?.[emojiKey];
-  const unicode = entry?.unicode?.trim() || DEFAULT_EMOJI_UNICODE[emojiKey] || "•";
+  const prefix = titleEmojiPrefix(emojiKey, botEmojis, DEFAULT_EMOJI_UNICODE);
   const space = rest.startsWith("\n") ? "" : " ";
-  const leading = unicode + space;
+  const leading = prefix.text + space;
   const { text: restText, entities: restEntities } = applyCustomEmojiPlaceholders(rest, botEmojis);
-  const entities: CustomEmojiEntity[] = [];
-  if (entry?.tgEmojiId) {
-    const len = firstCharLengthUtf16(unicode);
-    if (len > 0) entities.push({ type: "custom_emoji", offset: 0, length: len, custom_emoji_id: entry.tgEmojiId });
-  }
+  const entities: CustomEmojiEntity[] = [...prefix.entities];
   for (const e of restEntities) {
     entities.push({ ...e, offset: e.offset + leading.length });
   }
