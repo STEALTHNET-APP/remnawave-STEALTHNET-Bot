@@ -7,6 +7,7 @@ import { Router, type Request } from "express";
 import { z } from "zod";
 import { prisma, createPayment, assertActiveExtraOptionTargetForPayment, assertRenewalTargetForPayment, asClientUncheckedCreate, asClientWhere, asClientSelect, asPaymentUncheckedCreate, asTelegramAuthUpdate, type TelegramAuthTokenRecord, type ClientEmptyCloneRow } from "../../db.js";
 import { mergeClients, isBotOnlyAccount } from "./merge-clients.service.js";
+import { readSubscriptionDevices, usesLegacyDeviceFallback } from "./subscription-devices.js";
 import {
   hashPassword,
   verifyPassword,
@@ -3508,6 +3509,23 @@ clientRouter.get("/devices", async (req, res) => {
   return res.json({ total, devices });
 });
 
+/** Scoped list shared by the bot's counter and device management screen. */
+clientRouter.get("/devices/by-subscription/:id", async (req, res) => {
+  const clientId = (req as unknown as { clientId: string }).clientId;
+  try {
+    const result = await readSubscriptionDevices(clientId, req.params.id, {
+      findSubscription: (id) => prisma.subscription.findUnique({
+        where: { id },
+        select: { ownerId: true, giftedToClientId: true, remnawaveUuid: true },
+      }),
+      getDevices: remnaGetUserHwidDevices,
+    });
+    return res.status(result.status).json(result.body);
+  } catch {
+    return res.status(503).json({ message: "Не удалось загрузить устройства. Попробуйте ещё раз." });
+  }
+});
+
 // схема расширена subscriptionType/subscriptionId — теперь устройство
 // можно удалить с конкретной подписки (root или secondary). Раньше endpoint использовал только
 // client.remnawaveUuid (root) → удаление с secondary возвращало «HWID device not found».
@@ -3551,9 +3569,9 @@ clientRouter.post("/devices/delete", async (req, res) => {
     targetUuid = client.remnawaveUuid;
   }
 
-  // Если subscriptionType не задан явно — попробуем удалить со всех подписок (best-effort).
+  // Только полностью неадресный legacy-запрос может искать по всем подпискам.
   // Это для back-compat: старые версии бота шлют только hwid, без указания подписки.
-  if (!body.data.subscriptionType) {
+  if (usesLegacyDeviceFallback(body.data)) {
     // Сначала root.
     const rootResult = await remnaDeleteUserHwidDevice(targetUuid, body.data.hwid);
     if (!rootResult.error) {

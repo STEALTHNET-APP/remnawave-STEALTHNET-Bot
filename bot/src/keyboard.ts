@@ -1152,6 +1152,7 @@ export function subDetailButtons(
     subscriptionUrl && subscriptionUrl.trim()
       ? [{ text: "📲 Инструкции по установке", url: subscriptionUrl.trim(), icon_custom_emoji_id: connectId } as UrlButton]
       : [btn("📲 Инструкции по установке", `sub:connect:${type}:${id}`, undefined, connectId)],
+    [btn("📱 Устройства", `dev:open:${id}`)],
   ];
   if (hasLocations && tariffId) {
     // пробрасываем subType:subId в callback

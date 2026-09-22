@@ -1,3 +1,4 @@
+import { DeviceFlow, formatDeviceCount, subscriptionDeviceLimit } from "./device-flow.js";
 /**
  * STEALTHNET 4.2.0 — Telegram-бот
  * Полный функционал кабинета: главная, тарифы, профиль, пополнение, триал, реферальная ссылка, VPN.
@@ -493,19 +494,7 @@ const lastBroadcastMessage = new Map<number, string | BroadcastPayload>();
 // Админ: сквады — список для добавления/удаления (clientId + items с uuid/name)
 const lastSquadsForAdd = new Map<number, { clientId: string; items: { uuid: string; name: string }[] }>();
 const lastSquadsForRemove = new Map<number, { clientId: string; items: { uuid: string; name: string }[] }>();
-// Устройства (HWID): список для экрана «Удалить устройство» (индекс в callback)
-// храним subscriptionType + subscriptionId — нужны при удалении,
-// чтобы backend знал из какой подписки удалять (раньше удалял только root → secondary error).
-const lastDevicesList = new Map<number, { devices: { hwid: string; platform?: string; deviceModel?: string; subscriptionType?: "root" | "secondary"; subscriptionId?: string }[] }>();
-
-// Poco/Redmi и пр. шлют битые (непарные)
-// UTF-8 суррогаты в platform/deviceModel → Telegram отвергает "inline keyboard button
-// text must be encoded in UTF-8" и экран «Устройства» падает на editMessageText.
-// Buffer.from(utf8) заменяет непарные суррогаты на U+FFFD (валидный UTF-8) + срезаем
-// управляющие символы. Если после чистки пусто — вызывающий код даёт fallback на hwid.
-function sanitizeLabel(s: string): string {
-  return Array.from(Buffer.from(String(s ?? ""), "utf8").toString("utf8")).filter((c) => c >= " ").join("");
-}
+const deviceFlow = new DeviceFlow();
 
 /**
  * Если включён `botAutoDeleteUnknownMessages`, пробуем удалить сообщение пользователя.
@@ -6340,117 +6329,13 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       return;
     }
 
-    // «📱 Мои Устройства» — единый список устройств всех подписок
-    // (root + secondary) с пометкой «Подписка #N — тариф». Используется новый endpoint
-    // `/devices/all` который собирает devices из всех Remna-юзеров клиента.
-    if (data === "menu:devices") {
-      const lang = getUserLang(userId);
-      try {
-        const all = await api.getAllDevices(token);
-        // Маппим в стандартный формат для совместимости с devices:delete handler.
-        // T-fix (12.05.2026): пробрасываем subscriptionType + subscriptionId — нужны при удалении.
-        const flat = all.items.map((it) => ({
-          hwid: it.hwid,
-          platform: it.platform,
-          deviceModel: it.deviceModel,
-          createdAt: it.createdAt,
-          subscriptionType: it.subscriptionType,
-          subscriptionId: it.subscriptionId,
-        }));
-        lastDevicesList.set(userId, { devices: flat });
-        if (all.items.length === 0) {
-          await editMessageContent(
-            ctx,
-            _t("devices.no_devices", lang),
-            { inline_keyboard: [[{ text: config?.botBackLabel ?? _t("back_to_menu", lang), callback_data: "menu:main" }]] }
-          );
-          return;
-        }
-        // текст шапки берётся из настроек админки
-        // (`config.botDevicesText`). Fallback — i18n (`devices.delete_hint`).
-        const devicesHeader = (config?.botDevicesText ?? "").trim() || _t("devices.delete_hint", lang);
-        // Группируем устройства по подпискам — для красивого вывода.
-        const lines: string[] = [devicesHeader + "\n"];
-        const rows: InlineMarkup["inline_keyboard"] = [];
-        // Сначала группируем для заголовков, потом перебираем последовательно.
-        const groups = new Map<string, { label: string; devices: { idx: number; d: typeof all.items[number] }[] }>();
-        all.items.slice(0, 30).forEach((d, i) => {
-          const groupKey = `${d.subscriptionType}:${d.subscriptionId}`;
-          // root показываем как «Подписка #0»,
-          // а не «🌟 Основная» — чтобы юзер видел единый формат «Подписка #N».
-          const groupLabel = `Подписка #${d.subscriptionIndex}${d.tariffName ? ` ${d.tariffName}` : ""}`;
-          if (!groups.has(groupKey)) groups.set(groupKey, { label: groupLabel, devices: [] });
-          groups.get(groupKey)!.devices.push({ idx: i, d });
-        });
-        for (const [, grp] of groups) {
-          lines.push(`\n${grp.label}:`);
-          for (const { idx, d } of grp.devices) {
-            // приложение рядом с устройством.
-            const appPart = d.appName ? ` · 📱 ${d.appName}` : "";
-            const label = sanitizeLabel([d.platform, d.deviceModel].filter(Boolean).join(" · ") + appPart) || d.hwid.slice(0, 12) + "…";
-            lines.push(`  ${idx + 1}. ${label}`);
-            rows.push([{ text: sanitizeLabel(`🗑 Удалить #${idx + 1}: ${label.slice(0, 22)}`), callback_data: `devices:delete:${idx}` }]);
-          }
-        }
-        rows.push([{ text: "🏠 Главное меню", callback_data: "menu:main" }]);
-        // починка разорванного ключа install_second_device_text:
-        // он редактировался в админке, но ботом нигде не читался. Показываем блок
-        // «Как подключить второе устройство» под списком устройств (если задан).
-        const secondDeviceNote = (config?.installSecondDeviceText ?? "").trim();
-        if (secondDeviceNote) lines.push("", secondDeviceNote);
-        await editMessageContent(ctx, lines.join("\n"), { inline_keyboard: rows });
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка";
-        await editMessageContent(ctx, `📱 Устройства\n\n❌ ${msg}`, {
-          inline_keyboard: [[{ text: "🏠 Главное меню", callback_data: "menu:main" }]],
-        });
-      }
-      return;
-    }
-
-    if (data.startsWith("devices:delete:")) {
-      const lang = getUserLang(userId);
-      const indexStr = data.slice("devices:delete:".length);
-      const index = parseInt(indexStr, 10);
-      const stored = lastDevicesList.get(userId);
-      if (!stored || index < 0 || index >= stored.devices.length) {
-        await editMessageContent(ctx, _t("devices.session_expired", lang), {
-          inline_keyboard: [[{ text: config?.botBackLabel ?? _t("back_to_menu", lang), callback_data: "menu:main" }]],
-        });
-        return;
-      }
-      const dev = stored.devices[index]!;
-      const hwid = dev.hwid;
-      // T-fix (12.05.2026): передаём subscriptionType + subscriptionId — backend удалит ровно из этой подписки.
-      const subInfo = dev.subscriptionType && dev.subscriptionId
-        ? { type: dev.subscriptionType, id: dev.subscriptionId }
-        : undefined;
-      try {
-        await api.postClientDeviceDelete(token, hwid, subInfo);
-        const nextDevices = stored.devices.filter((_, i) => i !== index);
-        lastDevicesList.set(userId, { devices: nextDevices });
-        if (nextDevices.length === 0) {
-          await editMessageContent(
-            ctx,
-            _t("devices.deleted", lang),
-            { inline_keyboard: [[{ text: config?.botBackLabel ?? _t("back_to_menu", lang), callback_data: "menu:main" }]] }
-          );
-        } else {
-          const lines = [_t("devices.deleted", lang) + "\n"];
-          const rows: InlineMarkup["inline_keyboard"] = [];
-          nextDevices.slice(0, 15).forEach((d, i) => {
-            const label = sanitizeLabel([d.platform, d.deviceModel].filter(Boolean).join(" · ")) || d.hwid.slice(0, 12) + "…";
-            lines.push(`${i + 1}. ${label}`);
-            rows.push([{ text: sanitizeLabel(`🗑 Удалить: ${label.slice(0, 25)}`), callback_data: `devices:delete:${i}` }]);
-          });
-          rows.push([{ text: "🏠 Главное меню", callback_data: "menu:main" }]);
-          await editMessageContent(ctx, lines.join("\n"), { inline_keyboard: rows });
-        }
-      } catch (e: unknown) {
-        await editMessageContent(ctx, `❌ ${e instanceof Error ? e.message : "Ошибка"}`, {
-          inline_keyboard: [[{ text: "🏠 Главное меню", callback_data: "menu:main" }]],
-        });
-      }
+    if (data === "menu:devices" || data.startsWith("dev:") || data.startsWith("devices:delete:")) {
+      const screen = await deviceFlow.handle(`${userId}:${ctx.chat?.id ?? userId}`, data, {
+        subscriptions: async () => (await api.getAllSubscriptions(token)).items,
+        devices: (id) => api.getSubscriptionDevices(token, id),
+        remove: (subscription, hwid) => api.postClientDeviceDelete(token, hwid, subscription),
+      });
+      await editMessageContent(ctx, screen.text, screen.markup);
       return;
     }
 
@@ -7349,14 +7234,15 @@ if (data.startsWith("topup_paritypay:")) {
           }
         }
 
-        // Устройства: «Устройств: N доступно» (доступно = limit - used).
-        const deviceLimit = inner?.hwidDeviceLimit ?? inner?.deviceLimit ?? inner?.device_limit;
-        const devicesUsed = inner?.devicesUsed ?? inner?.devices_used;
-        let devicesLine = "";
-        if (typeof deviceLimit === "number") {
-          const available = typeof devicesUsed === "number" ? Math.max(0, deviceLimit - devicesUsed) : deviceLimit;
-          devicesLine = `📱 Устройств: ${available} доступно`;
+        // Count registered HWIDs from the selected subscription, never a legacy client field.
+        const deviceLimit = subscriptionDeviceLimit(item.subscription);
+        let devicesUsed: number | null = null;
+        try {
+          devicesUsed = (await api.getSubscriptionDevices(token, item.id)).total;
+        } catch {
+          // Keep the subscription card available while honestly showing an unavailable count.
         }
+        const devicesLine = formatDeviceCount(devicesUsed, deviceLimit);
 
         // Трафик: используется/лимит. Если без лимита — «X.XX GB / ♾».
         const tlimit = inner?.trafficLimitBytes ?? inner?.traffic_limit_bytes;
