@@ -1,119 +1,101 @@
 import cron, { type ScheduledTask } from "node-cron";
+import { writeFile } from "node:fs/promises";
 import { getSystemConfig } from "../client/client.service.js";
-import { parseDatabaseUrl, saveBackupToFile, cleanupOldBackups } from "./backup.service.js";
-import { readFile } from "node:fs/promises";
+import { parseDatabaseUrl } from "./backup.service.js";
+import { AUTO_BACKUPS_DIR, TELEGRAM_PART_BYTES, pruneDeliveredBackups, readFileParts, saveCompressedBackup } from "./backup-archive.js";
 import { proxyFetch } from "../proxy-util/proxy-fetch.js";
 import { getProxyUrl } from "../proxy-util/get-proxy-url.js";
 
 const DEFAULT_CRON = "0 7 * * *";
 const LOG = "[auto-backup]";
-
 let currentTask: ScheduledTask | null = null;
+let running = false;
 
-async function sendDocumentToTelegram(
-  botToken: string,
-  chatId: string,
-  topicId: number | null,
-  fileBuffer: Buffer,
-  filename: string,
-  caption: string,
-): Promise<boolean> {
-  const url = `https://api.telegram.org/bot${botToken}/sendDocument`;
-  const form = new FormData();
-  form.append("chat_id", chatId);
-  if (topicId) form.append("message_thread_id", String(topicId));
-  form.append("caption", caption);
-  form.append("parse_mode", "HTML");
-  form.append("document", new Blob([fileBuffer]), filename);
+interface TelegramDestination { botToken: string; chatId: string; topicId: number | null }
+interface TelegramResult { ok?: boolean; description?: string; result?: { message_id?: number }; parameters?: { retry_after?: number } }
 
-  try {
-    const proxy = await getProxyUrl("telegram");
-    const res = await proxyFetch(url, { method: "POST", body: form }, proxy);
-    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
-    if (!data.ok) {
-      console.error(`${LOG} sendDocument failed:`, data.description ?? res.statusText);
-      return false;
+async function sendDocument(destination: TelegramDestination, buffer: Buffer, filename: string, caption: string): Promise<number> {
+  const proxy = await getProxyUrl("telegram");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const form = new FormData();
+    form.append("chat_id", destination.chatId);
+    if (destination.topicId !== null) form.append("message_thread_id", String(destination.topicId));
+    form.append("caption", caption);
+    form.append("document", new Blob([new Uint8Array(buffer)]), filename);
+    let result: TelegramResult;
+    try {
+      const res = await proxyFetch(`https://api.telegram.org/bot${destination.botToken}/sendDocument`, {
+        method: "POST", body: form, signal: AbortSignal.timeout(5 * 60_000),
+      }, proxy);
+      result = await res.json() as TelegramResult;
+    } catch {
+      // Never expose token-bearing request URLs in logs or API errors.
+      if (attempt === 2) throw new Error(`Telegram upload failed: ${filename}`);
+      await new Promise(resolve => setTimeout(resolve, 3000 * (attempt + 1)));
+      continue;
     }
-    return true;
-  } catch (e) {
-    console.error(`${LOG} sendDocument error:`, e);
-    return false;
+    if (result.ok && typeof result.result?.message_id === "number") return result.result.message_id;
+    const retryAfter = result.parameters?.retry_after;
+    if (retryAfter && attempt < 2) {
+      await new Promise(resolve => setTimeout(resolve, Math.min(retryAfter, 120) * 1000));
+      continue;
+    }
+    throw new Error(`Telegram rejected backup ${filename}`);
   }
+  throw new Error(`Telegram upload failed: ${filename}`);
 }
 
-async function runAutoBackup(options: { force?: boolean } = {}): Promise<void> {
-  const config = await getSystemConfig();
-  if (!options.force && !config.autoBackupEnabled) return;
-
-  const botToken = config.telegramBotToken?.trim();
-  const groupId = config.notificationTelegramGroupId?.trim();
-  if (!botToken || !groupId) {
-    console.warn(`${LOG} Bot token or group ID not configured, skip`);
-    return;
-  }
-
-  const topicRaw = config.notificationTopicBackups?.trim();
-  const topicId = topicRaw ? (parseInt(topicRaw, 10) || null) : null;
-
-  const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl) {
-    console.warn(`${LOG} DATABASE_URL not set, skip`);
-    return;
-  }
-  const db = parseDatabaseUrl(dbUrl);
-  if (!db) {
-    console.warn(`${LOG} Invalid DATABASE_URL, skip`);
-    return;
-  }
-
-  console.log(`${LOG} Creating backup...`);
+export async function runAutoBackup(options: { force?: boolean } = {}): Promise<void> {
+  if (running) throw new Error("Создание бэкапа уже выполняется");
+  running = true;
   try {
-    const { fullPath, filename } = await saveBackupToFile(db);
-    // Ретеншен: ежедневные бэкапы иначе копятся бесконечно.
-    try {
-      await cleanupOldBackups(config.backupRetentionDays ?? 30);
-    } catch (e) {
-      console.error(`${LOG} чистка старых бэкапов не удалась:`, e);
+    const config = await getSystemConfig();
+    if (!options.force && !config.autoBackupEnabled) return;
+    const botToken = config.telegramBotToken?.trim();
+    const chatId = config.notificationTelegramGroupId?.trim();
+    if (!botToken || !chatId) throw new Error("Не настроены Telegram-бот и группа для бэкапов");
+    const topic = config.notificationTopicBackups?.trim();
+    const topicId = topic ? Number(topic) : null;
+    if (topicId !== null && (!Number.isSafeInteger(topicId) || topicId <= 0)) throw new Error("Некорректный ID темы бэкапов");
+    const destination = { botToken, chatId, topicId };
+    const sources: { name: "bot"; label: string; url: string | undefined }[] = [
+      { name: "bot", label: "База бота Void", url: process.env.DATABASE_URL },
+    ];
+    const failures: string[] = [];
+    for (const source of sources) {
+      try {
+        const db = source.url && parseDatabaseUrl(source.url);
+        if (!db) throw new Error(`Не настроено подключение к БД: ${source.name}`);
+        console.log(`${LOG} Creating compressed backup: ${source.name}`);
+        const archive = await saveCompressedBackup(db, source.name);
+        const total = Math.ceil(archive.bytes / TELEGRAM_PART_BYTES);
+        const messages: number[] = [];
+        let index = 0;
+        for await (const part of readFileParts(archive.fullPath)) {
+          index++;
+          const partName = total === 1 ? archive.filename : `${archive.filename}.part${String(index).padStart(3, "0")}-of-${String(total).padStart(3, "0")}`;
+          const caption = `💾 ${source.label}\n${new Date().toISOString()}\n${archive.filename}\nЧасть ${index}/${total} · ${(part.length / 1048576).toFixed(1)} МБ\nПосле получения всех частей: объединить по порядку, распаковать gzip → SQL.\nSHA256 целого архива: ${archive.sha256}`;
+          messages.push(await sendDocument(destination, part, partName, caption));
+          console.log(`${LOG} Delivered ${source.name} part ${index}/${total}, message ${messages.at(-1)}`);
+        }
+        const manifest = { filename: archive.filename, bytes: archive.bytes, sha256: archive.sha256, source: source.name, format: "SQL + gzip", parts: total, messages, chatId, topicId, deliveredAt: new Date().toISOString() };
+        await sendDocument(destination, Buffer.from(JSON.stringify(manifest, null, 2)), `${archive.filename}.manifest.json`, `✅ ${source.label}: все ${total} частей отправлены. Контрольная сумма и список сообщений — в файле.`);
+        await writeFile(`${archive.fullPath}.delivered.json`, JSON.stringify(manifest, null, 2), { mode: 0o600 });
+        await pruneDeliveredBackups(AUTO_BACKUPS_DIR, `void-${source.name}-`, config.backupRetentionDays ?? 30);
+        console.log(`${LOG} Backup complete: ${source.name}, ${archive.bytes} bytes, ${total} parts`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown backup failure";
+        console.error(`${LOG} ${source.name}: ${message}`);
+        failures.push(`${source.label}: ${message}`);
+      }
     }
-    const fileBuffer = await readFile(fullPath);
-    const sizeMb = (fileBuffer.length / 1024 / 1024).toFixed(2);
-    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
-
-    const caption =
-      `💾 <b>Авто-бэкап</b>\n\n` +
-      `📅 ${now} UTC\n` +
-      `📦 Размер: ${sizeMb} МБ\n` +
-      `📄 ${filename}`;
-
-    const sent = await sendDocumentToTelegram(botToken, groupId, topicId, fileBuffer, filename, caption);
-    if (sent) {
-      console.log(`${LOG} Backup sent to Telegram: ${filename} (${sizeMb} MB)`);
-    } else {
-      console.error(`${LOG} Failed to send backup to Telegram`);
+    if (failures.length) {
+      const summary = failures.join("; ");
+      await sendDocument(destination, Buffer.from(summary), "void-backup-error.txt", "⚠️ Резервное копирование завершилось с ошибкой. Подробности в файле.")
+        .catch(() => console.error(`${LOG} Could not deliver failure notification`));
+      throw new Error(summary);
     }
-  } catch (e) {
-    console.error(`${LOG} Backup error:`, e);
-  }
-}
-
-function startWithExpression(cronExpression: string): ScheduledTask | null {
-  const expr = cronExpression.trim();
-  const schedule = expr && cron.validate(expr) ? expr : DEFAULT_CRON;
-  if (expr && !cron.validate(expr)) {
-    console.warn(`${LOG} Invalid cron "${expr}", using default: ${DEFAULT_CRON}`);
-  }
-
-  const task = cron.schedule(schedule, async () => {
-    console.log(`${LOG} Cron triggered (${schedule})`);
-    try {
-      await runAutoBackup();
-    } catch (e) {
-      console.error(`${LOG} Error:`, e);
-    }
-  });
-
-  console.log(`${LOG} Scheduler started: ${schedule}`);
-  return task;
+  } finally { running = false; }
 }
 
 export async function startAutoBackupScheduler(): Promise<void> {
@@ -122,23 +104,21 @@ export async function startAutoBackupScheduler(): Promise<void> {
     console.log(`${LOG} Disabled, skip scheduler`);
     return;
   }
-  const expr = config.autoBackupCron || DEFAULT_CRON;
-  currentTask = startWithExpression(expr);
+  const configured = config.autoBackupCron?.trim();
+  const schedule = configured && cron.validate(configured) ? configured : DEFAULT_CRON;
+  currentTask = cron.schedule(schedule, async () => {
+    try { await runAutoBackup(); }
+    catch (error) { console.error(LOG, error instanceof Error ? error.message : "Backup failed"); }
+  });
+  console.log(`${LOG} Scheduler started: ${schedule} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`);
 }
 
 export async function restartAutoBackupScheduler(): Promise<void> {
-  if (currentTask) {
-    currentTask.stop();
-    currentTask = null;
-  }
+  stopAutoBackupScheduler();
   await startAutoBackupScheduler();
 }
 
 export function stopAutoBackupScheduler(): void {
-  if (currentTask) {
-    currentTask.stop();
-    currentTask = null;
-  }
+  currentTask?.stop();
+  currentTask = null;
 }
-
-export { runAutoBackup };

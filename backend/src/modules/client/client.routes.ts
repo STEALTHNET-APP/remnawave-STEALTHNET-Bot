@@ -3945,7 +3945,7 @@ clientRouter.post("/payments/platega", async (req, res) => {
   // в кабинете Plategá (зеркалит логику YooKassa/CryptoPay).
   const plategaClient = await prisma.client.findUnique({
     where: { id: clientId },
-    select: { telegramId: true },
+    select: { telegramId: true, email: true },
   });
   const plategaTgSuffix = plategaClient?.telegramId ? ` tg:${plategaClient.telegramId}` : "";
   const plategaDescription = (tariffIdToStore
@@ -4007,6 +4007,7 @@ clientRouter.post("/payments/platega", async (req, res) => {
     returnUrl,
     failedUrl,
     description: plategaDescription,
+    email: plategaClient?.email,
   });
 
   if ("error" in result) {
