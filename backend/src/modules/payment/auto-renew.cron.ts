@@ -15,6 +15,7 @@ import {
   notifyAutoRenewYookassaFailed,
   notifyAdminsAboutAutoRenewFailed,
 } from "../notification/telegram-notify.service.js";
+import { LEGACY_AUTO_RENEW_CLIENT_WHERE } from "./legacy-auto-renew-scope.js";
 import { dispatchAutoRenewNotification, tryMarkSubDedup } from "../notification/auto-renew-notifications.service.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -143,12 +144,7 @@ export async function processAutoRenewals() {
   const gracePeriod = gracePeriodDays * DAY_MS;
 
   const clients = await prisma.client.findMany({
-    where: {
-      autoRenewEnabled: true,
-      autoRenewTariffId: { not: null },
-      remnawaveUuid: { not: null },
-      isBlocked: false,
-    },
+    where: LEGACY_AUTO_RENEW_CLIENT_WHERE,
     include: { autoRenewTariff: true },
   });
 
