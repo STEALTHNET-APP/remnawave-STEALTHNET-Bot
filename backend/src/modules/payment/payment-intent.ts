@@ -57,3 +57,17 @@ export function buildPaymentIntentMetadata(input: PaymentIntentInput): Record<st
 
   return metadata;
 }
+
+/**
+ * Продление обязано сохранять тариф подписки. Исключения:
+ * - триал: переход на другой тариф разрешён правилами триала (convertEnabled /
+ *   convertAllTariffs / convertTariffIds), их проверяет активация;
+ * - подписка без тарифа (legacy-триал, ручная выдача): переход на тариф — это конвертация.
+ */
+export function isRenewalTargetTariffAllowed(
+  target: { tariffId: string | null; trialId: string | null },
+  tariffId: string,
+): boolean {
+  if (target.trialId != null || target.tariffId == null) return true;
+  return target.tariffId === tariffId;
+}
