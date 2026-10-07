@@ -59,7 +59,7 @@ export async function runAutoBackup(options: { force?: boolean } = {}): Promise<
     if (topicId !== null && (!Number.isSafeInteger(topicId) || topicId <= 0)) throw new Error("Некорректный ID темы бэкапов");
     const destination = { botToken, chatId, topicId };
     const sources: { name: "bot"; label: string; url: string | undefined }[] = [
-      { name: "bot", label: "База бота Void", url: process.env.DATABASE_URL },
+      { name: "bot", label: "База бота", url: process.env.DATABASE_URL },
     ];
     const failures: string[] = [];
     for (const source of sources) {
@@ -81,7 +81,7 @@ export async function runAutoBackup(options: { force?: boolean } = {}): Promise<
         const manifest = { filename: archive.filename, bytes: archive.bytes, sha256: archive.sha256, source: source.name, format: "SQL + gzip", parts: total, messages, chatId, topicId, deliveredAt: new Date().toISOString() };
         await sendDocument(destination, Buffer.from(JSON.stringify(manifest, null, 2)), `${archive.filename}.manifest.json`, `✅ ${source.label}: все ${total} частей отправлены. Контрольная сумма и список сообщений — в файле.`);
         await writeFile(`${archive.fullPath}.delivered.json`, JSON.stringify(manifest, null, 2), { mode: 0o600 });
-        await pruneDeliveredBackups(AUTO_BACKUPS_DIR, `void-${source.name}-`, config.backupRetentionDays ?? 30);
+        await pruneDeliveredBackups(AUTO_BACKUPS_DIR, `stealthnet-${source.name}-`, config.backupRetentionDays ?? 30);
         console.log(`${LOG} Backup complete: ${source.name}, ${archive.bytes} bytes, ${total} parts`);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown backup failure";
@@ -91,7 +91,7 @@ export async function runAutoBackup(options: { force?: boolean } = {}): Promise<
     }
     if (failures.length) {
       const summary = failures.join("; ");
-      await sendDocument(destination, Buffer.from(summary), "void-backup-error.txt", "⚠️ Резервное копирование завершилось с ошибкой. Подробности в файле.")
+      await sendDocument(destination, Buffer.from(summary), "stealthnet-backup-error.txt", "⚠️ Резервное копирование завершилось с ошибкой. Подробности в файле.")
         .catch(() => console.error(`${LOG} Could not deliver failure notification`));
       throw new Error(summary);
     }

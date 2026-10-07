@@ -60,7 +60,7 @@ export async function writeGzipArchive(proc: ChildProcess, fullPath: string): Pr
 
 export async function saveCompressedBackup(db: DbConnection, source: "bot") {
   await mkdir(AUTO_BACKUPS_DIR, { recursive: true, mode: 0o700 });
-  const filename = `void-${source}-${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID()}.sql.gz`;
+  const filename = `stealthnet-${source}-${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID()}.sql.gz`;
   const fullPath = path.join(AUTO_BACKUPS_DIR, filename);
   const proc = spawn("pg_dump", [
     "-h", db.host, "-p", String(db.port), "-U", db.user, "-d", db.database,

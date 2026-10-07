@@ -61,33 +61,33 @@ test('retention requires age and seven newer deliveries; failed/manual archives 
   const dir = await workspace(t);
   const now = Date.parse('2026-09-29T00:00:00Z');
   for (let i = 1; i <= 10; i++) {
-    const name = `void-bot-${String(i).padStart(2, '0')}.sql.gz`;
+    const name = `stealthnet-bot-${String(i).padStart(2, '0')}.sql.gz`;
     await writeFile(path.join(dir, name), 'archive');
     const age = i <= 2 ? 60 : i === 3 ? 5 : 1;
     await writeFile(path.join(dir, name + '.delivered.json'), JSON.stringify({ deliveredAt: new Date(now - age * 86400000 + i).toISOString() }));
   }
-  await writeFile(path.join(dir, 'void-bot-failed.sql.gz'), 'not delivered');
-  await writeFile(path.join(dir, 'void-bot-corrupt.sql.gz'), 'archive');
-  await writeFile(path.join(dir, 'void-bot-corrupt.sql.gz.delivered.json'), '{}');
+  await writeFile(path.join(dir, 'stealthnet-bot-failed.sql.gz'), 'not delivered');
+  await writeFile(path.join(dir, 'stealthnet-bot-corrupt.sql.gz'), 'archive');
+  await writeFile(path.join(dir, 'stealthnet-bot-corrupt.sql.gz.delivered.json'), '{}');
   await writeFile(path.join(dir, 'manual.sql'), 'manual backup');
-  await pruneDeliveredBackups(dir, 'void-bot-', 30, 7, now);
+  await pruneDeliveredBackups(dir, 'stealthnet-bot-', 30, 7, now);
   const files = await readdir(dir);
-  assert.ok(!files.includes('void-bot-01.sql.gz'));
-  assert.ok(!files.includes('void-bot-02.sql.gz'));
-  assert.ok(files.includes('void-bot-03.sql.gz')); // young despite being outside last seven
-  assert.ok(files.includes('void-bot-failed.sql.gz'));
-  assert.ok(files.includes('void-bot-corrupt.sql.gz'));
+  assert.ok(!files.includes('stealthnet-bot-01.sql.gz'));
+  assert.ok(!files.includes('stealthnet-bot-02.sql.gz'));
+  assert.ok(files.includes('stealthnet-bot-03.sql.gz')); // young despite being outside last seven
+  assert.ok(files.includes('stealthnet-bot-failed.sql.gz'));
+  assert.ok(files.includes('stealthnet-bot-corrupt.sql.gz'));
   assert.ok(files.includes('manual.sql'));
-  await pruneDeliveredBackups(dir, 'void-bot-', 30, 7, now + 100 * 86400000);
-  assert.equal((await readdir(dir)).filter(n => /^void-bot-\d+\.sql\.gz$/.test(n)).length, 7);
+  await pruneDeliveredBackups(dir, 'stealthnet-bot-', 30, 7, now + 100 * 86400000);
+  assert.equal((await readdir(dir)).filter(n => /^stealthnet-bot-\d+\.sql\.gz$/.test(n)).length, 7);
 });
 
 test('zero retention keeps every delivered archive', async t => {
   const dir = await workspace(t);
-  const file = path.join(dir, 'void-bot-old.sql.gz');
+  const file = path.join(dir, 'stealthnet-bot-old.sql.gz');
   await writeFile(file, 'archive');
   await writeFile(file + '.delivered.json', JSON.stringify({ deliveredAt: '2000-01-01' }));
-  await pruneDeliveredBackups(dir, 'void-bot-', 0);
+  await pruneDeliveredBackups(dir, 'stealthnet-bot-', 0);
   assert.equal((await readdir(dir)).length, 2);
 });
 

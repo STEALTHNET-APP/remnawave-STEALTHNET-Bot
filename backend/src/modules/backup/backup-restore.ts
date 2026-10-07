@@ -86,7 +86,7 @@ export async function runPgRestore(db: DbConnection, input: Buffer | Readable | 
   try {
     const tempRoot = path.join(process.cwd(), "temp");
     await mkdir(tempRoot, { recursive: true });
-    dir = await mkdtemp(path.join(tempRoot, "void-restore-"));
+    dir = await mkdtemp(path.join(tempRoot, "stealthnet-restore-"));
     const sqlPath = path.join(dir, "restore.sql");
     await prepareRestore(input, sqlPath, filename, limits);
     await runPsql(db, ["-c", CLEAN_SCHEMA_SQL]);
