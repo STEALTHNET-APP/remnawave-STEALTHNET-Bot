@@ -2310,9 +2310,16 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
   const data = overviewQuery.data ?? null;
   const loading = overviewQuery.isLoading;
   // ручное продление конкретной подписки (компенсация/бонус).
-  const [extendFor, setExtendFor] = useState<{ subId: string; label: string } | null>(null);
+  // trialLike: триал или подписка без тарифа — продлеваем только дату (опц. конвертация в тариф).
+  const [extendFor, setExtendFor] = useState<{ subId: string; label: string; trialLike: boolean } | null>(null);
   const [extendDays, setExtendDays] = useState<number>(30);
   const [extendNote, setExtendNote] = useState("");
+  const [extendConvertTariffId, setExtendConvertTariffId] = useState("");
+  const [extendConvertOptionId, setExtendConvertOptionId] = useState("");
+  const extendTariffCategories = useTariffCategories(token).data?.items ?? [];
+  const extendFlatTariffs: TariffRecord[] = extendTariffCategories.flatMap((c) => c.tariffs ?? []);
+  const extendConvertTariff = extendFlatTariffs.find((tr) => tr.id === extendConvertTariffId);
+  const extendConverting = !!extendFor?.trialLike && !!extendConvertTariff;
   const [extendBusy, setExtendBusy] = useState(false);
   const [extendError, setExtendError] = useState<string | null>(null);
   const [extendDone, setExtendDone] = useState<string | null>(null);
@@ -2327,11 +2334,19 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
     setExtendBusy(true);
     setExtendError(null);
     try {
-      const r = await api.adminGrantExtendSubscription(token, extendFor.subId, {
-        customDurationDays: extendDays,
-        note: extendNote.trim() || undefined,
-      });
-      setExtendDone(`Подписка продлена на ${r.tariff.durationDays} дн. (${r.tariff.name})`);
+      const r = await api.adminGrantExtendSubscription(token, extendFor.subId, extendConverting && extendConvertTariff
+        ? {
+            tariffId: extendConvertTariff.id,
+            tariffPriceOptionId: extendConvertOptionId || undefined,
+            note: extendNote.trim() || undefined,
+          }
+        : {
+            customDurationDays: extendDays,
+            note: extendNote.trim() || undefined,
+          });
+      setExtendDone(r.tariff
+        ? `Подписка продлена на ${r.tariff.durationDays} дн. (${r.tariff.name})`
+        : `Подписка продлена на ${extendDays} дн.${r.expireAt ? ` (до ${new Date(r.expireAt).toLocaleDateString("ru-RU")})` : ""}`);
       setExtendFor(null);
       setExtendNote("");
       void overviewQuery.refetch();
@@ -2489,9 +2504,12 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
                       onClick={() => {
                         setExtendFor({
                           subId: it.subscriptionId,
-                          label: `${isPrimary ? "Главная" : `#${it.subscriptionIndex}`}${it.tariffName ? ` — ${it.tariffName}` : ""}`,
+                          label: `${isPrimary ? "Главная" : `#${it.subscriptionIndex}`}${it.tariffName ? ` — ${it.tariffName}` : it.isTrial ? ` — ${it.trialName ?? "Пробная"}` : ""}`,
+                          trialLike: it.isTrial || !it.tariffName,
                         });
                         setExtendDays(30);
+                        setExtendConvertTariffId("");
+                        setExtendConvertOptionId("");
                         setExtendError(null);
                       }}
                     >
@@ -2567,6 +2585,7 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
             <DialogDescription className="text-xs">{extendFor?.label}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {!extendConverting && (
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Срок продления (дней)</Label>
               <div className="flex gap-2">
@@ -2595,6 +2614,42 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
                 className="rounded-xl"
               />
             </div>
+            )}
+            {extendFor?.trialLike && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Конвертировать в тариф (необязательно)</Label>
+                <select
+                  className="w-full rounded-xl border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  value={extendConvertTariffId}
+                  onChange={(e) => { setExtendConvertTariffId(e.target.value); setExtendConvertOptionId(""); }}
+                  disabled={extendBusy}
+                >
+                  <option value="">— не конвертировать, продлить пробный период —</option>
+                  {extendTariffCategories.map((cat) => (
+                    <optgroup key={cat.id} label={cat.name}>
+                      {(cat.tariffs ?? []).map((tr) => (
+                        <option key={tr.id} value={tr.id}>{tr.name}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                {extendConvertTariff && (extendConvertTariff.priceOptions ?? []).length > 0 && (
+                  <select
+                    className="w-full rounded-xl border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                    value={extendConvertOptionId}
+                    onChange={(e) => setExtendConvertOptionId(e.target.value)}
+                    disabled={extendBusy}
+                  >
+                    <option value="">— самая дешёвая опция —</option>
+                    {[...(extendConvertTariff.priceOptions ?? [])]
+                      .sort((a, b) => a.sortOrder - b.sortOrder || a.durationDays - b.durationDays)
+                      .map((opt) => (
+                        <option key={opt.id} value={opt.id}>{opt.durationDays} дн. · {opt.price} {extendConvertTariff.currency.toUpperCase()}</option>
+                      ))}
+                  </select>
+                )}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Заметка (видна только админам)</Label>
               <Input
@@ -2605,8 +2660,11 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
               />
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Продление по тарифу подписки, бесплатно (admin grant): дни добавятся к текущему сроку,
-              доп. устройства сохранятся, клиент получит уведомление в Telegram.
+              {extendConverting
+                ? "Пробная подписка будет конвертирована в выбранный тариф бесплатно (admin grant): сквады и лимиты тарифа, оставшиеся дни сохранятся."
+                : extendFor?.trialLike
+                  ? "Продлевает пробный период без смены тарифа: дни добавятся к текущему сроку, лимиты и серверы не меняются, клиент получит уведомление в Telegram."
+                  : "Продление по тарифу подписки, бесплатно (admin grant): дни добавятся к текущему сроку, доп. устройства сохранятся, клиент получит уведомление в Telegram."}
             </p>
             {extendError && (
               <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive font-medium">
@@ -2617,7 +2675,7 @@ function ClientSubsOverviewBlock({ clientId, token }: { clientId: string; token:
               <Button variant="ghost" size="sm" onClick={() => setExtendFor(null)} disabled={extendBusy}>Отмена</Button>
               <Button size="sm" onClick={grantExtend} disabled={extendBusy || extendDays < 1} className="gap-1.5 rounded-xl">
                 {extendBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                Продлить на {extendDays} дн.
+                {extendConverting ? "Конвертировать" : `Продлить на ${extendDays} дн.`}
               </Button>
             </div>
           </div>
