@@ -19,6 +19,8 @@ import {
 import { createAdditionalSubscription, deleteSubscription } from "../gift/gift.service.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { upsertSubscriptionByRemnaUuid } from "../subscription/subscription.helpers.js";
+import { isMultiSubscriptionsEnabled } from "../client/multi-subscriptions.js";
+import { isLegacyTrialRecord, isOnTrialSquad, pickConvertibleSubscription } from "./subscription-target.js";
 
 export type ActivationResult =
   | { ok: true; /** дни, добавленные pro-rata конвертацией остатка (режим convert) */ convertedDays?: number }
@@ -827,52 +829,71 @@ export async function findConvertibleSubscription(
   /** Мульти-подписки включены (глобально). Если false — single-режим для ЛЮБОГО тарифа:
    *  любая покупка находит существующую подписку клиента для замены. */
   multiSubEnabled: boolean = true,
-): Promise<{ id: string; subscriptionIndex: number; tariffId: string | null; tariffName: string | null; expireAt: Date | null; currentPricePerDay: number | null; trialId: string | null; /** покупается ТОТ ЖЕ тариф → это продление (стек дней), а не конвертация */ sameTariff: boolean } | null> {
+  opts: {
+    /** явный выбор пользователя (metadata.replaceTrialSubId) — побеждает сортировку по expireAt */
+    preferredSubId?: string | null;
+    /** config.trialSquadUuid — по нему опознаётся легаси-триал (trialId=null, tariffId=null) */
+    trialSquadUuid?: string | null;
+  } = {},
+): Promise<{ id: string; subscriptionIndex: number; tariffId: string | null; tariffName: string | null; expireAt: Date | null; currentPricePerDay: number | null; trialId: string | null; /** легаси-триал (POST /trial): конвертируется на месте, как триал */ isLegacyTrial: boolean; /** покупается ТОТ ЖЕ тариф → это продление (стек дней), а не конвертация */ sameTariff: boolean } | null> {
   const tariff = await prisma.tariff.findUnique({
     where: { id: tariffId },
     select: { categoryId: true, category: { select: { singleSubscriptionMode: true } } },
   });
   const perCategorySingle = !!(tariff?.categoryId && tariff.category?.singleSubscriptionMode);
-  // Мульти включены → работаем ТОЛЬКО для категорий с singleSubscriptionMode (старое поведение).
-  // Мульти выключены → глобальный single: конвертируем существующую для ЛЮБОГО тарифа.
-  if (multiSubEnabled && !perCategorySingle) return null;
 
-  const commonWhere = {
-    ownerId: clientId,
-    purchasedAsGift: false,
-    giftStatus: null,
-    remnawaveUuid: { not: null },
-  } as const;
-  const candidateSelect = {
-    id: true,
-    subscriptionIndex: true,
-    tariffId: true,
-    expireAt: true,
-    currentPricePerDay: true,
-    trialId: true,
-    tariff: { select: { name: true } },
-  } as const;
+  // Кандидаты — ЛЮБЫЕ подписки клиента (включая index 0), кроме подарочных/зарезервированных
+  // под подарок и не привязанных к Remna. Выбор — чистая функция pickConvertibleSubscription.
+  const rows = await prisma.subscription.findMany({
+    where: { ownerId: clientId, purchasedAsGift: false, giftStatus: null, remnawaveUuid: { not: null } },
+    select: {
+      id: true,
+      subscriptionIndex: true,
+      tariffId: true,
+      expireAt: true,
+      currentPricePerDay: true,
+      customPrice: true,
+      trialId: true,
+      purchasedAsGift: true,
+      giftStatus: true,
+      remnawaveUuid: true,
+      tariff: { select: { name: true, categoryId: true } },
+    },
+  });
 
-  // приоритет универсален для ЛЮБОЙ подписки (не только #0):
-  // 1) подписка с ТЕМ ЖЕ тарифом (не триал) → продление именно её;
-  // 2) иначе любая подписка с тарифом этой категории → конвертация «самой живой».
-  // Без приоритета у клиента с несколькими подписками категории «самая живая»
-  // перехватывала конвертацию, хотя рядом была подписка ровно с этим тарифом.
-  // Мульти выкл (глобальный single) → берём ЛЮБУЮ подписку клиента (без фильтра категории);
-  // мульти вкл (категория-single) → только подписки той же категории.
-  const secondaryScope = multiSubEnabled ? { tariff: { categoryId: tariff!.categoryId } } : {};
-  const candidate =
-    (await prisma.subscription.findFirst({
-      where: { ...commonWhere, tariffId, trialId: null },
-      orderBy: { expireAt: { sort: "desc", nulls: "last" } },
-      select: candidateSelect,
-    })) ??
-    (await prisma.subscription.findFirst({
-      where: { ...commonWhere, ...secondaryScope },
-      orderBy: { expireAt: { sort: "desc", nulls: "last" } },
-      select: candidateSelect,
-    }));
-  if (!candidate) return null;
+  // Легаси-триал подтверждаем сквадом в Remnawave (тем же правилом UI зовёт его «Тест»).
+  // Ошибка Remna → не считаем триалом (поведение как до фикса), а не роняем покупку.
+  const legacyIds = new Set<string>();
+  for (const r of rows) {
+    if (!r.remnawaveUuid || !isLegacyTrialRecord(r) || !opts.trialSquadUuid?.trim()) continue;
+    const u = await remnaGetUser(r.remnawaveUuid);
+    if (u.error || !u.data) {
+      console.error("[findConvertibleSubscription] legacy trial check failed:", r.id, u.error);
+      continue;
+    }
+    if (isOnTrialSquad(extractCurrentSquads(u.data), opts.trialSquadUuid)) legacyIds.add(r.id);
+  }
+
+  const picked = pickConvertibleSubscription(
+    rows.map((r) => ({
+      id: r.id,
+      subscriptionIndex: r.subscriptionIndex,
+      tariffId: r.tariffId,
+      categoryId: r.tariff?.categoryId ?? null,
+      trialId: r.trialId,
+      expireAt: r.expireAt,
+      isLegacyTrial: legacyIds.has(r.id),
+    })),
+    {
+      tariffId,
+      categoryId: tariff?.categoryId ?? null,
+      multiSubEnabled,
+      perCategorySingle,
+      preferredSubId: opts.preferredSubId ?? null,
+    },
+  );
+  const candidate = picked ? rows.find((r) => r.id === picked.id) : undefined;
+  if (!picked || !candidate) return null;
   return {
     id: candidate.id,
     subscriptionIndex: candidate.subscriptionIndex,
@@ -881,6 +902,7 @@ export async function findConvertibleSubscription(
     expireAt: candidate.expireAt,
     currentPricePerDay: candidate.currentPricePerDay,
     trialId: candidate.trialId,
+    isLegacyTrial: picked.isLegacyTrial,
     // тот же тариф = продление (дни складываются, сквады/трафик
     // не сбрасываются), конвертация только при ДРУГОМ тарифе. Триал не считается
     // «тем же» — переход с пробного на платный всегда конвертация.
@@ -957,6 +979,19 @@ export async function activateTariffByPaymentId(paymentId: string): Promise<Acti
   const extendsSecondaryId = getExtendsSecondarySubId(payment.metadata);
   const isGiftPurchase = isGiftPurchasePayment(payment.metadata);
 
+  // Глобальный тумблер мульти-подписок читаем ОДИН раз и до любых побочных эффектов.
+  // Сбой чтения конфига НЕ превращаем ни в «мульти вкл» (создаст лишнюю user_<tg>_N),
+  // ни в «выкл» (consolidate удалит подписки клиента) — возвращаем ошибку активации:
+  // платёж остаётся неактивированным, вебхук/крон/админ повторят активацию.
+  let systemConfig: Awaited<ReturnType<typeof getSystemConfig>>;
+  try {
+    systemConfig = await getSystemConfig();
+  } catch (e) {
+    console.error("[activateTariffByPaymentId] system config unavailable:", e);
+    return { ok: false, error: "Настройки временно недоступны, повторите позже", status: 503 };
+  }
+  const multiSubEnabled = isMultiSubscriptionsEnabled(systemConfig);
+
   if (payment.tariffId) {
     const tariff = await prisma.tariff.findUnique({ where: { id: payment.tariffId } });
     if (!tariff) {
@@ -1029,8 +1064,11 @@ export async function activateTariffByPaymentId(paymentId: string): Promise<Acti
     if (!isGiftPurchase) {
       // Глобальный тумблер мульти-подписок. Выкл → single-режим для любого тарифа:
       // покупка другого тарифа ЖЁСТКО заменяет существующую подписку (старые дни сгорают).
-      const multiSubEnabled = ((await getSystemConfig().catch(() => null)) as { multiSubscriptionsEnabled?: boolean } | null)?.multiSubscriptionsEnabled ?? true;
-      const convertible = await findConvertibleSubscription(client.id, tariff.id, multiSubEnabled);
+      // Легаси-триал (trialId=null) конвертируется здесь же — на месте, тот же Remna-юзер/ссылка.
+      const convertible = await findConvertibleSubscription(client.id, tariff.id, multiSubEnabled, {
+        preferredSubId: getReplaceTrialSubId(payment.metadata),
+        trialSquadUuid: systemConfig.trialSquadUuid,
+      });
       if (convertible) {
         // юзер выбирает судьбу доп. устройств при конвертации:
         // убрать (бо́льшая конвертация дней) или оставить (устройства переезжают).
@@ -1104,8 +1142,7 @@ export async function activateTariffByPaymentId(paymentId: string): Promise<Acti
       await prisma.payment.update({ where: { id: payment.id }, data: { subscriptionId: result.data.subscriptionId } }).catch(() => {});
       await resetOneTimeDiscount();
       // Single-режим: подчищаем любые прочие подписки клиента (оставляем эту).
-      const cfgMs2 = await getSystemConfig().catch(() => null);
-      if ((cfgMs2 as { multiSubscriptionsEnabled?: boolean } | null)?.multiSubscriptionsEnabled === false) {
+      if (!multiSubEnabled) {
         await consolidateToSingleSubscription(client.id, result.data.subscriptionId).catch(() => {});
       }
     }
@@ -1120,8 +1157,7 @@ export async function activateTariffByPaymentId(paymentId: string): Promise<Acti
       // Single-режим: кастом-билд, как и обычная покупка, оставляет ОДНУ подписку.
       // Не для подарков (иначе консолидация снесла бы реальные подписки клиента).
       if (!isGiftPurchase) {
-        const cfgMsCb = await getSystemConfig().catch(() => null);
-        if ((cfgMsCb as { multiSubscriptionsEnabled?: boolean } | null)?.multiSubscriptionsEnabled === false) {
+        if (!multiSubEnabled) {
           await consolidateToSingleSubscription(client.id, result.data.subscriptionId).catch(() => {});
         }
       }

@@ -5,6 +5,7 @@ const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.Common
 let multi=false,candidate=null,failure=false,configFailure=false,calls=[];
 const moduleMock={exports:{}};
 vm.runInNewContext(js,{exports:moduleMock.exports,require:(name)=>{
+ if(name.includes('multi-subscriptions')){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/modules/client/multi-subscriptions.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:m.exports});return m.exports;}
  if(name.includes('client.service'))return {getSystemConfig:async()=>{if(configFailure)throw Error('config unavailable');return {multiSubscriptionsEnabled:multi};}};
  if(name.includes('gift.service'))return {createAdditionalSubscription:async(...args)=>{calls.push(['create',...args]);return {ok:true,data:{subscriptionId:'new',subscriptionIndex:1}};}};
  if(name.includes('tariff-activation'))return {findConvertibleSubscription:async(...args)=>{calls.push(['find',...args]);return candidate;},extendSecondarySubscription:async(...args)=>{calls.push(['extend',...args]);return failure?{ok:false,error:'Remnawave down',status:503}:{ok:true};},consolidateToSingleSubscription:async(...args)=>{calls.push(['consolidate',...args]);}};
