@@ -71,7 +71,7 @@ function latest(list: ConvertibleCandidate[]): ConvertibleCandidate | null {
 /**
  * Кандидаты — НЕ подарочные подписки клиента, привязанные к Remnawave.
  *
- * Мульти ВЫКЛ (глобальный single): явный выбор → тот же тариф (не триал) → платная
+ * Мульти ВЫКЛ (глобальный single): тот же тариф (не триал) → явно выбранный триал → платная
  *   (tariffId, не триал) с max expireAt → любая с max expireAt. Платная предпочитается
  *   триалу: иначе живущий дольше триал оставался бы, а платную снёс бы consolidate.
  * Мульти ВКЛ + single-категория: явный выбор в категории → тот же тариф → любая из категории.
@@ -89,9 +89,12 @@ export function pickConvertibleSubscription(
   const sameTariff = (c: ConvertibleCandidate) => c.tariffId === opts.tariffId && c.trialId == null;
 
   if (!opts.multiSubEnabled) {
-    if (preferred) return preferred;
+    // Явный выбор (бот шлёт replaceTrialSubId при любом выборе) побеждает только если это
+    // триал и у клиента нет платной подписки того же тарифа — иначе продлеваем платную,
+    // а не жёстко заменяем триал с последующим удалением платной консолидацией.
     const same = latest(candidates.filter(sameTariff));
     if (same) return same;
+    if (preferred && (preferred.trialId != null || preferred.isLegacyTrial)) return preferred;
     const paid = latest(candidates.filter((c) => c.tariffId != null && c.trialId == null));
     if (paid) return paid;
     return latest([...candidates]);

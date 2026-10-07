@@ -627,6 +627,9 @@ export async function extendSecondarySubscription(
    *  тот же Remnawave-UUID → ссылка подписки НЕ меняется), НО остаток дней НЕ переносится
    *  (convertedDays=0) — старые дни сгорают, тариф начинается с нуля. */
   hardReplace?: boolean,
+  /** цель — легаси-триал (POST /trial, trialId=null): конвертируется как триал —
+   *  остаток дней и трафика переносится 1:1 (а не pro-rata по пустой ставке = 0). */
+  legacyTrial?: boolean,
 ): Promise<ActivationResult> {
   if (!isRemnaConfigured()) return { ok: false, error: "Сервис временно недоступен", status: 503 };
 
@@ -683,7 +686,7 @@ export async function extendSecondarySubscription(
   // сквады заменяются на сквады целевого тарифа (уход с триального сквада),
   // трафик начинается заново. Остаток бесплатных дней не конвертируется
   // (currentPricePerDay у триала нет → computeConvertedDays вернёт 0).
-  const isTrialConversion = sec.trialId != null;
+  const isTrialConversion = sec.trialId != null || legacyTrial === true;
   const effectiveConvert = convertMode || isTrialConversion || hardReplace;
 
   // ── Конвертация: остаток дней переносится pro-rata по ставке, отсчёт от «сейчас» ──
@@ -828,7 +831,7 @@ export async function findConvertibleSubscription(
   tariffId: string,
   /** Мульти-подписки включены (глобально). Если false — single-режим для ЛЮБОГО тарифа:
    *  любая покупка находит существующую подписку клиента для замены. */
-  multiSubEnabled: boolean = true,
+  multiSubEnabled: boolean,
   opts: {
     /** явный выбор пользователя (metadata.replaceTrialSubId) — побеждает сортировку по expireAt */
     preferredSubId?: string | null;
@@ -863,9 +866,18 @@ export async function findConvertibleSubscription(
 
   // Легаси-триал подтверждаем сквадом в Remnawave (тем же правилом UI зовёт его «Тест»).
   // Ошибка Remna → не считаем триалом (поведение как до фикса), а не роняем покупку.
+  // Подписка с оплаченным платежом — платная, даже без тарифа (attach-remna, бэкфилл):
+  // её нельзя считать триалом.
+  const legacyRecords = opts.trialSquadUuid?.trim() ? rows.filter((r) => isLegacyTrialRecord(r)) : [];
+  const paidLinked = legacyRecords.length > 0
+    ? new Set((await prisma.payment.findMany({
+        where: { status: "PAID", subscriptionId: { in: legacyRecords.map((r) => r.id) } },
+        select: { subscriptionId: true },
+      })).map((p) => p.subscriptionId))
+    : new Set<string | null>();
   const legacyIds = new Set<string>();
-  for (const r of rows) {
-    if (!r.remnawaveUuid || !isLegacyTrialRecord(r) || !opts.trialSquadUuid?.trim()) continue;
+  for (const r of legacyRecords) {
+    if (!r.remnawaveUuid || paidLinked.has(r.id)) continue;
     const u = await remnaGetUser(r.remnawaveUuid);
     if (u.error || !u.data) {
       console.error("[findConvertibleSubscription] legacy trial check failed:", r.id, u.error);
@@ -1089,7 +1101,7 @@ export async function activateTariffByPaymentId(paymentId: string): Promise<Acti
           trafficResetMode: tariff.trafficResetMode ?? undefined,
           price: selectedOption?.price ?? tariff.price,
         // тот же тариф → обычное продление (стек); другой → convert (pro-rata) или hardReplace (с нуля).
-        }, selectedOption, payment.deviceCount ?? undefined, removeExtrasOnConvert, convertModeFlag, hardReplace);
+        }, selectedOption, payment.deviceCount ?? undefined, removeExtrasOnConvert, convertModeFlag, hardReplace, convertible.isLegacyTrial);
         if (result.ok) {
           // фиксируем конвертацию в платеже: и привязку подписки, и детали для отчётности.
           const meta = (() => {

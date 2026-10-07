@@ -4345,6 +4345,7 @@ clientRouter.post("/payments/balance", async (req, res) => {
         // тот же тариф → продление (стек); другой → convert (мульти вкл) / hardReplace (мульти выкл, дни сгорают).
         /* convertMode */ multiSubEnabledBal && !convertible.sameTariff,
         /* hardReplace */ !multiSubEnabledBal && !convertible.sameTariff,
+        /* legacyTrial */ convertible.isLegacyTrial,
       );
       isConverted = activateResult.ok && !convertible.sameTariff;
       convertedLegacyTrial = isConverted && convertible.isLegacyTrial;

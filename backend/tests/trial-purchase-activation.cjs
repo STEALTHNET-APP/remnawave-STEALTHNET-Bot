@@ -20,7 +20,7 @@ let state;
 function reset({ multiRaw = 'true', configFails = false } = {}) {
   state = {
     multiRaw, configFails,
-    subs: [], remnaUsers: {}, calls: [], payments: {},
+    subs: [], remnaUsers: {}, calls: [], payments: {}, paidLinks: [],
     tariffs: { paid: { id: 'paid', name: 'Paid', price: 300, durationDays: 30, trafficLimitBytes: null, deviceLimit: 3, includedDevices: 1, pricePerExtraDevice: 0, maxExtraDevices: 0, deviceDiscountTiers: null, internalSquadUuids: ['sq-paid'], trafficResetMode: null, categoryId: null, category: null } },
   };
 }
@@ -41,6 +41,7 @@ const withTariff = (r) => ({ ...r, tariff: r.tariffId ? { name: state.tariffs[r.
 const prisma = {
   payment: {
     findUnique: async ({ where }) => state.payments[where.id] ?? null,
+    findMany: async ({ where }) => state.paidLinks.filter((l) => where.status === 'PAID' && where.subscriptionId.in.includes(l)).map((subscriptionId) => ({ subscriptionId })),
     update: async ({ where, data }) => { state.calls.push(['payment.update', where.id, data]); return {}; },
   },
   client: {
@@ -132,11 +133,30 @@ const cases = [
     assert.deepEqual(remnaUpdates().map((u) => u.uuid), ['u-S2']);
     assert.deepEqual(state.calls.filter((c) => c[0] === 'consolidate.delete').map((c) => c[1]).sort(), ['L', 'S1']);
   }],
-  ['multi OFF: explicit replaceTrialSubId wins over expireAt', async () => {
+  ['multi OFF: explicit replaceTrialSubId (trial) wins over expireAt of another tariff', async () => {
+    reset({ multiRaw: 'false' }); legacy();
+    addSub({ id: 'S1', tariffId: 'other', remnawaveUuid: 'u-S1', squads: ['sq-paid'], expireAt: new Date(Date.now() + 20 * DAY) });
+    assert.equal((await pay({ replaceTrialSubId: 'L' })).ok, true);
+    assert.deepEqual(remnaUpdates().map((u) => u.uuid), ['u-L']);
+  }],
+  ['multi OFF: replaceTrialSubId does not override a paid sub of the same tariff', async () => {
     reset({ multiRaw: 'false' }); legacy();
     addSub({ id: 'S1', tariffId: 'paid', remnawaveUuid: 'u-S1', squads: ['sq-paid'], expireAt: new Date(Date.now() + 20 * DAY) });
     assert.equal((await pay({ replaceTrialSubId: 'L' })).ok, true);
-    assert.deepEqual(remnaUpdates().map((u) => u.uuid), ['u-L']);
+    assert.deepEqual(remnaUpdates().map((u) => u.uuid), ['u-S1']);
+    assert.deepEqual(state.calls.filter((c) => c[0] === 'consolidate.delete').map((c) => c[1]), ['L']);
+  }],
+  ['paid sub without tariff on trial squad keeps remaining days', async () => {
+    reset({ multiRaw: 'true' }); addSub({ id: 'N', remnawaveUuid: 'u-N', squads: [TRIAL_SQUAD], expireAt: new Date(Date.now() + 10 * DAY + 3600_000) });
+    assert.equal((await pay()).ok, true); assert.ok(!kinds().includes('create'));
+    const [u] = remnaUpdates(); assert.equal(u.uuid, 'u-N');
+    const days = Math.round((new Date(u.expireAt).getTime() - Date.now()) / DAY);
+    assert.equal(days, 40, 'purchased 30 + remaining 10');
+  }],
+  ['sub with a PAID payment linked is never a legacy trial', async () => {
+    reset({ multiRaw: 'true' }); addSub({ id: 'N', remnawaveUuid: 'u-N', squads: [TRIAL_SQUAD], expireAt: new Date(Date.now() + 10 * DAY) });
+    state.paidLinks.push('N');
+    assert.equal((await pay()).ok, true); assert.ok(kinds().includes('create')); assert.equal(remnaUpdates().length, 0);
   }],
   ['config load failure → retryable error, nothing touched', async () => {
     reset({ configFails: true }); legacy();

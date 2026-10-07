@@ -6,7 +6,7 @@ import {
   pickConvertibleSubscription,
   type ConvertibleCandidate,
 } from "./subscription-target.js";
-import { parseMultiSubscriptionsEnabled, isMultiSubscriptionsEnabled } from "../client/multi-subscriptions.js";
+import { parseMultiSubscriptionsEnabled, isMultiSubscriptionsEnabled, describeMultiSubscriptionsRaw } from "../client/multi-subscriptions.js";
 
 const day = 86_400_000;
 const now = Date.now();
@@ -49,6 +49,13 @@ test("isLegacyTrialRecord: tariff-less, trial-less, unpriced, owned, linked to R
   assert.equal(isLegacyTrialRecord({ ...base, customPrice: 300 }), false, "custom build has a price");
 });
 
+test("describeMultiSubscriptionsRaw: unrecognised non-empty values are flagged", () => {
+  for (const ok of [undefined, null, "", " ", "true", "TRUE", "1", "false", "False", "0"]) {
+    assert.equal(describeMultiSubscriptionsRaw(ok).recognised, true, String(ok));
+  }
+  for (const bad of ["yes", "on", "off", "2", "enabled"]) assert.equal(describeMultiSubscriptionsRaw(bad).recognised, false, bad);
+});
+
 test("isOnTrialSquad: trial squad must be configured and present", () => {
   assert.equal(isOnTrialSquad(["a", "trial"], "trial"), true);
   assert.equal(isOnTrialSquad(["a"], "trial"), false);
@@ -84,11 +91,34 @@ test("multi ON + category single: category sub wins; legacy trial is the fallbac
   assert.equal(pickConvertibleSubscription([legacy], opts)?.id, "legacy");
 });
 
-test("multi OFF: explicit target wins over expireAt ordering", () => {
+test("multi OFF: explicit trial target wins over expireAt ordering", () => {
   const a = sub({ id: "a", tariffId: "x", expireAt: new Date(now + 30 * day) });
-  const b = sub({ id: "b", subscriptionIndex: 1, tariffId: "y", expireAt: new Date(now + day) });
+  const b = sub({ id: "b", subscriptionIndex: 1, tariffId: "y", trialId: "tr", expireAt: new Date(now + day) });
   const r = pickConvertibleSubscription([a, b], { tariffId: "z", categoryId: null, multiSubEnabled: false, perCategorySingle: false, preferredSubId: "b" });
   assert.equal(r?.id, "b");
+});
+
+test("multi OFF: explicit trial choice does not override a paid sub of the same tariff", () => {
+  const paid = sub({ id: "paid", subscriptionIndex: 1, tariffId: "x", expireAt: new Date(now + 5 * day) });
+  const legacy = sub({ id: "legacy", isLegacyTrial: true, expireAt: new Date(now + day) });
+  const multiTrial = sub({ id: "mt", subscriptionIndex: 2, tariffId: "tt", trialId: "tr" });
+  const opts = { tariffId: "x", categoryId: null, multiSubEnabled: false, perCategorySingle: false };
+  assert.equal(pickConvertibleSubscription([paid, legacy, multiTrial], { ...opts, preferredSubId: "legacy" })?.id, "paid");
+  assert.equal(pickConvertibleSubscription([paid, legacy, multiTrial], { ...opts, preferredSubId: "mt" })?.id, "paid");
+});
+
+test("multi OFF: explicit non-trial choice is ignored in favour of normal ordering", () => {
+  const a = sub({ id: "a", tariffId: "x", expireAt: new Date(now + 30 * day) });
+  const b = sub({ id: "b", subscriptionIndex: 1, tariffId: "y", expireAt: new Date(now + day) });
+  const r = pickConvertibleSubscription([a, b], { tariffId: "x", categoryId: null, multiSubEnabled: false, perCategorySingle: false, preferredSubId: "b" });
+  assert.equal(r?.id, "a");
+});
+
+test("multi OFF: explicit trial choice wins when no same-tariff paid sub exists", () => {
+  const a = sub({ id: "a", tariffId: "x", expireAt: new Date(now + 30 * day) });
+  const legacy = sub({ id: "legacy", subscriptionIndex: 1, isLegacyTrial: true, expireAt: new Date(now + day) });
+  const r = pickConvertibleSubscription([a, legacy], { tariffId: "z", categoryId: null, multiSubEnabled: false, perCategorySingle: false, preferredSubId: "legacy" });
+  assert.equal(r?.id, "legacy");
 });
 
 test("multi OFF: unknown explicit target falls back to normal ordering", () => {
