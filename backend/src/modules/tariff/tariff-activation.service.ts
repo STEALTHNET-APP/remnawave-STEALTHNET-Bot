@@ -788,6 +788,11 @@ export async function extendSecondarySubscription(
       extraDevices: effectiveExtras,
       extraDevicesMonthlyPrice: effectiveExtrasMonthly,
       ...(tariff.id && tariff.id !== sec.tariffId ? { tariffId: tariff.id } : {}),
+      // issue #195: автопродление берёт autoRenewTariffId/OptionId в приоритете — держим их
+      // в синхроне с последним купленным тарифом/опцией, иначе cron вернёт старый тариф.
+      ...(tariff.id && (tariff.id !== sec.tariffId || selectedOption?.id)
+        ? { autoRenewTariffId: tariff.id, autoRenewPriceOptionId: selectedOption?.id ?? null }
+        : {}),
       ...(effectiveConvert && newPriceForDb != null && newPriceForDb > 0 ? {
         customPrice: newPriceForDb,
         currentPricePerDay: effectiveDays > 0 ? newPriceForDb / effectiveDays : null,
