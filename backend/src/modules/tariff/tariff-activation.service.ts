@@ -630,7 +630,7 @@ export async function extendSecondarySubscription(
 
   const sec = await prisma.subscription.findUnique({
     where: { id: secondaryId },
-    select: { id: true, remnawaveUuid: true, tariffId: true, ownerId: true, customPrice: true, extraDevices: true, extraDevicesMonthlyPrice: true, trialId: true, currentPricePerDay: true },
+    select: { id: true, remnawaveUuid: true, tariffId: true, autoRenewTariffId: true, ownerId: true, customPrice: true, extraDevices: true, extraDevicesMonthlyPrice: true, trialId: true, currentPricePerDay: true },
   });
   if (!sec) {
     return { ok: false, error: "Доп. подписка не найдена", status: 404 };
@@ -788,10 +788,11 @@ export async function extendSecondarySubscription(
       extraDevices: effectiveExtras,
       extraDevicesMonthlyPrice: effectiveExtrasMonthly,
       ...(tariff.id && tariff.id !== sec.tariffId ? { tariffId: tariff.id } : {}),
-      // issue #195: автопродление берёт autoRenewTariffId/OptionId в приоритете — держим их
-      // в синхроне с последним купленным тарифом/опцией, иначе cron вернёт старый тариф.
-      ...(tariff.id && (tariff.id !== sec.tariffId || selectedOption?.id)
-        ? { autoRenewTariffId: tariff.id, autoRenewPriceOptionId: selectedOption?.id ?? null }
+      // Смена тарифа (конвертация): опция автопродления от старого тарифа больше не валидна,
+      // а autoRenewTariffId (fallback cron-а, если tariffId станет null) переводим на новый
+      // тариф — но только если он был задан, чтобы не включать новых настроек.
+      ...(tariff.id && tariff.id !== sec.tariffId
+        ? { autoRenewPriceOptionId: null, ...(sec.autoRenewTariffId ? { autoRenewTariffId: tariff.id || null } : {}) }
         : {}),
       ...(effectiveConvert && newPriceForDb != null && newPriceForDb > 0 ? {
         customPrice: newPriceForDb,

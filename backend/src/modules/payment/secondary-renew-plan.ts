@@ -37,11 +37,49 @@ export interface SecondaryRenewPlan {
 
 const PRICE_EPSILON = 0.005;
 
-/** schema.prisma: autoRenewTariffId — тариф автопродления; null → продлеваем текущий tariffId. */
+/**
+ * Тариф продления: текущий tariffId подписки; autoRenewTariffId — только если тариф у
+ * подписки пропал (удалён → SetNull). autoRenewTariffId бывает устаревшим: его копировали
+ * из последнего платежа клиента по ЛЮБОЙ подписке и не обновляли после конвертации,
+ * поэтому в приоритет его ставить нельзя (иначе cron переключит подписку на чужой тариф).
+ */
 export function resolveSecondaryRenewTariffId(
   sub: Pick<RenewPlanSubscription, "tariffId" | "autoRenewTariffId">,
 ): string | null {
-  return sub.autoRenewTariffId ?? sub.tariffId ?? null;
+  return sub.tariffId ?? sub.autoRenewTariffId ?? null;
+}
+
+export interface LastTariffPayment {
+  tariffId: string | null;
+  tariffPriceOptionId: string | null;
+  deviceCount: number | null;
+}
+
+export interface SubAutoRenewPrefs {
+  autoRenewTariffId: string;
+  autoRenewPriceOptionId: string | null;
+  autoRenewExtraDevices?: number;
+}
+
+/**
+ * Настройки автопродления при включении тумблера на конкретной подписке.
+ * Платёж должен быть платежом ЭТОЙ подписки по её текущему тарифу, опция — принадлежать
+ * этому тарифу (optionTariffId — tariffId опции платежа из БД, null если опции нет).
+ */
+export function autoRenewPrefsFromLastPayment(
+  subTariffId: string,
+  lastPaid: LastTariffPayment | null,
+  optionTariffId: string | null,
+): SubAutoRenewPrefs {
+  if (!lastPaid || lastPaid.tariffId !== subTariffId) {
+    return { autoRenewTariffId: subTariffId, autoRenewPriceOptionId: null };
+  }
+  const optionOk = lastPaid.tariffPriceOptionId != null && optionTariffId === subTariffId;
+  return {
+    autoRenewTariffId: subTariffId,
+    autoRenewPriceOptionId: optionOk ? lastPaid.tariffPriceOptionId : null,
+    autoRenewExtraDevices: lastPaid.deviceCount ?? 0,
+  };
 }
 
 export function resolveSecondaryRenewPlan(

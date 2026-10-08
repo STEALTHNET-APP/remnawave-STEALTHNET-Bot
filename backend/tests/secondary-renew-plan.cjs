@@ -5,6 +5,7 @@ const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind
 const mod = { exports: {} };
 vm.runInNewContext(js, { exports: mod.exports, require: (n) => { throw Error(n); } });
 const { resolveSecondaryRenewTariffId, computeSecondaryRenewPrice } = mod.exports;
+const autoRenewPrefsFromLastPayment = (...a) => ({ ...mod.exports.autoRenewPrefsFromLastPayment(...a) });
 // Copy into this realm: objects built inside vm have a foreign Object.prototype.
 const resolveSecondaryRenewPlan = (...a) => ({ ...mod.exports.resolveSecondaryRenewPlan(...a) });
 
@@ -50,11 +51,21 @@ assert.equal(resolveSecondaryRenewPlan(sub({ customPrice: 90, extraDevicesMonthl
 // Zero legacy duration falls back to 30 days, as today.
 assert.equal(resolveSecondaryRenewPlan(sub({}), { id: 't1', price: 70, durationDays: 0 }, []).durationDays, 30);
 
-// 4. autoRenewTariffId takes precedence over tariffId (schema: null → current tariffId).
-assert.equal(resolveSecondaryRenewTariffId({ tariffId: 't1', autoRenewTariffId: 't2' }), 't2');
+// 4. tariffId wins; autoRenewTariffId only when the sub lost its tariff (review of f1de800:
+//    autoRenewTariffId can be stale — copied from another sub's payment or pre-conversion).
+assert.equal(resolveSecondaryRenewTariffId({ tariffId: 't1', autoRenewTariffId: 't2' }), 't1');
 assert.equal(resolveSecondaryRenewTariffId({ tariffId: 't1', autoRenewTariffId: null }), 't1');
 assert.equal(resolveSecondaryRenewTariffId({ tariffId: null, autoRenewTariffId: 't2' }), 't2');
 assert.equal(resolveSecondaryRenewTariffId({ tariffId: null, autoRenewTariffId: null }), null);
+// tariffId set + stale autoRenewTariffId/option of t2 → tariff t1 unchanged, foreign option ignored.
+{
+  const stale = sub({ tariffId: 't1', autoRenewTariffId: 't2', autoRenewPriceOptionId: 'x', customPrice: 250 });
+  assert.equal(resolveSecondaryRenewTariffId(stale), 't1');
+  assert.deepEqual(
+    resolveSecondaryRenewPlan(stale, tariff, [...options, { id: 'x', tariffId: 't2', durationDays: 60, price: 180 }]),
+    { tariffId: 't1', optionId: 'o31', durationDays: 31, basePrice: 250 },
+  );
+}
 
 // 5. Option from another tariff is ignored (both as saved id and as price match).
 const t2 = { id: 't2', price: 100, durationDays: 30 };
@@ -70,5 +81,18 @@ const plan31 = { tariffId: 't1', optionId: 'o31', durationDays: 31, basePrice: 2
 assert.equal(computeSecondaryRenewPrice(plan31, 0, 0), 250);
 assert.equal(computeSecondaryRenewPrice(plan31, 60, 0), 250 + Math.floor(60 * 31 / 30));
 assert.equal(computeSecondaryRenewPrice(plan31, 60, 10), Math.floor((250 + 62) * 0.9));
+
+// Enabling auto-renew on a sub: only that sub's payment of that sub's tariff, option must belong to it.
+const paid = { tariffId: 't1', tariffPriceOptionId: 'o31', deviceCount: 2 };
+assert.deepEqual(autoRenewPrefsFromLastPayment('t1', paid, 't1'),
+  { autoRenewTariffId: 't1', autoRenewPriceOptionId: 'o31', autoRenewExtraDevices: 2 });
+assert.deepEqual(autoRenewPrefsFromLastPayment('t1', paid, 't2'),
+  { autoRenewTariffId: 't1', autoRenewPriceOptionId: null, autoRenewExtraDevices: 2 });
+assert.deepEqual(autoRenewPrefsFromLastPayment('t1', { ...paid, tariffId: 't2' }, 't2'),
+  { autoRenewTariffId: 't1', autoRenewPriceOptionId: null });
+assert.deepEqual(autoRenewPrefsFromLastPayment('t1', null, null),
+  { autoRenewTariffId: 't1', autoRenewPriceOptionId: null });
+assert.deepEqual(autoRenewPrefsFromLastPayment('t1', { ...paid, tariffPriceOptionId: null, deviceCount: null }, null),
+  { autoRenewTariffId: 't1', autoRenewPriceOptionId: null, autoRenewExtraDevices: 0 });
 
 console.log('secondary-renew-plan: ok');

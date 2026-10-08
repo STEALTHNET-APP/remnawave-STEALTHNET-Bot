@@ -59,6 +59,7 @@ import {
   pickField,
 } from "../ticket/attachments.js";
 import { validateEmailForSignup } from "../signup-protection/email-blocklist.js";
+import { autoRenewPrefsFromLastPayment } from "../payment/secondary-renew-plan.js";
 
 /** Извлекает реальный IP клиента (с учётом trust proxy). */
 function getRequestIp(req: Request): string | null {
@@ -3361,19 +3362,20 @@ clientRouter.post("/subscription/:type/:id/auto-renew", async (req, res) => {
   const updates: { autoRenewEnabled: boolean; autoRenewTariffId?: string | null; autoRenewPriceOptionId?: string | null; autoRenewExtraDevices?: number } = {
     autoRenewEnabled: enabled,
   };
-  if (enabled) {
+  if (enabled && sub.tariffId) {
+    // Только платёж ЭТОЙ подписки (subscriptionId или metadata.extendsSecondarySubId) по её
+    // текущему тарифу — иначе в подписку попадал тариф/опция другой подписки клиента.
     const lastPaid = await prisma.payment.findFirst({
-      where: { clientId, status: "PAID", tariffId: { not: null } },
+      where: {
+        clientId,
+        status: "PAID",
+        tariffId: sub.tariffId,
+        OR: [{ subscriptionId: sub.id }, { metadata: { contains: `"extendsSecondarySubId":"${sub.id}"` } }],
+      },
       orderBy: { paidAt: "desc" },
-      select: { tariffId: true, tariffPriceOptionId: true, deviceCount: true },
+      select: { tariffId: true, tariffPriceOptionId: true, deviceCount: true, tariffPriceOption: { select: { tariffId: true } } },
     });
-    if (lastPaid?.tariffId) {
-      updates.autoRenewTariffId = lastPaid.tariffId;
-      updates.autoRenewPriceOptionId = lastPaid.tariffPriceOptionId;
-      updates.autoRenewExtraDevices = lastPaid.deviceCount ?? 0;
-    } else if (sub.tariffId) {
-      updates.autoRenewTariffId = sub.tariffId;
-    }
+    Object.assign(updates, autoRenewPrefsFromLastPayment(sub.tariffId, lastPaid, lastPaid?.tariffPriceOption?.tariffId ?? null));
   }
   await prisma.subscription.update({ where: { id: sub.id }, data: updates });
   return res.json({ ok: true, enabled, type: subType });

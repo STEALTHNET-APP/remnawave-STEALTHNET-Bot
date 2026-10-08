@@ -16,7 +16,7 @@ import {
   notifyAdminsAboutAutoRenewFailed,
 } from "../notification/telegram-notify.service.js";
 import { dispatchAutoRenewNotification, tryMarkSubDedup } from "../notification/auto-renew-notifications.service.js";
-import { computeSecondaryRenewPrice, resolveSecondaryRenewPlan } from "./secondary-renew-plan.js";
+import { computeSecondaryRenewPrice, resolveSecondaryRenewPlan, resolveSecondaryRenewTariffId } from "./secondary-renew-plan.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -630,8 +630,9 @@ async function processSecondaryAutoRenewals(): Promise<void> {
   for (const sec of secondaries) {
     if (!sec.remnawaveUuid || !sec.owner || sec.owner.isBlocked) continue;
 
-    // schema.prisma: autoRenewTariffId приоритетнее; null → продлеваем текущий tariffId.
-    const tariffForRenewal = sec.autoRenewTariff ?? sec.tariff;
+    // Текущий tariffId в приоритете; autoRenewTariffId — только если тариф у подписки пропал.
+    const renewTariffId = resolveSecondaryRenewTariffId(sec);
+    const tariffForRenewal = [sec.tariff, sec.autoRenewTariff].find((t) => t != null && t.id === renewTariffId) ?? null;
     if (!tariffForRenewal) {
       continue;
     }
@@ -708,9 +709,10 @@ async function processSecondaryAutoRenewals(): Promise<void> {
           clientId: sec.owner.id,
           provider: "yookassa",
           status: "PAID",
-          tariffId: tariffForRenewal.id,
+          // Связь с подпиской — через metadata.extendsSecondarySubId (не по tariffId: тариф
+          // мог смениться между попытками → второе списание).
           paidAt: { gte: new Date(now - 2 * 60 * 60 * 1000) },
-          metadata: { contains: sec.id },
+          metadata: { contains: `"extendsSecondarySubId":"${sec.id}"` },
         },
         orderBy: { paidAt: "desc" },
       });
