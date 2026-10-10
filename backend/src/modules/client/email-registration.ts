@@ -49,3 +49,33 @@ export function consumedPendingExpiry(now: Date, currentExpiry: Date): Date {
 export function passwordResetFingerprint(passwordHash: string | null): string {
   return (passwordHash ?? "").slice(-12);
 }
+
+/**
+ * /set-password без текущего пароля — только если пароля нет. Существующий пароль
+ * меняется через /change-password (с текущим) или сброс по письму.
+ */
+export function canSetPasswordWithoutCurrent(passwordHash: string | null): boolean {
+  return !passwordHash?.trim();
+}
+
+/**
+ * Сброс пароля по письму. Аккаунт с паролем — как раньше. Аккаунт БЕЗ пароля — только если
+ * его email подтверждён. Флага в схеме нет; registrationSource === "web" ставят лишь /verify-email
+ * (email подтверждён ссылкой) и skipEmailVerification-регистрация (аккаунт создан вокруг этого email
+ * самим владельцем ввода). Telegram/Google/Apple-аккаунты, к которым email мог быть привязан
+ * без подтверждения (/link-email-direct), сюда не попадают.
+ */
+export function canResetPassword(client: { passwordHash: string | null; registrationSource: string | null }): boolean {
+  if (client.passwordHash?.trim()) return true;
+  return client.registrationSource === "web";
+}
+
+/** Prisma P2002 именно по уникальному email (а не по другому уникальному полю). */
+export function isEmailUniqueViolation(e: unknown): boolean {
+  if (typeof e !== "object" || e === null) return false;
+  const err = e as { code?: unknown; meta?: { target?: unknown } };
+  if (err.code !== "P2002") return false;
+  const target = err.meta?.target;
+  if (Array.isArray(target)) return target.some((t) => typeof t === "string" && t.includes("email"));
+  return typeof target === "string" && target.includes("email");
+}

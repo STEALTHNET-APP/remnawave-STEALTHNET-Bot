@@ -54,3 +54,23 @@ assert.ok(!page.includes('dummy password')&&!page.includes('slice(-8) + "A1!"'),
 const verifyPage=fs.readFileSync('../frontend/src/pages/cabinet/client-verify-email.tsx','utf8');
 assert.ok(verifyPage.includes('already_verified'),'verify page handles already-verified links');
 console.log('PASS: email-only register route, null password -> onboarding step, verify-email replay without session, reset for passwordless accounts, frontend wiring');
+
+// 6. review fixes: no password overwrite via set-password, passwordless reset only for verified-email accounts, P2002 on email only
+assert.equal(h.canSetPasswordWithoutCurrent(null),true);
+assert.equal(h.canSetPasswordWithoutCurrent(''),true);
+assert.equal(h.canSetPasswordWithoutCurrent('$2b$10$existing'),false);
+assert.equal(h.canResetPassword({passwordHash:'$2b$10$x',registrationSource:'telegram'}),true);
+assert.equal(h.canResetPassword({passwordHash:null,registrationSource:'web'}),true);
+assert.equal(h.canResetPassword({passwordHash:null,registrationSource:'telegram'}),false);
+assert.equal(h.canResetPassword({passwordHash:null,registrationSource:null}),false);
+assert.equal(h.isEmailUniqueViolation({code:'P2002',meta:{target:['email']}}),true);
+assert.equal(h.isEmailUniqueViolation({code:'P2002',meta:{target:'clients_email_key'}}),true);
+assert.equal(h.isEmailUniqueViolation({code:'P2002',meta:{target:['referral_code']}}),false);
+assert.equal(h.isEmailUniqueViolation({code:'P2002'}),false);
+assert.equal(h.isEmailUniqueViolation({code:'P2025',meta:{target:['email']}}),false);
+assert.equal(h.isEmailUniqueViolation(null),false);
+const setPwd=routes.slice(routes.indexOf('clientRouter.post("/set-password"'),routes.indexOf('clientRouter.post("/complete-onboarding"'));
+assert.ok(setPwd.includes('canSetPasswordWithoutCurrent(')&&!setPwd.includes('onboardingCompleted'),'set-password must not overwrite an existing password');
+assert.ok((reset.match(/canResetPassword\(/g)||[]).length===2,'forgot+reset enforce canResetPassword');
+assert.ok(verify.includes('isEmailUniqueViolation(e)'),'verify-email checks P2002 target');
+console.log('PASS: review fixes (set-password, passwordless reset gate, P2002 target)');

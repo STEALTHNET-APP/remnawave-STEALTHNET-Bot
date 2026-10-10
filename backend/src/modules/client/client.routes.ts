@@ -31,7 +31,7 @@ import { remnaCreateUser, remnaUpdateUser, isRemnaConfigured, remnaGetUser, remn
 import { isSmtpConfigured, isMailConfigured, mailConfigFromSystem, sendEmail } from "../mail/mail.service.js";
 import { renderEmailTemplate } from "../email-templates/email-templates.service.js";
 import { signClientPasswordResetToken, verifyClientPasswordResetToken } from "../auth/auth.service.js";
-import { NO_PASSWORD_HASH, resolveRegisterRoute, clientPasswordHashFromPending, decideVerifyEmail, consumedPendingExpiry, passwordResetFingerprint } from "./email-registration.js";
+import { NO_PASSWORD_HASH, resolveRegisterRoute, clientPasswordHashFromPending, decideVerifyEmail, consumedPendingExpiry, passwordResetFingerprint, canSetPasswordWithoutCurrent, canResetPassword, isEmailUniqueViolation } from "./email-registration.js";
 import { createPlategaTransaction, isPlategaConfigured } from "../platega/platega.service.js";
 import { activateTariffForClient, activateTariffByPaymentId, findConvertibleSubscription, computeConvertedDays } from "../tariff/tariff-activation.service.js";
 import { upsertPrimarySubscription, upsertSubscriptionByRemnaUuid } from "../subscription/subscription.helpers.js";
@@ -504,9 +504,6 @@ const alreadyVerifiedResponse = {
   alreadyVerified: true,
   message: "Email уже подтверждён. Войдите в аккаунт; если пароль ещё не задан — воспользуйтесь «Забыли пароль?».",
 } as const;
-function isUniqueViolation(e: unknown): boolean {
-  return typeof e === "object" && e !== null && "code" in e && (e as { code: unknown }).code === "P2002";
-}
 clientAuthRouter.post("/verify-email", async (req, res) => {
   const parse = verifyEmailSchema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ message: "Проверьте введённые данные" });
@@ -578,7 +575,7 @@ clientAuthRouter.post("/verify-email", async (req, res) => {
     });
   } catch (e) {
     // Параллельный первый переход уже создал клиента (unique email) — сессию не выдаём.
-    if (isUniqueViolation(e)) return res.json(alreadyVerifiedResponse);
+    if (isEmailUniqueViolation(e)) return res.json(alreadyVerifiedResponse);
     throw e;
   }
 
@@ -672,10 +669,11 @@ clientAuthRouter.post("/forgot-password", async (req, res) => {
     // в БД не находился, и письмо сброса молча не отправлялось (при ok:true в ответе).
     const client = await prisma.client.findFirst({
       where: { email: { equals: email, mode: "insensitive" } },
-      select: { id: true, email: true, passwordHash: true, isBlocked: true },
+      select: { id: true, email: true, passwordHash: true, isBlocked: true, registrationSource: true },
     });
-    // #200: аккаунт без пароля (email-регистрация, Google) тоже может задать его через письмо.
-    if (!client || client.isBlocked) return respondOk();
+    // #200: аккаунт без пароля может задать его через письмо, только если email подтверждён
+    // (canResetPassword). Ответ одинаковый — без перечисления аккаунтов.
+    if (!client || client.isBlocked || !canResetPassword(client)) return respondOk();
     const config = await getSystemConfig();
     const smtpConfig = mailConfigFromSystem(config);
     const appUrl = (config.publicAppUrl || "").replace(/\/$/, "");
@@ -705,8 +703,8 @@ clientAuthRouter.post("/reset-password", async (req, res) => {
   if (!body.success) return res.status(400).json({ message: body.error.issues[0]?.message ?? "Проверьте данные" });
   const payload = verifyClientPasswordResetToken(body.data.token, env.JWT_SECRET);
   if (!payload) return res.status(400).json({ message: "Ссылка недействительна или устарела" });
-  const client = await prisma.client.findUnique({ where: { id: payload.clientId }, select: { id: true, passwordHash: true, isBlocked: true } });
-  if (!client || client.isBlocked) return res.status(400).json({ message: "Ссылка недействительна" });
+  const client = await prisma.client.findUnique({ where: { id: payload.clientId }, select: { id: true, passwordHash: true, isBlocked: true, registrationSource: true } });
+  if (!client || client.isBlocked || !canResetPassword(client)) return res.status(400).json({ message: "Ссылка недействительна" });
   if (passwordResetFingerprint(client.passwordHash) !== payload.pv) return res.status(400).json({ message: "Ссылка уже использована — запросите сброс заново" });
   const newHash = await hashPassword(body.data.password);
   await prisma.client.update({ where: { id: client.id }, data: { passwordHash: newHash } });
@@ -1513,11 +1511,12 @@ clientRouter.post("/set-password", requireClientAuth, async (req, res) => {
 
   const clientData = await prisma.client.findUnique({
     where: { id: client.id },
-    select: { passwordHash: true, onboardingCompleted: true },
+    select: { passwordHash: true },
   });
 
-  // Разрешаем установку пароля если: пароля нет ИЛИ онбоардинг не завершён (dummy-пароль от email-регистрации)
-  if (clientData?.passwordHash && clientData.onboardingCompleted) {
+  // Только если пароля нет. Исключение для dummy-пароля (#200) убрано: оно позволяло перезаписать
+  // существующий пароль без текущего. Смена — /change-password или «Забыли пароль?».
+  if (!clientData || !canSetPasswordWithoutCurrent(clientData.passwordHash)) {
     return res.status(400).json({ message: "Пароль уже установлен. Используйте смену пароля." });
   }
 
