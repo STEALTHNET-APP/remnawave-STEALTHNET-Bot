@@ -30,6 +30,27 @@ export function isReferralEligiblePayment(provider: string | null | undefined): 
 }
 
 /**
+ * Сумма, от которой считается реферальный бонус. Если платёж смешанный
+ * (часть списана с внутреннего баланса, часть — внешним провайдером, напр.
+ * автопродление ЮKassa + баланс), metadata.cardPortion хранит реально
+ * оплаченную внешнюю часть — бонус считается только от неё (issue #201).
+ * Некорректные/отсутствующие данные — вся сумма платежа.
+ */
+export function getReferralBaseAmount(amount: number, metadata: string | null | undefined): number {
+  if (!metadata) return amount;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(metadata);
+  } catch {
+    return amount;
+  }
+  if (typeof parsed !== "object" || parsed === null || !("cardPortion" in parsed)) return amount;
+  const cardPortion: unknown = parsed.cardPortion;
+  if (typeof cardPortion !== "number" || !Number.isFinite(cardPortion) || cardPortion < 0) return amount;
+  return Math.min(cardPortion, amount);
+}
+
+/**
  * Распределяет реферальные бонусы по цепочке рефереров (до 3 уровней)
  * при оплате. Вызывать один раз при переводе платежа в PAID.
  * Идемпотентно: повторный вызов для того же платежа не дублирует начисления
@@ -89,7 +110,7 @@ export async function distributeReferralRewards(paymentId: string): Promise<{ di
 
     // v5.0.0: после выпила multi-bot реферальный бонус считается от amount
     // (раньше использовалось baseAmount = amount без наценки клона).
-    const amount = payment.amount;
+    const amount = getReferralBaseAmount(payment.amount, payment.metadata);
     const updates: { clientId: string; bonus: number; level: number }[] = [];
     // ВНИМАНИЕ: Client.referralPercent — это индивидуальный override клиента
     // как реферера ПЕРВОГО уровня (т.е. процент с его прямых рефералов).

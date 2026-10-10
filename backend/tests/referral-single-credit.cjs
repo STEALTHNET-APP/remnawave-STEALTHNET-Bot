@@ -47,5 +47,16 @@ const mk=(provider)=>({id:'p-'+provider,status:'PAID',provider,amount:500,referr
     assert.deepEqual(writes,[],prov+' must not write credits or balances');
     assert.equal(payment.referralDistributedAt,null);
   }
-  console.log('PASS: external providers credited once, balance/admin_grant/null providers skipped, idempotent');
+  // Mixed auto-renew: card + balance, saved as yookassa with full amount -> reward only on card portion
+  payment={...mk('yookassa'),metadata:JSON.stringify({autoRenew:true,cardPortion:200,balancePortion:300})};writes=[];
+  r=await distributeReferralRewards(payment.id);
+  assert.equal(r.distributed,true);
+  assert.deepEqual(writes.filter(w=>w[0]==='credit'),[['credit','ref1',20,1]]);
+  // Broken / absent / out-of-range metadata -> full amount
+  for(const metadata of [null,'not json',JSON.stringify({cardPortion:'abc'}),JSON.stringify({cardPortion:-5}),JSON.stringify({cardPortion:9999})]){
+    payment={...mk('yookassa'),metadata};writes=[];
+    await distributeReferralRewards(payment.id);
+    assert.deepEqual(writes.filter(w=>w[0]==='credit'),[['credit','ref1',50,1]],String(metadata));
+  }
+  console.log('PASS: external providers credited once, balance/admin_grant/null providers skipped, idempotent, mixed card+balance credited on card portion only');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -418,7 +418,12 @@ export async function processAutoRenewals() {
                     ypMeta.personalDiscountPercent = personalPct;
                     if (!ypMeta.originalPrice) ypMeta.originalPrice = baseTariffPrice;
                   }
-                  const ypHasExtras = autoRenewPromoCodeId || personalPct > 0;
+                  if (balancePortion > 0) {
+                    // Смешанная оплата: реферальный бонус считается только от cardPortion (issue #201).
+                    ypMeta.balancePortion = balancePortion;
+                    ypMeta.cardPortion = cardPortion;
+                  }
+                  const ypHasExtras = autoRenewPromoCodeId || personalPct > 0 || balancePortion > 0;
                   const p = await tx.payment.create({
                     data: {
                       clientId: client.id,
