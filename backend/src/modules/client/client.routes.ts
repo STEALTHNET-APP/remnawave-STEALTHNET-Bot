@@ -31,6 +31,7 @@ import { remnaCreateUser, remnaUpdateUser, isRemnaConfigured, remnaGetUser, remn
 import { isSmtpConfigured, isMailConfigured, mailConfigFromSystem, sendEmail } from "../mail/mail.service.js";
 import { renderEmailTemplate } from "../email-templates/email-templates.service.js";
 import { signClientPasswordResetToken, verifyClientPasswordResetToken } from "../auth/auth.service.js";
+import { NO_PASSWORD_HASH, resolveRegisterRoute, clientPasswordHashFromPending, decideVerifyEmail, consumedPendingExpiry, passwordResetFingerprint } from "./email-registration.js";
 import { createPlategaTransaction, isPlategaConfigured } from "../platega/platega.service.js";
 import { activateTariffForClient, activateTariffByPaymentId, findConvertibleSubscription, computeConvertedDays } from "../tariff/tariff-activation.service.js";
 import { upsertPrimarySubscription, upsertSubscriptionByRemnaUuid } from "../subscription/subscription.helpers.js";
@@ -200,11 +201,12 @@ clientAuthRouter.post("/register", async (req, res) => {
   }
 
   const data = body.data;
-  const hasEmail = data.email && data.password;
-  const hasTelegram = data.telegramId;
+  // #200: email-регистрация допустима без пароля — его задают на шаге онбординга.
+  const route = resolveRegisterRoute(data);
+  const hasEmail = route === "email";
 
-  if (!hasEmail && !hasTelegram) {
-    return res.status(400).json({ message: "Укажите email и пароль или войдите через Telegram" });
+  if (!route) {
+    return res.status(400).json({ message: "Укажите email или войдите через Telegram" });
   }
 
   // Какому клону принадлежит регистрация — определяем по X-Telegram-Bot-Token
@@ -276,7 +278,7 @@ clientAuthRouter.post("/register", async (req, res) => {
         const referrer = await prisma.client.findFirst({ where: { referralCode: data.referralCode } });
         if (referrer) referrerId = referrer.id;
       }
-      const passwordHash = await hashPassword(data.password!);
+      const passwordHash = data.password ? await hashPassword(data.password) : null;
       const client = await prisma.client.create({
         data: asClientUncheckedCreate({
           email: data.email!,
@@ -324,7 +326,7 @@ clientAuthRouter.post("/register", async (req, res) => {
       const referrer = await prisma.client.findFirst({ where: { referralCode: data.referralCode } });
       if (referrer) referrerId = referrer.id;
     }
-    const passwordHash = await hashPassword(data.password!);
+    const passwordHash = data.password ? await hashPassword(data.password) : NO_PASSWORD_HASH;
 
     await prisma.pendingEmailRegistration.create({
       data: {
@@ -374,7 +376,7 @@ clientAuthRouter.post("/register", async (req, res) => {
   }
 
   // Регистрация / вход по Telegram (используется ботом). 2FA не требуем — только для входа на сайте.
-  if (hasTelegram) {
+  if (route === "telegram") {
     const existing = await prisma.client.findFirst({
       where: asClientWhere({ telegramId: data.telegramId! }),
       select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
@@ -498,6 +500,13 @@ clientAuthRouter.post("/verify-link-email", async (req, res) => {
 });
 
 const verifyEmailSchema = z.object({ token: z.string().min(1) });
+const alreadyVerifiedResponse = {
+  alreadyVerified: true,
+  message: "Email уже подтверждён. Войдите в аккаунт; если пароль ещё не задан — воспользуйтесь «Забыли пароль?».",
+} as const;
+function isUniqueViolation(e: unknown): boolean {
+  return typeof e === "object" && e !== null && "code" in e && (e as { code: unknown }).code === "P2002";
+}
 clientAuthRouter.post("/verify-email", async (req, res) => {
   const parse = verifyEmailSchema.safeParse(req.body);
   if (!parse.success) return res.status(400).json({ message: "Проверьте введённые данные" });
@@ -506,20 +515,22 @@ clientAuthRouter.post("/verify-email", async (req, res) => {
   const pending = await prisma.pendingEmailRegistration.findUnique({
     where: { verificationToken: token },
   });
-  if (!pending) return res.status(400).json({ message: "Ссылка недействительна или устарела" });
-  if (new Date() > pending.expiresAt) {
+  const now = new Date();
+  const expired = pending ? now > pending.expiresAt : false;
+  const existingClient = pending
+    ? await prisma.client.findUnique({ where: { email: pending.email }, select: { id: true } })
+    : null;
+  const decision = decideVerifyEmail({ pendingExists: Boolean(pending), expired, clientExists: Boolean(existingClient) });
+  if (!pending || decision === "invalid") return res.status(400).json({ message: "Ссылка недействительна или устарела" });
+  if (decision === "expired") {
     await prisma.pendingEmailRegistration.delete({ where: { id: pending.id } }).catch(() => {});
     return res.status(400).json({ message: "Ссылка истекла — зарегистрируйтесь заново." });
   }
-
-  const existingClient = await prisma.client.findUnique({
-    where: { email: pending.email },
-    select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
-  });
-  if (existingClient) {
-    await prisma.pendingEmailRegistration.delete({ where: { id: pending.id } }).catch(() => {});
-    const auth = buildAuthResponse(existingClient);
-    return res.json(auth);
+  if (decision === "already_verified") {
+    // #200: повторный переход (повторное открытие, превью почтового клиента). Сессию НЕ выдаём —
+    // старая/утёкшая ссылка не должна давать вход после использования.
+    if (expired) await prisma.pendingEmailRegistration.delete({ where: { id: pending.id } }).catch(() => {});
+    return res.json(alreadyVerifiedResponse);
   }
 
   // Не создаём пользователя в Remna при регистрации — клиент неактивен до триала или оплаты тарифа.
@@ -537,33 +548,45 @@ clientAuthRouter.post("/verify-email", async (req, res) => {
   }
 
   const configForAutoRenew = await getSystemConfig();
-  const client = await prisma.client.create({
-    data: asClientUncheckedCreate({
-      email: pending.email,
-      passwordHash: pending.passwordHash,
-      remnawaveUuid: null,
-      referralCode,
-      referrerId,
-      preferredLang: pending.preferredLang,
-      preferredCurrency: pending.preferredCurrency,
-      telegramId: null,
-      telegramUsername: null,
-      utmSource: pending.utmSource,
-      utmMedium: pending.utmMedium,
-      utmCampaign: pending.utmCampaign,
-      utmContent: pending.utmContent,
-      utmTerm: pending.utmTerm,
-      autoRenewEnabled: configForAutoRenew.defaultAutoRenewEnabled ?? false,
-      onboardingCompleted: false,
-      // IP/UA на момент перехода по ссылке из письма (не на момент создания pending —
-      // боты обычно не ходят по ссылкам, а если ходят — это уже другой IP, ещё лучше)
-      registrationIp: getRequestIp(req),
-      registrationUa: (req.headers["user-agent"] as string)?.slice(0, 500) ?? null,
-      registrationSource: "web",
-    }),
-  });
+  let client;
+  try {
+    client = await prisma.client.create({
+      data: asClientUncheckedCreate({
+        email: pending.email,
+        // #200: пароль не выбран → null → hasPassword: false → онбординг попросит задать пароль
+        passwordHash: clientPasswordHashFromPending(pending.passwordHash),
+        remnawaveUuid: null,
+        referralCode,
+        referrerId,
+        preferredLang: pending.preferredLang,
+        preferredCurrency: pending.preferredCurrency,
+        telegramId: null,
+        telegramUsername: null,
+        utmSource: pending.utmSource,
+        utmMedium: pending.utmMedium,
+        utmCampaign: pending.utmCampaign,
+        utmContent: pending.utmContent,
+        utmTerm: pending.utmTerm,
+        autoRenewEnabled: configForAutoRenew.defaultAutoRenewEnabled ?? false,
+        onboardingCompleted: false,
+        // IP/UA на момент перехода по ссылке из письма (не на момент создания pending —
+        // боты обычно не ходят по ссылкам, а если ходят — это уже другой IP, ещё лучше)
+        registrationIp: getRequestIp(req),
+        registrationUa: (req.headers["user-agent"] as string)?.slice(0, 500) ?? null,
+        registrationSource: "web",
+      }),
+    });
+  } catch (e) {
+    // Параллельный первый переход уже создал клиента (unique email) — сессию не выдаём.
+    if (isUniqueViolation(e)) return res.json(alreadyVerifiedResponse);
+    throw e;
+  }
 
-  await prisma.pendingEmailRegistration.delete({ where: { id: pending.id } }).catch(() => {});
+  // Не удаляем запись сразу: короткое окно, в котором повтор отвечает «уже подтверждено».
+  // Хеш пароля из ожидающей записи больше не нужен — стираем.
+  await prisma.pendingEmailRegistration
+    .update({ where: { id: pending.id }, data: { passwordHash: NO_PASSWORD_HASH, expiresAt: consumedPendingExpiry(now, pending.expiresAt) } })
+    .catch(() => {});
 
   const signToken = signClientToken(client.id);
   return res.status(201).json({ token: signToken, client: toClientShape(client) });
@@ -574,6 +597,9 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+// #200: один текст для «неверный пароль» и «пароля нет» — без перечисления аккаунтов.
+const LOGIN_FAILED_MESSAGE = "Неверный email или пароль. Если вы регистрировались по email и не задавали пароль — воспользуйтесь «Забыли пароль?».";
+
 clientAuthRouter.post("/login", async (req, res) => {
   const body = loginSchema.safeParse(req.body);
   if (!body.success) {
@@ -582,17 +608,17 @@ clientAuthRouter.post("/login", async (req, res) => {
 
   const client = await prisma.client.findUnique({ where: { email: body.data.email } });
   if (!client || !client.passwordHash || client.isBlocked) {
-    return res.status(401).json({ message: "Неверный email или пароль" });
+    return res.status(401).json({ message: LOGIN_FAILED_MESSAGE });
   }
 
   const valid = await verifyPassword(body.data.password, client.passwordHash);
-  if (!valid) return res.status(401).json({ message: "Неверный email или пароль" });
+  if (!valid) return res.status(401).json({ message: LOGIN_FAILED_MESSAGE });
 
   const full = await prisma.client.findUnique({
     where: { id: client.id },
     select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
   });
-  if (!full) return res.status(401).json({ message: "Неверный email или пароль" });
+  if (!full) return res.status(401).json({ message: LOGIN_FAILED_MESSAGE });
   const auth = buildAuthResponse(full);
   return res.json(auth);
 });
@@ -648,12 +674,13 @@ clientAuthRouter.post("/forgot-password", async (req, res) => {
       where: { email: { equals: email, mode: "insensitive" } },
       select: { id: true, email: true, passwordHash: true, isBlocked: true },
     });
-    if (!client || !client.passwordHash || client.isBlocked) return respondOk();
+    // #200: аккаунт без пароля (email-регистрация, Google) тоже может задать его через письмо.
+    if (!client || client.isBlocked) return respondOk();
     const config = await getSystemConfig();
     const smtpConfig = mailConfigFromSystem(config);
     const appUrl = (config.publicAppUrl || "").replace(/\/$/, "");
     if (!isMailConfigured(smtpConfig) || !appUrl) return respondOk();
-    const token = signClientPasswordResetToken({ clientId: client.id, pv: client.passwordHash.slice(-12) }, env.JWT_SECRET);
+    const token = signClientPasswordResetToken({ clientId: client.id, pv: passwordResetFingerprint(client.passwordHash) }, env.JWT_SECRET);
     const resetLink = `${appUrl}/cabinet/reset-password?token=${encodeURIComponent(token)}`;
     const resetTpl = await renderEmailTemplate("password_reset", {
       resetUrl: resetLink,
@@ -679,8 +706,8 @@ clientAuthRouter.post("/reset-password", async (req, res) => {
   const payload = verifyClientPasswordResetToken(body.data.token, env.JWT_SECRET);
   if (!payload) return res.status(400).json({ message: "Ссылка недействительна или устарела" });
   const client = await prisma.client.findUnique({ where: { id: payload.clientId }, select: { id: true, passwordHash: true, isBlocked: true } });
-  if (!client || !client.passwordHash || client.isBlocked) return res.status(400).json({ message: "Ссылка недействительна" });
-  if (client.passwordHash.slice(-12) !== payload.pv) return res.status(400).json({ message: "Ссылка уже использована — запросите сброс заново" });
+  if (!client || client.isBlocked) return res.status(400).json({ message: "Ссылка недействительна" });
+  if (passwordResetFingerprint(client.passwordHash) !== payload.pv) return res.status(400).json({ message: "Ссылка уже использована — запросите сброс заново" });
   const newHash = await hashPassword(body.data.password);
   await prisma.client.update({ where: { id: client.id }, data: { passwordHash: newHash } });
   return res.json({ ok: true });
