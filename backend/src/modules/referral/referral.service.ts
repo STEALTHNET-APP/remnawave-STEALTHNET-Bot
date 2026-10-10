@@ -1,10 +1,33 @@
 /**
  * Трёхуровневая реферальная система: начисление процентов от пополнений
  * рефералов уровня 1, 2 и 3 при переходе платежа в статус PAID.
+ * Начисляется только с реальных внешних платежей (см. isReferralEligiblePayment):
+ * траты внутреннего баланса и админские выдачи бонус не дают.
  */
 
 import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
+
+/**
+ * Провайдеры, которые двигают внутренние средства, а не реальные деньги:
+ * - "balance" — оплата с внутреннего баланса (покупка тарифа, автопродление,
+ *   доп. подписка). Деньги уже были учтены при пополнении через внешний провайдер.
+ * - "admin_grant" — выдача тарифа админом (amount = 0, денег нет).
+ * Реферальный бонус с них не начисляется, иначе одни и те же деньги дают
+ * бонус дважды (issue #201).
+ */
+const INTERNAL_PAYMENT_PROVIDERS: ReadonlySet<string> = new Set(["balance", "admin_grant"]);
+
+/**
+ * true — платёж оплачен реальными внешними деньгами (Platega, YooKassa, CryptoPay и т.п.)
+ * и с него можно начислять реферальный бонус. Пустой/неизвестный provider — не начисляем.
+ */
+export function isReferralEligiblePayment(provider: string | null | undefined): boolean {
+  if (typeof provider !== "string") return false;
+  const normalized = provider.trim().toLowerCase();
+  if (normalized === "") return false;
+  return !INTERNAL_PAYMENT_PROVIDERS.has(normalized);
+}
 
 /**
  * Распределяет реферальные бонусы по цепочке рефереров (до 3 уровней)
@@ -43,6 +66,9 @@ export async function distributeReferralRewards(paymentId: string): Promise<{ di
     }
     if (payment.status !== "PAID") {
       return { distributed: false, message: "Payment is not PAID" };
+    }
+    if (!isReferralEligiblePayment(payment.provider)) {
+      return { distributed: false, message: "Payment is not funded by an external provider; no referral rewards" };
     }
     if (payment.referralDistributedAt != null) {
       return { distributed: false, message: "Referral rewards already distributed for this payment" };
