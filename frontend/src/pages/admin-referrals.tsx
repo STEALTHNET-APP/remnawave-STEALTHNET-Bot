@@ -54,12 +54,15 @@ function fmtRub(v: number): string {
   return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(v) + " ₽";
 }
 
-function clientHandle(c: { telegramUsername: string | null; email?: string | null; telegramId: string | null } | null): string {
+function clientHandle(c: { id?: string; telegramUsername: string | null; email?: string | null; telegramId: string | null } | null): string {
   if (!c) return "—";
-  return c.telegramUsername ? `@${c.telegramUsername}` : (c.email ?? null) || `tg:${c.telegramId ?? "?"}`;
+  if (c.telegramUsername) return `@${c.telegramUsername}`;
+  if (c.email) return c.email;
+  if (c.telegramId) return `tg:${c.telegramId}`;
+  return c.id ? `#${c.id.slice(0, 8)}` : "—";
 }
 
-function ClientChip({ c }: { c: { telegramId: string | null; telegramUsername: string | null; email?: string | null } | null }) {
+function ClientChip({ c }: { c: { id?: string; telegramId: string | null; telegramUsername: string | null; email?: string | null } | null }) {
   if (!c) return <span className="text-zinc-500">—</span>;
   return <span className="text-zinc-100">{clientHandle(c)}</span>;
 }
