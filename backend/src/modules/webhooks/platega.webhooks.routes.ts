@@ -497,10 +497,12 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
     const paidData = { status: "PAID" as const, paidAt: new Date(), externalId: transactionId ?? payment.externalId };
     const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
     const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption;
+    // В claimPlategaPaid идёт только id из тела webhook'а: externalId CANCELED уже записал
+    // сам, поэтому fallback на него не доказывает, что это та же транзакция (FAILED → PAID).
     let claim: { changed: boolean; decision: PlategaConfirmedDecision };
     if (isTopUp) {
       claim = await prisma.$transaction(async (tx) => {
-        const res = await claimPlategaPaid(tx, payment.id, transactionId ?? payment.externalId, apiCheck, paidData);
+        const res = await claimPlategaPaid(tx, payment.id, transactionId, apiCheck, paidData);
         if (res.changed) {
           await tx.client.update({
             where: { id: payment.clientId },
@@ -510,7 +512,7 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
         return res;
       });
     } else {
-      claim = await claimPlategaPaid(prisma, payment.id, transactionId ?? payment.externalId, apiCheck, paidData);
+      claim = await claimPlategaPaid(prisma, payment.id, transactionId, apiCheck, paidData);
     }
     const recovered = claim.decision.kind === "recover_failed";
 

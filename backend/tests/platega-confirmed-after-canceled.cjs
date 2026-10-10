@@ -65,7 +65,8 @@ function reset(tariffId = null, status = 'PENDING', metadata = null) {
 }
 async function call(status, id = 'tx1') {
   const res = { code: 200, status(c) { this.code = c; return this; }, json() { return this; } };
-  await handler({ body: Buffer.from(JSON.stringify({ id, status, payload: 'order1' })), headers: {} }, res);
+  const body = id === null ? { status, payload: 'order1' } : { id, status, payload: 'order1' };
+  await handler({ body: Buffer.from(JSON.stringify(body)), headers: {} }, res);
   return res.code;
 }
 const last = () => outcomes[outcomes.length - 1][0];
@@ -106,5 +107,12 @@ const last = () => outcomes[outcomes.length - 1][0];
   reset(null, 'FAILED', T.withPlategaCancelMarker(null, 'CANCELED', 'other', NOW));
   await call('CONFIRMED'); assert.equal(row.status, 'FAILED'); assert.equal(balance, 0); assert.equal(last(), 'error');
 
-  console.log('PASS: Platega CANCELED->CONFIRMED recovery (top-up, tariff), idempotent/concurrent credit, forged confirm rejected, no-creds mirror, non-webhook FAILED untouched, tx mismatch, CANCELED after PAID');
+  // CONFIRMED without a transaction id in the body must not recover (externalId fallback is not proof)
+  reset(); await call('CANCELED');
+  await call('CONFIRMED', null); assert.equal(row.status, 'FAILED'); assert.equal(balance, 0); assert.equal(last(), 'error');
+  assert.match(outcomes[outcomes.length - 1][1], /transaction_id_mismatch/);
+  // ...but a body-less-id CONFIRMED for a PENDING payment keeps the old behaviour
+  reset(); await call('CONFIRMED', null); assert.equal(row.status, 'PAID'); assert.equal(balance, 100);
+
+  console.log('PASS: Platega CANCELED->CONFIRMED recovery (top-up, tariff), idempotent/concurrent credit, forged confirm rejected, no-creds mirror, non-webhook FAILED untouched, tx mismatch, CANCELED after PAID, no-body-id recovery refused');
 })().catch(e => { console.error(e); process.exitCode = 1; });

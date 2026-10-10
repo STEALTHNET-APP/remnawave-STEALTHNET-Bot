@@ -68,6 +68,7 @@ export function withPlategaCancelMarker(
 
 /**
  * Что делать с CONFIRMED-webhook'ом для платежа в текущем состоянии.
+ * `transactionId` — id только из тела webhook'а (без fallback на payment.externalId).
  * Атомарность обеспечивает вызывающий: условный updateMany по статусу (и metadata для FAILED).
  */
 export function decidePlategaConfirmed(
