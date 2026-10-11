@@ -2913,17 +2913,29 @@ export const api = {
     secondsLeft: number;
     sectors: { id: string; type: string; value: number; label: string; color: string; icon: string }[];
     recentSpins: { id: string; rewardType: string; rewardValue: number; rewardLabel: string; sectorId: string; createdAt: string }[];
+    subscriptions?: {
+      id: string;
+      index: number;
+      name: string;
+      expireAt: string | null;
+      isExpired: boolean;
+      remnaStatus: string | null;
+    }[];
   }> {
     return request("/client/roulette", { token });
   },
 
-  async clientSpinRoulette(token: string): Promise<{
+  async clientSpinRoulette(token: string, subscriptionId?: string): Promise<{
     spinId: string;
     sectorId: string;
     reward: { id: string; type: string; value: number; label: string; color: string; icon: string };
     nextSpinAt: string;
   }> {
-    return request("/client/roulette/spin", { method: "POST", token });
+    return request("/client/roulette/spin", {
+      method: "POST",
+      token,
+      body: subscriptionId ? JSON.stringify({ subscriptionId }) : undefined,
+    });
   },
 
   async getAdminRoulette(token: string): Promise<{

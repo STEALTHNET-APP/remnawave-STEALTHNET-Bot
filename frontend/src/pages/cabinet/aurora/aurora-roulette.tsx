@@ -23,6 +23,14 @@ interface RouletteStatusData {
     sectorId: string;
     createdAt: string;
   }[];
+  subscriptions?: {
+    id: string;
+    index: number;
+    name: string;
+    expireAt: string | null;
+    isExpired: boolean;
+    remnaStatus: string | null;
+  }[];
 }
 
 function formatCountdown(sec: number): string {
@@ -56,6 +64,7 @@ export function AuroraRoulette() {
   const [secondsLeft, setSecondsLeft] = useState<number>(0);
   const [spinning, setSpinning] = useState(false);
   const [winSector, setWinSector] = useState<WheelSector | null>(null);
+  const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
 
   // Для защиты от манипуляций системным временем на клиенте
   // храним начальное серверное значение и точку отсчета через монотонный performance.now()
@@ -67,6 +76,13 @@ export function AuroraRoulette() {
     try {
       const res = await api.clientGetRoulette(state.token);
       setData(res as RouletteStatusData);
+      if (res.subscriptions && res.subscriptions.length > 0) {
+        setSelectedSubId((prev) => {
+          if (prev && res.subscriptions!.some((s) => s.id === prev)) return prev;
+          const active = res.subscriptions!.find((s) => !s.isExpired);
+          return active ? active.id : res.subscriptions![0].id;
+        });
+      }
       const sec = res.secondsLeft || 0;
       serverSecondsRef.current = sec;
       startPerfRef.current = performance.now();
@@ -118,7 +134,7 @@ export function AuroraRoulette() {
     if (!state.token || !data?.canSpin || spinning) return null;
     setSpinning(true);
     try {
-      const res = await api.clientSpinRoulette(state.token);
+      const res = await api.clientSpinRoulette(state.token, selectedSubId || undefined);
       invalidateClientData();
       refreshProfile().catch(() => {});
       return res.sectorId;
@@ -231,6 +247,83 @@ export function AuroraRoulette() {
             : `Крутить можно раз в ${data?.cooldownHours || 24} ч. Таймер обратного отсчета выше.`}
         </p>
       </section>
+
+      {/* ── Выбор целевой подписки (если 2 и более) ── */}
+      {data?.subscriptions && data.subscriptions.length > 1 && (
+        <section className="rounded-[26px] bg-[var(--au-surface)] p-5 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[var(--au-from)]" />
+              <h2 className="text-sm font-bold text-[var(--au-ink)]">
+                Куда применить бонус:
+              </h2>
+            </div>
+            <span className="text-[11px] font-semibold text-[var(--au-muted)] bg-black/5 dark:bg-white/5 px-2.5 py-0.5 rounded-full">
+              {data.subscriptions.length} подписки
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {data.subscriptions.map((sub) => {
+              const selected = selectedSubId === sub.id;
+              return (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => setSelectedSubId(sub.id)}
+                  disabled={spinning}
+                  className={cn(
+                    "w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 active:scale-[0.99]",
+                    selected
+                      ? "bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white border-transparent shadow-md shadow-[var(--au-from)]/20"
+                      : "bg-white/50 dark:bg-black/20 border-white/40 dark:border-white/5 hover:border-[var(--au-from)]/40 text-[var(--au-ink)]"
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold truncate">{sub.name}</span>
+                      {sub.isExpired && (
+                        <span
+                          className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded-md font-semibold shrink-0",
+                            selected
+                              ? "bg-white/20 text-white"
+                              : "bg-red-500/10 text-red-500 dark:text-red-400"
+                          )}
+                        >
+                          Истекла
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      className={cn(
+                        "text-[11px] mt-0.5",
+                        selected ? "text-white/85" : "text-[var(--au-muted)]"
+                      )}
+                    >
+                      {sub.expireAt ? `Действует до ${formatDate(sub.expireAt)}` : "Без ограничений"}
+                    </p>
+                  </div>
+
+                  <div
+                    className={cn(
+                      "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
+                      selected
+                        ? "border-white bg-white"
+                        : "border-zinc-400 dark:border-zinc-600 bg-transparent"
+                    )}
+                  >
+                    {selected && <div className="w-2.5 h-2.5 rounded-full bg-[var(--au-from)]" />}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-[var(--au-muted)] text-center">
+            При выигрыше дней или трафика приз будет зачислен на выбранную подписку
+          </p>
+        </section>
+      )}
 
       {/* ── Возможные секторы и призы ── */}
       <section className="rounded-[26px] bg-[var(--au-surface)] p-5 space-y-3">

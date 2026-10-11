@@ -24,6 +24,14 @@ interface RouletteStatusData {
     sectorId: string;
     createdAt: string;
   }[];
+  subscriptions?: {
+    id: string;
+    index: number;
+    name: string;
+    expireAt: string | null;
+    isExpired: boolean;
+    remnaStatus: string | null;
+  }[];
 }
 
 function formatCountdown(sec: number): string {
@@ -57,6 +65,7 @@ export function StealthRoulette() {
   const [secondsLeft, setSecondsLeft] = useState<number>(0);
   const [spinning, setSpinning] = useState(false);
   const [winSector, setWinSector] = useState<WheelSector | null>(null);
+  const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
 
   // Для защиты от манипуляций системным временем на клиенте
   // храним начальное серверное значение и точку отсчета через монотонный performance.now()
@@ -68,6 +77,13 @@ export function StealthRoulette() {
     try {
       const res = await api.clientGetRoulette(state.token);
       setData(res as RouletteStatusData);
+      if (res.subscriptions && res.subscriptions.length > 0) {
+        setSelectedSubId((prev) => {
+          if (prev && res.subscriptions!.some((s) => s.id === prev)) return prev;
+          const active = res.subscriptions!.find((s) => !s.isExpired);
+          return active ? active.id : res.subscriptions![0].id;
+        });
+      }
       const sec = res.secondsLeft || 0;
       serverSecondsRef.current = sec;
       startPerfRef.current = performance.now();
@@ -119,7 +135,7 @@ export function StealthRoulette() {
     if (!state.token || !data?.canSpin || spinning) return null;
     setSpinning(true);
     try {
-      const res = await api.clientSpinRoulette(state.token);
+      const res = await api.clientSpinRoulette(state.token, selectedSubId || undefined);
       invalidateClientData();
       refreshProfile().catch(() => {});
       return res.sectorId;
@@ -236,6 +252,71 @@ export function StealthRoulette() {
             : `Крутить можно один раз в ${data?.cooldownHours || 24} ч. Таймер обратного отсчета выше.`}
         </p>
       </div>
+
+      {/* ── Выбор целевой подписки (если 2 и более) ── */}
+      {data?.subscriptions && data.subscriptions.length > 1 && (
+        <div className="rounded-3xl bg-white/[0.04] border border-white/[0.08] p-5 backdrop-blur-2xl space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-saccent-400" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                ЦЕЛЕВАЯ ПОДПИСКА
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold uppercase text-zinc-400 bg-white/[0.04] px-2 py-0.5 rounded-md border border-white/5">
+              {data.subscriptions.length} ПОДПИСКИ
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {data.subscriptions.map((sub) => {
+              const selected = selectedSubId === sub.id;
+              return (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => setSelectedSubId(sub.id)}
+                  disabled={spinning}
+                  className={cn(
+                    "w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 active:scale-[0.99]",
+                    selected
+                      ? "bg-saccent-500/15 border-saccent-500/50 text-white shadow-[0_0_20px_rgb(var(--stealth-accent)_/_0.2)]"
+                      : "bg-zinc-900/60 border-white/[0.06] hover:border-saccent-500/30 text-zinc-300"
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold truncate text-white">{sub.name}</span>
+                      {sub.isExpired && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase bg-red-500/15 text-red-400 border border-red-500/30">
+                          ИСТЕКЛА
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      {sub.expireAt ? `До ${formatDate(sub.expireAt)}` : "Без срока"}
+                    </p>
+                  </div>
+
+                  <div
+                    className={cn(
+                      "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
+                      selected
+                        ? "border-saccent-400 bg-saccent-500/20"
+                        : "border-zinc-600 bg-transparent"
+                    )}
+                  >
+                    {selected && <div className="w-2.5 h-2.5 rounded-full bg-saccent-400 shadow-[0_0_8px_rgb(var(--stealth-accent))]" />}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-zinc-400 text-center leading-relaxed">
+            При выигрыше дней или трафика награда будет применена к выбранной подписке
+          </p>
+        </div>
+      )}
 
       {/* ── Секторы колеса (награды) ── */}
       <div className="rounded-3xl bg-white/[0.04] border border-white/[0.08] p-5 backdrop-blur-2xl space-y-3">

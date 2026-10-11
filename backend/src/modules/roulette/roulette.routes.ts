@@ -26,7 +26,8 @@ rouletteClientRouter.get("/", async (req: Request, res: Response) => {
 rouletteClientRouter.post("/spin", async (req: Request, res: Response) => {
   try {
     const clientId = (req as AuthedReq).clientId;
-    const result = await spinRoulette(clientId);
+    const subscriptionId = typeof req.body?.subscriptionId === "string" ? req.body.subscriptionId.trim() : undefined;
+    const result = await spinRoulette(clientId, subscriptionId);
     res.json(result);
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : "Ошибка вращения рулетки" });
