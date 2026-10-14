@@ -1,3 +1,4 @@
+import { freeDaysSettings, PromoCodeError } from "../promo-code/free-days.service.js";
 /**
  * Админские эндпоинты — прокси к Remna API + клиенты панели + настройки
  */
@@ -111,6 +112,7 @@ import { markPaymentPaid } from "../payment/mark-paid.service.js";
 // подписки (grant-extend): тот же механизм, что и оплаченное продление.
 import { extendSecondarySubscription } from "../tariff/tariff-activation.service.js";
 import { logAdmin } from "../audit/audit.service.js";
+import { chooseGrantExtendMode, extendSubscriptionDaysOnly } from "./grant-extend-days.service.js";
 import { registerBackupRoutes } from "../backup/backup.routes.js";
 import { invalidateBrandCache } from "../branding/spa-html.js";
 import { getBroadcastRecipientsCount, startBroadcastJob, getBroadcastJob, cancelBroadcastJob, listBroadcastHistory, getBroadcastHistoryItem, sendDirectTelegramMessage, sendDirectEmail, startListSendJob, getListSendJob } from "../broadcast/broadcast.service.js";
@@ -2413,10 +2415,45 @@ adminRouter.post("/subscriptions/:subId/grant-extend", asyncRoute(async (req, re
 
   const sub = await prisma.subscription.findUnique({
     where: { id: subId },
-    select: { id: true, ownerId: true, subscriptionIndex: true, tariffId: true, remnawaveUuid: true },
+    select: { id: true, ownerId: true, subscriptionIndex: true, tariffId: true, trialId: true, remnawaveUuid: true },
   });
   if (!sub) return res.status(404).json({ message: "Подписка не найдена" });
   if (!sub.remnawaveUuid) return res.status(400).json({ message: "Подписка не привязана к Remnawave" });
+
+  // Триал / подписка без тарифа и тариф явно не выбран → продлеваем только дату
+  // (лимиты, сквады, trialId не трогаем). Явный tariffId = конвертация в тариф (ниже).
+  if (chooseGrantExtendMode(sub, body.data.tariffId) === "days_only") {
+    const days = body.data.customDurationDays;
+    if (!days) return res.status(400).json({ message: "Укажите срок продления (дней)" });
+    const daysResult = await extendSubscriptionDaysOnly({ id: sub.id, remnawaveUuid: sub.remnawaveUuid }, days);
+    if (!daysResult.ok) {
+      return res.status(daysResult.status >= 400 ? daysResult.status : 500).json({ ok: false, message: daysResult.error });
+    }
+    await logAdmin(req, "subscription.grant_extend", { type: "subscription", id: sub.id }, {
+      tariffId: null,
+      trialId: sub.trialId,
+      mode: "days_only",
+      days,
+      expireAt: daysResult.expireAt.toISOString(),
+      reactivated: daysResult.reactivated,
+      note: body.data.note ?? null,
+    });
+    try {
+      const { notifySubscriptionExtendedByAdmin } = await import("../notification/telegram-notify.service.js");
+      await notifySubscriptionExtendedByAdmin(sub.ownerId, daysResult.expireAt);
+    } catch (e) {
+      console.error("[admin/grant-extend] notify client failed:", e);
+    }
+    return res.json({
+      ok: true,
+      paymentId: null,
+      subscriptionId: sub.id,
+      subscriptionIndex: sub.subscriptionIndex,
+      mode: "days_only",
+      expireAt: daysResult.expireAt.toISOString(),
+      tariff: null,
+    });
+  }
 
   const effectiveTariffId = body.data.tariffId ?? sub.tariffId;
   if (!effectiveTariffId) {
@@ -5045,6 +5082,8 @@ const createPromoCodeSchema = z.object({
   type: z.enum(["DISCOUNT", "FREE_DAYS"]),
   discountPercent: z.number().min(0).max(100).nullable().optional(),
   discountFixed: z.number().min(0).nullable().optional(),
+  tariffId: z.string().min(1).nullable().optional(),
+  tariffPriceOptionId: z.string().min(1).nullable().optional(),
   squadUuid: z.string().nullable().optional(),
   trafficLimitBytes: z.union([z.string(), z.number()]).transform((v) => (v != null ? BigInt(v) : null)).nullable().optional(),
   deviceLimit: z.number().int().min(0).nullable().optional(),
@@ -5065,6 +5104,11 @@ adminRouter.post("/promo-codes", async (req, res) => {
   const exists = await prisma.promoCode.findUnique({ where: { code: d.code } });
   if (exists) return res.status(400).json({ message: "Промокод с таким кодом уже существует" });
 
+  let freeDays = {};
+  if (d.type === "FREE_DAYS") {
+    try { freeDays = await freeDaysSettings(d); }
+    catch (e) { if (e instanceof PromoCodeError) return res.status(e.status).json({ message: e.message }); throw e; }
+  }
   const code = await prisma.promoCode.create({
     data: {
       code: d.code,
@@ -5076,6 +5120,7 @@ adminRouter.post("/promo-codes", async (req, res) => {
       trafficLimitBytes: d.type === "FREE_DAYS" ? (d.trafficLimitBytes ?? BigInt(0)) : null,
       deviceLimit: d.type === "FREE_DAYS" ? (d.deviceLimit ?? null) : null,
       durationDays: d.type === "FREE_DAYS" ? (d.durationDays ?? null) : null,
+      ...freeDays,
       maxUses: d.maxUses,
       maxUsesPerClient: d.maxUsesPerClient,
       isActive: d.isActive ?? true,
@@ -5090,6 +5135,8 @@ const updatePromoCodeSchema = z.object({
   type: z.enum(["DISCOUNT", "FREE_DAYS"]).optional(),
   discountPercent: z.number().min(0).max(100).nullable().optional(),
   discountFixed: z.number().min(0).nullable().optional(),
+  tariffId: z.string().min(1).nullable().optional(),
+  tariffPriceOptionId: z.string().min(1).nullable().optional(),
   squadUuid: z.string().nullable().optional(),
   trafficLimitBytes: z.union([z.string(), z.number()]).transform((v) => (v != null ? BigInt(v) : null)).nullable().optional(),
   deviceLimit: z.number().int().min(0).nullable().optional(),
@@ -5109,6 +5156,15 @@ adminRouter.patch("/promo-codes/:id", async (req, res) => {
   if (!existing) return res.status(404).json({ message: "Not found" });
 
   const data: Record<string, unknown> = { ...parsed.data };
+  const merged = { ...existing, ...parsed.data };
+  const configChanged = ["type", "tariffId", "tariffPriceOptionId", "durationDays", "squadUuid", "trafficLimitBytes", "deviceLimit"]
+    .some((key) => key in parsed.data);
+  if (merged.type === "FREE_DAYS" && configChanged) {
+    try { Object.assign(data, await freeDaysSettings(merged)); }
+    catch (e) { if (e instanceof PromoCodeError) return res.status(e.status).json({ message: e.message }); throw e; }
+  } else if (merged.type === "DISCOUNT") {
+    Object.assign(data, { tariffId: null, tariffPriceOptionId: null, squadUuid: null, durationDays: null, trafficLimitBytes: null, deviceLimit: null });
+  }
   if (data.expiresAt !== undefined) {
     data.expiresAt = data.expiresAt ? new Date(data.expiresAt as string) : null;
   }
@@ -7423,7 +7479,7 @@ adminRouter.get("/referrals/:id", asyncRoute(async (req, res) => {
           amount: true,
           status: true,
           clientId: true,
-          client: { select: { id: true, telegramId: true, telegramUsername: true } },
+          client: { select: { id: true, telegramId: true, telegramUsername: true, email: true } },
         },
       },
     },
