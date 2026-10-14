@@ -1,6 +1,6 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import { Sun, Moon, Monitor, Settings2, User, Gift, SlidersHorizontal, Shield, Network, LogOut, X, ChevronRight } from "lucide-react";
+import { Sun, Moon, Monitor, Settings2, User, Gift, SlidersHorizontal, Shield, Network, LogOut, X, ChevronRight, Sparkles } from "lucide-react";
 import { AuroraTabs } from "@/components/aurora/aurora-tabs";
 import { api } from "@/lib/api";
 import { useCabinetConfig } from "@/contexts/cabinet-config";
@@ -41,6 +41,7 @@ export function AuroraLayout() {
     {to:"/cabinet/profile",label:"Мой профиль",icon:User,show:true},
     {to:"/cabinet/subscribe",label:"Подключение VPN",icon:Shield,show:true},
     {to:"/cabinet/gifts",label:"Подарки",icon:Gift,show:!!config?.giftSubscriptionsEnabled},
+    {to:"/cabinet/roulette",label:"Рулетка удачи",icon:Sparkles,show:config?.rouletteEnabled !== false},
     {to:"/cabinet/custom-build",label:"Собрать свой тариф",icon:SlidersHorizontal,show:!!config?.customBuildConfig},
     {to:"/cabinet/extra-options",label:"Дополнительные услуги",icon:Settings2,show:!!config?.sellOptionsEnabled},
     {to:"/cabinet/proxy",label:"Прокси",icon:Network,show:!!config?.showProxyEnabled},

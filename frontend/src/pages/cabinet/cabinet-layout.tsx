@@ -10,7 +10,7 @@ import { useLanguageSync } from "@/i18n/use-language-sync";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { GlassSelect } from "@/components/ui/glass-select";
-import { LayoutDashboard, Package, User, LogOut, Shield, Users, Sun, Moon, PlusCircle, Globe, KeyRound, MessageSquare, Palette, Monitor, Check, Loader2, Settings, Layers, MoreHorizontal, ChevronDown, Wallet, Gift } from "lucide-react";
+import { LayoutDashboard, Package, User, LogOut, Shield, Users, Sun, Moon, PlusCircle, Globe, KeyRound, MessageSquare, Palette, Monitor, Check, Loader2, Settings, Layers, MoreHorizontal, ChevronDown, Wallet, Gift, Sparkles } from "lucide-react";
 import { useTheme, ACCENT_PALETTES, type ThemeMode, type ThemeAccent } from "@/contexts/theme";
 import { cn } from "@/lib/utils";
 import { FloatingChat } from "@/components/floating-chat";
@@ -161,6 +161,7 @@ function useNavItems() {
     { to: "/cabinet/referral", label: t("cabinet.nav.referrals"), icon: Users },
     { to: "/cabinet/tickets", label: t("cabinet.nav.tickets"), icon: MessageSquare },
     { to: "/cabinet/gifts", label: "Подарки", icon: Gift },
+    { to: "/cabinet/roulette", label: t("cabinet.nav.roulette", "Рулетка"), icon: Sparkles },
     { to: "/cabinet/profile", label: t("cabinet.nav.profile"), icon: User },
   ], [t]);
 }
@@ -392,7 +393,7 @@ function SettingsPopover() {
   );
 }
 
-function resolveNavItems(allNavItems: { to: string; label: string; icon: typeof LayoutDashboard }[], config: { sellOptionsEnabled?: boolean; showProxyEnabled?: boolean; showSingboxEnabled?: boolean; ticketsEnabled?: boolean; customBuildConfig?: { enabled: true } | null; giftSubscriptionsEnabled?: boolean } | null) {
+function resolveNavItems(allNavItems: { to: string; label: string; icon: typeof LayoutDashboard }[], config: { sellOptionsEnabled?: boolean; showProxyEnabled?: boolean; showSingboxEnabled?: boolean; ticketsEnabled?: boolean; customBuildConfig?: { enabled: true } | null; giftSubscriptionsEnabled?: boolean; rouletteEnabled?: boolean } | null) {
   let items = allNavItems;
   // Убираем вкладку тикетов, так как теперь поддержка внутри виджета чата
   items = items.filter((i) => i.to !== "/cabinet/tickets");
@@ -402,6 +403,7 @@ function resolveNavItems(allNavItems: { to: string; label: string; icon: typeof 
   if (!config?.showProxyEnabled) items = items.filter((i) => i.to !== "/cabinet/proxy");
   if (!config?.showSingboxEnabled) items = items.filter((i) => i.to !== "/cabinet/singbox");
   if (!config?.giftSubscriptionsEnabled) items = items.filter((i) => i.to !== "/cabinet/gifts");
+  if (config?.rouletteEnabled === false) items = items.filter((i) => i.to !== "/cabinet/roulette");
 
   return items;
 }
@@ -420,6 +422,7 @@ const ROUTE_TOUR_MAP: Record<string, string> = {
   "/cabinet/referral": "referrals",
   "/cabinet/tickets": "support",
   "/cabinet/gifts": "gifts",
+  "/cabinet/roulette": "roulette",
   "/cabinet/profile": "profile",
 };
 
@@ -429,7 +432,7 @@ function MobileCabinetShell() {
   const { state, logout, refreshProfile } = useClientAuth();
   const config = useCabinetConfig();
   const allNavItems = useNavItems();
-  const navItems = useMemo(() => resolveNavItems(allNavItems, config), [allNavItems, config?.sellOptionsEnabled, config?.showProxyEnabled, config?.showSingboxEnabled, config?.ticketsEnabled, config?.customBuildConfig, config?.giftSubscriptionsEnabled]);
+  const navItems = useMemo(() => resolveNavItems(allNavItems, config), [allNavItems, config?.sellOptionsEnabled, config?.showProxyEnabled, config?.showSingboxEnabled, config?.ticketsEnabled, config?.customBuildConfig, config?.giftSubscriptionsEnabled, config?.rouletteEnabled]);
   const [logoError, setLogoError] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const visibleItems = navItems.slice(0, MAX_VISIBLE_NAV);
@@ -571,7 +574,7 @@ function CabinetShell() {
   const { state, logout, refreshProfile } = useClientAuth();
   const config = useCabinetConfig();
   const allNavItems = useNavItems();
-  const navItems = useMemo(() => resolveNavItems(allNavItems, config), [allNavItems, config?.sellOptionsEnabled, config?.showProxyEnabled, config?.showSingboxEnabled, config?.ticketsEnabled, config?.customBuildConfig, config?.giftSubscriptionsEnabled]);
+  const navItems = useMemo(() => resolveNavItems(allNavItems, config), [allNavItems, config?.sellOptionsEnabled, config?.showProxyEnabled, config?.showSingboxEnabled, config?.ticketsEnabled, config?.customBuildConfig, config?.giftSubscriptionsEnabled, config?.rouletteEnabled]);
   const isMiniapp = useIsMiniapp();
   const isMobile = useIsMobile();
   const isNarrowDesktop = useIsMobile(1280);

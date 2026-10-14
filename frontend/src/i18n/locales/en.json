@@ -1684,7 +1684,8 @@
       "profile": "Profile",
       "more": "More",
       "menu": "Menu",
-      "logout": "Log Out"
+      "logout": "Log Out",
+      "roulette": "Lucky Wheel"
     },
     "layout": {
       "theme_heading": "Theme",

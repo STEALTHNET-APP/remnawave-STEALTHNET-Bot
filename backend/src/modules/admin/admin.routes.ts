@@ -123,6 +123,7 @@ import {
   serializeAttachments,
   parseAttachments,
   pickField as pickTicketField,
+  deleteTicketAttachments,
 } from "../ticket/attachments.js";
 import {
   notifyAdminsAboutSupportReply,
@@ -4408,6 +4409,20 @@ adminRouter.post("/tickets/:id/messages", uploadTicketAttachment.array("files", 
     attachments: parseAttachments(msg.attachments),
     createdAt: msg.createdAt.toISOString(),
   });
+}));
+
+// Удаление тикета админом (каскадное удаление сообщений в БД + удаление файлов с диска)
+adminRouter.delete("/tickets/:id", asyncRoute(async (req, res) => {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: req.params.id },
+    include: { messages: { select: { attachments: true } } },
+  });
+  if (!ticket) return res.status(404).json({ message: "Тикет не найден" });
+
+  await prisma.ticket.delete({ where: { id: ticket.id } });
+  await deleteTicketAttachments(ticket.messages.map((m) => m.attachments));
+
+  return res.json({ success: true, id: ticket.id });
 }));
 
 // Синхронизация с Remna

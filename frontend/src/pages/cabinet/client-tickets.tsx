@@ -1,6 +1,7 @@
 import { AuroraTickets } from "./aurora/aurora-tickets";
 import { useEffect, useRef, useState } from "react";
-import { MessageSquarePlus, Inbox, Loader2, Send, ArrowLeft, CircleDot, CircleCheck, User, Paperclip, X as XIcon, ImageIcon } from "lucide-react";
+import { MessageSquarePlus, Inbox, Loader2, Send, ArrowLeft, CircleDot, CircleCheck, User, Paperclip, X as XIcon, ImageIcon, Trash2 } from "lucide-react";
+import { askConfirm } from "@/lib/confirm";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type TicketAttachmentDto, type TicketMessageDto } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -190,6 +191,23 @@ function ClassicTicketsPage() {
       .finally(() => setCreateSending(false));
   };
 
+  const deleteCurrentTicket = async (id?: string) => {
+    const targetId = id || detailId;
+    if (!token || !targetId) return;
+    const ok = await askConfirm("Удалить это обращение навсегда? Все сообщения будут удалены.");
+    if (!ok) return;
+    try {
+      await api.deleteTicket(token, targetId);
+      setList((prev) => prev.filter((t) => t.id !== targetId));
+      if (detailId === targetId) {
+        setDetailId(null);
+        setDetail(null);
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Не удалось удалить обращение");
+    }
+  };
+
   const formatDate = (s: string) => {
     try {
       const d = new Date(s);
@@ -243,6 +261,15 @@ function ClassicTicketsPage() {
               </div>
             </div>
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => deleteCurrentTicket(detail.id)}
+            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+            title="Удалить обращение"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 scroll-smooth">
@@ -530,8 +557,22 @@ function ClassicTicketsPage() {
                     <span className="text-xs font-semibold text-muted-foreground">Последнее сообщение: {formatDate(t.updatedAt)}</span>
                   </div>
                 </div>
-                <div className="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background/50 border border-white/10 text-muted-foreground transition-all duration-300 group-hover:translate-x-1 group-hover:bg-primary group-hover:border-primary/50 group-hover:text-primary-foreground group-hover:shadow-md">
-                  <ArrowLeft className="h-4 w-4 rotate-180" />
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteCurrentTicket(t.id);
+                    }}
+                    className="h-9 w-9 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                    title="Удалить обращение"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                  <div className="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background/50 border border-white/10 text-muted-foreground transition-all duration-300 group-hover:translate-x-1 group-hover:bg-primary group-hover:border-primary/50 group-hover:text-primary-foreground group-hover:shadow-md">
+                    <ArrowLeft className="h-4 w-4 rotate-180" />
+                  </div>
                 </div>
               </div>
             );

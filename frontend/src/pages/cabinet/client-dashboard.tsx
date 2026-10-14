@@ -1097,6 +1097,31 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
             </Link>
           </Button>
         </section>
+
+        {config?.rouletteEnabled !== false && (
+          <Link
+            to="/cabinet/roulette"
+            className="order-3 group relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 via-purple-500/10 to-pink-500/10 p-4 transition-all duration-300 hover:border-primary/50 flex items-center justify-between gap-3 shadow-sm"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-purple-600 text-xl text-white shadow-md shadow-primary/25">
+                🎰
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-foreground">Рулетка удачи</h3>
+                  <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-[9px] font-bold text-primary uppercase">
+                    Бесплатно
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Крутите и получайте ежедневные призы
+                </p>
+              </div>
+            </div>
+            <ArrowRight className="h-4 w-4 text-primary shrink-0 transition-transform group-hover:translate-x-1" />
+          </Link>
+        )}
       </div>
       {trialsPickerNode}
       {paySuccessModalNode}
@@ -1183,6 +1208,40 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
         <div className="rounded-2xl border border-primary/30 bg-primary/5 backdrop-blur-md px-5 py-4 text-sm whitespace-pre-line shadow-sm">
           {config.botInfoBlock.trim()}
         </div>
+      )}
+
+      {config?.rouletteEnabled !== false && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.1 }}
+        >
+          <Link
+            to="/cabinet/roulette"
+            className="group relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 via-purple-500/10 to-pink-500/10 p-5 transition-all duration-300 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 flex items-center justify-between gap-4 backdrop-blur-xl"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-purple-600 text-2xl text-white shadow-md shadow-primary/25 group-hover:scale-105 transition-transform">
+                🎰
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-foreground">Рулетка удачи</h3>
+                  <span className="inline-flex items-center rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wide">
+                    Бесплатно
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Крутите колесо каждый день и получайте бонусы, дни подписки и скидки!
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-primary shrink-0">
+              <span className="hidden sm:inline">Испытать удачу</span>
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </div>
+          </Link>
+        </motion.div>
       )}
 
       {/* Cards grid */}

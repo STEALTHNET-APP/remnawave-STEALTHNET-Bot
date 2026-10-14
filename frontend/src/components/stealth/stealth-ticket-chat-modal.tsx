@@ -13,7 +13,8 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X as XIcon, RefreshCw } from "lucide-react";
+import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X as XIcon, RefreshCw, Trash2 } from "lucide-react";
+import { askConfirm } from "@/lib/confirm";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type TicketMessageDto } from "@/lib/api";
 import { StealthModal } from "./stealth-modal";
@@ -125,20 +126,41 @@ export function StealthTicketChatModal({ open, ticketId, onClose }: Props) {
     }
   }
 
+  async function handleDelete() {
+    if (!state.token || !ticketId) return;
+    const ok = await askConfirm("Удалить это обращение навсегда? Все сообщения будут удалены.");
+    if (!ok) return;
+    try {
+      await api.deleteTicket(state.token, ticketId);
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Не удалось удалить обращение");
+    }
+  }
+
   const isClosed = data?.status === "closed";
   const subject = data?.subject || "Без темы";
 
   return (
     <StealthModal open={open} onClose={onClose} title={subject} maxWidth="32rem">
-      {/* Status pill */}
+      {/* Status pill & Delete button */}
       {data && (
-        <div className="-mt-2 mb-3">
+        <div className="-mt-2 mb-3 flex items-center justify-between">
           <span className={cn(
             "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
             isClosed ? "bg-zinc-800/60 text-zinc-400 border-white/10" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
           )}>
             {isClosed ? "Закрыт" : "Открыт"}
           </span>
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-500/10 transition"
+            title="Удалить обращение"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Удалить
+          </button>
         </div>
       )}
 

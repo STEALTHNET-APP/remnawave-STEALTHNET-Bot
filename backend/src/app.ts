@@ -34,6 +34,7 @@ import { apiKeysAdminRouter } from "./modules/api-keys/api-keys.admin.routes.js"
 import { externalApiRouter } from "./modules/api-keys/external-api.routes.js";
 import { geoMapRouter } from "./modules/geo-map/geo-map.routes.js";
 import { giftRouter, giftPublicRouter } from "./modules/gift/gift.routes.js";
+import { rouletteClientRouter, rouletteAdminRouter } from "./modules/roulette/roulette.routes.js";
 import { paymentRedirectRouter } from "./modules/payment-redirect/payment-redirect.routes.js";
 import { marketplaceClientRouter } from "./modules/marketplace/marketplace.client.routes.js";
 import { marketplaceHubRouter } from "./modules/marketplace/marketplace.hub.routes.js";
@@ -360,6 +361,8 @@ app.use("/api/singbox-nodes", singboxAgentRouter);
 app.use("/api/client", clientRouter);
 app.use("/api/client/contests", contestClientRouter);
 app.use("/api/client/gift", giftRouter);
+app.use("/api/client/roulette", rouletteClientRouter);
+app.use("/api/admin/roulette", rouletteAdminRouter);
 app.use("/api/gift/public", giftPublicRouter);
 app.use("/api/admin/landing", landingAdminRouter);
 app.use("/api/admin/audit", auditAdminRouter);

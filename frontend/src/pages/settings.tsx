@@ -23,6 +23,7 @@ import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { MarketplaceSettingsCard } from "@/pages/marketplace/marketplace-settings-card";
 import { ConsoleAccessCard } from "@/components/console-access-card";
+import { RouletteAdminTab } from "@/components/roulette/roulette-admin-tab";
 // drag-n-drop кнопок главного меню.
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -78,6 +79,7 @@ const DEFAULT_BOT_BUTTONS: BotButtonItem[] = [
   { id: "support", visible: true, label: " Поддержка", order: 7, style: "primary", emojiKey: "NOTE" },
   { id: "promocode", visible: true, label: " Промокод", order: 8, style: "primary", emojiKey: "STAR" },
   { id: "gift", visible: true, label: " Подарки", order: 8.5, style: "primary", emojiKey: "TRIAL" },
+  { id: "roulette", visible: true, label: "🎰 Рулетка", order: 8.7, style: "primary", emojiKey: "STAR" },
   { id: "extra_options", visible: true, label: " Доп. опции", order: 9, style: "primary", emojiKey: "PACKAGE" },
   // Кастомные кнопки. Используются в главном меню.
   { id: "my_subs", visible: true, label: " Мои подписки", order: 3, style: "", onePerRow: true },
@@ -1146,6 +1148,9 @@ export function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="gifts" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Gift className="h-4 w-4 shrink-0" />Подарки
+          </TabsTrigger>
+          <TabsTrigger value="roulette" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
+            <Sparkles className="h-4 w-4 shrink-0" />Рулетка
           </TabsTrigger>
           <TabsTrigger value="sync" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <ArrowLeftRight className="h-4 w-4 shrink-0" />{t("admin.settings.tab_sync")}
@@ -5490,6 +5495,10 @@ export function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="roulette">
+          <RouletteAdminTab />
         </TabsContent>
 
         <TabsContent value="sync">

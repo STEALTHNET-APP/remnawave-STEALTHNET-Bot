@@ -113,6 +113,7 @@ const MENU_IDS: Record<string, string> = {
   promocode: "menu:promocode",
   extra_options: "menu:extra_options",
   gift: "menu:gift",
+  roulette: "menu:roulette",
   // Унифицированный список подписок (root + secondary). См. handler menu:my_subs в index.ts.
   my_subs: "menu:my_subs",
   // T14 (11.05.2026): бесплатный MTProto-прокси для Telegram. См. handler menu:tg_proxy в index.ts.
@@ -140,6 +141,7 @@ const DEFAULT_BUTTONS: BotButtonConfig[] = [
   { id: "support", visible: true, label: "⭕ Помощь", order: 7, style: "primary" },
   { id: "promocode", visible: true, label: "🎟️ Промокод", order: 8, style: "primary" },
   { id: "gift", visible: true, label: "🎁 Подарки", order: 8.5, style: "primary" },
+  { id: "roulette", visible: true, label: "🎰 Рулетка", order: 8.7, style: "primary" },
   { id: "extra_options", visible: true, label: "➕ Доп. опции", order: 9, style: "primary" },
   // T14 (11.05.2026): бесплатный MTProto-прокси для Telegram (по эталону скрина 1).
   { id: "tg_proxy", visible: true, label: "🛡 Бесплатный Прокси для Telegram", order: 6.8, style: "primary", onePerRow: true },
@@ -208,6 +210,9 @@ export function mainMenu(opts: {
   if (fromConfig && opts.showGift === true && !list.some((b) => b.id === "gift")) {
     list.push({ id: "gift", visible: true, label: "🎁 Подарки", order: 8.5, style: "primary" });
   }
+  if (fromConfig && !list.some((b) => b.id === "roulette")) {
+    list.push({ id: "roulette", visible: true, label: "🎰 Рулетка", order: 8.7, style: "primary" });
+  }
   // auto-add «🌐 Сайт» если её ещё нет в админ-конфиге.
   // URL берётся из publicAppUrl. Если URL не задан — кнопка скрывается обработчиком ниже.
   if (fromConfig && !!opts.appUrl?.trim() && !list.some((b) => b.id === "site")) {
@@ -264,6 +269,11 @@ export function mainMenu(opts: {
       items.push({ node: btn(b.label, MENU_IDS[b.id], styleForBtn, iconId), onePerRow });
     } else if (b.id === "tickets" && base) {
       const w: WebAppButton = { text: labelForIcon, web_app: { url: `${base}/cabinet/tickets` } };
+      if (iconId) w.icon_custom_emoji_id = iconId;
+      if (styleForBtn) w.style = styleForBtn;
+      items.push({ node: w, onePerRow });
+    } else if (b.id === "roulette" && base) {
+      const w: WebAppButton = { text: labelForIcon, web_app: { url: `${base}/cabinet/roulette` } };
       if (iconId) w.icon_custom_emoji_id = iconId;
       if (styleForBtn) w.style = styleForBtn;
       items.push({ node: w, onePerRow });

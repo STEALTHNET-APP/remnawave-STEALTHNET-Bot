@@ -12,7 +12,8 @@
  */
 
 import { useEffect, useState } from "react";
-import { Plus, MessageCircle, ChevronRight, AlertCircle } from "lucide-react";
+import { Plus, MessageCircle, AlertCircle, Trash2 } from "lucide-react";
+import { askConfirm } from "@/lib/confirm";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api } from "@/lib/api";
 import { AuroraNewTicketSheet } from "@/components/aurora/aurora-new-ticket-sheet";
@@ -72,6 +73,20 @@ export function AuroraTickets() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.token]);
 
+  async function handleDeleteTicket(id: string, subject?: string) {
+    if (!state.token) return;
+    const msg = subject ? `Удалить обращение «${subject}»? Все сообщения будут удалены.` : "Удалить обращение?";
+    const ok = await askConfirm(msg);
+    if (!ok) return;
+    try {
+      await api.deleteTicket(state.token, id);
+      setItems((prev) => (prev ? prev.filter((t) => t.id !== id) : []));
+      if (chatTicketId === id) setChatTicketId(null);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Не удалось удалить обращение");
+    }
+  }
+
   return (
     <div className="space-y-3">
       <header className="px-1 pb-1">
@@ -112,11 +127,10 @@ export function AuroraTickets() {
       ) : (
         <div className="space-y-2.5">
           {items.map((t) => (
-            <button
+            <div
               key={t.id}
-              type="button"
               onClick={() => setChatTicketId(t.id)}
-              className="flex w-full items-center gap-3 rounded-[20px] bg-[var(--au-surface)] p-4 text-left transition-transform active:scale-[0.99]"
+              className="flex w-full items-center gap-3 rounded-[20px] bg-[var(--au-surface)] p-4 text-left transition-transform active:scale-[0.99] cursor-pointer"
             >
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--au-bg)]">
                 <MessageCircle className="h-5 w-5 text-[var(--au-muted)]" />
@@ -130,8 +144,21 @@ export function AuroraTickets() {
                   <span className="text-[12.5px] text-[var(--au-muted)]">{fmtDate(t.updatedAt)}</span>
                 </div>
               </div>
-              <ChevronRight className="h-5 w-5 shrink-0 text-[var(--au-muted)]" />
-            </button>
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  void handleDeleteTicket(t.id, t.subject);
+                }}
+                className="h-9 w-9 flex items-center justify-center rounded-full text-[var(--au-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
+                title="Удалить обращение"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           ))}
         </div>
       )}

@@ -7755,6 +7755,28 @@ if (data.startsWith("topup_paritypay:")) {
     // Текст — новый эталонный из system_settings.gift_intro_text (скрин 11),
     // кнопки — оригинальные `giftMenuButtons` (как в бэкапе): купить / активировать / мои подарки / назад.
     // Решение по UX (11.05.2026): «верни кнопки на те, которые были, текст оставь».
+    if (data === "menu:roulette") {
+      const appUrl = config?.publicAppUrl?.replace(/\/$/, "") ?? null;
+      const rouletteUrl = appUrl ? `${appUrl}/cabinet/roulette` : null;
+      if (!rouletteUrl) {
+        await editMessageContent(ctx, "Рулетка временно недоступна.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      await editMessageContent(
+        ctx,
+        `🎰 Колесо Фортуны
+
+Испытайте свою удачу! Крутите рулетку каждый день и выигрывайте дни подписки, рубли на баланс или приятные скидки 🎁`,
+        {
+          inline_keyboard: [
+            [{ text: "🎰 Крутить рулетку", web_app: { url: rouletteUrl } }],
+            [{ text: backButton(config?.botEmojis ?? null).text, callback_data: "menu:main" }],
+          ],
+        }
+      );
+      return;
+    }
+
     if (data === "menu:gift") {
       if (!config?.giftSubscriptionsEnabled) {
         await editMessageContent(ctx, "Функция подарков недоступна.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));

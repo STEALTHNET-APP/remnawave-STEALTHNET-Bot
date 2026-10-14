@@ -30,7 +30,7 @@ function parseAllowedSections(raw: string | null): string[] {
 
 /** Нормализует путь запроса до пути относительно /api/admin (без ведущего слэша). */
 function normaliseAdminPath(req: Request): string {
-  let path = (req.path || req.originalUrl || "").replace(/^\//, "");
+  let path = (req.originalUrl || req.path || "").split("?")[0].replace(/^\//, "");
   if (path.startsWith("api/admin/")) path = path.slice("api/admin/".length);
   else if (path === "api/admin" || path.startsWith("api/admin")) path = path.slice("api/admin".length).replace(/^\//, "");
   return path;
@@ -57,7 +57,7 @@ function getSectionFromPath(normalisedPath: string): string | null {
   // обратная совместимость с прежним маппингом на clients — в requireAdminSection.
   if (first === "referrals") return "referrals";
   if (first === "traffic-abuse") return "analytics";
-  if (first === "api-keys") return "settings";
+  if (first === "api-keys" || first === "roulette") return "settings";
   if (first === "gramads") return "promo-vpn";
   // Антибот: и фильтры регистраций, и bulk-purge — все работают через /api/admin/clients/...
   if (first === "clients" && (segments[1] === "antibot" || segments[1] === "bulk")) return "clients";
