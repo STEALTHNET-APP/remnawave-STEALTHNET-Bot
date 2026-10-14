@@ -4419,8 +4419,8 @@ adminRouter.delete("/tickets/:id", asyncRoute(async (req, res) => {
   });
   if (!ticket) return res.status(404).json({ message: "Тикет не найден" });
 
-  await deleteTicketAttachments(ticket.messages.map((m) => m.attachments));
   await prisma.ticket.delete({ where: { id: ticket.id } });
+  await deleteTicketAttachments(ticket.messages.map((m) => m.attachments));
 
   return res.json({ success: true, id: ticket.id });
 }));

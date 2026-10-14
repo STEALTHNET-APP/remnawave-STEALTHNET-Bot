@@ -1035,6 +1035,14 @@ model Subscription {
   /// Синхронизируется при каждом upsert/extend через extractCurrentExpireAt из Remna-ответа.
   /// null = подписка ещё не привязана к Remna user или дата неизвестна.
   expireAt                 DateTime? @map("expire_at")
+  /// Теневой бан подписки за превышение правил трафика.
+  /// Remnawave остаётся безлимитным; бан отключает пользователя до bannedUntil.
+  bannedUntil              DateTime? @map("banned_until")
+  banReason                String?   @map("ban_reason")
+  banRuleId                String?   @map("ban_rule_id")
+  banNotifiedAt            DateTime? @map("ban_notified_at")
+  /// Иммунитет после ручного разбана: планировщик не предупреждает и не банит до этой даты.
+  abuseImmuneUntil         DateTime? @map("abuse_immune_until")
   /// ── T-remna-mirror (9.08.2026): зеркало состояния подписки из Remnawave ──
   /// Чтобы даты/трафик/статус жили и в НАШЕЙ базе, а не только в панели Remna:
   /// переживают недоступность Remna, дают историю и позволяют считать отчёты
@@ -1062,6 +1070,8 @@ model Subscription {
   trial           Trial?     @relation(fields: [trialId], references: [id], onDelete: SetNull)
   giftCodes       GiftCode[] @relation("GiftCodeSubscription")
   payments        Payment[]  @relation("PaymentSubscription")
+  abuseStates     TrafficAbuseState[] @relation("SubscriptionAbuseStates")
+  abuseEvents     TrafficAbuseEvent[] @relation("SubscriptionAbuseEvents")
 
   @@unique([ownerId, subscriptionIndex])
   @@index([ownerId])
@@ -1070,6 +1080,7 @@ model Subscription {
   @@index([trialId])
   @@index([autoRenewEnabled])
   @@index([expireAt])
+  @@index([bannedUntil])
   @@map("subscriptions")
 }
 
@@ -1535,4 +1546,78 @@ model ClientRouletteSpin {
 
   @@index([clientId, createdAt])
   @@map("client_roulette_spins")
+}
+
+/// Правило теневого лимита трафика. Расписание определяет момент проверки,
+/// окно и limitBytes — анализируемый период и порог, action — WARN или BAN.
+model TrafficAbuseRule {
+  id                     String   @id @default(cuid())
+  name                   String   @db.VarChar(120)
+  enabled                Boolean  @default(true)
+  schedules              Json     @default("[]")
+  windowKind             String   @map("window_kind") @db.VarChar(16)
+  windowValueHours       Int?     @map("window_value_hours")
+  limitBytes             BigInt   @map("limit_bytes")
+  action                 String   @db.VarChar(8)
+  banDurationKind        String?  @map("ban_duration_kind") @db.VarChar(20)
+  banDurationHours       Int?     @map("ban_duration_hours")
+  channels               Json     @default("{}")
+  messageText            String   @map("message_text") @db.Text
+  emailSubject           String?  @map("email_subject") @db.VarChar(200)
+  scopeKind              String   @default("all") @map("scope_kind") @db.VarChar(16)
+  scopeValues            Json?    @map("scope_values")
+  excludeSubscriptionIds Json?    @map("exclude_subscription_ids")
+  priority               Int      @default(0)
+  resendAfterHours       Int?     @map("resend_after_hours")
+  lastRunAt              DateTime? @map("last_run_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  states TrafficAbuseState[] @relation("RuleAbuseStates")
+  events TrafficAbuseEvent[] @relation("RuleAbuseEvents")
+
+  @@index([enabled])
+  @@map("traffic_abuse_rules")
+}
+
+/// Состояние пары «подписка × правило»: дедупликация предупреждений и rolling-снапшот.
+model TrafficAbuseState {
+  id                String   @id @default(cuid())
+  subscriptionId    String   @map("subscription_id")
+  ruleId            String   @map("rule_id")
+  windowKey         String   @map("window_key") @db.VarChar(32)
+  warnedAt          DateTime? @map("warned_at")
+  lastPeriodBytes   BigInt?  @map("last_period_bytes")
+  lastLifetimeBytes BigInt?  @map("last_lifetime_bytes")
+  lastSnapshotAt    DateTime? @map("last_snapshot_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  subscription Subscription     @relation("SubscriptionAbuseStates", fields: [subscriptionId], references: [id], onDelete: Cascade)
+  rule         TrafficAbuseRule @relation("RuleAbuseStates", fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, ruleId])
+  @@index([ruleId])
+  @@map("traffic_abuse_states")
+}
+
+/// Журнал WARN/BAN/UNBAN/ERROR антиабуза.
+model TrafficAbuseEvent {
+  id             String   @id @default(cuid())
+  subscriptionId String   @map("subscription_id")
+  ruleId         String?  @map("rule_id")
+  eventType      String   @map("event_type") @db.VarChar(8)
+  periodBytes    BigInt?  @map("period_bytes")
+  windowKey      String?  @map("window_key") @db.VarChar(32)
+  channelsSent   Json?    @map("channels_sent")
+  detail         String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  subscription Subscription      @relation("SubscriptionAbuseEvents", fields: [subscriptionId], references: [id], onDelete: Cascade)
+  rule         TrafficAbuseRule? @relation("RuleAbuseEvents", fields: [ruleId], references: [id], onDelete: SetNull)
+
+  @@index([subscriptionId])
+  @@index([eventType])
+  @@index([createdAt(sort: Desc)])
+  @@map("traffic_abuse_events")
 }

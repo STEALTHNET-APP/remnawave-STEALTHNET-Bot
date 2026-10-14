@@ -79,6 +79,7 @@ export const MANAGER_SECTIONS: { key: string; label: string; category: ManagerSe
   { key: "geo-map", label: "Карта нод", category: "overview" },
   // Управление
   { key: "clients", label: "Клиенты", category: "management" },
+  { key: "anti-abuse", label: "Анти-абьюз трафика", category: "management" },
   { key: "proxy", label: "Прокси", category: "management" },
   { key: "singbox", label: "Sing-box", category: "management" },
   { key: "backup", label: "Бэкапы", category: "management" },
@@ -1211,6 +1212,51 @@ export const api = {
     return request(`/admin/traffic-abuse/analytics${q ? `?${q}` : ""}`, { token });
   },
 
+  async getAntiAbuseRules(token: string): Promise<{ items: AntiAbuseRule[] }> {
+    return request("/admin/anti-abuse/rules", { token });
+  },
+  async createAntiAbuseRule(token: string, body: AntiAbuseRuleInput): Promise<AntiAbuseRule> {
+    return request("/admin/anti-abuse/rules", { token, method: "POST", body: JSON.stringify(body) });
+  },
+  async updateAntiAbuseRule(token: string, id: string, body: Partial<AntiAbuseRuleInput>): Promise<AntiAbuseRule> {
+    return request(`/admin/anti-abuse/rules/${id}`, { token, method: "PATCH", body: JSON.stringify(body) });
+  },
+  async deleteAntiAbuseRule(token: string, id: string): Promise<{ ok: boolean }> {
+    return request(`/admin/anti-abuse/rules/${id}`, { token, method: "DELETE" });
+  },
+  async runAntiAbuseRule(token: string, id: string): Promise<{ ok: boolean; message?: string }> {
+    return request(`/admin/anti-abuse/rules/${id}/run`, { token, method: "POST" });
+  },
+  async getAntiAbuseState(token: string): Promise<{ banned: AntiAbuseBannedItem[]; warned: AntiAbuseWarnedItem[] }> {
+    return request("/admin/anti-abuse/state", { token });
+  },
+  async getAntiAbuseEvents(
+    token: string,
+    params?: { limit?: number; eventType?: string; ruleId?: string; cursor?: string; dateFrom?: string; dateTo?: string },
+  ): Promise<{ items: AntiAbuseEvent[]; nextCursor: string | null }> {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.eventType) qs.set("eventType", params.eventType);
+    if (params?.ruleId) qs.set("ruleId", params.ruleId);
+    if (params?.cursor) qs.set("cursor", params.cursor);
+    if (params?.dateFrom) qs.set("dateFrom", params.dateFrom);
+    if (params?.dateTo) qs.set("dateTo", params.dateTo);
+    const q = qs.toString();
+    return request(`/admin/anti-abuse/events${q ? `?${q}` : ""}`, { token });
+  },
+  async getAntiAbuseSettings(token: string): Promise<{ enabled: boolean; topN: number }> {
+    return request("/admin/anti-abuse/settings", { token });
+  },
+  async updateAntiAbuseSettings(token: string, body: { enabled?: boolean; topN?: number }): Promise<{ ok: boolean }> {
+    return request("/admin/anti-abuse/settings", { token, method: "PATCH", body: JSON.stringify(body) });
+  },
+  async unbanAntiAbuse(token: string, subscriptionId: string, immuneDays?: number): Promise<{ ok: boolean; immuneDays?: number }> {
+    return request(`/admin/anti-abuse/unban/${subscriptionId}`, { token, method: "POST", body: JSON.stringify({ immuneDays: immuneDays ?? 7 }) });
+  },
+  async banAntiAbuse(token: string, subscriptionId: string, body: { reason: string; durationHours: number | null }): Promise<{ ok: boolean; bannedUntil: string; indefinite: boolean }> {
+    return request(`/admin/anti-abuse/ban/${subscriptionId}`, { token, method: "POST", body: JSON.stringify(body) });
+  },
+
   async getApiKeys(token: string): Promise<ApiKeyListItem[]> {
     return request("/admin/api-keys", { token });
   },
@@ -2004,6 +2050,9 @@ export const api = {
     isTrial?: boolean;
     trialName?: string | null;
     trialConvertEnabled?: boolean;
+    isBanned?: boolean;
+    banReason?: string | null;
+    bannedUntil?: string | null;
     message?: string;
   }> {
     return request("/client/subscription", { token });
@@ -2037,6 +2086,9 @@ export const api = {
       trialConvertEnabled?: boolean;
       /** конвертация триала разрешена в любой тариф. */
       trialConvertAllTariffs?: boolean;
+      isBanned?: boolean;
+      banReason?: string | null;
+      bannedUntil?: string | null;
     }>;
   }> {
     return request("/client/subscription/all", { token });
@@ -4254,6 +4306,80 @@ export interface TrafficAbuseStats {
 export interface TrafficAbuseResponse {
   abusers: TrafficAbuser[];
   stats: TrafficAbuseStats;
+}
+
+export interface AntiAbuseChannels { telegram?: boolean; email?: boolean; site?: boolean; }
+export interface AntiAbuseRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  schedules: string[];
+  windowKind: "hour" | "day" | "week" | "custom" | "rolling";
+  windowValueHours: number | null;
+  limitBytes: string;
+  action: "WARN" | "BAN";
+  banDurationKind: "until_window_end" | "fixed" | null;
+  banDurationHours: number | null;
+  channels: AntiAbuseChannels;
+  messageText: string;
+  emailSubject: string | null;
+  scopeKind: "all" | "tariff" | "squad";
+  scopeValues: string[] | null;
+  excludeSubscriptionIds: string[] | null;
+  priority: number;
+  resendAfterHours: number | null;
+  lastRunAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AntiAbuseRuleInput {
+  name: string;
+  enabled?: boolean;
+  schedules: string[];
+  windowKind: "hour" | "day" | "week" | "custom" | "rolling";
+  windowValueHours?: number | null;
+  limitBytes: string | number;
+  action: "WARN" | "BAN";
+  banDurationKind?: "until_window_end" | "fixed" | null;
+  banDurationHours?: number | null;
+  channels: AntiAbuseChannels;
+  messageText: string;
+  emailSubject?: string | null;
+  scopeKind?: "all" | "tariff" | "squad";
+  scopeValues?: string[] | null;
+  excludeSubscriptionIds?: string[] | null;
+  priority?: number;
+  resendAfterHours?: number | null;
+}
+export interface AntiAbuseOwnerLite { id: string; telegramId: string | null; telegramUsername: string | null; email: string | null; }
+export interface AntiAbuseBannedItem {
+  id: string;
+  subscriptionIndex: number;
+  remnawaveUuid: string | null;
+  bannedUntil: string | null;
+  banReason: string | null;
+  banRuleId: string | null;
+  tariff: { name: string } | null;
+  owner: AntiAbuseOwnerLite;
+}
+export interface AntiAbuseWarnedItem {
+  id: string;
+  windowKey: string;
+  warnedAt: string | null;
+  lastPeriodBytes: string | null;
+  subscription: { id: string; subscriptionIndex: number; tariff: { name: string } | null; owner: AntiAbuseOwnerLite } | null;
+  rule: { id: string; name: string; action: string } | null;
+}
+export interface AntiAbuseEvent {
+  id: string;
+  eventType: string;
+  periodBytes: string | null;
+  windowKey: string | null;
+  channelsSent: AntiAbuseChannels | null;
+  detail: string | null;
+  createdAt: string;
+  ruleId: string | null;
+  subscription: { id: string; subscriptionIndex: number; owner: AntiAbuseOwnerLite } | null;
 }
 
 // ────── Admin Secondary Subscriptions ──────

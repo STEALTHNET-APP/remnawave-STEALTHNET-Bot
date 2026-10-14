@@ -1129,12 +1129,16 @@ export function subDetailButtons(
   subscriptionUrl?: string | null, // прямой URL подписки — кнопка «Инструкции» открывает его без промежуточного экрана
   extraDevicesCount?: number, // для кнопки «Убрать дополнительные устройства»
   trialConvertEnabled?: boolean, // false → у триала вообще нет кнопки продления/конвертации
+  isBanned?: boolean, // антиабуз: во время блокировки доступны только навигационные действия
 ): InlineMarkup {
   const connectId = emojiIds?.connect;
   const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
   const tariffEmoji = emojiIds?.tariff;
   const back = (backLabel && backLabel.trim()) || "⬅️ К списку подписок";
   const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
+  if (isBanned) {
+    return { inline_keyboard: [[btn(back, "menu:my_subs", undefined, emojiIds?.back)]] };
+  }
   // УНИФИЦИРОВАННОЕ продление любой подписки.
   // После унификации primary и secondary живут в одной таблице Subscription и обе имеют
   // одинаковый id. `pay_tariff_ext:<subscriptionId>` идёт прямо в продление, без диалога

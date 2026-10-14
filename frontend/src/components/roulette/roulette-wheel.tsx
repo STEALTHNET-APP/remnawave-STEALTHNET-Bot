@@ -54,7 +54,7 @@ export function RouletteWheel({
 
   const handleSpinClick = async () => {
     if (internalSpinning || externalSpinning) return;
-    
+
     // Если onSpin не передан — демонстрационное вращение на случайный сектор
     if (!onSpin) {
       if (sectors.length === 0) return;

@@ -1123,6 +1123,9 @@ export type SubscriptionListItem = {
   trialName?: string | null;
   trialConvertEnabled?: boolean;
   trialConvertAllTariffs?: boolean;
+  isBanned?: boolean;
+  banReason?: string | null;
+  bannedUntil?: string | null;
 };
 
 /** Убрать ВСЕ доп. устройства с подписки */

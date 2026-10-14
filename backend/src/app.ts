@@ -29,6 +29,7 @@ import { contestAdminRouter } from "./modules/contest/contest.admin.routes.js";
 import { contestPublicRouter, contestClientRouter } from "./modules/contest/contest.public.routes.js";
 import { adminReferralsRouter } from "./modules/admin/referrals.routes.js";
 import { trafficAbuseRouter } from "./modules/admin/traffic-abuse.routes.js";
+import { antiAbuseRouter } from "./modules/anti-abuse/anti-abuse.routes.js";
 import { apiKeysAdminRouter } from "./modules/api-keys/api-keys.admin.routes.js";
 import { externalApiRouter } from "./modules/api-keys/external-api.routes.js";
 import { geoMapRouter } from "./modules/geo-map/geo-map.routes.js";
@@ -349,6 +350,7 @@ app.use("/api/admin/console", consoleAdminRouter);
 app.use("/api/internal/console", consoleInternalRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/admin/traffic-abuse", trafficAbuseRouter);
+app.use("/api/admin/anti-abuse", antiAbuseRouter);
 app.use("/api/admin/api-keys", apiKeysAdminRouter);
 app.use("/api/admin/geo-map", geoMapRouter);
 app.use("/api/admin/contests", contestAdminRouter);
@@ -406,6 +408,15 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   const code = (err as Error & { code?: string }).code;
   if (code === "TARIFF_RESTRICTED") {
     return res.status(403).json({ message: err.message || "Покупка этого тарифа ограничена", code: "TARIFF_RESTRICTED" });
+  }
+  if (code === "SUBSCRIPTION_INACTIVE") {
+    return res.status(409).json({ message: err.message || "Подписка истекла", code: "SUBSCRIPTION_INACTIVE" });
+  }
+  if (code === "SUBSCRIPTION_TARGET_INVALID") {
+    return res.status(400).json({ message: err.message || "Подписка для опции не найдена", code: "SUBSCRIPTION_TARGET_INVALID" });
+  }
+  if (code === "PAYMENT_INTENT_CONFLICT") {
+    return res.status(400).json({ message: err.message, code: "PAYMENT_INTENT_CONFLICT" });
   }
   console.error(err);
   res.status(500).json({ message: "Internal server error" });

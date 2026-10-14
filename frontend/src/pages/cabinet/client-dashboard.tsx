@@ -254,6 +254,11 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   const subscription = subQuery.data?.subscription ?? null;
   const subscriptionError = (subQuery.data?.message as string | undefined) ?? (subQuery.error instanceof Error ? subQuery.error.message : null);
   const tariffDisplayName = subQuery.data?.tariffDisplayName ?? null;
+  const mainBan = {
+    isBanned: subQuery.data?.isBanned === true,
+    banReason: subQuery.data?.banReason ?? null,
+    bannedUntil: subQuery.data?.bannedUntil ?? null,
+  };
   const autoRenewNext = {
     amount: subQuery.data?.autoRenewNextChargeAmount ?? null,
     at: subQuery.data?.autoRenewNextChargeAt ?? null,
@@ -578,11 +583,31 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
     />
   );
 
+  const BanNotice = ({ until }: { until: string | null }) => {
+    let untilStr = "";
+    if (until) {
+      const date = new Date(until);
+      if (!isNaN(date.getTime())) {
+        untilStr = date.toLocaleString("ru-RU", {
+          day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+        });
+      }
+    }
+    return (
+      <div className="rounded-2xl bg-red-500/10 border border-red-500/30 px-4 py-3">
+        <p className="text-sm font-semibold text-red-600 dark:text-red-400 leading-relaxed">
+          🚫 Подписка заблокирована за превышение трафика{untilStr ? ` до ${untilStr}` : ""}.
+          <br />Подключение отключено, действия недоступны до разблокировки.
+        </p>
+      </div>
+    );
+  };
+
   // единая кнопка действия root-подписки (для всех 3 мест рендера):
   // обычная → «Продлить» (модалка); триал → «Конвертировать» (выбор тарифа в каталоге);
   // триал с запрещённой конвертацией → кнопки нет вовсе.
   const rootActionNode = (cls: string, iconCls: string, txtCls: string, label = "Продлить") => {
-    if (!rootSubId) return null;
+    if (!rootSubId || mainBan.isBanned) return null;
     if (rootTrial.isTrial) {
       if (!rootTrial.convertEnabled) return null;
       return (
@@ -603,7 +628,8 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   };
 
   // то же для ЛЮБОЙ secondary-подписки (унифицировано с root).
-  const secActionNode = (sec: { id: string; trialId?: string | null; trialConvertEnabled?: boolean }, cls: string, iconCls: string, txtCls: string) => {
+  const secActionNode = (sec: { id: string; trialId?: string | null; trialConvertEnabled?: boolean; isBanned?: boolean }, cls: string, iconCls: string, txtCls: string) => {
+    if (sec.isBanned) return null;
     if (sec.trialId) {
       if (sec.trialConvertEnabled === false) return null;
       return (
@@ -690,6 +716,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
             {giftRedeemMessage.type === "success" ? "🎁 " : "❌ "}{giftRedeemMessage.text}
           </div>
         )}
+        {mainBan.isBanned && <BanNotice until={mainBan.bannedUntil} />}
 
         {config?.botInfoBlock?.trim() && (
           <div className="rounded-2xl border border-primary/30 bg-primary/5 backdrop-blur-md px-4 py-3 text-sm whitespace-pre-line shadow-sm">
@@ -796,7 +823,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                 </div>
               </div>
               {/* T-main-connect (WolfVPN): ссылка подписки + кнопка «Подключиться» прямо в карточке основной подписки (как у доп.подписок) */}
-              {vpnUrl && (
+              {vpnUrl && !mainBan.isBanned && (
                 <>
                   <div className="flex gap-2 min-w-0 pt-1">
                     <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={vpnUrl}>
@@ -852,6 +879,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
               </h2>
 
               <div className="space-y-4 min-w-0">
+                {sec.isBanned && <BanNotice until={sec.bannedUntil ?? null} />}
                 <div className="flex items-center gap-2 flex-wrap">
                   {secHasActive ? (
                     <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-indigo-500/20 text-indigo-400 border border-indigo-500/20">
@@ -929,7 +957,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                 </div>
 
                 {/* T-sub-link (WolfVPN, 2026-06-03): ссылка подписки доп.подписки + копирование прямо на главной (без захода в «Подключиться»). */}
-                {secParsed.subscriptionUrl && (
+                {secParsed.subscriptionUrl && !sec.isBanned && (
                   <div className="flex gap-2 min-w-0 pt-1">
                     <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={secParsed.subscriptionUrl}>
                       {secParsed.subscriptionUrl}
@@ -939,7 +967,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                     </Button>
                   </div>
                 )}
-                <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                {!sec.isBanned && <div className="pt-2 flex flex-col sm:flex-row gap-2">
                   <Button className="flex-1 gap-2 shadow-lg h-12 rounded-xl text-md hover:scale-[1.02] transition-transform duration-300 [&_svg]:self-center [&_span]:leading-none bg-indigo-600 hover:bg-indigo-700 text-white" asChild>
                     {useRemnaPage && secParsed.subscriptionUrl ? (
                       <a href={secParsed.subscriptionUrl} target="_blank" rel="noopener noreferrer" className="inline-flex w-full items-center justify-center gap-2">
@@ -953,7 +981,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                       </Link>
                     )}
                   </Button>
-                </div>
+                </div>}
               </div>
             </section>
           );
@@ -1106,6 +1134,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   return (
     <>
     <div ref={pageRef} className="classic-dashboard flex flex-col gap-6 w-full min-w-0 mx-auto">
+      {mainBan.isBanned && <BanNotice until={mainBan.bannedUntil} />}
       {/* Hero + CTA */}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
@@ -1314,7 +1343,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                   )}
                 </div>
                 {/* T-main-connect (WolfVPN): ссылка подписки + кнопка «Подключиться» в карточке основной подписки (desktop) */}
-                {vpnUrl && (
+                {vpnUrl && !mainBan.isBanned && (
                   <>
                     <div className="flex gap-2 min-w-0">
                       <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={vpnUrl}>
@@ -1588,6 +1617,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                   </CardHeader>
                   <CardContent className="dashboard-subscription-body flex-1 flex flex-col">
                     <div className="dashboard-subscription-details space-y-4">
+                      {sec.isBanned && <BanNotice until={sec.bannedUntil ?? null} />}
                       <div className="flex items-center gap-2 flex-wrap mb-2">
                         {secDaysLeft != null && (
                           <span className="text-sm font-semibold text-foreground bg-foreground/5 px-3 py-1.5 rounded-full border border-border/50 shadow-sm">
@@ -1654,7 +1684,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                       </div>
 
                       {/* T-sub-link (WolfVPN, 2026-06-03): ссылка подписки доп.подписки + копирование прямо на главной (без захода в «Подключиться»). */}
-                      {secParsed.subscriptionUrl && (
+                      {secParsed.subscriptionUrl && !sec.isBanned && (
                         <div className="flex gap-2 min-w-0 pt-1 mb-2">
                           <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={secParsed.subscriptionUrl}>
                             {secParsed.subscriptionUrl}
@@ -1664,7 +1694,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                           </Button>
                         </div>
                       )}
-                      <div className="pt-2 flex flex-col gap-2">
+                      {!sec.isBanned && <div className="pt-2 flex flex-col gap-2">
                         <Button variant="default" size="lg" className="w-full gap-2 rounded-xl shadow-lg h-14 text-[16px] hover:scale-105 transition-transform [&_svg]:self-center [&_span]:leading-none bg-indigo-600 hover:bg-indigo-700 text-white" asChild>
                           {useRemnaPage && secParsed.subscriptionUrl ? (
                             <a href={secParsed.subscriptionUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 leading-none">
@@ -1678,7 +1708,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                             </Link>
                           )}
                         </Button>
-                      </div>
+                      </div>}
 
                     </div>
                   </CardContent>

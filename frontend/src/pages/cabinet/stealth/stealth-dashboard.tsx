@@ -43,6 +43,9 @@ interface SubCard {
   /** тариф подписки — нужен для тоггла автосписания (без тарифа списывать нечего). */
   tariffId: string | null;
   autoRenewEnabled: boolean;
+  isBanned: boolean;
+  banReason: string | null;
+  bannedUntil: string | null;
 }
 
 type PaySuccessKind = "topup" | "tariff" | "generic";
@@ -205,7 +208,8 @@ export function StealthDashboard() {
         const expireAt = typeof s?.expireAt === "string" ? s.expireAt : null;
         const expDate = expireAt ? new Date(expireAt) : null;
         const validDate = expDate && !Number.isNaN(expDate.getTime()) ? expDate : null;
-        const isActive = !!validDate && validDate.getTime() > Date.now();
+        const isBanned = it.isBanned === true;
+        const isActive = !isBanned && !!validDate && validDate.getTime() > Date.now();
         const daysLeft = isActive
           ? Math.max(0, Math.ceil((validDate!.getTime() - Date.now()) / 86_400_000))
           : null;
@@ -226,6 +230,9 @@ export function StealthDashboard() {
           trialConvertEnabled: it.trialConvertEnabled ?? true,
           tariffId: it.tariffId ?? null,
           autoRenewEnabled: it.autoRenewEnabled === true,
+          isBanned,
+          banReason: it.banReason ?? null,
+          bannedUntil: it.bannedUntil ?? null,
         };
       });
       return { cards, devices: { used: dev?.total ?? 0, total: devicesTotal } };
@@ -337,7 +344,9 @@ export function StealthDashboard() {
                 data-sub-card
                 className={cn(
                   "relative rounded-2xl border p-3.5 space-y-2.5 transition-all duration-300 backdrop-blur-xl",
-                  s.isActive
+                  s.isBanned
+                    ? "bg-red-500/[0.06] border-red-500/25"
+                    : s.isActive
                     ? "bg-white/[0.04] border-white/[0.09] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] hover:border-saccent-500/30 hover:shadow-[0_0_40px_-12px_rgb(var(--stealth-accent)_/_0.45),inset_0_1px_0_rgba(255,255,255,0.05)]"
                     : "bg-zinc-900/40 border-white/[0.05]",
                 )}
@@ -366,7 +375,11 @@ export function StealthDashboard() {
                       </span>
                     )}
                   </div>
-                  {s.isActive ? (
+                  {s.isBanned ? (
+                    <span className="shrink-0 rounded-lg bg-red-500/10 border border-red-500/20 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-400">
+                      заблокирована
+                    </span>
+                  ) : s.isActive ? (
                     <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] px-2 py-1 text-[11px] tabular-nums shrink-0">
                       <Clock className="h-3 w-3 text-zinc-400" strokeWidth={2.2} />
                       {s.daysLeft} дн.
@@ -378,6 +391,12 @@ export function StealthDashboard() {
                   )}
                 </div>
 
+                {s.isBanned && (
+                  <div className="rounded-xl bg-red-500/10 border border-red-500/25 px-3 py-2 text-xs font-medium leading-relaxed text-red-300">
+                    🚫 Превышен лимит трафика. Подключение и действия отключены до разблокировки.
+                  </div>
+                )}
+
                 {/* flex-wrap: на узких экранах группа кнопок уезжает
                     на новую строку целиком, а не вылезает за край карточки. Кнопки
                     тянутся flex-1 (min-w-0) и переносят/обрезают подпись при нехватке места. */}
@@ -386,7 +405,7 @@ export function StealthDashboard() {
                     <Calendar className="h-3 w-3 text-saccent-400/80" strokeWidth={2.2} />
                     до {formatDate(s.expiresAt)}
                   </span>
-                  <div className="flex items-center gap-1.5 ml-auto min-w-0">
+                  {!s.isBanned && <div className="flex items-center gap-1.5 ml-auto min-w-0">
                     {/* триал: «Конвертировать» = выбор тарифа в каталоге (navigate),
                         обычная подписка: продление в диалоге без ухода со страницы. */}
                     {(!s.isTrial || s.trialConvertEnabled) && (
@@ -408,11 +427,11 @@ export function StealthDashboard() {
                       <Settings2 className="h-3 w-3 shrink-0" />
                       <span className="truncate">Настроить</span>
                     </button>
-                  </div>
+                  </div>}
                 </div>
 
                 {/* Тоггл автосписания — только для НЕ-триальных подписок с тарифом. */}
-                {!s.isTrial && s.tariffId && (
+                {!s.isBanned && !s.isTrial && s.tariffId && (
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-2 pt-0.5">
                       <span className="text-[11px] text-zinc-400">♻️ Автосписание</span>

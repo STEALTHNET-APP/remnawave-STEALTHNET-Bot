@@ -337,7 +337,7 @@ async function readRemnaUser(uuid: string): Promise<Record<string, unknown>> {
 
 async function reserveSpin(clientId: string, targetSubscriptionId?: string) {
   return prisma.$transaction(async db => {
-    await lockClient(db, clientId);
+    const client = await lockClient(db, clientId);
     const last = await db.clientRouletteSpin.findFirst({ where: { clientId }, orderBy: { createdAt: "desc" } });
     if (last?.status === "PENDING") return last;
     const settings = await getRouletteSettings(db);
@@ -353,7 +353,12 @@ async function reserveSpin(clientId: string, targetSubscriptionId?: string) {
     const plan: AwardPlan = { sector: { ...sector }, cooldownHours: settings.cooldownHours };
     let label = sector.label;
     if (sector.type === "balance") plan.balance = sector.value;
-    if (sector.type === "discount") plan.discount = Math.min(100, sector.value);
+    if (sector.type === "discount") {
+      const existing = client.personalDiscountPercent ?? 0;
+      if (existing > 0 && !client.personalDiscountIsOneTime) label = `Ваша постоянная скидка ${existing}% сохранена`;
+      else if (existing >= sector.value) label = `Ваша скидка ${existing}% сохранена`;
+      else plan.discount = Math.min(100, sector.value);
+    }
     if ((sector.type === "days" || sector.type === "traffic") && sector.value > 0) {
       const sub = await resolveTargetSubscription(clientId, targetSubscriptionId, db);
       if (!sub?.remnawaveUuid) {
@@ -404,11 +409,12 @@ async function deliverSpin(clientId: string, spinId: string) {
       } });
       if (!sub || !plan.uuid) throw new Error("Подписка изменилась. Приз сохранён, обратитесь в поддержку.");
       const user = await readRemnaUser(plan.uuid);
-      const patch: { uuid: string; expireAt?: string; trafficLimitBytes?: number } = { uuid: plan.uuid };
+      const patch: { uuid: string; expireAt?: string; trafficLimitBytes?: number; status?: string } = { uuid: plan.uuid };
       if (plan.expireAt) {
         const current = typeof user.expireAt === "string" ? Date.parse(user.expireAt) : NaN;
         if (!Number.isFinite(current)) throw new Error("Не удалось определить срок подписки");
         patch.expireAt = new Date(Math.max(current, Date.parse(plan.expireAt))).toISOString();
+        if (user.status === "EXPIRED" && !sub.bannedUntil) patch.status = "ACTIVE";
       } else {
         const current = Number(user.trafficLimitBytes);
         if (user.trafficLimitBytes == null || !Number.isSafeInteger(current) || current < 0) throw new Error("Не удалось определить лимит трафика");
@@ -420,6 +426,7 @@ async function deliverSpin(clientId: string, spinId: string) {
       }
       await db.subscription.update({ where: { id: sub.id }, data: {
         ...(patch.expireAt ? { expireAt: new Date(patch.expireAt) } : {}),
+        ...(patch.status ? { remnaStatus: patch.status } : {}),
         ...(patch.trafficLimitBytes != null ? { trafficLimitBytes: patch.trafficLimitBytes } : {}),
       } });
     }
@@ -451,13 +458,15 @@ export async function spinRoulette(clientId: string, targetSubscriptionId?: stri
 export async function getAdminRouletteStats() {
   const settings = await getRouletteSettings();
   const [totalSpins, spinsByType, recentSpins] = await Promise.all([
-    prisma.clientRouletteSpin.count(),
+    prisma.clientRouletteSpin.count({ where: { status: "APPLIED" } }),
     prisma.clientRouletteSpin.groupBy({
       by: ["rewardType"],
+      where: { status: "APPLIED" },
       _count: { id: true },
       _sum: { rewardValue: true },
     }),
     prisma.clientRouletteSpin.findMany({
+      where: { status: "APPLIED" },
       orderBy: { createdAt: "desc" },
       take: 20,
       include: {
