@@ -26,6 +26,7 @@
  */
 
 import { Router } from "express";
+import type { Prisma } from "@prisma/client";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
@@ -39,6 +40,7 @@ import { distributeReferralRewards } from "../referral/referral.service.js";
 import { notifyBalanceToppedUp, notifyTariffActivated, notifyTariffActivationFailed, notifyProxySlotsCreated, notifySingboxSlotsCreated } from "../notification/telegram-notify.service.js";
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
+import { decidePlategaConfirmed, withPlategaCancelMarker, type PlategaApiCheck, type PlategaConfirmedDecision } from "./platega-transition.js";
 
 function hasExtraOptionInMetadata(metadata: string | null): boolean {
   if (!metadata?.trim()) return false;
@@ -319,6 +321,45 @@ async function verifyViaPlategaApi(payment: PaymentRow, webhookTxId: string | nu
   return { trusted: true, status: upperStatus };
 }
 
+/**
+ * Атомарно переводит платёж в PAID по подтверждённому CONFIRMED:
+ *   PENDING → PAID (как раньше) или FAILED → PAID, если FAILED поставил CANCELED-webhook
+ *   этой же транзакции (#198). Условный updateMany (статус + provider, для FAILED ещё и
+ *   точное совпадение metadata с маркером) гарантирует один переход при дублях/гонках.
+ */
+async function claimPlategaPaid(
+  db: Prisma.TransactionClient,
+  paymentId: string,
+  transactionId: string | null,
+  api: PlategaApiCheck,
+  paidData: { status: "PAID"; paidAt: Date; externalId: string | null },
+): Promise<{ changed: boolean; decision: PlategaConfirmedDecision }> {
+  let decision: PlategaConfirmedDecision = { kind: "not_recoverable", reason: "payment_missing" };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const row = await db.payment.findUnique({ where: { id: paymentId }, select: { status: true, metadata: true } });
+    if (!row) return { changed: false, decision: { kind: "not_recoverable", reason: "payment_missing" } };
+    decision = decidePlategaConfirmed(row, transactionId, api, new Date().toISOString());
+    if (decision.kind === "from_pending") {
+      const upd = await db.payment.updateMany({
+        where: { id: paymentId, provider: "platega", status: "PENDING" },
+        data: paidData,
+      });
+      if (upd.count > 0) return { changed: true, decision };
+      continue; // статус сменился параллельно — перечитываем
+    }
+    if (decision.kind === "recover_failed") {
+      const upd = await db.payment.updateMany({
+        where: { id: paymentId, provider: "platega", status: "FAILED", metadata: row.metadata },
+        data: { ...paidData, metadata: decision.nextMetadata },
+      });
+      if (upd.count > 0) return { changed: true, decision };
+      continue;
+    }
+    return { changed: false, decision };
+  }
+  return { changed: false, decision: { kind: "not_recoverable", reason: "concurrent_update" } };
+}
+
 // Используется ниже. Объявлено здесь чтобы видеть типы выше.
 void isPlategaConfigured;
 
@@ -415,10 +456,22 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
 
     await auditPaymentClientBotAlignment(payment);
 
+    // Не даём чужому CANCELED пометить платёж и заблокировать его настоящее подтверждение.
+    const webhookBinding = checkPlategaWebhookTxId(payment, transactionId);
+    if (!webhookBinding.ok) {
+      ack(401, "rejected_signature", webhookBinding.reason, payment.id);
+      return res.status(401).json({ message: "Platega transaction does not match payment" });
+    }
+
     if (FAILED_STATUSES.has(status)) {
       const failed = await prisma.payment.updateMany({
         where: { id: payment.id, status: "PENDING" },
-        data: { status: "FAILED", externalId: payment.externalId?.trim() ? payment.externalId : (transactionId ?? payment.externalId) },
+        data: {
+          status: "FAILED",
+          externalId: plategaTxIdToVerify(payment, transactionId),
+          // маркер: FAILED выставлен webhook'ом Platega — CONFIRMED этой же транзакции сможет его отменить (#198)
+          metadata: withPlategaCancelMarker(payment.metadata, status, transactionId ?? payment.externalId, new Date().toISOString()),
+        },
       });
       if (failed.count > 0) {
         console.log("[Platega Webhook] Payment marked FAILED", { paymentId: payment.id, status, transactionId, orderId: payment.orderId });
@@ -455,46 +508,64 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
     const boundTxId = plategaTxIdToVerify(payment, transactionId);
 
 
+    const apiCheck: PlategaApiCheck = apiVerify.trusted === true ? "confirmed" : "unverified";
+    const paidData = { status: "PAID" as const, paidAt: new Date(), externalId: boundTxId ?? payment.externalId };
     const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
     const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption;
+    // В claimPlategaPaid идёт только id из тела webhook'а: externalId CANCELED уже записал
+    // сам, поэтому fallback на него не доказывает, что это та же транзакция (FAILED → PAID).
+    let claim: { changed: boolean; decision: PlategaConfirmedDecision };
     if (isTopUp) {
-      const changed = await prisma.$transaction(async (tx) => {
-        const upd = await tx.payment.updateMany({
-          where: { id: payment.id, status: "PENDING" },
-          data: { status: "PAID", paidAt: new Date(), externalId: boundTxId ?? payment.externalId },
-        });
-        if (upd.count > 0) {
+      claim = await prisma.$transaction(async (tx) => {
+        const res = await claimPlategaPaid(tx, payment.id, transactionId, apiCheck, paidData);
+        if (res.changed) {
           await tx.client.update({
             where: { id: payment.clientId },
             data: { balance: { increment: payment.amount } },
           });
         }
-        return upd.count > 0;
+        return res;
       });
-      if (changed) {
+    } else {
+      claim = await claimPlategaPaid(prisma, payment.id, transactionId, apiCheck, paidData);
+    }
+    const recovered = claim.decision.kind === "recover_failed";
+
+    if (claim.decision.kind === "not_recoverable") {
+      // CONFIRMED (подтверждённый или unverified) пришёл, но платёж не PAID и вернуть его
+      // нельзя — деньги могли списаться без выдачи. Не молчим: warning, outcome=error, алерт админам.
+      const reason = claim.decision.reason;
+      console.warn("[Platega Webhook] CONFIRMED could not be applied", { paymentId: payment.id, transactionId, reason, apiCheck });
+      await notifyTariffActivationFailed(
+        payment.clientId,
+        payment.id,
+        `Platega прислал ${status}, но платёж не зачислен (${reason}). Проверьте транзакцию ${transactionId ?? payment.externalId ?? "?"} вручную.`,
+      ).catch(() => {});
+      ack(200, "error", `CONFIRMED not applied: ${reason}`, payment.id);
+      return res.status(200).json({ received: true });
+    }
+
+    if (isTopUp) {
+      if (claim.changed) {
         console.log("[Platega Webhook] Payment PAID, balance credited (top-up)", {
           paymentId: payment.id,
           amount: payment.amount,
           currency: payment.currency,
           transactionId,
           orderId: payment.orderId,
+          recoveredAfterCancel: recovered,
         });
         await notifyBalanceToppedUp(payment.clientId, payment.amount, payment.currency || "RUB", "Platega").catch(() => {});
       } else {
         console.log("[Platega Webhook] Payment already finalized", { paymentId: payment.id, status: payment.status });
       }
-    } else {
-      const upd = await prisma.payment.updateMany({
-        where: { id: payment.id, status: "PENDING" },
-        data: { status: "PAID", paidAt: new Date(), externalId: boundTxId ?? payment.externalId },
+    } else if (claim.changed) {
+      console.log("[Platega Webhook] Payment PAID (tariff)", {
+        paymentId: payment.id,
+        transactionId,
+        orderId: payment.orderId,
+        recoveredAfterCancel: recovered,
       });
-      if (upd.count > 0) {
-        console.log("[Platega Webhook] Payment PAID (tariff)", {
-          paymentId: payment.id,
-          transactionId,
-          orderId: payment.orderId,
-        });
-      }
     }
 
     // Надёжная пост-обработка: даже если платеж уже PAID, повторный webhook
