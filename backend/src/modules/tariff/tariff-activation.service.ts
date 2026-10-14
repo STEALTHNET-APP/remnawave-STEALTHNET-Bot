@@ -630,7 +630,7 @@ export async function extendSecondarySubscription(
 
   const sec = await prisma.subscription.findUnique({
     where: { id: secondaryId },
-    select: { id: true, remnawaveUuid: true, tariffId: true, ownerId: true, customPrice: true, extraDevices: true, extraDevicesMonthlyPrice: true, trialId: true, currentPricePerDay: true },
+    select: { id: true, remnawaveUuid: true, tariffId: true, ownerId: true, customPrice: true, extraDevices: true, extraDevicesMonthlyPrice: true, trialId: true, promoGranted: true, currentPricePerDay: true },
   });
   if (!sec) {
     return { ok: false, error: "Доп. подписка не найдена", status: 404 };
@@ -681,7 +681,10 @@ export async function extendSecondarySubscription(
   // сквады заменяются на сквады целевого тарифа (уход с триального сквада),
   // трафик начинается заново. Остаток бесплатных дней не конвертируется
   // (currentPricePerDay у триала нет → computeConvertedDays вернёт 0).
-  const isTrialConversion = sec.trialId != null;
+  // A promo grant is upgraded in place just like a trial, including in multi mode.
+  // Preserve its remaining days even when the caller requested a single-mode replacement.
+  if (sec.promoGranted) hardReplace = false;
+  const isTrialConversion = sec.trialId != null || sec.promoGranted;
   const effectiveConvert = convertMode || isTrialConversion || hardReplace;
 
   // ── Конвертация: остаток дней переносится pro-rata по ставке, отсчёт от «сейчас» ──
@@ -726,7 +729,9 @@ export async function extendSecondarySubscription(
     ? currentExpireAt
     : new Date();
   const totalDays = effectiveDays + convertedDays;
-  const expireAt = new Date(baseDate.getTime() + totalDays * 24 * 60 * 60 * 1000).toISOString();
+  const expireAt = sec.promoGranted
+    ? calculateExpireAt(currentExpireAt, effectiveDays)
+    : new Date(baseDate.getTime() + totalDays * 24 * 60 * 60 * 1000).toISOString();
 
   // Конвертация = переход на другой тариф: сквады ЗАМЕНЯЮТСЯ (юзер уходит со старых
   // серверов — в т.ч. с триального сквада — на сервера нового тарифа).
@@ -785,6 +790,7 @@ export async function extendSecondarySubscription(
     data: {
       expireAt: new Date(expireAt),
       trialId: null,
+      promoGranted: false,
       extraDevices: effectiveExtras,
       extraDevicesMonthlyPrice: effectiveExtrasMonthly,
       ...(tariff.id && tariff.id !== sec.tariffId ? { tariffId: tariff.id } : {}),
@@ -827,15 +833,14 @@ export async function findConvertibleSubscription(
   /** Мульти-подписки включены (глобально). Если false — single-режим для ЛЮБОГО тарифа:
    *  любая покупка находит существующую подписку клиента для замены. */
   multiSubEnabled: boolean = true,
-): Promise<{ id: string; subscriptionIndex: number; tariffId: string | null; tariffName: string | null; expireAt: Date | null; currentPricePerDay: number | null; trialId: string | null; /** покупается ТОТ ЖЕ тариф → это продление (стек дней), а не конвертация */ sameTariff: boolean } | null> {
+): Promise<{ id: string; subscriptionIndex: number; tariffId: string | null; tariffName: string | null; expireAt: Date | null; currentPricePerDay: number | null; trialId: string | null; promoGranted: boolean; /** покупается ТОТ ЖЕ тариф → это продление (стек дней), а не конвертация */ sameTariff: boolean } | null> {
   const tariff = await prisma.tariff.findUnique({
     where: { id: tariffId },
     select: { categoryId: true, category: { select: { singleSubscriptionMode: true } } },
   });
   const perCategorySingle = !!(tariff?.categoryId && tariff.category?.singleSubscriptionMode);
-  // Мульти включены → работаем ТОЛЬКО для категорий с singleSubscriptionMode (старое поведение).
+  // В мульти-режиме первая покупка переиспользует промоподписку; остальные — по правилам категории.
   // Мульти выключены → глобальный single: конвертируем существующую для ЛЮБОГО тарифа.
-  if (multiSubEnabled && !perCategorySingle) return null;
 
   const commonWhere = {
     ownerId: clientId,
@@ -850,8 +855,15 @@ export async function findConvertibleSubscription(
     expireAt: true,
     currentPricePerDay: true,
     trialId: true,
+    promoGranted: true,
     tariff: { select: { name: true } },
   } as const;
+
+  const promoSubscription = await prisma.subscription.findFirst({
+    where: { ...commonWhere, subscriptionIndex: 0, promoGranted: true },
+    select: candidateSelect,
+  });
+  if (multiSubEnabled && !perCategorySingle && !promoSubscription) return null;
 
   // приоритет универсален для ЛЮБОЙ подписки (не только #0):
   // 1) подписка с ТЕМ ЖЕ тарифом (не триал) → продление именно её;
@@ -861,7 +873,7 @@ export async function findConvertibleSubscription(
   // Мульти выкл (глобальный single) → берём ЛЮБУЮ подписку клиента (без фильтра категории);
   // мульти вкл (категория-single) → только подписки той же категории.
   const secondaryScope = multiSubEnabled ? { tariff: { categoryId: tariff!.categoryId } } : {};
-  const candidate =
+  const candidate = promoSubscription ??
     (await prisma.subscription.findFirst({
       where: { ...commonWhere, tariffId, trialId: null },
       orderBy: { expireAt: { sort: "desc", nulls: "last" } },
@@ -881,6 +893,7 @@ export async function findConvertibleSubscription(
     expireAt: candidate.expireAt,
     currentPricePerDay: candidate.currentPricePerDay,
     trialId: candidate.trialId,
+    promoGranted: candidate.promoGranted,
     // тот же тариф = продление (дни складываются, сквады/трафик
     // не сбрасываются), конвертация только при ДРУГОМ тарифе. Триал не считается
     // «тем же» — переход с пробного на платный всегда конвертация.

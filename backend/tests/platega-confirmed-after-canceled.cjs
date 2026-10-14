@@ -10,6 +10,10 @@ function load(path, mocks = {}) {
   vm.runInNewContext(code, { exports, require: n => { if (n in mocks) return mocks[n]; return require(n); }, Buffer, console: process.env.DBG ? console : { log() {}, warn() {}, error() {} }, Date, Promise, JSON, Number, Set }); return exports;
 }
 const T = load('src/modules/webhooks/platega-transition.ts');
+const service = load('src/modules/platega/platega.service.ts', {
+  '../proxy-util/proxy-fetch.js': { proxyFetch: async () => { throw new Error('unexpected network'); } },
+  '../proxy-util/get-proxy-url.js': { getProxyUrl: async () => null },
+});
 const NOW = '2026-10-10T00:00:00.000Z';
 
 // ---- pure decision ----
@@ -48,7 +52,7 @@ load('src/modules/webhooks/platega.webhooks.routes.ts', {
   express: { Router: () => ({ post: (_, fn) => { handler = fn; } }) },
   '../../db.js': { prisma: db },
   '../client/client.service.js': { getSystemConfig: async () => (creds ? { plategaMerchantId: 'm', plategaSecret: 's' } : {}) },
-  '../platega/platega.service.js': { isPlategaConfigured: () => true, getPlategaTransactionStatus: async () => ({ status: apiStatus }) },
+  '../platega/platega.service.js': { ...service, getPlategaTransactionStatus: async () => ({ status: apiStatus, id: 'tx1', amount: 100, currency: 'RUB', payload: 'order1' }) },
   '../webhook-inbox/webhook-inbox.service.js': { recordWebhook: async () => ({ id: 'w', startedAt: 0 }), markOutcome: async (_c, _s, o, extra) => { outcomes.push([o, extra && extra.errorMessage]); } },
   '../tariff/tariff-activation.service.js': { activateTariffByPaymentId: async () => { activations++; return { ok: true }; } },
   '../proxy/proxy-slots-activation.service.js': {}, '../singbox/singbox-slots-activation.service.js': {}, '../extra-options/extra-options.service.js': {},
@@ -79,6 +83,13 @@ const last = () => outcomes[outcomes.length - 1][0];
   await call('CONFIRMED'); assert.equal(balance, 100);
   // CANCELED after PAID does not downgrade
   await call('CANCELED'); assert.equal(row.status, 'PAID');
+
+  // A mismatched cancellation must not poison recovery for the real transaction.
+  reset();
+  assert.equal(await call('CANCELED', 'other'), 401);
+  assert.equal(row.status, 'PENDING'); assert.equal(row.metadata, null);
+  await call('CANCELED'); await call('CONFIRMED');
+  assert.equal(row.status, 'PAID'); assert.equal(balance, 100);
 
   // concurrent duplicate CONFIRMED after CANCELED -> one credit
   reset(); await call('CANCELED');
