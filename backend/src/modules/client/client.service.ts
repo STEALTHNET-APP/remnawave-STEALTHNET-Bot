@@ -293,6 +293,7 @@ const DEFAULT_BOT_BUTTONS: BotButtonConfig[] = [
   { id: "support", visible: true, label: "🆘 Поддержка", order: 7, style: "primary", emojiKey: "NOTE" },
   { id: "promocode", visible: true, label: "🎟️ Промокод", order: 8, style: "primary", emojiKey: "STAR" },
   { id: "extra_options", visible: true, label: "➕ Доп. опции", order: 9, style: "primary", emojiKey: "PACKAGE" },
+  { id: "roulette", visible: true, label: "🎰 Рулетка", order: 8.7, style: "primary", emojiKey: "STAR" },
   // Кастомные кнопки. Раньше добавлялись автоматом в keyboard.ts —
   // теперь явно в DEFAULT, чтобы они отображались в UI настроек админки.
   { id: "my_subs", visible: true, label: "📋 Мои подписки", order: 3, style: "", onePerRow: true },
@@ -1329,6 +1330,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     smtpConfigured: isSystemSmtpConfigured(full),
     useRemnaSubscriptionPage: full.useRemnaSubscriptionPage ?? false,
     aiChatEnabled: full.aiChatEnabled ?? true,
+    rouletteEnabled: (full as any).rouletteEnabled !== "false" && (full as any).rouletteEnabled !== false,
     trialEnabled,
     trialDays,
     botButtons: resolvedButtons,

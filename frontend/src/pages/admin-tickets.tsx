@@ -9,8 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { motion } from "framer-motion";
 import {
   Loader2, Send, ArrowLeft, Lock, Unlock,
-  CircleDot, CircleCheck, RefreshCw, Paperclip, X as XIcon,
+  CircleDot, CircleCheck, RefreshCw, Paperclip, X as XIcon, Trash2,
 } from "lucide-react";
+import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { fmtMskShort } from "@/lib/datetime";
 
@@ -134,6 +135,28 @@ export function AdminTicketsPage() {
     statusMutation.mutate(detail.status === "open" ? "closed" : "open");
   };
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deleteAdminTicket(token, id),
+    onSuccess: (_, deletedId) => {
+      toast.success("Тикет удалён", "Обращение успешно удалено");
+      if (detailId === deletedId) {
+        setDetailId(null);
+      }
+      void qc.invalidateQueries({ queryKey: ["admin", "tickets"], exact: false });
+    },
+    onError: (e) => {
+      toast.error("Ошибка при удалении", e instanceof Error ? e.message : "Не удалось удалить тикет");
+    },
+  });
+
+  const handleDeleteTicket = (id: string, subject?: string) => {
+    const msg = subject
+      ? `Удалить тикет «${subject}» навсегда? Все сообщения и вложенные файлы будут удалены.`
+      : "Удалить этот тикет навсегда? Все сообщения и вложенные файлы будут удалены.";
+    if (!confirm(msg)) return;
+    deleteMutation.mutate(id);
+  };
+
   const formatDate = (s: string) => {
     try {
       return fmtMskShort(s);
@@ -180,6 +203,17 @@ export function AdminTicketsPage() {
             <Button variant="outline" size="sm" onClick={toggleStatus} className="gap-1.5">
               {isOpen ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
               {isOpen ? "Закрыть" : "Открыть"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleDeleteTicket(detail.id, detail.subject)}
+              disabled={deleteMutation.isPending}
+              className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+              title="Удалить тикет"
+            >
+              <Trash2 className="h-4 w-4" />
+              Удалить
             </Button>
           </div>
         </motion.div>
@@ -404,7 +438,18 @@ export function AdminTicketsPage() {
                         <span>{formatDate(t.updatedAt)}</span>
                       </div>
                     </div>
-                    <span className="text-muted-foreground/40 shrink-0"></span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteTicket(t.id, t.subject);
+                      }}
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                      title="Удалить тикет"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </Card>
               </motion.div>

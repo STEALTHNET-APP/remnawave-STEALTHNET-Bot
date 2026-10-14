@@ -92,6 +92,7 @@ import { ClientSingboxPage } from "@/pages/cabinet/client-singbox";
 import { ClientTicketsPage } from "@/pages/cabinet/client-tickets";
 import { ClientCustomBuildPage } from "@/pages/cabinet/client-custom-build";
 import { ClientGiftsPage } from "@/pages/cabinet/client-gifts";
+import { ClientRoulettePage } from "@/pages/cabinet/client-roulette";
 import { ClientLegalDocsPage } from "@/pages/cabinet/client-legal-docs";
 import { GiftActivatePage } from "@/pages/gift-activate";
 import { LandingPage } from "@/pages/landing";
@@ -452,6 +453,14 @@ function AppRoutes() {
           element={
             <RequireClientAuth>
               <ClientGiftsPage />
+            </RequireClientAuth>
+          }
+        />
+        <Route
+          path="roulette"
+          element={
+            <RequireClientAuth>
+              <ClientRoulettePage />
             </RequireClientAuth>
           }
         />

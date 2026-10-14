@@ -12,15 +12,14 @@
  *     правило в index.css) — по той же причине.
  * Плюс фон не скроллит, пока шторка открыта.
  *
- * Анимация въезда/выезда — gsap (yPercent 100 ↔ 0): шторка остаётся в DOM,
- * пока играет exit (onComplete убирает её через ~300 мс), поэтому закрытие
- * плавное, как раньше с AnimatePresence.
+ * Анимация въезда/выезда — аппаратный CSS transition (translate-y 100% ↔ 0,
+ * opacity 0 ↔ 1): устойчив к перерисовкам React при вводе текста, без
+ * матричных сбоев JS-библиотек.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import gsap from "gsap";
+import { useEffect, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
-import { EASE_OUT, reducedMotion } from "@/lib/gsap-utils";
+import { cn } from "@/lib/utils";
 
 interface Props {
   open: boolean;
@@ -32,78 +31,59 @@ interface Props {
 }
 
 export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
-  // Шторка смонтирована, пока открыта И пока играет анимация выхода.
   const [mounted, setMounted] = useState(open);
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (open) setMounted(true);
+    if (open) {
+      setMounted(true);
+      const raf = requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setVisible(true);
+        });
+      });
+      return () => cancelAnimationFrame(raf);
+    } else {
+      setVisible(false);
+      const timer = setTimeout(() => {
+        setMounted(false);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.documentElement.dataset.auSheet = "1";
     return () => {
+      window.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
       delete document.documentElement.dataset.auSheet;
     };
-  }, [open]);
-
-  useEffect(() => {
-    const overlay = overlayRef.current;
-    const panel = panelRef.current;
-    if (!overlay || !panel) return;
-    if (reducedMotion()) {
-      // Без анимаций: мгновенно в финальное состояние, размонтируем сразу.
-      gsap.set(panel, { yPercent: open ? 0 : 100 });
-      gsap.set(overlay, { opacity: open ? 1 : 0 });
-      if (!open) setMounted(false);
-      return;
-    }
-    const ctx = gsap.context(() => {
-      if (open) {
-        gsap.fromTo(
-          overlay,
-          { opacity: 0 },
-          { opacity: 1, duration: 0.35, ease: EASE_OUT },
-        );
-        gsap.fromTo(
-          panel,
-          { yPercent: 100 },
-          { yPercent: 0, duration: 0.35, ease: EASE_OUT },
-        );
-      } else {
-        gsap.to(overlay, { opacity: 0, duration: 0.3, ease: EASE_OUT });
-        gsap.to(panel, {
-          yPercent: 100,
-          duration: 0.3,
-          ease: EASE_OUT,
-          // убираем из DOM сразу по завершении выхода (~300 мс)
-          onComplete: () => setMounted(false),
-        });
-      }
-    }, overlay);
-    return () => ctx.revert();
-  }, [open, mounted]);
+  }, [open, onClose]);
 
   if (!mounted) return null;
 
   return (
     <div
-      ref={overlayRef}
-      className="fixed inset-0 z-[55] flex items-end justify-center bg-black/45"
-      style={{ opacity: 0 }}
+      className={cn(
+        "fixed inset-0 z-[55] flex items-end justify-center bg-black/45 transition-opacity duration-300 ease-out",
+        visible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+      )}
       onClick={onClose}
     >
       <div
-        ref={panelRef}
-        className="flex max-h-[88vh] w-full max-w-md flex-col rounded-t-[28px] bg-[var(--au-bg)] pt-3 text-[var(--au-ink)] [backface-visibility:hidden] [isolation:isolate]"
+        className={cn(
+          "flex max-h-[88vh] w-full max-w-md flex-col rounded-t-[28px] bg-[var(--au-bg)] pt-3 text-[var(--au-ink)] [backface-visibility:hidden] [isolation:isolate] transition-transform duration-300 ease-out",
+          visible ? "translate-y-0" : "translate-y-full"
+        )}
         style={{
-          // стартовое состояние до первого твина — без вспышки на 1 кадр
-          transform: "translate3d(0, 100%, 0)",
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
         }}
         onClick={(e) => e.stopPropagation()}

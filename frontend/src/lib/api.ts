@@ -1448,6 +1448,10 @@ export const api = {
   async patchAdminTicket(token: string, id: string, data: { status: "open" | "closed" }): Promise<{ id: string; status: string }> {
     return request(`/admin/tickets/${id}`, { method: "PATCH", body: JSON.stringify(data), token });
   },
+  /** Админ: удалить тикет */
+  async deleteAdminTicket(token: string, id: string): Promise<{ success: boolean; id: string }> {
+    return request(`/admin/tickets/${id}`, { method: "DELETE", token });
+  },
   /** Админ: ответ в тикет (поддержка). Можно приложить до 5 фото — тогда уходит multipart/form-data. */
   async postAdminTicketMessage(
     token: string,
@@ -2719,6 +2723,10 @@ export const api = {
       token,
     });
   },
+  /** Клиент: удалить свой тикет */
+  async deleteTicket(token: string, id: string): Promise<{ success: boolean; id: string }> {
+    return request(`/client/tickets/${id}`, { method: "DELETE", token });
+  },
 
   /** AI Чат (Groq) */
   async chatAi(
@@ -2946,6 +2954,54 @@ export const api = {
   },
   async marketplaceHubDeleteCategory(token: string, id: string): Promise<{ ok: boolean }> {
     return request(`/admin/marketplace/hub/categories/${encodeURIComponent(id)}`, { method: "DELETE", token });
+  },
+
+  // ─── Рулетка (Колесо Фортуны) ───
+  async clientGetRoulette(token: string): Promise<{
+    enabled: boolean;
+    cooldownHours: number;
+    canSpin: boolean;
+    pendingReward: boolean;
+    nextSpinAt: string | null;
+    secondsLeft: number;
+    sectors: { id: string; type: string; value: number; label: string; color: string; icon: string }[];
+    recentSpins: { id: string; rewardType: string; rewardValue: number; rewardLabel: string; sectorId: string; createdAt: string }[];
+    subscriptions?: {
+      id: string;
+      index: number;
+      name: string;
+      expireAt: string | null;
+      isExpired: boolean;
+      remnaStatus: string | null;
+    }[];
+  }> {
+    return request("/client/roulette", { token });
+  },
+
+  async clientSpinRoulette(token: string, subscriptionId?: string): Promise<{
+    spinId: string;
+    sectorId: string;
+    reward: { id: string; type: string; value: number; label: string; color: string; icon: string };
+    nextSpinAt: string;
+  }> {
+    return request("/client/roulette/spin", {
+      method: "POST",
+      token,
+      body: subscriptionId ? JSON.stringify({ subscriptionId }) : undefined,
+    });
+  },
+
+  async getAdminRoulette(token: string): Promise<{
+    settings: { enabled: boolean; cooldownHours: number; sectors: any[] };
+    totalSpins: number;
+    spinsByType: any[];
+    recentSpins: any[];
+  }> {
+    return request("/admin/roulette", { token });
+  },
+
+  async updateAdminRoulette(token: string, data: any): Promise<any> {
+    return request("/admin/roulette", { method: "PUT", body: JSON.stringify(data), token });
   },
 };
 
@@ -3275,6 +3331,7 @@ export type UpdateSettingsPayload = {
   logoBot?: string | null;
   favicon?: string | null;
   cabinetDesign?: "classic" | "stealth" | "aurora";
+  rouletteEnabled?: boolean;
   remnaClientUrl?: string | null;
   smtpHost?: string | null;
   smtpPort?: number;
@@ -5388,6 +5445,7 @@ export interface PublicConfig {
   smtpConfigured?: boolean;
   useRemnaSubscriptionPage?: boolean;
   aiChatEnabled?: boolean;
+  rouletteEnabled?: boolean;
   customBuildConfig?: {
     enabled: true;
     pricePerDay: number;

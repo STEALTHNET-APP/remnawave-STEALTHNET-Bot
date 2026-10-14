@@ -1684,7 +1684,8 @@
       "profile": "Профиль",
       "more": "Ещё",
       "menu": "Меню",
-      "logout": "Выйти"
+      "logout": "Выйти",
+      "roulette": "Рулетка"
     },
     "layout": {
       "theme_heading": "Тема",

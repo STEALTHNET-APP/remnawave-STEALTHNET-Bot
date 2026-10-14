@@ -158,6 +158,7 @@ model Client {
   giftHistory           GiftHistory[]
   // T15 (11.05.2026, WolfVPN): какие триалы клиент уже активировал.
   trialUsages           ClientTrialUsage[]
+  rouletteSpins         ClientRouletteSpin[]
 
   // Email/google/apple/referralCode/telegramId глобально уникальны.
   @@index([email])
@@ -1526,6 +1527,25 @@ model AutoRenewNotification {
   @@index([triggerType, enabled])
   @@index([sortOrder])
   @@map("auto_renew_notifications")
+}
+
+
+// История вращений рулетки удачи
+model ClientRouletteSpin {
+  status      String   @default("APPLIED")
+  awardPlan   Json?    @map("award_plan")
+  id          String   @id @default(cuid())
+  clientId    String   @map("client_id")
+  rewardType  String   @map("reward_type") // "days" | "balance" | "traffic" | "discount" | "empty"
+  rewardValue Float    @default(0) @map("reward_value")
+  rewardLabel String   @map("reward_label")
+  sectorId    String   @map("sector_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@map("client_roulette_spins")
 }
 
 /// Правило теневого лимита трафика. Расписание определяет момент проверки,

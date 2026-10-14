@@ -12,7 +12,8 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X } from "lucide-react";
+import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X, Trash2 } from "lucide-react";
+import { askConfirm } from "@/lib/confirm";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type TicketMessageDto } from "@/lib/api";
 import { AuroraSheet } from "@/components/aurora/aurora-sheet";
@@ -122,13 +123,39 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose }: Props) {
     }
   }
 
+  async function handleDelete() {
+    if (!state.token || !ticketId) return;
+    const ok = await askConfirm("Удалить это обращение навсегда? Все сообщения будут удалены.");
+    if (!ok) return;
+    try {
+      await api.deleteTicket(state.token, ticketId);
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Не удалось удалить обращение");
+    }
+  }
+
   const isClosed = data?.status === "closed";
 
   return (
     <AuroraSheet
       open={open}
       onClose={onClose}
-      title={data?.subject || "Обращение"}
+      title={
+        <div className="flex items-center justify-between gap-2 w-full pr-8">
+          <span className="truncate">{data?.subject || "Обращение"}</span>
+          {ticketId && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="text-red-500 hover:text-red-600 p-1.5 rounded-full hover:bg-red-500/10 transition-colors shrink-0"
+              title="Удалить обращение"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      }
       footer={
         isClosed ? (
           <p className="rounded-[16px] bg-[var(--au-surface)] px-4 py-3.5 text-center text-[13px] text-[var(--au-muted)]">
