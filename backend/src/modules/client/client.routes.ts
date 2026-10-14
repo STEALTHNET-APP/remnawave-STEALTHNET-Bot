@@ -51,6 +51,7 @@ import { createLavatopInvoice, isLavatopConfigured } from "../lavatop/lavatop.se
 import { createOverpayPayformOrder, isOverpayConfigured } from "../overpay/overpay.service.js";
 import { applyPersonalDiscount } from "./personal-discount.js";
 import { checkTariffRestriction } from "./client.service.js";
+import { isMultiSubscriptionsEnabled } from "./multi-subscriptions.js";
 import { getBotByToken, getPrimaryBot, paymentSnapshotTopup, paymentSnapshotProduct, applyMarkup } from "../bot/bot.service.js";
 import { extractBotTokenFromRequest, optionalBot, type ReqWithBot } from "../bot/bot.middleware.js";
 import { uploadTicketAttachment } from "../../lib/upload.js";
@@ -1754,9 +1755,21 @@ clientRouter.get("/tariff-conversion-preview", async (req, res) => {
   const priceOptionId = typeof req.query.priceOptionId === "string" ? req.query.priceOptionId : null;
   if (!tariffId) return res.status(400).json({ message: "tariffId обязателен" });
 
-  const cfgMS = await getSystemConfig().catch(() => null);
-  const multiSubEnabled = (cfgMS as { multiSubscriptionsEnabled?: boolean } | null)?.multiSubscriptionsEnabled ?? true;
-  const convertible = await findConvertibleSubscription(client.id, tariffId, multiSubEnabled);
+  const replaceTrialSubId = typeof req.query.replaceTrialSubId === "string" && req.query.replaceTrialSubId.trim()
+    ? req.query.replaceTrialSubId.trim()
+    : null;
+  let cfgMS: Awaited<ReturnType<typeof getSystemConfig>>;
+  try {
+    cfgMS = await getSystemConfig();
+  } catch (e) {
+    console.error("[conversion-preview] system config unavailable:", e);
+    return res.status(503).json({ message: "Настройки временно недоступны, повторите позже" });
+  }
+  const multiSubEnabled = isMultiSubscriptionsEnabled(cfgMS);
+  const convertible = await findConvertibleSubscription(client.id, tariffId, multiSubEnabled, {
+    preferredSubId: replaceTrialSubId,
+    trialSquadUuid: cfgMS.trialSquadUuid,
+  });
   if (!convertible) return res.json({ willConvert: false });
   // Single-режим: сколько ДРУГИХ подписок клиента удалится при консолидации (кроме конвертируемой).
   const othersToRemove = !multiSubEnabled
@@ -1841,7 +1854,7 @@ clientRouter.get("/tariff-conversion-preview", async (req, res) => {
         index: convertible.subscriptionIndex,
         tariffName: convertible.tariffName,
         expireAt: convertible.expireAt?.toISOString() ?? null,
-        isTrial: convertible.trialId != null,
+        isTrial: convertible.trialId != null || convertible.isLegacyTrial,
       },
       remainingDays,
       convertedDays: 0,
@@ -1878,7 +1891,7 @@ clientRouter.get("/tariff-conversion-preview", async (req, res) => {
       index: convertible.subscriptionIndex,
       tariffName: convertible.tariffName,
       expireAt: convertible.expireAt?.toISOString() ?? null,
-      isTrial: convertible.trialId != null,
+      isTrial: convertible.trialId != null || convertible.isLegacyTrial,
     },
     remainingDays,
     // обратная совместимость: convertedDays = вариант «оставить устройства» (дефолт UI).
@@ -2141,7 +2154,7 @@ clientRouter.post("/trial", async (req, res) => {
   // single-режим (мульти-подписки ВЫКЛ): у клиента может быть только ОДНА подписка.
   // Если подписка (не подарок) уже есть — триал вторым не выдаём. В мульти-режиме
   // (по умолчанию) — как раньше, триал доступен параллельно.
-  if (config.multiSubscriptionsEnabled === false) {
+  if (!isMultiSubscriptionsEnabled(config)) {
     const existingSubs = await prisma.subscription.count({
       where: { ownerId: client.id, purchasedAsGift: false, giftStatus: null },
     });
@@ -2402,8 +2415,9 @@ clientRouter.post("/trials/:id/activate", async (req, res) => {
 
   // single-режим (мульти-подписки ВЫКЛ): одна подписка на клиента. Если подписка
   // (не подарок) уже есть — standalone-пробный вторым не выдаём.
+  // сбой чтения конфига → single (fail-closed): лишний триал не выдаём.
   const cfgTrialStandalone = await getSystemConfig().catch(() => null);
-  if ((cfgTrialStandalone as { multiSubscriptionsEnabled?: boolean } | null)?.multiSubscriptionsEnabled === false) {
+  if (!isMultiSubscriptionsEnabled(cfgTrialStandalone)) {
     const existingSubsT = await prisma.subscription.count({ where: { ownerId: clientId, purchasedAsGift: false, giftStatus: null } });
     if (existingSubsT > 0) {
       return res.status(400).json({ message: "Пробный период недоступен — у вас уже есть подписка." });
@@ -4198,6 +4212,18 @@ clientRouter.post("/payments/balance", async (req, res) => {
   if (!clientDb) return res.status(401).json({ message: "Требуется авторизация" });
   const tariffPaySnap = await paymentSnapshotProduct(clientRaw.id, finalPrice);
 
+  // Глобальный тумблер мульти-подписок (single-режим при выкл) — читаем ДО списания:
+  // сбой конфига не должен ни включать мульти (лишняя user_<tg>_N), ни выключать его
+  // (consolidate удалит подписки), ни оставлять клиента без денег.
+  let balCfg: Awaited<ReturnType<typeof getSystemConfig>>;
+  try {
+    balCfg = await getSystemConfig();
+  } catch (e) {
+    console.error("[balance] system config unavailable:", e);
+    return res.status(503).json({ message: "Настройки временно недоступны, повторите позже" });
+  }
+  const multiSubEnabledBal = isMultiSubscriptionsEnabled(balCfg);
+
   // Атомик debit ДО активации в Remna. Раньше было: проверили баланс, активировали
   // тариф, потом списали. Между check и debit юзер мог нажать "купить" 30 раз —
   // получал 30 продлений за 100₽. Теперь сначала списываем, и если Remna откажет —
@@ -4226,9 +4252,8 @@ clientRouter.post("/payments/balance", async (req, res) => {
   let convertedFromTariffName: string | null = null;
   let convertedDaysForNotify: number | null = null;
   let createdSubscriptionId: string | null = null;
-  // Глобальный тумблер мульти-подписок (single-режим при выкл). Объявлен на уровне
-  // хендлера — нужен и в конверт-ветке, и в сообщении/консолидации ниже.
-  const multiSubEnabledBal = ((await getSystemConfig().catch(() => null)) as { multiSubscriptionsEnabled?: boolean } | null)?.multiSubscriptionsEnabled ?? true;
+  // легаси-триал (POST /trial) заменён покупкой на месте — для сообщения клиенту.
+  let convertedLegacyTrial = false;
 
   if (extendsSecondarySubId) {
     const sec = await prisma.subscription.findUnique({
@@ -4259,7 +4284,11 @@ clientRouter.post("/payments/balance", async (req, res) => {
     // Балансовый путь активирует напрямую (мимо activateTariffByPaymentId), поэтому
     // конверт-ветка нужна и здесь.
     const { findConvertibleSubscription, extendSecondarySubscription } = await import("../tariff/tariff-activation.service.js");
-    const convertible = await findConvertibleSubscription(clientRaw.id, tariff.id, multiSubEnabledBal);
+    // Легаси-триал (trialId=null) конвертируется здесь же — на месте, тот же Remna-юзер/ссылка.
+    const convertible = await findConvertibleSubscription(clientRaw.id, tariff.id, multiSubEnabledBal, {
+      preferredSubId: replaceTrialSubId ?? null,
+      trialSquadUuid: balCfg.trialSquadUuid,
+    });
     if (convertible) {
       activateResult = await extendSecondarySubscription(
         convertible.id,
@@ -4272,8 +4301,10 @@ clientRouter.post("/payments/balance", async (req, res) => {
         // тот же тариф → продление (стек); другой → convert (мульти вкл) / hardReplace (мульти выкл, дни сгорают).
         /* convertMode */ multiSubEnabledBal && !convertible.sameTariff,
         /* hardReplace */ !multiSubEnabledBal && !convertible.sameTariff,
+        /* legacyTrial */ convertible.isLegacyTrial,
       );
       isConverted = activateResult.ok && !convertible.sameTariff;
+      convertedLegacyTrial = isConverted && convertible.isLegacyTrial;
       isExtendingSecondary = isExtendingSecondary || (activateResult.ok && convertible.sameTariff);
       createdSubscriptionId = convertible.id;
       if (isConverted) {
@@ -4409,7 +4440,9 @@ clientRouter.post("/payments/balance", async (req, res) => {
     ? ` Остаток прежней подписки конвертирован: +${activateResult.convertedDays} дн.`
     : "";
   const okMessage = isConverted
-    ? (!multiSubEnabledBal
+    ? (convertedLegacyTrial
+        ? `🔄 Пробный период заменён тарифом «${tariff.name}» — ссылка подписки прежняя. Списано ${tariffPaySnap.amount.toFixed(2)} ${tariff.currency.toUpperCase()} с баланса.`
+        : !multiSubEnabledBal
         ? `🔄 Прежняя подписка заменена на тариф «${tariff.name}» — при выключённых мульти-подписках активна только одна подписка. Списано ${tariffPaySnap.amount.toFixed(2)} ${tariff.currency.toUpperCase()} с баланса.`
         : `🔄 У вас уже была подписка в этой категории — она обновлена до тарифа «${tariff.name}».${convertedDaysMsg} Списано ${tariffPaySnap.amount.toFixed(2)} ${tariff.currency.toUpperCase()} с баланса.`)
     : isExtendingSecondary

@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import { prisma } from "../../db.js";
 import { env } from "../../config/index.js";
 import { applyMarkup } from "../bot/bot.service.js";
+import { parseMultiSubscriptionsEnabled, isMultiSubscriptionsEnabled } from "./multi-subscriptions.js";
 
 const SALT_ROUNDS = 12;
 
@@ -710,7 +711,7 @@ async function loadSystemConfigFromDb() {
     stealthAccent: (map.stealth_accent ?? "").trim() || null,
     stealthHeroImage: map.stealth_hero_image || null,
     // Default FALSE: по умолчанию одна подписка (hard-replace); мульти — только если явно "true".
-    multiSubscriptionsEnabled: (map.multi_subscriptions_enabled ?? "false").trim() !== "false",
+    multiSubscriptionsEnabled: parseMultiSubscriptionsEnabled(map.multi_subscriptions_enabled),
     passwordResetEnabled: map.password_reset_enabled === "true" || map.password_reset_enabled === "1",
     /** Master switch для антибот-фильтра. По умолчанию включён. */
     signupProtectionEnabled: (map.signup_protection_enabled ?? "true").trim() !== "false",
@@ -1320,7 +1321,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     onboardingEmailRequired: full.onboardingEmailRequired ?? false,
     stealthAccent: full.stealthAccent ?? null,
     stealthHeroImage: full.stealthHeroImage ?? null,
-    multiSubscriptionsEnabled: full.multiSubscriptionsEnabled ?? false,
+    multiSubscriptionsEnabled: isMultiSubscriptionsEnabled(full),
     passwordResetEnabled: full.passwordResetEnabled ?? false,
     // фронту нужен флаг — настроен ли SMTP.
     // Если SMTP не настроен или skipEmailVerification=true → email привязывается
