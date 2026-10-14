@@ -465,7 +465,12 @@ async function applyBan(
   const bannedUntil = computeBanUntil(rule, windowHrs, now);
 
   // Физический бан в Remna (отключаем подключение).
-  if (sub.remnawaveUuid) await remnaDisableUser(sub.remnawaveUuid);
+  if (sub.remnawaveUuid) {
+    const result = await remnaDisableUser(sub.remnawaveUuid);
+    if (result.error || result.status < 200 || result.status >= 300) {
+      throw new Error(result.error || `Remna disable failed: ${result.status}`);
+    }
+  }
 
   await prisma.subscription.update({
     where: { id: sub.id },
@@ -563,7 +568,12 @@ async function applyRolling(
     const bannedUntil = computeBanUntil(rule, windowHrs, now);
     // Сначала применяем бан; если remnaDisableUser бросит — снапшот НЕ сдвинется,
     // дельта сохранится и нарушитель будет пойман на следующем тике.
-    if (sub.remnawaveUuid) await remnaDisableUser(sub.remnawaveUuid);
+    if (sub.remnawaveUuid) {
+      const result = await remnaDisableUser(sub.remnawaveUuid);
+      if (result.error || result.status < 200 || result.status >= 300) {
+        throw new Error(result.error || `Remna disable failed: ${result.status}`);
+      }
+    }
     await prisma.subscription.update({
       where: { id: sub.id },
       data: { bannedUntil, banReason: rule.name, banRuleId: rule.id, banNotifiedAt: now },
@@ -624,11 +634,18 @@ async function runAutoUnbanInner(): Promise<void> {
   });
   if (banned.length === 0) return;
 
+  let unbanned = 0;
   for (const sub of banned) {
     try {
-      if (sub.remnawaveUuid) await remnaEnableUser(sub.remnawaveUuid);
+      if (sub.remnawaveUuid) {
+        const result = await remnaEnableUser(sub.remnawaveUuid);
+        if (result.error || result.status < 200 || result.status >= 300) {
+          throw new Error(result.error || `Remna enable failed: ${result.status}`);
+        }
+      }
     } catch (e) {
       console.error(`[anti-abuse] авто-разбан Remna enable ${sub.id}:`, e instanceof Error ? e.message : e);
+      continue; // Keep the ban pending so the next tick retries.
     }
     await prisma.subscription.update({
       where: { id: sub.id },
@@ -648,6 +665,7 @@ async function runAutoUnbanInner(): Promise<void> {
         detail: "Авто-разбан по истечении срока блокировки",
       },
     });
+    unbanned++;
   }
-  console.log(`[anti-abuse] авто-разбан: разблокировано ${banned.length}`);
+  console.log(`[anti-abuse] авто-разбан: разблокировано ${unbanned}`);
 }

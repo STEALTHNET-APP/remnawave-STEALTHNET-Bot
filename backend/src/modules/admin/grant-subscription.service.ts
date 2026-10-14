@@ -1,4 +1,5 @@
 import { getSystemConfig } from "../client/client.service.js";
+import { isMultiSubscriptionsEnabled } from "../client/multi-subscriptions.js";
 import { createAdditionalSubscription } from "../gift/gift.service.js";
 import { findConvertibleSubscription, extendSecondarySubscription, consolidateToSingleSubscription } from "../tariff/tariff-activation.service.js";
 
@@ -13,16 +14,15 @@ type GrantTariff = Parameters<typeof createAdditionalSubscription>[1] & { id: st
  */
 export async function grantSubscriptionTariff(clientId: string, tariff: GrantTariff, extraDevices = 0): ReturnType<typeof createAdditionalSubscription> {
   const config = await getSystemConfig();
-  const multiSubEnabled = config.multiSubscriptionsEnabled !== false;
-  if (!multiSubEnabled) {
-    const existing = await findConvertibleSubscription(clientId, tariff.id, false);
-    if (existing) {
-      const result = await extendSecondarySubscription(
-        existing.id, tariff, undefined, extraDevices, false, false, !existing.sameTariff,
-      );
-      if (!result.ok) return result;
-      return { ok: true, data: { subscriptionId: existing.id, subscriptionIndex: existing.subscriptionIndex } };
-    }
+  const multiSubEnabled = isMultiSubscriptionsEnabled(config);
+  const existing = await findConvertibleSubscription(clientId, tariff.id, multiSubEnabled, { trialSquadUuid: config.trialSquadUuid });
+  if (existing && (!multiSubEnabled || existing.promoGranted)) {
+    const result = await extendSecondarySubscription(
+      existing.id, tariff, undefined, extraDevices, false, false, !multiSubEnabled && !existing.sameTariff,
+      existing.isLegacyTrial,
+    );
+    if (!result.ok) return result;
+    return { ok: true, data: { subscriptionId: existing.id, subscriptionIndex: existing.subscriptionIndex } };
   }
   const created = await createAdditionalSubscription(clientId, tariff, {
     skipConfigCheck: true, extraDevices, purchasedAsGift: false,

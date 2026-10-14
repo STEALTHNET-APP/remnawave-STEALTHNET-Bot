@@ -1,3 +1,4 @@
+import { freeDaysSettings, PromoCodeError } from "../promo-code/free-days.service.js";
 /**
  * Массовый генератор промокодов.
  *
@@ -14,8 +15,9 @@
  *   discountPercent?: number (0..100),
  *   discountFixed?: number,
  *
- *   // FREE_DAYS-параметры (нужны все):
- *   squadUuid?: string,
+ *   // FREE_DAYS: тариф + опция длительности либо число дней
+ *   tariffId: string,
+ *   tariffPriceOptionId?: string,
  *   durationDays?: number,
  *   trafficLimitBytes?: number,
  *   deviceLimit?: number,
@@ -57,6 +59,8 @@ const schema = z.object({
   type: z.enum(["DISCOUNT", "FREE_DAYS"]),
   discountPercent: z.number().min(0).max(100).optional(),
   discountFixed: z.number().min(0).optional(),
+  tariffId: z.string().min(1).optional(),
+  tariffPriceOptionId: z.string().min(1).optional(),
   squadUuid: z.string().optional(),
   durationDays: z.number().int().min(1).max(3650).optional(),
   trafficLimitBytes: z.number().int().min(0).optional(),
@@ -89,15 +93,15 @@ promoBulkRouter.post(
     if (!parsed.success) return res.status(400).json({ message: "Invalid payload", errors: parsed.error.flatten() });
     const data = parsed.data;
 
+    let freeDays = {};
     // Валидация по типу
     if (data.type === "DISCOUNT") {
       if (data.discountPercent === undefined && data.discountFixed === undefined) {
         return res.status(400).json({ message: "Для DISCOUNT нужен discountPercent или discountFixed" });
       }
     } else {
-      if (!data.squadUuid || !data.durationDays) {
-        return res.status(400).json({ message: "Для FREE_DAYS нужны squadUuid и durationDays" });
-      }
+      try { freeDays = await freeDaysSettings(data); }
+      catch (e) { if (e instanceof PromoCodeError) return res.status(e.status).json({ message: e.message }); throw e; }
     }
 
     const length = data.length ?? 10;
@@ -133,6 +137,7 @@ promoBulkRouter.post(
               trafficLimitBytes: data.type === "FREE_DAYS" && data.trafficLimitBytes !== undefined ? BigInt(data.trafficLimitBytes) : null,
               deviceLimit: data.type === "FREE_DAYS" ? data.deviceLimit ?? null : null,
               durationDays: data.type === "FREE_DAYS" ? data.durationDays ?? null : null,
+              ...freeDays,
               maxUses,
               maxUsesPerClient,
               isActive: true,

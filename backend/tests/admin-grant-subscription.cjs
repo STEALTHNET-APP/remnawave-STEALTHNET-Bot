@@ -5,6 +5,7 @@ const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.Common
 let multi=false,candidate=null,failure=false,configFailure=false,calls=[];
 const moduleMock={exports:{}};
 vm.runInNewContext(js,{exports:moduleMock.exports,require:(name)=>{
+ if(name.includes('multi-subscriptions')){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/modules/client/multi-subscriptions.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:m.exports});return m.exports;}
  if(name.includes('client.service'))return {getSystemConfig:async()=>{if(configFailure)throw Error('config unavailable');return {multiSubscriptionsEnabled:multi};}};
  if(name.includes('gift.service'))return {createAdditionalSubscription:async(...args)=>{calls.push(['create',...args]);return {ok:true,data:{subscriptionId:'new',subscriptionIndex:1}};}};
  if(name.includes('tariff-activation'))return {findConvertibleSubscription:async(...args)=>{calls.push(['find',...args]);return candidate;},extendSecondarySubscription:async(...args)=>{calls.push(['extend',...args]);return failure?{ok:false,error:'Remnawave down',status:503}:{ok:true};},consolidateToSingleSubscription:async(...args)=>{calls.push(['consolidate',...args]);}};
@@ -23,7 +24,8 @@ const tariff={id:'paid',durationDays:7,price:15,trafficLimitBytes:123n,includedD
  failure=true;calls=[];assert.equal((await grant('client',tariff)).ok,false);assert.equal(calls.some(x=>x[0]==='create'),false);failure=false;
  candidate=null;calls=[];assert.equal((await grant('client',tariff)).data.subscriptionId,'new');assert.equal(calls.filter(x=>x[0]==='create').length,1);
  assert.deepEqual(calls.find(x=>x[0]==='consolidate'),['consolidate','client','new']);
- multi=true;candidate={id:'trial'};calls=[];await grant('client',tariff,1);assert.equal(calls.length,1);assert.equal(calls[0][0],'create');assert.equal(calls[0][3].purchasedAsGift,false);
+ multi=true;candidate={id:'trial'};calls=[];await grant('client',tariff,1);assert.equal(calls.length,2);assert.equal(calls[0][0],'find');assert.equal(calls[1][0],'create');assert.equal(calls[1][3].purchasedAsGift,false);
+ candidate={id:'promo',subscriptionIndex:0,sameTariff:false,promoGranted:true};calls=[];const promo=await grant('client',tariff);assert.equal(promo.data.subscriptionId,'promo');assert.equal(calls.some(x=>x[0]==='create'),false);
  configFailure=true;calls=[];await assert.rejects(()=>grant('client',tariff));assert.equal(calls.length,0);
  console.log('PASS: single trial/different/same, new client, multi enabled, update failure, config failure, overrides and existing subscription identity');
 })().catch(e=>{console.error(e);process.exitCode=1;});
