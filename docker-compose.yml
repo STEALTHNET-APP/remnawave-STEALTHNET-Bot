@@ -182,6 +182,7 @@ services:
     volumes:
       - frontend_dist:/var/www/stealthnet:ro
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/40-watch-certificates.sh:/docker-entrypoint.d/40-watch-certificates.sh:ro
       - certbot_www:/var/www/certbot:ro
       - certbot_certs:/etc/nginx/ssl:ro
     depends_on:
@@ -196,12 +197,14 @@ services:
   certbot:
     image: ${CERTBOT_IMAGE:-certbot/certbot:latest}
     container_name: stealthnet-certbot
+    restart: unless-stopped
     profiles:
       - builtin-nginx
     volumes:
       - certbot_www:/var/www/certbot
       - certbot_certs:/etc/letsencrypt
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+      - ./nginx/renew-certificates.sh:/opt/renew-certificates.sh:ro
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do /bin/sh /opt/renew-certificates.sh; sleep 12h & wait $${!}; done;'"
     networks:
       - stealthnet
 
