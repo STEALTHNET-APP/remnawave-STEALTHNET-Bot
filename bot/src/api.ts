@@ -379,6 +379,14 @@ export async function getAllDevices(token: string): Promise<{
   return fetchJson("/api/client/devices/all", { token });
 }
 
+/** Registered HWIDs for exactly one owned subscription. Failed reads throw. */
+export async function getSubscriptionDevices(token: string, subscriptionId: string): Promise<{
+  total: number;
+  devices: { hwid: string; platform?: string; deviceModel?: string; appName?: string; createdAt?: string }[];
+}> {
+  return fetchJson(`/api/client/devices/by-subscription/${encodeURIComponent(subscriptionId)}`, { token });
+}
+
 /** Удалить устройство по HWID */
 export async function postClientDeviceDelete(
   token: string,

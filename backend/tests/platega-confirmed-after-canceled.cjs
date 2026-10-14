@@ -11,6 +11,7 @@ function load(path, mocks = {}) {
 }
 const T = load('src/modules/webhooks/platega-transition.ts');
 const service = load('src/modules/platega/platega.service.ts', {
+  './platega-request.js': load('src/modules/platega/platega-request.ts'),
   '../proxy-util/proxy-fetch.js': { proxyFetch: async () => { throw new Error('unexpected network'); } },
   '../proxy-util/get-proxy-url.js': { getProxyUrl: async () => null },
 });

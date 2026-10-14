@@ -11,7 +11,7 @@ import {
   cleanupOldBackups,
   listBackups,
   createBackupReadStream,
-  readBackupFile,
+  resolveBackupPath,
 } from "./backup.service.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { createReadStream } from "node:fs";
@@ -74,7 +74,7 @@ export function registerBackupRoutes(
     const stream = createBackupReadStream(pathParam);
     if (!stream) return res.status(404).json({ message: "Бэкап не найден" });
     const filename = pathParam.split("/").pop() || "backup.sql";
-    res.setHeader("Content-Type", "application/sql");
+    res.setHeader("Content-Type", filename.endsWith(".gz") ? "application/gzip" : "application/sql");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     stream.pipe(res);
   }));
@@ -93,22 +93,26 @@ export function registerBackupRoutes(
       return res.status(400).json({ message: "Подтвердите восстановление: укажите confirm: RESTORE" });
     }
 
-    let sqlBuffer: Buffer;
+    let input: Buffer | string;
+    let filename: string;
     const serverPath = req.body?.path as string | undefined;
     if (serverPath && typeof serverPath === "string") {
-      const buf = await readBackupFile(serverPath);
-      if (!buf || buf.length === 0) return res.status(404).json({ message: "Бэкап на сервере не найден" });
-      sqlBuffer = buf;
+      const fullPath = resolveBackupPath(serverPath);
+      const fileStat = fullPath ? await stat(fullPath).catch(() => null) : null;
+      if (!fullPath || !fileStat?.isFile() || fileStat.size === 0) return res.status(404).json({ message: "Бэкап на сервере не найден" });
+      input = fullPath;
+      filename = serverPath;
     } else {
       const file = (req as Request & { file?: Express.Multer.File }).file;
       if (!file || !file.buffer || file.buffer.length === 0) {
-        return res.status(400).json({ message: "Выберите файл бэкапа (.sql) или укажите path к сохранённому бэкапу" });
+        return res.status(400).json({ message: "Выберите файл бэкапа (.sql или .sql.gz) или укажите path к сохранённому бэкапу" });
       }
-      sqlBuffer = file.buffer;
+      input = file.buffer;
+      filename = file.originalname;
     }
 
     try {
-      await runPgRestore(db, sqlBuffer);
+      await runPgRestore(db, input, filename);
       return res.json({ message: "База данных восстановлена из бэкапа." });
     } catch (e) {
       console.error("Backup restore error:", e);

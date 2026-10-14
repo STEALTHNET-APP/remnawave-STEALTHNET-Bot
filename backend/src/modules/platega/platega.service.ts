@@ -5,6 +5,7 @@
 
 import { proxyFetch } from "../proxy-util/proxy-fetch.js";
 import { getProxyUrl } from "../proxy-util/get-proxy-url.js";
+import { buildPlategaTransactionBody, type PlategaTransactionParams } from "./platega-request.js";
 
 const PLATEGA_API_BASE = "https://app.platega.io";
 
@@ -23,26 +24,10 @@ export function isPlategaConfigured(config: PlategaConfig | null): boolean {
  */
 export async function createPlategaTransaction(
   config: PlategaConfig,
-  params: {
-    amount: number;
-    currency: string;
-    orderId: string;
-    paymentMethod: number;
-    returnUrl: string;
-    failedUrl: string;
-    description?: string;
-  }
+  params: PlategaTransactionParams
 ): Promise<{ paymentUrl: string; transactionId: string } | { error: string }> {
-  const { amount, currency, orderId, paymentMethod, returnUrl, failedUrl, description } = params;
   const url = `${PLATEGA_API_BASE}/transaction/process`;
-  const body: Record<string, unknown> = {
-    paymentMethod: Number(paymentMethod) || 2,
-    paymentDetails: { amount: Number(amount), currency: currency.toUpperCase() },
-    description: description || `Оплата заказа ${orderId}`,
-    return: returnUrl,
-    failedUrl,
-    payload: orderId, // orderId передаём через payload — единственное кастомное поле в API Platega
-  };
+  const body = buildPlategaTransactionBody(params);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
