@@ -1937,7 +1937,7 @@ export const api = {
     });
   },
 
-  async clientVerifyEmail(token: string): Promise<ClientAuthResponse | ClientAuthRequires2FA> {
+  async clientVerifyEmail(token: string): Promise<ClientAuthResponse | ClientAuthRequires2FA | { alreadyVerified: true; message: string }> {
     return request("/client/auth/verify-email", {
       method: "POST",
       body: JSON.stringify({ token }),
