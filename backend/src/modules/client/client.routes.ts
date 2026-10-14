@@ -6,7 +6,7 @@ import { generateSecret, generateURI, verify } from "otplib";
 import { env } from "../../config/index.js";
 import { Router, type Request } from "express";
 import { z } from "zod";
-import { prisma, createPayment, asClientUncheckedCreate, asClientWhere, asClientSelect, asPaymentUncheckedCreate, asTelegramAuthUpdate, type TelegramAuthTokenRecord, type ClientEmptyCloneRow } from "../../db.js";
+import { prisma, createPayment, assertActiveExtraOptionTargetForPayment, assertRenewalTargetForPayment, asClientUncheckedCreate, asClientWhere, asClientSelect, asPaymentUncheckedCreate, asTelegramAuthUpdate, type TelegramAuthTokenRecord, type ClientEmptyCloneRow } from "../../db.js";
 import { mergeClients, isBotOnlyAccount } from "./merge-clients.service.js";
 import {
   hashPassword,
@@ -41,6 +41,7 @@ import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.ser
 import { createSingboxSlotsByPaymentId } from "../singbox/singbox-slots-activation.service.js";
 import { buildSingboxSlotSubscriptionLink } from "../singbox/singbox-link.js";
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
+import { buildPaymentIntentMetadata } from "../payment/payment-intent.js";
 import { getAuthUrl, exchangeCodeForToken, requestPayment, processPayment } from "../yoomoney/yoomoney.service.js";
 import { createYookassaPayment } from "../yookassa/yookassa.service.js";
 import { createCryptopayInvoice, isCryptopayConfigured } from "../cryptopay/cryptopay.service.js";
@@ -125,6 +126,11 @@ async function calculateDevicesProrataPriceCoefficient(targetSubId: string | nul
   const expireAt = await resolveSubExpireAt(sub.expireAt, sub.remnawaveUuid);
   if (!expireAt) return 1;
   const daysLeft = (expireAt.getTime() - Date.now()) / 86_400_000;
+  if (daysLeft <= 0) {
+    const error = new Error("Нельзя купить опцию для истёкшей подписки. Сначала продлите подписку.") as Error & { code?: string };
+    error.code = "SUBSCRIPTION_INACTIVE";
+    throw error;
+  }
   return Math.max(1, daysLeft / 30);
 }
 
@@ -146,6 +152,11 @@ async function calculateDevicesProrataPriceCoefficientForPrimary(clientId: strin
   const expireAt = await resolveSubExpireAt(primarySub?.expireAt ?? null, primarySub?.remnawaveUuid ?? client.remnawaveUuid);
   if (!expireAt) return 1;
   const daysLeft = (expireAt.getTime() - Date.now()) / 86_400_000;
+  if (daysLeft <= 0) {
+    const error = new Error("Нельзя купить опцию для истёкшей подписки. Сначала продлите подписку.") as Error & { code?: string };
+    error.code = "SUBSCRIPTION_INACTIVE";
+    throw error;
+  }
   return Math.max(1, daysLeft / 30);
 }
 
@@ -2845,7 +2856,7 @@ clientRouter.get("/subscription", async (req, res) => {
   // EXPIRED Remna-юзера, тогда как subscriptions хранит актуального). Бот берёт из subscriptions — кабинет теперь тоже.
   const rootSub = await prisma.subscription.findFirst({
     where: { ownerId: client.id, subscriptionIndex: 0, remnawaveUuid: { not: null } },
-    select: { remnawaveUuid: true, trialId: true, expireAt: true, tariff: { select: { name: true } }, trial: { select: { name: true, convertEnabled: true } } },
+    select: { remnawaveUuid: true, trialId: true, expireAt: true, bannedUntil: true, banReason: true, tariff: { select: { name: true } }, trial: { select: { name: true, convertEnabled: true } } },
   });
   const effectiveUuid = rootSub?.remnawaveUuid ?? client.remnawaveUuid;
   if (!effectiveUuid) {
@@ -2872,6 +2883,9 @@ clientRouter.get("/subscription", async (req, res) => {
         isTrial: Boolean(rootSub.trialId),
         trialName: rootSub.trialId ? (rootSub.trial?.name ?? null) : null,
         trialConvertEnabled: rootSub.trialId ? (rootSub.trial?.convertEnabled ?? true) : true,
+        isBanned: !!(rootSub.bannedUntil && rootSub.bannedUntil.getTime() > Date.now()),
+        banReason: rootSub.banReason ?? null,
+        bannedUntil: rootSub.bannedUntil?.toISOString() ?? null,
         message: null,
       });
     }
@@ -2995,6 +3009,9 @@ clientRouter.get("/subscription", async (req, res) => {
     isTrial: Boolean(rootSub?.trialId),
     trialName: rootSub?.trialId ? (rootSub.trial?.name ?? null) : null,
     trialConvertEnabled: rootSub?.trialId ? (rootSub.trial?.convertEnabled ?? true) : true,
+    isBanned: !!(rootSub?.bannedUntil && rootSub.bannedUntil.getTime() > Date.now()),
+    banReason: rootSub?.banReason ?? null,
+    bannedUntil: rootSub?.bannedUntil?.toISOString() ?? null,
   });
 });
 
@@ -3072,6 +3089,9 @@ clientRouter.get("/subscription/all", async (req, res) => {
     trialConvertEnabled: boolean;
     /** конвертация разрешена в любой тариф. */
     trialConvertAllTariffs: boolean;
+    isBanned: boolean;
+    banReason: string | null;
+    bannedUntil: string | null;
   };
 
   const allSubs = await prisma.subscription.findMany({
@@ -3090,6 +3110,8 @@ clientRouter.get("/subscription/all", async (req, res) => {
       autoRenewEnabled: true,
       extraDevices: true,
       extraDevicesMonthlyPrice: true,
+      bannedUntil: true,
+      banReason: true,
       tariff: { select: { id: true, name: true, menuEmoji: true } },
       trial: { select: { name: true, convertEnabled: true, convertAllTariffs: true, convertTariffIds: true } },
     },
@@ -3131,6 +3153,9 @@ clientRouter.get("/subscription/all", async (req, res) => {
       tariffMenuEmoji: sub.tariff?.menuEmoji?.trim() || null,
       extraDevices: sub.extraDevices ?? 0,
       extraDevicesMonthlyPrice: sub.extraDevicesMonthlyPrice ?? 0,
+      isBanned: !!(sub.bannedUntil && sub.bannedUntil.getTime() > Date.now()),
+      banReason: sub.banReason ?? null,
+      bannedUntil: sub.bannedUntil?.toISOString() ?? null,
       convertTariffIds: (() => {
         if (!sub.trialId || !sub.trial?.convertTariffIds) return [];
         try {
@@ -3893,6 +3918,15 @@ clientRouter.post("/payments/platega", async (req, res) => {
     paymentMetaObj.originalAmount = metadataExtra ? finalAmount : (originalAmount ?? finalAmount);
   }
   if (personalDiscountMeta) Object.assign(paymentMetaObj, personalDiscountMeta);
+  // Активация читает намерение только из metadata. Продление имеет приоритет над
+  // флагом новой подписки, чтобы один клик не мог породить параллельный доступ.
+  Object.assign(paymentMetaObj, buildPaymentIntentMetadata({
+    asAdditional: parsed.data.asAdditional && !!tariffIdToStore,
+    asGift: parsed.data.asGift,
+    extendsSecondarySubId: parsed.data.extendsSecondarySubId,
+    removeExtrasOnActivate: parsed.data.removeExtrasOnActivate,
+    replaceTrialSubId: parsed.data.replaceTrialSubId,
+  }));
   const paymentMeta = Object.keys(paymentMetaObj).length > 0 ? paymentMetaObj : null;
   const snap = isTopupOnlyPlatega ? await paymentSnapshotTopup(clientId, finalAmount) : await paymentSnapshotProduct(clientId, finalAmount);
   const payment = await createPayment({
@@ -4104,6 +4138,14 @@ clientRouter.post("/payments/balance", async (req, res) => {
     include: { priceOptions: { orderBy: [{ sortOrder: "asc" }, { durationDays: "asc" }] } },
   });
   if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
+
+  // Проверяем владельца и тариф цели ДО списания с баланса. Повторная проверка
+  // выполняется в createPayment для внешних провайдеров и других точек входа.
+  await assertRenewalTargetForPayment({
+    clientId: clientRaw.id,
+    tariffId: tariff.id,
+    metadata: buildPaymentIntentMetadata({ asAdditional, extendsSecondarySubId }),
+  });
 
   // кулдаун ПРОДЛЕНИЯ существующей подписки.
   // Применяется только при продлении (extendsSecondarySubId) — новые покупки этого тарифа
@@ -4686,6 +4728,13 @@ clientRouter.post("/payments/balance/option", async (req, res) => {
     }
     metadataExtra.targetSubscriptionId = targetSubscriptionId;
   }
+
+  // Balance списывается до createPayment, поэтому DB-бэкстоп запускаем заранее,
+  // чтобы на неактивной подписке не пришлось возвращать деньги постфактум.
+  await assertActiveExtraOptionTargetForPayment({
+    clientId: clientDb.id,
+    metadata: JSON.stringify(metadataExtra),
+  });
 
   const pdOption = await applyPersonalDiscount(price, clientDb.id);
   const finalOptionPrice = pdOption.amount;
@@ -8244,4 +8293,3 @@ publicConfigRouter.get("/singbox-tariffs", async (req, res) => {
     return res.status(500).json({ message: "Ошибка загрузки тарифов Sing-box" });
   }
 });
-

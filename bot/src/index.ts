@@ -11,6 +11,7 @@ import { ignoreNotModified } from "./ignore-not-modified.js";
 import { ProxyAgent as UndiciProxyAgent } from "undici";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import * as api from "./api.js";
+import { shouldShowPurchaseChoice } from "./purchase-choice.js";
 import {
   mainMenu,
   backToMenu,
@@ -4996,7 +4997,19 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
       try {
         const subs = await api.getAllSubscriptions(token);
-        const subItems = subs.items ?? [];
+        const subItems = (subs.items ?? []).filter((sub) => {
+          const raw = sub.subscription as Record<string, unknown> | null;
+          const payload = raw
+            ? ((raw.response ?? raw.data ?? raw) as Record<string, unknown>)
+            : null;
+          const status = typeof payload?.status === "string" ? payload.status.toUpperCase() : null;
+          const expireAtRaw = payload?.expireAt ?? payload?.expire_at;
+          const expireAt = typeof expireAtRaw === "string" || typeof expireAtRaw === "number"
+            ? new Date(typeof expireAtRaw === "number" && expireAtRaw < 1_000_000_000_000 ? expireAtRaw * 1000 : expireAtRaw)
+            : null;
+          if (status && status !== "ACTIVE") return false;
+          return !expireAt || Number.isNaN(expireAt.getTime()) || expireAt.getTime() > Date.now();
+        });
         if (subItems.length === 0) {
           await editMessageContent(ctx, "❌ Сначала оформите подписку — потом сможете покупать опции.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
           return;
@@ -6113,6 +6126,35 @@ if (data.startsWith("pay_tariff_paritypay:")) {
         // между названием и приглашением выбрать длительность.
         // Если description пустой — экран как раньше: только название + «Выберите длительность».
         if (opts.length > 1) {
+          // Сначала явно фиксируем намерение: продлить существующую подписку или
+          // оформить новую. Без этого много-срочный тариф сразу открывал длительности,
+          // и пользователь мог случайно создать параллельную подписку.
+          if (!isBypass && !isSingleCategory) {
+            try {
+              const all = await api.getAllSubscriptions(token);
+              if (shouldShowPurchaseChoice({
+                tariffId: tariff.id,
+                subscriptions: all.items ?? [],
+                isBypass,
+                isSingleCategory,
+              })) {
+                const desc = ((tariff as TariffItem & { description?: string | null }).description ?? "").trim();
+                await editMessageContent(ctx, `${desc || tariff.name}\n\nУ вас уже есть подписка с этим тарифом. Что хотите сделать?`, {
+                  inline_keyboard: [
+                    [{ text: "🔌 Продлить текущую", callback_data: `renew_pick:${tariff.id}` }],
+                    [{ text: "🛒 Купить новую", callback_data: `pay_tariff:${tariff.id}:add` }],
+                    [{ text: backButton(config?.botEmojis ?? null).text, callback_data: "menu:tariffs" }],
+                  ],
+                });
+                return;
+              }
+            } catch {
+              await editMessageContent(ctx, "❌ Не удалось проверить ваши подписки. Повторите попытку — покупка не создана.", {
+                inline_keyboard: [[{ text: "🔄 Повторить", callback_data: `pay_tariff:${tariff.id}` }], [{ text: "🏠 Главное меню", callback_data: "menu:main" }]],
+              });
+              return;
+            }
+          }
           tariffOptionsCache.set(userId, { tariffId: tariff.id, options: opts });
           const bestId = bestPricePerDayOptionId(opts);
           const desc = ((tariff as TariffItem & { description?: string | null }).description ?? "").trim();
@@ -6121,17 +6163,6 @@ if (data.startsWith("pay_tariff_paritypay:")) {
           const text = desc
             ? `${desc}\n\nВыберите тариф:`
             : `${tariff.name}\n\nВыберите длительность подписки:`;
-          // проверяем, есть ли у клиента подписки с ЭТИМ tariffId.
-          // Если есть → сверху picker'а длительностей появится кнопка «🔌 Продлить подписку».
-          // в single-режиме кнопку «🔌 Продлить» не показываем —
-          // выбор длительности и так ведёт к конвертации/продлению (см. isSingleCategory).
-          let hasOwnSubsWithThisTariff = false;
-          if (!isSingleCategory) {
-            try {
-              const all = await api.getAllSubscriptions(token);
-              hasOwnSubsWithThisTariff = (all.items ?? []).some((it) => it.tariffId === tariff.id);
-            } catch { /* ignore — не блокируем покупку */ }
-          }
           await editMessageContent(
             ctx,
             text,
@@ -6142,7 +6173,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
               null,
               innerStyles,
               innerEmojiIds,
-              hasOwnSubsWithThisTariff ? tariff.id : null,
+              null,
               config?.botEmojis ?? null,
             ),
           );
@@ -6174,7 +6205,12 @@ if (data.startsWith("pay_tariff_paritypay:")) {
                 });
                 return;
               }
-            } catch { /* ignore — fallback в обычный flow */ }
+            } catch {
+              await editMessageContent(ctx, "❌ Не удалось проверить ваши подписки. Повторите попытку — покупка не создана.", {
+                inline_keyboard: [[{ text: "🔄 Повторить", callback_data: `pay_tariff:${tariff.id}` }], [{ text: "🏠 Главное меню", callback_data: "menu:main" }]],
+              });
+              return;
+            }
           }
           if (hasExtraDevices(tariff)) {
             const tiers = tariff.deviceDiscountTiers;
@@ -7345,18 +7381,33 @@ if (data.startsWith("topup_paritypay:")) {
         // все подписки равные. Триал-метка остаётся (это отдельная семантика, не root/secondary).
         const isTrialSub = !!item.trialId;
         const trialMark = isTrialSub ? "🎁 Пробная" : "";
+        const isBanned = item.isBanned === true;
+        let banLine = "";
+        if (isBanned) {
+          let untilStr = "";
+          if (item.bannedUntil) {
+            const bannedUntil = new Date(item.bannedUntil);
+            if (!isNaN(bannedUntil.getTime())) {
+              untilStr = bannedUntil.toLocaleString("ru-RU", {
+                day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+              });
+            }
+          }
+          banLine = `🚫 Подписка заблокирована за превышение трафика${untilStr ? ` до ${untilStr}` : ""}.\nПодключение отключено, действия недоступны до разблокировки.`;
+        }
         const lines = [
           `📲 Подписка #${idx}`,
           "",
         ];
         if (trialMark) lines.push(trialMark);
         lines.push(`💎 Тариф: ${tariff}`);
-        lines.push(`📊 Статус подписки — ${statusLabel}`);
+        lines.push(`📊 Статус подписки — ${isBanned ? "🚫 Заблокирована" : statusLabel}`);
+        if (banLine) lines.push(banLine);
         if (expireDateTimeStr) lines.push(`📅 до ${expireDateTimeStr}`);
         if (daysLeftStr) lines.push(`⏰ осталось ${daysLeftStr}`);
         if (devicesLine) lines.push(devicesLine);
         lines.push(trafficLine);
-        if (subUrl) {
+        if (subUrl && !isBanned) {
           lines.push("");
           lines.push("🔗 Ссылка для подключения:");
           lines.push(subUrl);
@@ -7387,7 +7438,7 @@ if (data.startsWith("topup_paritypay:")) {
           // T15.4: пробрасываем isTrialSub → CTA «Конвертировать в платную» вместо «Продлить».
           // пробрасываем subUrl — кнопка «📲 Инструкции по установке»
           // открывает его напрямую (без промежуточного экрана со ссылкой).
-          subDetailButtons(subType, subId, backToSubsListLabel(config?.botEmojis ?? null), innerStyles, innerEmojiIds, item.tariffId, tariffHasLocations, isTrialSub, item.autoRenewEnabled === true, subUrl, item.extraDevices ?? 0, item.trialConvertEnabled),
+          subDetailButtons(subType, subId, backToSubsListLabel(config?.botEmojis ?? null), innerStyles, innerEmojiIds, item.tariffId, tariffHasLocations, isTrialSub, item.autoRenewEnabled === true, subUrl, item.extraDevices ?? 0, item.trialConvertEnabled, isBanned),
         );
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Ошибка";

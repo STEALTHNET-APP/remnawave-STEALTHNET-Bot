@@ -106,11 +106,11 @@ export async function applyExtraOptionByPaymentId(paymentId: string): Promise<Ap
   // Это исправляет кейс: юзер выбирал secondary, но extra-option применялась к primary
   // потому что бот не пробрасывал targetSubscriptionId в платёжных хэндлерах.
   const targetSecondaryId = getTargetSubscriptionId(payment.metadata);
-  let targetSub: { id: string; remnawaveUuid: string | null; ownerId: string; customPrice: number | null; subscriptionIndex: number } | null = null;
+  let targetSub: { id: string; remnawaveUuid: string | null; ownerId: string; customPrice: number | null; subscriptionIndex: number; expireAt: Date | null } | null = null;
   if (targetSecondaryId) {
     targetSub = await prisma.subscription.findUnique({
       where: { id: targetSecondaryId },
-      select: { id: true, remnawaveUuid: true, ownerId: true, customPrice: true, subscriptionIndex: true },
+      select: { id: true, remnawaveUuid: true, ownerId: true, customPrice: true, subscriptionIndex: true, expireAt: true },
     });
     if (!targetSub || targetSub.ownerId !== payment.clientId) {
       return { ok: false, error: "Подписка для опции не найдена / не принадлежит клиенту", status: 404 };
@@ -119,7 +119,7 @@ export async function applyExtraOptionByPaymentId(paymentId: string): Promise<Ap
     // Fallback: primary подписка клиента (subscriptionIndex=0).
     targetSub = await prisma.subscription.findUnique({
       where: { ownerId_subscriptionIndex: { ownerId: payment.clientId, subscriptionIndex: 0 } },
-      select: { id: true, remnawaveUuid: true, ownerId: true, customPrice: true, subscriptionIndex: true },
+      select: { id: true, remnawaveUuid: true, ownerId: true, customPrice: true, subscriptionIndex: true, expireAt: true },
     });
     if (!targetSub) {
       return { ok: false, error: "У клиента нет подписки для применения опции. Сначала оформите подписку.", status: 400 };
@@ -127,6 +127,9 @@ export async function applyExtraOptionByPaymentId(paymentId: string): Promise<Ap
   }
   if (!targetSub.remnawaveUuid) {
     return { ok: false, error: "Подписка не привязана к VPN", status: 400 };
+  }
+  if (targetSub.expireAt && targetSub.expireAt.getTime() <= Date.now()) {
+    return { ok: false, error: "Нельзя применить опцию к истёкшей подписке. Сначала продлите подписку.", status: 409 };
   }
   const uuid = targetSub.remnawaveUuid;
   // Для совместимости с существующей логикой bumpCustomPrice/extraDevices ниже —
@@ -136,6 +139,16 @@ export async function applyExtraOptionByPaymentId(paymentId: string): Promise<Ap
   const userRes = await remnaGetUser(uuid);
   if (userRes.error) {
     return { ok: false, error: userRes.error, status: userRes.status >= 400 ? userRes.status : 500 };
+  }
+  const remnaOuter = userRes.data as Record<string, unknown> | null;
+  const remnaUser = (remnaOuter?.response ?? remnaOuter) as Record<string, unknown> | null;
+  const remnaStatus = typeof remnaUser?.status === "string" ? remnaUser.status.toUpperCase() : null;
+  const remnaExpireRaw = remnaUser?.expireAt ?? remnaUser?.expire_at;
+  const remnaExpireAt = typeof remnaExpireRaw === "string" || typeof remnaExpireRaw === "number"
+    ? new Date(typeof remnaExpireRaw === "number" && remnaExpireRaw < 1_000_000_000_000 ? remnaExpireRaw * 1000 : remnaExpireRaw)
+    : null;
+  if ((remnaStatus && remnaStatus !== "ACTIVE") || (remnaExpireAt && !Number.isNaN(remnaExpireAt.getTime()) && remnaExpireAt.getTime() <= Date.now())) {
+    return { ok: false, error: "Нельзя применить опцию к неактивной подписке. Сначала продлите подписку.", status: 409 };
   }
 
   // после apply увеличиваем custom_price выбранной подписки на цену опции.

@@ -78,6 +78,22 @@ export function mailConfigFromSystem(c: {
 
 export type EmailAttachment = { filename: string; content: Buffer };
 
+/** Branded wrapper for free-form operational notifications. */
+export function brandedNotificationEmail(opts: {
+  serviceName: string;
+  title: string;
+  bodyHtml: string;
+  btnLabel?: string;
+  btnLink?: string;
+}): string {
+  const { serviceName, title, bodyHtml, btnLabel, btnLink } = opts;
+  const button = btnLabel && btnLink
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:8px;"><tr><td style="border-radius:12px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);box-shadow:0 6px 16px rgba(16,185,129,0.35);"><a href="${btnLink}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:15px 38px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:12px;">${btnLabel}</a></td></tr></table>`
+    : "";
+
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;margin:0;padding:32px 12px;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;"><tr><td align="center"><table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 6px 28px rgba(15,23,42,0.08);"><tr><td style="background:linear-gradient(135deg,#0b1220 0%,#0f2a22 100%);padding:30px 36px;text-align:center;"><span style="font-size:26px;font-weight:800;color:#ffffff;letter-spacing:0.4px;">🔐 ${serviceName}</span></td></tr><tr><td style="padding:38px 40px 8px 40px;"><h1 style="margin:0 0 14px;font-size:23px;line-height:1.3;color:#0f172a;font-weight:700;">${title}</h1><div style="margin:0 0 22px;font-size:15px;line-height:1.65;color:#475569;">${bodyHtml}</div>${button}</td></tr><tr><td style="padding:30px 40px 0;"><div style="border-top:1px solid #eef0f3;font-size:1px;line-height:1px;">&nbsp;</div></td></tr><tr><td style="padding:18px 40px 34px;text-align:center;"><p style="margin:0;font-size:12px;line-height:1.6;color:#aeb6c2;">${serviceName}</p></td></tr></table></td></tr></table>`;
+}
+
 /**
  * Отправить произвольное письмо выбранным провайдером. Опционально — вложения.
  */
