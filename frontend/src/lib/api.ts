@@ -1179,7 +1179,7 @@ export const api = {
         amount: number;
         status: string;
         clientId: string;
-        client: { id: string; telegramId: string | null; telegramUsername: string | null } | null;
+        client: { id: string; telegramId: string | null; telegramUsername: string | null; email: string | null } | null;
       } | null;
     }>;
   }> {

@@ -7443,7 +7443,7 @@ adminRouter.get("/referrals/:id", asyncRoute(async (req, res) => {
           amount: true,
           status: true,
           clientId: true,
-          client: { select: { id: true, telegramId: true, telegramUsername: true } },
+          client: { select: { id: true, telegramId: true, telegramUsername: true, email: true } },
         },
       },
     },
