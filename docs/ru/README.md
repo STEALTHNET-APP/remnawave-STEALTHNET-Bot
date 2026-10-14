@@ -397,6 +397,8 @@ docker compose restart api bot
 
 ### 🔄 Обновление из Git (git pull)
 
+Для встроенного nginx см. [обновление и проверку автопродления SSL](../SSL-RENEWAL.md).
+
 - **`nginx/nginx.conf`** — в `.gitignore` (файл генерируется install.sh под домен). Если Git всё ещё его обновляет при pull, один раз выполните:  
   `git rm --cached nginx/nginx.conf && git commit -m "Stop tracking nginx.conf"`
 - **Исходный код** (`backend/...`, `nginx/nginx.conf.template` и т.д.) в игнор не добавлять. Перед `git pull` либо закоммитьте изменения, либо спрячьте:  
