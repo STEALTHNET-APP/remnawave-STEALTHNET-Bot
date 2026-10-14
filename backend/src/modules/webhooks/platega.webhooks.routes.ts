@@ -29,7 +29,7 @@ import { Router } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
-import { getPlategaTransactionStatus, isPlategaConfigured } from "../platega/platega.service.js";
+import { checkPlategaBinding, checkPlategaWebhookTxId, getPlategaTransactionStatus, isPlategaConfigured, plategaTxIdToVerify } from "../platega/platega.service.js";
 import { recordWebhook, markOutcome } from "../webhook-inbox/webhook-inbox.service.js";
 import { activateTariffByPaymentId } from "../tariff/tariff-activation.service.js";
 import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.service.js";
@@ -286,7 +286,7 @@ const PLATEGA_API_SUCCESS_STATUSES = new Set([
  *   - { trusted: false, reason } если API вернул другой статус (или мы не смогли его дёрнуть)
  *   - { trusted: "unverified" } если plategaMerchantId/plategaSecret не настроены — нечего и проверять
  */
-async function verifyViaPlategaApi(transactionId: string | null): Promise<
+async function verifyViaPlategaApi(payment: PaymentRow, webhookTxId: string | null): Promise<
   | { trusted: true; status: string }
   | { trusted: false; reason: string }
   | { trusted: "unverified"; reason: string }
@@ -294,10 +294,14 @@ async function verifyViaPlategaApi(transactionId: string | null): Promise<
   const config = await getSystemConfig();
   const merchantId = (config as { plategaMerchantId?: string | null }).plategaMerchantId?.trim();
   const secret = (config as { plategaSecret?: string | null }).plategaSecret?.trim();
+  // Webhook должен ссылаться на транзакцию, выданную Platega при создании этого платежа.
+  const idCheck = checkPlategaWebhookTxId(payment, webhookTxId);
+  if (!idCheck.ok) return { trusted: false, reason: idCheck.reason };
   if (!merchantId || !secret) {
     return { trusted: "unverified", reason: "platega api credentials not configured" };
   }
-  if (!transactionId || !transactionId.trim()) {
+  const transactionId = plategaTxIdToVerify(payment, webhookTxId);
+  if (!transactionId) {
     return { trusted: false, reason: "no transactionId in webhook body" };
   }
 
@@ -306,10 +310,13 @@ async function verifyViaPlategaApi(transactionId: string | null): Promise<
     return { trusted: false, reason: `platega api error: ${result.error}` };
   }
   const upperStatus = result.status.toUpperCase();
-  if (PLATEGA_API_SUCCESS_STATUSES.has(upperStatus)) {
-    return { trusted: true, status: upperStatus };
+  if (!PLATEGA_API_SUCCESS_STATUSES.has(upperStatus)) {
+    return { trusted: false, reason: `platega api returned status=${result.status}` };
   }
-  return { trusted: false, reason: `platega api returned status=${result.status}` };
+  // Успешная транзакция должна принадлежать именно этому платежу (id/payload/сумма/валюта).
+  const binding = checkPlategaBinding(payment, webhookTxId, result);
+  if (!binding.ok) return { trusted: false, reason: binding.reason };
+  return { trusted: true, status: upperStatus };
 }
 
 // Используется ниже. Объявлено здесь чтобы видеть типы выше.
@@ -411,7 +418,7 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
     if (FAILED_STATUSES.has(status)) {
       const failed = await prisma.payment.updateMany({
         where: { id: payment.id, status: "PENDING" },
-        data: { status: "FAILED", externalId: transactionId ?? payment.externalId },
+        data: { status: "FAILED", externalId: payment.externalId?.trim() ? payment.externalId : (transactionId ?? payment.externalId) },
       });
       if (failed.count > 0) {
         console.log("[Platega Webhook] Payment marked FAILED", { paymentId: payment.id, status, transactionId, orderId: payment.orderId });
@@ -430,7 +437,7 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
     // (URL публичный, подписи у Platega нет в кабинете), но не может подделать
     // ответ от app.platega.io. Запрашиваем у API реальный статус — если не PAID,
     // отвергаем как поддельный webhook.
-    const apiVerify = await verifyViaPlategaApi(transactionId ?? payment.externalId);
+    const apiVerify = await verifyViaPlategaApi(payment, transactionId);
     if (apiVerify.trusted === false) {
       console.warn("[Platega Webhook] API double-check FAILED", {
         paymentId: payment.id,
@@ -443,8 +450,9 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
     }
     if (apiVerify.trusted === "unverified") {
       // Креды не настроены — falling back to webhook trust. Громко предупреждаем.
-      console.warn("[Platega Webhook] API double-check skipped (credentials not configured) — accepting webhook UNVERIFIED. Set plategaMerchantId+plategaSecret in admin to enable verification.", { paymentId: payment.id });
+      console.warn("[Platega Webhook] SECURITY: API double-check skipped (plategaMerchantId/plategaSecret not configured) — accepting webhook UNVERIFIED: status, transaction ownership and amount are NOT confirmed. Configure Platega API credentials (and/or plategaWebhookSecret) in admin.", { paymentId: payment.id, transactionId });
     }
+    const boundTxId = plategaTxIdToVerify(payment, transactionId);
 
 
     const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
@@ -453,7 +461,7 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
       const changed = await prisma.$transaction(async (tx) => {
         const upd = await tx.payment.updateMany({
           where: { id: payment.id, status: "PENDING" },
-          data: { status: "PAID", paidAt: new Date(), externalId: transactionId ?? payment.externalId },
+          data: { status: "PAID", paidAt: new Date(), externalId: boundTxId ?? payment.externalId },
         });
         if (upd.count > 0) {
           await tx.client.update({
@@ -478,7 +486,7 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
     } else {
       const upd = await prisma.payment.updateMany({
         where: { id: payment.id, status: "PENDING" },
-        data: { status: "PAID", paidAt: new Date(), externalId: transactionId ?? payment.externalId },
+        data: { status: "PAID", paidAt: new Date(), externalId: boundTxId ?? payment.externalId },
       });
       if (upd.count > 0) {
         console.log("[Platega Webhook] Payment PAID (tariff)", {
