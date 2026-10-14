@@ -7,6 +7,7 @@
 import "dotenv/config";
 import { Bot, Composer, Context, InputFile } from "grammy";
 import type { Api } from "grammy";
+import { ignoreNotModified } from "./ignore-not-modified.js";
 import { ProxyAgent as UndiciProxyAgent } from "undici";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import * as api from "./api.js";
@@ -8692,6 +8693,7 @@ const botInstances: Bot[] = [];
     throw new Error("BOT_TOKEN не задан в env");
   }
   const b = await createBotWithProxy(token);
+  b.api.config.use(ignoreNotModified);
   b.use(composer);
   b.catch((err) => console.error(`[Bot ${token.slice(0, 6)}…] error:`, err));
   botInstances.push(b);
