@@ -17,6 +17,7 @@ import {
 } from "../notification/telegram-notify.service.js";
 import { LEGACY_AUTO_RENEW_CLIENT_WHERE } from "./legacy-auto-renew-scope.js";
 import { dispatchAutoRenewNotification, tryMarkSubDedup } from "../notification/auto-renew-notifications.service.js";
+import { computeSecondaryRenewPrice, resolveSecondaryRenewPlan, resolveSecondaryRenewTariffId } from "./secondary-renew-plan.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -610,6 +611,7 @@ async function processSecondaryAutoRenewals(): Promise<void> {
     },
     include: {
       tariff: true,
+      autoRenewTariff: true,
       owner: {
         select: {
           id: true,
@@ -629,10 +631,9 @@ async function processSecondaryAutoRenewals(): Promise<void> {
   for (const sec of secondaries) {
     if (!sec.remnawaveUuid || !sec.owner || sec.owner.isBlocked) continue;
 
-    let tariffForRenewal = sec.tariff;
-    if (!tariffForRenewal && sec.autoRenewTariffId) {
-      tariffForRenewal = await prisma.tariff.findUnique({ where: { id: sec.autoRenewTariffId } });
-    }
+    // Текущий tariffId в приоритете; autoRenewTariffId — только если тариф у подписки пропал.
+    const renewTariffId = resolveSecondaryRenewTariffId(sec);
+    const tariffForRenewal = [sec.tariff, sec.autoRenewTariff].find((t) => t != null && t.id === renewTariffId) ?? null;
     if (!tariffForRenewal) {
       continue;
     }
@@ -662,20 +663,21 @@ async function processSecondaryAutoRenewals(): Promise<void> {
       if (Number.isNaN(expireAtDate.getTime())) continue;
       const timeLeft = expireAtDate.getTime() - now;
 
-      const renewDurationDays = tariffForRenewal.durationDays || 30;
-      const extrasMonthly = sec.extraDevicesMonthlyPrice ?? 0;
-      const extrasForPeriod = extrasMonthly > 0
-        ? Math.floor(extrasMonthly * (renewDurationDays / 30))
-        : 0;
-      const baseRenewPrice = extrasForPeriod > 0
-        ? tariffForRenewal.price
-        : (sec.customPrice && sec.customPrice > 0 ? sec.customPrice : tariffForRenewal.price);
-      let priceBeforeDiscount = baseRenewPrice + extrasForPeriod;
-      const pd = sec.owner.personalDiscountPercent ?? 0;
-      const priceRaw = pd > 0
-        ? Math.max(0, Math.floor(priceBeforeDiscount * (1 - pd / 100)))
-        : priceBeforeDiscount;
-      const price = Math.round(priceRaw * 100) / 100;
+      // Цена и длительность — из одной опции тарифа (issue #195), иначе legacy-поля тарифа.
+      const priceOptions = await prisma.tariffPriceOption.findMany({
+        where: { tariffId: tariffForRenewal.id },
+        orderBy: [{ sortOrder: "asc" }, { price: "asc" }],
+        select: { id: true, tariffId: true, durationDays: true, price: true },
+      });
+      const plan = resolveSecondaryRenewPlan(sec, tariffForRenewal, priceOptions);
+      const price = computeSecondaryRenewPrice(
+        plan,
+        sec.extraDevicesMonthlyPrice ?? 0,
+        sec.owner.personalDiscountPercent ?? 0,
+      );
+      const selectedOption = plan.optionId
+        ? { id: plan.optionId, durationDays: plan.durationDays, price: plan.basePrice }
+        : undefined;
 
       // UPCOMING уведомления отправляются раз в минуту через встроенный dedup
       if (timeLeft > 0) {
@@ -708,9 +710,10 @@ async function processSecondaryAutoRenewals(): Promise<void> {
           clientId: sec.owner.id,
           provider: "yookassa",
           status: "PAID",
-          tariffId: tariffForRenewal.id,
+          // Связь с подпиской — через metadata.extendsSecondarySubId (не по tariffId: тариф
+          // мог смениться между попытками → второе списание).
           paidAt: { gte: new Date(now - 2 * 60 * 60 * 1000) },
-          metadata: { contains: sec.id },
+          metadata: { contains: `"extendsSecondarySubId":"${sec.id}"` },
         },
         orderBy: { paidAt: "desc" },
       });
@@ -721,7 +724,7 @@ async function processSecondaryAutoRenewals(): Promise<void> {
           sec.id,
           {
             id: tariffForRenewal.id,
-            durationDays: tariffForRenewal.durationDays,
+            durationDays: plan.durationDays,
             trafficLimitBytes: tariffForRenewal.trafficLimitBytes,
             deviceLimit: tariffForRenewal.deviceLimit,
             includedDevices: tariffForRenewal.includedDevices ?? undefined,
@@ -731,7 +734,7 @@ async function processSecondaryAutoRenewals(): Promise<void> {
             trafficResetMode: tariffForRenewal.trafficResetMode ?? undefined,
             price,
           },
-          undefined,
+          selectedOption,
           0,
         );
         if (retryResult.ok) {
@@ -904,6 +907,7 @@ async function processSecondaryAutoRenewals(): Promise<void> {
           clientId: sec.owner.id,
           orderId: randomUUID(),
           tariffId: tariffForRenewal.id,
+          tariffPriceOptionId: plan.optionId,
           amount: price,
           currency: tariffForRenewal.currency.toUpperCase(),
           status: "PAID",
@@ -928,7 +932,7 @@ async function processSecondaryAutoRenewals(): Promise<void> {
         sec.id,
         {
           id: tariffForRenewal.id,
-          durationDays: tariffForRenewal.durationDays,
+          durationDays: plan.durationDays,
           trafficLimitBytes: tariffForRenewal.trafficLimitBytes,
           deviceLimit: tariffForRenewal.deviceLimit,
           includedDevices: tariffForRenewal.includedDevices ?? undefined,
@@ -938,7 +942,7 @@ async function processSecondaryAutoRenewals(): Promise<void> {
           trafficResetMode: tariffForRenewal.trafficResetMode ?? undefined,
           price,
         },
-        undefined,
+        selectedOption,
         0,
       );
 

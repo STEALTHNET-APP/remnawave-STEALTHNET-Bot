@@ -630,7 +630,7 @@ export async function extendSecondarySubscription(
 
   const sec = await prisma.subscription.findUnique({
     where: { id: secondaryId },
-    select: { id: true, remnawaveUuid: true, tariffId: true, ownerId: true, customPrice: true, extraDevices: true, extraDevicesMonthlyPrice: true, trialId: true, promoGranted: true, currentPricePerDay: true },
+    select: { id: true, remnawaveUuid: true, tariffId: true, autoRenewTariffId: true, ownerId: true, customPrice: true, extraDevices: true, extraDevicesMonthlyPrice: true, trialId: true, promoGranted: true, currentPricePerDay: true },
   });
   if (!sec) {
     return { ok: false, error: "Доп. подписка не найдена", status: 404 };
@@ -794,6 +794,12 @@ export async function extendSecondarySubscription(
       extraDevices: effectiveExtras,
       extraDevicesMonthlyPrice: effectiveExtrasMonthly,
       ...(tariff.id && tariff.id !== sec.tariffId ? { tariffId: tariff.id } : {}),
+      // Смена тарифа (конвертация): опция автопродления от старого тарифа больше не валидна,
+      // а autoRenewTariffId (fallback cron-а, если tariffId станет null) переводим на новый
+      // тариф — но только если он был задан, чтобы не включать новых настроек.
+      ...(tariff.id && tariff.id !== sec.tariffId
+        ? { autoRenewPriceOptionId: null, ...(sec.autoRenewTariffId ? { autoRenewTariffId: tariff.id || null } : {}) }
+        : {}),
       ...(effectiveConvert && newPriceForDb != null && newPriceForDb > 0 ? {
         customPrice: newPriceForDb,
         currentPricePerDay: effectiveDays > 0 ? newPriceForDb / effectiveDays : null,
