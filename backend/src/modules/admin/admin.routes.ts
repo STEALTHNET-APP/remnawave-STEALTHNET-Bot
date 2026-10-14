@@ -1,3 +1,4 @@
+import { freeDaysSettings, PromoCodeError } from "../promo-code/free-days.service.js";
 /**
  * Админские эндпоинты — прокси к Remna API + клиенты панели + настройки
  */
@@ -5045,6 +5046,8 @@ const createPromoCodeSchema = z.object({
   type: z.enum(["DISCOUNT", "FREE_DAYS"]),
   discountPercent: z.number().min(0).max(100).nullable().optional(),
   discountFixed: z.number().min(0).nullable().optional(),
+  tariffId: z.string().min(1).nullable().optional(),
+  tariffPriceOptionId: z.string().min(1).nullable().optional(),
   squadUuid: z.string().nullable().optional(),
   trafficLimitBytes: z.union([z.string(), z.number()]).transform((v) => (v != null ? BigInt(v) : null)).nullable().optional(),
   deviceLimit: z.number().int().min(0).nullable().optional(),
@@ -5065,6 +5068,11 @@ adminRouter.post("/promo-codes", async (req, res) => {
   const exists = await prisma.promoCode.findUnique({ where: { code: d.code } });
   if (exists) return res.status(400).json({ message: "Промокод с таким кодом уже существует" });
 
+  let freeDays = {};
+  if (d.type === "FREE_DAYS") {
+    try { freeDays = await freeDaysSettings(d); }
+    catch (e) { if (e instanceof PromoCodeError) return res.status(e.status).json({ message: e.message }); throw e; }
+  }
   const code = await prisma.promoCode.create({
     data: {
       code: d.code,
@@ -5076,6 +5084,7 @@ adminRouter.post("/promo-codes", async (req, res) => {
       trafficLimitBytes: d.type === "FREE_DAYS" ? (d.trafficLimitBytes ?? BigInt(0)) : null,
       deviceLimit: d.type === "FREE_DAYS" ? (d.deviceLimit ?? null) : null,
       durationDays: d.type === "FREE_DAYS" ? (d.durationDays ?? null) : null,
+      ...freeDays,
       maxUses: d.maxUses,
       maxUsesPerClient: d.maxUsesPerClient,
       isActive: d.isActive ?? true,
@@ -5090,6 +5099,8 @@ const updatePromoCodeSchema = z.object({
   type: z.enum(["DISCOUNT", "FREE_DAYS"]).optional(),
   discountPercent: z.number().min(0).max(100).nullable().optional(),
   discountFixed: z.number().min(0).nullable().optional(),
+  tariffId: z.string().min(1).nullable().optional(),
+  tariffPriceOptionId: z.string().min(1).nullable().optional(),
   squadUuid: z.string().nullable().optional(),
   trafficLimitBytes: z.union([z.string(), z.number()]).transform((v) => (v != null ? BigInt(v) : null)).nullable().optional(),
   deviceLimit: z.number().int().min(0).nullable().optional(),
@@ -5109,6 +5120,15 @@ adminRouter.patch("/promo-codes/:id", async (req, res) => {
   if (!existing) return res.status(404).json({ message: "Not found" });
 
   const data: Record<string, unknown> = { ...parsed.data };
+  const merged = { ...existing, ...parsed.data };
+  const configChanged = ["type", "tariffId", "tariffPriceOptionId", "durationDays", "squadUuid", "trafficLimitBytes", "deviceLimit"]
+    .some((key) => key in parsed.data);
+  if (merged.type === "FREE_DAYS" && configChanged) {
+    try { Object.assign(data, await freeDaysSettings(merged)); }
+    catch (e) { if (e instanceof PromoCodeError) return res.status(e.status).json({ message: e.message }); throw e; }
+  } else if (merged.type === "DISCOUNT") {
+    Object.assign(data, { tariffId: null, tariffPriceOptionId: null, squadUuid: null, durationDays: null, trafficLimitBytes: null, deviceLimit: null });
+  }
   if (data.expiresAt !== undefined) {
     data.expiresAt = data.expiresAt ? new Date(data.expiresAt as string) : null;
   }

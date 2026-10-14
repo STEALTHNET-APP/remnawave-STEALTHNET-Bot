@@ -1,3 +1,5 @@
+import { PromoFreeDaysFields } from "@/components/promo-free-days-fields";
+import type { TariffRecord } from "@/lib/api";
 /**
  * Dialog для массового создания промокодов.
  *
@@ -22,10 +24,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onCreated?: () => void;
-  squads?: { uuid: string; name?: string }[];
+  tariffs?: TariffRecord[];
 }
 
-export function MassPromoDialog({ open, onClose, onCreated, squads = [] }: Props) {
+export function MassPromoDialog({ open, onClose, onCreated, tariffs = [] }: Props) {
   const { state } = useAuth();
 
   const [count, setCount] = useState(50);
@@ -39,7 +41,8 @@ export function MassPromoDialog({ open, onClose, onCreated, squads = [] }: Props
   const [discountFixed, setDiscountFixed] = useState<string>("");
 
   // FREE_DAYS
-  const [squadUuid, setSquadUuid] = useState("");
+  const [tariffId, setTariffId] = useState<string | null>(null);
+  const [tariffPriceOptionId, setTariffPriceOptionId] = useState<string | null>(null);
   const [durationDays, setDurationDays] = useState("7");
 
   // common
@@ -76,7 +79,8 @@ export function MassPromoDialog({ open, onClose, onCreated, squads = [] }: Props
         if (discountPercent.trim()) body.discountPercent = Number(discountPercent);
         if (discountFixed.trim()) body.discountFixed = Number(discountFixed);
       } else {
-        body.squadUuid = squadUuid.trim();
+        body.tariffId = tariffId || undefined;
+        body.tariffPriceOptionId = tariffPriceOptionId || undefined;
         body.durationDays = Number(durationDays);
       }
 
@@ -193,23 +197,12 @@ export function MassPromoDialog({ open, onClose, onCreated, squads = [] }: Props
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <Label className="text-xs">Squad UUID (Remnawave)</Label>
-                  {squads.length > 0 ? (
-                    <select className="w-full h-9 rounded-md bg-background border border-input px-3 text-sm" value={squadUuid} onChange={(e) => setSquadUuid(e.target.value)}>
-                      <option value="">— выберите —</option>
-                      {squads.map((s) => <option key={s.uuid} value={s.uuid}>{s.name || s.uuid}</option>)}
-                    </select>
-                  ) : (
-                    <Input value={squadUuid} onChange={(e) => setSquadUuid(e.target.value)} placeholder="uuid сквада" />
-                  )}
-                </div>
-                <div>
-                  <Label className="text-xs">Сколько дней</Label>
-                  <Input type="number" min={1} max={3650} value={durationDays} onChange={(e) => setDurationDays(e.target.value)} />
-                </div>
-              </div>
+              <PromoFreeDaysFields tariffs={tariffs} value={{ tariffId, tariffPriceOptionId, durationDays: Number(durationDays) || null }}
+                onChange={(update) => {
+                  if (update.tariffId !== undefined) setTariffId(update.tariffId);
+                  if (update.tariffPriceOptionId !== undefined) setTariffPriceOptionId(update.tariffPriceOptionId);
+                  if (update.durationDays !== undefined) setDurationDays(update.durationDays == null ? '' : String(update.durationDays));
+                }} />
             )}
 
             {/* Общие */}

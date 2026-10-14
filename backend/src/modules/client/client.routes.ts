@@ -1,3 +1,4 @@
+import { activateFreeDaysPromo, PromoCodeError } from "../promo-code/free-days.service.js";
 import { createParitypayPayment, isParitypayConfigured } from "../paritypay/paritypay.service.js";
 import { randomBytes, createHmac } from "crypto";
 import { randomUUID } from "crypto";
@@ -1799,7 +1800,7 @@ clientRouter.get("/tariff-conversion-preview", async (req, res) => {
   // чистого тарифа, при «оставить» — в дни тарифа с устройствами.
   // Глобальный single-режим (мульти-подписки выкл): смена тарифа = ЖЁСТКАЯ замена.
   // Старая подписка обнуляется, остаток дней СГОРАЕТ, новая с нуля на выбранный тариф.
-  if (!multiSubEnabled) {
+  if (!multiSubEnabled && !convertible.promoGranted) {
     return res.json({
       willConvert: true,
       mode: "replace",
@@ -1822,12 +1823,12 @@ clientRouter.get("/tariff-conversion-preview", async (req, res) => {
   const oldFullPerDay = convertible.currentPricePerDay != null
     ? convertible.currentPricePerDay + extrasPerDay
     : (extrasPerDay > 0 ? extrasPerDay : null);
-  const convertedDaysDrop = computeConvertedDays({
+  const convertedDaysDrop = convertible.promoGranted ? remainingDays : computeConvertedDays({
     remainingDays,
     oldPricePerDay: oldFullPerDay,
     newPricePerDay: newBasePerDay,
   });
-  const convertedDaysKeep = extraDevices > 0
+  const convertedDaysKeep = convertible.promoGranted ? remainingDays : extraDevices > 0
     ? computeConvertedDays({
         remainingDays,
         oldPricePerDay: oldFullPerDay,
@@ -2676,97 +2677,20 @@ clientRouter.post("/promo-code/check", async (req, res) => {
 });
 
 /** Применить промокод FREE_DAYS — активирует подписку */
-clientRouter.post("/promo-code/activate", async (req, res) => {
-  const client = (req as unknown as { client: { id: string; remnawaveUuid: string | null; email: string | null; telegramId: string | null; telegramUsername?: string | null } }).client;
-  const { code } = req.body as { code?: string };
-  if (!code?.trim()) return res.status(400).json({ message: "Промокод не указан" });
-
-  const result = await validatePromoCode(code, client.id);
-  if (!result.ok) return res.status(result.status).json({ message: result.error });
-
-  const promo = result.promo;
-
-  if (promo.type === "DISCOUNT") {
-    return res.status(400).json({ message: "Промокод на скидку применяется при оплате тарифа" });
-  }
-
-  // FREE_DAYS
-  if (!promo.squadUuid || !promo.durationDays) {
-    return res.status(400).json({ message: "Промокод не полностью настроен" });
-  }
-
-  if (!isRemnaConfigured()) return res.status(503).json({ message: "Сервис временно недоступен" });
-
-  const trafficLimitBytes = Number(promo.trafficLimitBytes ?? 0);
-  const hwidDeviceLimit = promo.deviceLimit ?? null;
-
-  if (client.remnawaveUuid) {
-    const userRes = await remnaGetUser(client.remnawaveUuid);
-    const currentExpireAt = extractCurrentExpireAt(userRes.data);
-    const expireAt = calculateExpireAt(currentExpireAt, promo.durationDays);
-
-    const updateRes = await remnaUpdateUser({
-      uuid: client.remnawaveUuid,
-      expireAt,
-      trafficLimitBytes,
-      hwidDeviceLimit,
-      activeInternalSquads: [promo.squadUuid],
-    });
-    if (updateRes.error) {
-      return res.status(updateRes.status >= 400 ? updateRes.status : 500).json({ message: updateRes.error });
-    }
-    // Не вызываем add-users: по api-1.yaml эндпоинт добавляет ВСЕХ пользователей в сквад.
-  } else {
-    let existingUuid: string | null = null;
-    let currentExpireAt: Date | null = null;
-    if (client.telegramId?.trim()) {
-      const byTgRes = await remnaGetUserByTelegramId(client.telegramId.trim());
-      existingUuid = extractRemnaUuid(byTgRes.data);
-      if (existingUuid) currentExpireAt = extractCurrentExpireAt(byTgRes.data);
-    }
-    if (!existingUuid && client.email) {
-      const byEmailRes = await remnaGetUserByEmail(client.email.trim());
-      existingUuid = extractRemnaUuid(byEmailRes.data);
-      if (existingUuid) currentExpireAt = extractCurrentExpireAt(byEmailRes.data);
-    }
-    const displayUsername = remnaUsernameFromClient({
-      telegramUsername: client.telegramUsername,
-      telegramId: client.telegramId,
-      email: client.email,
-      clientIdFallback: client.id,
-    });
-    const expireAt = calculateExpireAt(currentExpireAt, promo.durationDays);
-    if (!existingUuid) {
-      const createRes = await remnaCreateUser({
-        username: displayUsername,
-        trafficLimitBytes,
-        trafficLimitStrategy: "NO_RESET",
-        expireAt,
-        hwidDeviceLimit: hwidDeviceLimit ?? undefined,
-        activeInternalSquads: [promo.squadUuid],
-        ...(client.telegramId?.trim() && { telegramId: parseInt(client.telegramId, 10) }),
-        ...(client.email?.trim() && { email: client.email.trim() }),
-      });
-      existingUuid = extractRemnaUuid(createRes.data);
-    }
-    if (!existingUuid) return res.status(502).json({ message: "Ошибка создания пользователя VPN" });
-
-    await remnaUpdateUser({ uuid: existingUuid, expireAt, trafficLimitBytes, hwidDeviceLimit, activeInternalSquads: [promo.squadUuid] });
-    // Не вызываем add-users: по api-1.yaml эндпоинт добавляет ВСЕХ пользователей в сквад.
-    await prisma.client.update({ where: { id: client.id }, data: { remnawaveUuid: existingUuid } });
-  }
-
-  await prisma.promoCodeUsage.create({ data: { promoCodeId: promo.id, clientId: client.id } });
-
-  // уведомление админам в TG-группу: активирован промокод FREE_DAYS (best-effort).
-  {
-    const promoDays = promo.durationDays ?? 0;
+clientRouter.post("/promo-code/activate", async (req, res, next) => {
+  const client = (req as unknown as { client: { id: string } }).client;
+  const code = req.body?.code;
+  if (typeof code !== "string" || !code.trim()) return res.status(400).json({ message: "Промокод не указан" });
+  try {
+    const activated = await activateFreeDaysPromo(client.id, code);
     import("../notification/telegram-notify.service.js")
-      .then((m) => m.notifyAdminsAboutPromoActivated(client.id, promo.code, promoDays))
+      .then((m) => m.notifyAdminsAboutPromoActivated(client.id, activated.code, activated.durationDays))
       .catch((e) => console.error("[promo-code activate] admin notify failed:", e));
+    return res.json({ message: `Промокод активирован! Подписка на ${activated.durationDays} дн. подключена.`, subscriptionId: activated.subscriptionId });
+  } catch (e) {
+    if (e instanceof PromoCodeError) return res.status(e.status).json({ message: e.message });
+    return next(e);
   }
-
-  return res.json({ message: `Промокод активирован! Подписка на ${promo.durationDays} дн. подключена.` });
 });
 
 /** Определить отображаемое имя тарифа: Триал, название с сайта или «Тариф не выбран».

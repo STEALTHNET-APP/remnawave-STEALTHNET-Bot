@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { PromoFreeDaysFields } from "@/components/promo-free-days-fields";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
@@ -42,11 +43,6 @@ import { cn } from "@/lib/utils";
 import { MassPromoDialog } from "@/components/mass-promo-dialog";
 import { fmtMsk, fmtMskDate } from "@/lib/datetime";
 
-interface Squad {
-  uuid: string;
-  name?: string;
-}
-
 function formatTraffic(bytes: string | number | null): string {
   if (!bytes) return "Без лимита";
   const b = typeof bytes === "string" ? parseInt(bytes, 10) : bytes;
@@ -67,16 +63,12 @@ export function PromoCodesPage() {
   const loading = codesQuery.isLoading;
   const error = codesQuery.error instanceof Error ? codesQuery.error.message : null;
 
-  const squadsQuery = useQuery({
-    queryKey: qk.admin.remnaSquads(),
-    queryFn: () => api.getRemnaSquadsInternal(token!).catch(() => ({ response: { internalSquads: [] } })),
+  const tariffsQuery = useQuery({
+    queryKey: qk.admin.tariffs(),
+    queryFn: () => api.getTariffs(token),
     enabled: !!token,
   });
-  const squads: Squad[] = useMemo(() => {
-    const res = squadsQuery.data as { response?: { internalSquads?: { uuid?: string; name?: string }[] } } | undefined;
-    const list = res?.response?.internalSquads ?? (Array.isArray(res?.response) ? res.response : []);
-    return Array.isArray(list) ? list.map((s: { uuid?: string; name?: string }) => ({ uuid: s.uuid ?? "", name: s.name })) : [];
-  }, [squadsQuery.data]);
+  const tariffs = tariffsQuery.data?.items ?? [];
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -86,6 +78,8 @@ export function PromoCodesPage() {
     type: "DISCOUNT",
     discountPercent: null,
     discountFixed: null,
+    tariffId: null,
+    tariffPriceOptionId: null,
     squadUuid: null,
     trafficLimitBytes: "0",
     deviceLimit: null,
@@ -114,7 +108,9 @@ export function PromoCodesPage() {
       type: "DISCOUNT",
       discountPercent: null,
       discountFixed: null,
-      squadUuid: squads[0]?.uuid ?? null,
+      tariffId: null,
+      tariffPriceOptionId: null,
+      squadUuid: null,
       trafficLimitBytes: "0",
       deviceLimit: null,
       durationDays: 30,
@@ -134,6 +130,8 @@ export function PromoCodesPage() {
       type: c.type,
       discountPercent: c.discountPercent,
       discountFixed: c.discountFixed,
+      tariffId: c.tariffId,
+      tariffPriceOptionId: c.tariffPriceOptionId,
       squadUuid: c.squadUuid,
       trafficLimitBytes: c.trafficLimitBytes,
       deviceLimit: c.deviceLimit,
@@ -192,10 +190,11 @@ export function PromoCodesPage() {
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  const getSquadName = (uuid: string | null) => {
-    if (!uuid) return "—";
-    const s = squads.find((sq) => sq.uuid === uuid);
-    return s?.name || uuid.slice(0, 8) + "…";
+  const describeFreeDays = (c: PromoCodeRecord) => {
+    const tariff = tariffs.find((t) => t.id === c.tariffId);
+    return c.tariffId
+      ? `${c.durationDays} дн. • ${tariff?.name ?? "Тариф"}`
+      : `${c.durationDays} дн. • ${formatTraffic(c.trafficLimitBytes)} • старый промокод: выберите тариф при редактировании`;
   };
 
   function TypeBadge({ type }: { type: string }) {
@@ -309,7 +308,7 @@ export function PromoCodesPage() {
                   {!detail.discountPercent && !detail.discountFixed ? "—" : ""}
                 </p>
               ) : (
-                <p className="text-sm font-medium">{detail.durationDays} дн. • {formatTraffic(detail.trafficLimitBytes)} • {detail.deviceLimit ?? "∞"} устр.</p>
+                <p className="text-sm font-medium">{describeFreeDays(detail)}</p>
               )}
             </Card>
           </motion.div>
@@ -395,7 +394,7 @@ export function PromoCodesPage() {
         open={showMassDialog}
         onClose={() => setShowMassDialog(false)}
         onCreated={() => invalidateCodes()}
-        squads={squads}
+        tariffs={tariffs}
       />
 
 
@@ -438,7 +437,7 @@ export function PromoCodesPage() {
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1">
-                          <Gift className="h-3 w-3" /> {c.durationDays} дн. • {formatTraffic(c.trafficLimitBytes)} • {c.deviceLimit ?? "∞"} устр. • {getSquadName(c.squadUuid)}
+                          <Gift className="h-3 w-3" /> {describeFreeDays(c)}
                         </span>
                       )}
                       {c.expiresAt && (
@@ -576,51 +575,8 @@ export function PromoCodesPage() {
 
             {form.type === "FREE_DAYS" && (
               <>
-                <div className="grid gap-1.5">
-                  <Label className="text-xs text-muted-foreground">Сквад</Label>
-                  <select
-                    className="flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                    value={form.squadUuid ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, squadUuid: e.target.value || null }))}
-                  >
-                    <option value="">Выберите сквад</option>
-                    {squads.map((s) => (
-                      <option key={s.uuid} value={s.uuid}>{s.name || s.uuid}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-1.5">
-                    <Label className="text-xs text-muted-foreground">Дней подписки</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={form.durationDays ?? ""}
-                      onChange={(e) => setForm((f) => ({ ...f, durationDays: e.target.value === "" ? null : Number(e.target.value) || 1 }))}
-                      className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
-                    />
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label className="text-xs text-muted-foreground">Трафик (ГБ, 0 = без лимита)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={Number(form.trafficLimitBytes ?? 0) / (1024 * 1024 * 1024) || 0}
-                      onChange={(e) => setForm((f) => ({ ...f, trafficLimitBytes: String(Math.round((Number(e.target.value) || 0) * 1024 * 1024 * 1024)) }))}
-                      className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
-                    />
-                  </div>
-                </div>
-                <div className="grid gap-1.5">
-                  <Label className="text-xs text-muted-foreground">Лимит устройств (пусто = без лимита)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={form.deviceLimit ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, deviceLimit: e.target.value === "" ? null : Number(e.target.value) || 0 }))}
-                    className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
-                  />
-                </div>
+                {tariffsQuery.isError && <p className="text-sm text-destructive">Не удалось загрузить тарифы. Обновите страницу.</p>}
+                <PromoFreeDaysFields tariffs={tariffs} value={form} onChange={(update) => setForm((f) => ({ ...f, ...update }))} />
               </>
             )}
 

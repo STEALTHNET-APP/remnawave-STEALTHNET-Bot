@@ -5042,6 +5042,8 @@ export interface PromoCodeRecord {
   type: "DISCOUNT" | "FREE_DAYS";
   discountPercent: number | null;
   discountFixed: number | null;
+  tariffId: string | null;
+  tariffPriceOptionId: string | null;
   squadUuid: string | null;
   trafficLimitBytes: string | null;
   deviceLimit: number | null;
@@ -5080,6 +5082,8 @@ export type CreatePromoCodePayload = {
   type: "DISCOUNT" | "FREE_DAYS";
   discountPercent?: number | null;
   discountFixed?: number | null;
+  tariffId?: string | null;
+  tariffPriceOptionId?: string | null;
   squadUuid?: string | null;
   trafficLimitBytes?: string | number | null;
   deviceLimit?: number | null;
