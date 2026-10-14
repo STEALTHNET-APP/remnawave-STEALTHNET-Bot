@@ -59,6 +59,7 @@ const service = load('src/modules/platega/platega.service.ts', {
   const db = { payment, client: { update: async ({ data }) => { balance += data.balance.increment; } }, $transaction: async fn => fn(db) };
   const noop = async () => {};
   load('src/modules/webhooks/platega.webhooks.routes.ts', {
+    './platega-transition.js': load('src/modules/webhooks/platega-transition.ts'),
     express: { Router: () => ({ post: (_, fn) => { handler = fn; } }) },
     '../../db.js': { prisma: db },
     '../client/client.service.js': { getSystemConfig: async () => (creds ? { plategaMerchantId: 'm', plategaSecret: 's' } : {}) },
@@ -117,8 +118,10 @@ const service = load('src/modules/platega/platega.service.ts', {
 
   // CANCELED with a different tx id must not overwrite stored externalId
   reset();
-  assert.equal(await call({ id: 'tx-cheap', status: 'CANCELED', payload: 'o-big' }), 200);
+  assert.equal(await call({ id: 'tx-cheap', status: 'CANCELED', payload: 'o-big' }), 401);
   assert.equal(rows.big.externalId, 'tx-big');
+  assert.equal(rows.big.status, 'PENDING');
+  assert.equal(rows.big.metadata, null);
 
   // no API credentials: unverified mode still accepts (unchanged), but stored-id mismatch is rejected
   reset(); creds = false;
