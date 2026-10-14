@@ -5757,7 +5757,7 @@ function SortableBotButtonCard({
           <select
             className="flex h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
             value={btn.emojiKey ?? ""}
-            onChange={(e) => onUpdate({ emojiKey: e.target.value || undefined })}
+            onChange={(e) => onUpdate({ emojiKey: e.target.value })}
           >
             <option value="">— нет —</option>
             {BOT_EMOJI_KEYS.map((k) => (

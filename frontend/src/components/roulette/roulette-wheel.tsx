@@ -15,6 +15,7 @@ export interface WheelSector {
 interface RouletteWheelProps {
   sectors: WheelSector[];
   canSpin?: boolean;
+  pendingReward?: boolean;
   spinning?: boolean;
   onSpin?: () => Promise<string | null>;
   onFinished?: (sector: WheelSector) => void;
@@ -25,6 +26,7 @@ interface RouletteWheelProps {
 export function RouletteWheel({
   sectors,
   canSpin = false,
+  pendingReward = false,
   spinning: externalSpinning = false,
   onSpin,
   onFinished,
@@ -288,7 +290,7 @@ export function RouletteWheel({
               <>
                 <span className={cn(isSmall ? "text-sm" : "text-base sm:text-lg", "leading-none")}>🎰</span>
                 <span className={cn(isSmall ? "text-[9px]" : "text-[10px] sm:text-[11px]", "font-black leading-none mt-0.5")}>
-                  {canSpin || !onSpin ? "КРУТИТЬ" : "ЖДЁМ"}
+                  {pendingReward ? "ПОЛУЧИТЬ" : canSpin || !onSpin ? "КРУТИТЬ" : "ЖДЁМ"}
                 </span>
               </>
             )}

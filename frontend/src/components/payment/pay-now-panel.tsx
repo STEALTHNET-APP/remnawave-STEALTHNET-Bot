@@ -3,7 +3,23 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { openPaymentInBrowser, isTelegramWebApp } from "@/lib/open-payment-url";
+
+type TelegramWebAppMinimal = {
+  initData?: string;
+  openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
+};
+
+function getTelegramMiniApp(): TelegramWebAppMinimal | null {
+  if (typeof window === "undefined") return null;
+  const raw = (window as {
+    Telegram?: { WebApp?: false | TelegramWebAppMinimal };
+  }).Telegram?.WebApp;
+  if (!raw || typeof raw !== "object") return null;
+  const webApp = raw as TelegramWebAppMinimal;
+  if (typeof webApp.openLink !== "function") return null;
+  if (!webApp.initData || !webApp.initData.trim()) return null;
+  return webApp;
+}
 
 export type PayNowPanelProps = {
   /** URL платёжной страницы, возвращённый провайдером. */
@@ -21,28 +37,32 @@ export type PayNowPanelProps = {
 /**
  * Компонент, который показывается внутри платёжной модалки после того,
  * как URL для оплаты получен от бэкенда. Отрисовывает большую кнопку-ссылку
- * «Оплатить».
+ * «Оплатить», которая открывает страницу в новой вкладке.
  *
- * Ключевой момент для iOS Safari / десктопа: клик по `<a target="_blank">` — это
- * прямой user gesture, открывающий страницу в новой вкладке.
+ * Ключевой момент для iOS Safari: клик по `<a target="_blank">` — это
+ * **прямой user gesture**, между ним и открытием вкладки нет `await`.
+ * Поэтому блокировщик попапов в iOS Safari/PWA не срабатывает.
  *
- * В Telegram Mini App стандартный `<a target="_blank">` либо не открывается вовсе,
- * либо блокирует переходы в приложения банков (СБП выдаёт net::ERR_UNKNOWN_URL_SCHEME).
- * Поэтому в Mini App перехватываем клик и открываем платёжный шлюз в системном браузере
- * устройства через openPaymentInBrowser (WebApp.openLink с { try_browser: true }).
+ * В Telegram Mini App `<a target="_blank">` не открывается корректно —
+ * поэтому здесь перехватываем клик и используем `WebApp.openLink`.
  */
 export function PayNowPanel({ url, provider, onBack, onPaid, compact }: PayNowPanelProps) {
   const { t } = useTranslation();
-  const isMiniapp = typeof window !== "undefined" && isTelegramWebApp();
 
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    if (isMiniapp) {
+    const miniApp = getTelegramMiniApp();
+    if (miniApp) {
       e.preventDefault();
-      openPaymentInBrowser(url);
+      try {
+        miniApp.openLink!(url);
+      } catch {
+        window.location.assign(url);
+      }
     }
     if (onPaid) onPaid();
   };
 
+  const isMiniapp = typeof window !== "undefined" && Boolean(getTelegramMiniApp());
   const hint = isMiniapp
     ? t("cabinet.common.ready_to_pay_hint_miniapp")
     : t("cabinet.common.ready_to_pay_hint");

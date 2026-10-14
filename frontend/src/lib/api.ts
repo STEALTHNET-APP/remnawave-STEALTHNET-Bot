@@ -1015,7 +1015,7 @@ export const api = {
     token: string,
     subscriptionId: string,
     payload: { tariffId?: string; tariffPriceOptionId?: string; customDurationDays?: number; note?: string; createPaymentRecord?: boolean },
-  ): Promise<{ ok: boolean; paymentId: string | null; subscriptionId: string; tariff: { id: string; name: string; durationDays: number }; message?: string }> {
+  ): Promise<{ ok: boolean; paymentId: string | null; subscriptionId: string; mode?: "days_only"; expireAt?: string; tariff: { id: string; name: string; durationDays: number } | null; message?: string }> {
     return request(`/admin/subscriptions/${encodeURIComponent(subscriptionId)}/grant-extend`, {
       method: "POST",
       body: JSON.stringify(payload),
@@ -1179,7 +1179,7 @@ export const api = {
         amount: number;
         status: string;
         clientId: string;
-        client: { id: string; telegramId: string | null; telegramUsername: string | null } | null;
+        client: { id: string; telegramId: string | null; telegramUsername: string | null; email: string | null } | null;
       } | null;
     }>;
   }> {
@@ -1941,7 +1941,7 @@ export const api = {
     });
   },
 
-  async clientVerifyEmail(token: string): Promise<ClientAuthResponse | ClientAuthRequires2FA> {
+  async clientVerifyEmail(token: string): Promise<ClientAuthResponse | ClientAuthRequires2FA | { alreadyVerified: true; message: string }> {
     return request("/client/auth/verify-email", {
       method: "POST",
       body: JSON.stringify({ token }),
@@ -2909,6 +2909,7 @@ export const api = {
     enabled: boolean;
     cooldownHours: number;
     canSpin: boolean;
+    pendingReward: boolean;
     nextSpinAt: string | null;
     secondsLeft: number;
     sectors: { id: string; type: string; value: number; label: string; color: string; icon: string }[];
@@ -5098,6 +5099,8 @@ export interface PromoCodeRecord {
   type: "DISCOUNT" | "FREE_DAYS";
   discountPercent: number | null;
   discountFixed: number | null;
+  tariffId: string | null;
+  tariffPriceOptionId: string | null;
   squadUuid: string | null;
   trafficLimitBytes: string | null;
   deviceLimit: number | null;
@@ -5136,6 +5139,8 @@ export type CreatePromoCodePayload = {
   type: "DISCOUNT" | "FREE_DAYS";
   discountPercent?: number | null;
   discountFixed?: number | null;
+  tariffId?: string | null;
+  tariffPriceOptionId?: string | null;
   squadUuid?: string | null;
   trafficLimitBytes?: string | number | null;
   deviceLimit?: number | null;

@@ -23,6 +23,7 @@ import {
   remnaGetUser,
 } from "../remna/remna.client.js";
 import { getPrimaryBot } from "../bot/bot.service.js";
+import { notifyAdminsAboutNewClient } from "../notification/telegram-notify.service.js";
 
 export const externalApiRouter = Router();
 externalApiRouter.use(requireApiKey);
@@ -231,6 +232,7 @@ externalApiRouter.post("/auth/register", async (req: Request, res: Response) => 
     select: { ...CLIENT_SELECT, passwordHash: false, totpSecret: false },
   });
 
+  notifyAdminsAboutNewClient(client.id).catch(() => {});
   return res.status(201).json({
     token: signClientToken(client.id),
     client: clientShape(client),

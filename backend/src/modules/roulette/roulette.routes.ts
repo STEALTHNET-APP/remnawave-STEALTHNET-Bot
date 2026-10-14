@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { requireClientAuth } from "../client/client.middleware.js";
-import { requireAuth } from "../auth/middleware.js";
+import { requireAuth, requireAdminSection } from "../auth/middleware.js";
 import {
   getRouletteStatus,
   spinRoulette,
@@ -36,6 +36,7 @@ rouletteClientRouter.post("/spin", async (req: Request, res: Response) => {
 
 export const rouletteAdminRouter = Router();
 rouletteAdminRouter.use(requireAuth);
+rouletteAdminRouter.use(requireAdminSection);
 
 rouletteAdminRouter.get("/", async (_req: Request, res: Response) => {
   try {

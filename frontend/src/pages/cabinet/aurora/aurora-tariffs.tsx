@@ -9,7 +9,6 @@ import { Wallet, Bitcoin, Check, AlertCircle, Loader2, RefreshCw, X } from "luci
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type PublicTariff, type PublicTariffCategory, type PublicConfig, type TariffConversionPreview } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { openPaymentInBrowser } from "@/lib/open-payment-url";
 import { AuroraTariffCard, auroraPrice, auroraDays, auroraTraffic, auroraDevices } from "./aurora-tariff-card";
 
 interface PriceOption {
@@ -407,62 +406,44 @@ export function AuroraTariffs() {
         })(),
       };
       let url: string | null = null;
-      let paymentId: string | undefined = undefined;
       if (selectedMethod.kind === "platega") {
         const r = await api.clientCreatePlategaPayment(state.token, { ...base, paymentMethod: selectedMethod.id });
         url = r.paymentUrl;
-        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "yookassa") {
         const r = await api.yookassaCreatePayment(state.token, base);
         url = r.confirmationUrl;
-        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "yoomoney") {
         const r = await api.yoomoneyCreateFormPayment(state.token, { ...base, paymentType: "AC" });
         url = r.paymentUrl;
-        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "cryptopay") {
         const r = await api.cryptopayCreatePayment(state.token, base);
         // CryptoBot mini-app preferred when in Telegram, иначе fallback
         url = r.miniAppPayUrl ?? r.webAppPayUrl ?? r.payUrl;
-        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "heleket") {
         const r = await api.heleketCreatePayment(state.token, base);
         url = r.payUrl;
-        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "paritypay") {
         const r = await api.paritypayCreatePayment(state.token, base);
         url = r.payUrl;
-        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "rollypay") {
         const r = await api.rollypayCreatePayment(state.token, base);
         url = r.payUrl;
-        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "lava") {
         const r = await api.lavaCreatePayment(state.token, base);
         url = r.payUrl;
-        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "lavatop") {
         const r = await api.lavatopCreatePayment(state.token, { ...base, amount: totalPrice, currency });
         url = r.payUrl;
-        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "overpay") {
         const r = await api.overpayCreatePayment(state.token, { ...base, amount: totalPrice, currency });
         url = r.payUrl;
-        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "balance") {
         await api.clientPayByBalance(state.token, base);
         await refreshProfile();
         navigate("/cabinet/dashboard?paid=balance");
         return;
       }
-      if (url) {
-        openPaymentInBrowser(url);
-        if (paymentId) {
-          navigate(`/cabinet/payment-wait?id=${encodeURIComponent(paymentId)}&kind=tariff`, {
-            state: { url, provider: selectedMethod.label },
-          });
-        }
-      }
+      if (url) window.location.href = url;
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {

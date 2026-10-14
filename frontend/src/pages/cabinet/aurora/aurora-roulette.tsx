@@ -12,6 +12,7 @@ interface RouletteStatusData {
   enabled: boolean;
   cooldownHours: number;
   canSpin: boolean;
+  pendingReward?: boolean;
   nextSpinAt: string | null;
   secondsLeft: number;
   sectors: WheelSector[];
@@ -63,6 +64,7 @@ export function AuroraRoulette() {
   const [loading, setLoading] = useState(true);
   const [secondsLeft, setSecondsLeft] = useState<number>(0);
   const [spinning, setSpinning] = useState(false);
+  const awardedRef = useRef<WheelSector | null>(null);
   const [winSector, setWinSector] = useState<WheelSector | null>(null);
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
 
@@ -137,6 +139,7 @@ export function AuroraRoulette() {
       const res = await api.clientSpinRoulette(state.token, selectedSubId || undefined);
       invalidateClientData();
       refreshProfile().catch(() => {});
+      awardedRef.current = res.reward;
       return res.sectorId;
     } catch (e: any) {
       setSpinning(false);
@@ -149,7 +152,8 @@ export function AuroraRoulette() {
 
   const handleFinished = (sector: WheelSector) => {
     setSpinning(false);
-    setWinSector(sector);
+    setWinSector(awardedRef.current ?? sector);
+    awardedRef.current = null;
     invalidateClientData();
     refreshProfile().catch(() => {});
     loadStatus();
@@ -234,6 +238,7 @@ export function AuroraRoulette() {
         <RouletteWheel
           sectors={data?.sectors || []}
           canSpin={canSpin}
+          pendingReward={data?.pendingReward}
           spinning={spinning}
           onSpin={handleSpin}
           onFinished={handleFinished}

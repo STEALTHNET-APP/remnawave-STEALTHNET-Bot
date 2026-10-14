@@ -27,7 +27,7 @@ declare global {
         platform?: string;
         showPopup?: (params: { title?: string; message?: string }) => void;
         /** Открыть ссылку во внешнем браузере (кастомные URL-схемы не поддерживаются, только https) */
-        openLink?: (url: string, options?: { try_instant_view?: boolean; try_browser?: boolean | string }) => void;
+        openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
         /** Открыть ссылку t.me внутри Telegram (диалог «Переслать» и т.п.). */
         openTelegramLink?: (url: string) => void;
         setHeaderColor?: (color: string) => void;

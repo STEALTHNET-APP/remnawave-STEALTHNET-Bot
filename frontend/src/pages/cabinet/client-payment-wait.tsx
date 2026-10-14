@@ -5,7 +5,6 @@ import { Loader2, CheckCircle2, ExternalLink, ArrowRight, Clock, XCircle, Home }
 import { useClientAuth } from "@/contexts/client-auth";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { openPaymentInBrowser, isTelegramWebApp } from "@/lib/open-payment-url";
 
 type WaitState = "pending" | "paid" | "failed";
 
@@ -122,18 +121,10 @@ export function ClientPaymentWaitPage() {
                 </p>
 
                 {providerUrl && (
-                  <Button
-                    size="lg"
-                    onClick={() => {
-                      if (isTelegramWebApp()) {
-                        openPaymentInBrowser(providerUrl);
-                      } else {
-                        window.open(providerUrl, "_blank", "noopener,noreferrer");
-                      }
-                    }}
-                    className="mt-6 h-13 w-full rounded-2xl bg-gradient-to-r from-primary via-fuchsia-500 to-purple-500 text-base font-bold text-white shadow-lg hover:opacity-90 inline-flex items-center justify-center gap-2 py-3.5 cursor-pointer"
-                  >
-                    <ExternalLink className="h-5 w-5" /> Открыть оплату снова
+                  <Button asChild size="lg" className="mt-6 h-13 w-full rounded-2xl bg-gradient-to-r from-primary via-fuchsia-500 to-purple-500 text-base font-bold text-white shadow-lg hover:opacity-90">
+                    <a href={providerUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 py-3.5">
+                      <ExternalLink className="h-5 w-5" /> Открыть оплату снова
+                    </a>
                   </Button>
                 )}
 

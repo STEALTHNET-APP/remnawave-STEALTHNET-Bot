@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../../db.js";
 import {
   remnaGetUser,
@@ -87,7 +88,7 @@ function extractCurrentTrafficLimitBytes(data: unknown, fallbackBytes?: number |
   return typeof fallbackBytes === "number" && fallbackBytes > 0 ? fallbackBytes : 0;
 }
 
-async function resolveTargetSubscription(clientId: string, targetSubscriptionId?: string | null) {
+async function resolveTargetSubscription(clientId: string, targetSubscriptionId?: string | null, db: Prisma.TransactionClient = prisma) {
   const subInclude = {
     tariff: { select: { name: true } },
     trial: { select: { name: true } },
@@ -95,7 +96,7 @@ async function resolveTargetSubscription(clientId: string, targetSubscriptionId?
 
   // 1. Если клиент явно указал подписку — проверяем её
   if (targetSubscriptionId && typeof targetSubscriptionId === "string" && targetSubscriptionId.trim()) {
-    const requested = await prisma.subscription.findFirst({
+    const requested = await db.subscription.findFirst({
       where: {
         id: targetSubscriptionId.trim(),
         ownerId: clientId,
@@ -105,12 +106,13 @@ async function resolveTargetSubscription(clientId: string, targetSubscriptionId?
       },
       include: subInclude,
     });
-    if (requested) return requested;
+    if (!requested) throw new Error("Подписка не найдена");
+    return requested;
   }
 
   // 2. Иначе выбираем наиболее актуальную активную подписку
   const now = new Date();
-  const activeSub = await prisma.subscription.findFirst({
+  const activeSub = await db.subscription.findFirst({
     where: {
       ownerId: clientId,
       giftStatus: null,
@@ -130,7 +132,7 @@ async function resolveTargetSubscription(clientId: string, targetSubscriptionId?
   if (activeSub) return activeSub;
 
   // 3. Fallback: любая существующая подписка клиента с Remnawave UUID
-  return prisma.subscription.findFirst({
+  return db.subscription.findFirst({
     where: {
       ownerId: clientId,
       giftStatus: null,
@@ -145,8 +147,8 @@ async function resolveTargetSubscription(clientId: string, targetSubscriptionId?
   });
 }
 
-export async function getRouletteSettings(): Promise<RouletteSettings> {
-  const settings = await prisma.systemSetting.findMany({
+export async function getRouletteSettings(db: Prisma.TransactionClient = prisma): Promise<RouletteSettings> {
+  const settings = await db.systemSetting.findMany({
     where: { key: { in: ["roulette_enabled", "roulette_cooldown_hours", "roulette_sectors"] } },
   });
   const map = Object.fromEntries(settings.map((s) => [s.key, s.value]));
@@ -227,7 +229,8 @@ export async function getRouletteStatus(clientId: string) {
   const now = Date.now();
   const lastSpinTime = lastSpin ? lastSpin.createdAt.getTime() : 0;
   const diff = now - lastSpinTime;
-  const canSpin = settings.enabled && diff >= cooldownMs;
+  const pendingReward = lastSpin?.status === "PENDING";
+  const canSpin = pendingReward || (settings.enabled && diff >= cooldownMs);
   const nextSpinAt = canSpin ? null : new Date(lastSpinTime + cooldownMs).toISOString();
   const secondsLeft = canSpin ? 0 : Math.max(0, Math.ceil((cooldownMs - diff) / 1000));
 
@@ -243,7 +246,7 @@ export async function getRouletteStatus(clientId: string) {
 
   const [recentSpins, clientSubs] = await Promise.all([
     prisma.clientRouletteSpin.findMany({
-      where: { clientId },
+      where: { clientId, status: "APPLIED" },
       orderBy: { createdAt: "desc" },
       take: 10,
       select: {
@@ -291,7 +294,8 @@ export async function getRouletteStatus(clientId: string) {
   });
 
   return {
-    enabled: settings.enabled,
+    enabled: settings.enabled || pendingReward,
+    pendingReward,
     cooldownHours: settings.cooldownHours,
     canSpin,
     nextSpinAt,
@@ -302,142 +306,146 @@ export async function getRouletteStatus(clientId: string) {
   };
 }
 
-// In-flight блокировка против race condition атак параллельными запросами
-const activeSpins = new Set<string>();
+type AwardPlan = {
+  sector: RouletteSector;
+  cooldownHours: number;
+  subscriptionId?: string;
+  uuid?: string;
+  expireAt?: string;
+  trafficLimitBytes?: number;
+  balance?: number;
+  discount?: number;
+};
 
-export async function spinRoulette(clientId: string, targetSubscriptionId?: string) {
-  if (activeSpins.has(clientId)) {
-    throw new Error("Вращение уже обрабатывается, пожалуйста, подождите");
+async function lockClient(db: Prisma.TransactionClient, clientId: string) {
+  await db.$queryRaw`SELECT id FROM clients WHERE id = ${clientId} FOR UPDATE`;
+  const client = await db.client.findUnique({ where: { id: clientId } });
+  if (!client || client.isBlocked) throw new Error("Рулетка недоступна");
+  return client;
+}
+
+async function readRemnaUser(uuid: string): Promise<Record<string, unknown>> {
+  const result = await remnaGetUser(uuid);
+  if (result.error || result.status < 200 || result.status >= 300 || !result.data) {
+    throw new Error("Не удалось получить подписку. Попробуйте ещё раз.");
   }
-  activeSpins.add(clientId);
-  try {
-    const settings = await getRouletteSettings();
-    if (!settings.enabled) {
-      throw new Error("Рулетка временно отключена");
+  const envelope = result.data as { response?: unknown };
+  const user = envelope.response ?? result.data;
+  if (!user || typeof user !== "object" || Array.isArray(user)) throw new Error("Некорректный ответ VPN");
+  return user as Record<string, unknown>;
+}
+
+async function reserveSpin(clientId: string, targetSubscriptionId?: string) {
+  return prisma.$transaction(async db => {
+    await lockClient(db, clientId);
+    const last = await db.clientRouletteSpin.findFirst({ where: { clientId }, orderBy: { createdAt: "desc" } });
+    if (last?.status === "PENDING") return last;
+    const settings = await getRouletteSettings(db);
+    if (!settings.enabled) throw new Error("Рулетка временно отключена");
+    if (last && Date.now() - last.createdAt.getTime() < settings.cooldownHours * 3_600_000) {
+      throw new Error("Следующая попытка пока недоступна");
     }
-
-    const lastSpin = await prisma.clientRouletteSpin.findFirst({
-      where: { clientId },
-      orderBy: { createdAt: "desc" },
-    });
-
-    const cooldownMs = settings.cooldownHours * 3600 * 1000;
-    const now = Date.now();
-    const lastSpinTime = lastSpin ? lastSpin.createdAt.getTime() : 0;
-    const diff = now - lastSpinTime;
-    if (diff < cooldownMs) {
-      const secondsLeft = Math.ceil((cooldownMs - diff) / 1000);
-      throw new Error(`Следующая попытка будет доступна через ${Math.ceil(secondsLeft / 60)} мин.`);
-    }
-
-    // Взвешенный случайный выбор сектора
-    const sectors = settings.sectors.length > 0 ? settings.sectors : DEFAULT_ROULETTE_SECTORS;
-    const totalWeight = sectors.reduce((acc, s) => acc + (s.weight > 0 ? s.weight : 1), 0);
-    let rand = Math.random() * totalWeight;
-    let wonSector = sectors[0];
-    for (const s of sectors) {
-      const w = s.weight > 0 ? s.weight : 1;
-      if (rand < w) {
-        wonSector = s;
-        break;
-      }
-      rand -= w;
-    }
-
-    // Применяем выигрыш
-    let appliedDescription = wonSector.label;
-    if (wonSector.type === "balance" && wonSector.value > 0) {
-      await prisma.client.update({
-        where: { id: clientId },
-        data: { balance: { increment: wonSector.value } },
-      });
-    } else if (wonSector.type === "days" && wonSector.value > 0) {
-      const sub = await resolveTargetSubscription(clientId, targetSubscriptionId);
-      if (sub && sub.remnawaveUuid) {
-        try {
-          const remnaUser = await remnaGetUser(sub.remnawaveUuid);
-          const curExpire = extractCurrentExpireAt(remnaUser, sub.expireAt);
-          const newExpire = calculateExpireAt(curExpire, wonSector.value);
-          await remnaUpdateUser({ uuid: sub.remnawaveUuid, expireAt: newExpire, status: "ACTIVE" });
-          await prisma.subscription.update({
-            where: { id: sub.id },
-            data: {
-              expireAt: new Date(newExpire),
-              remnaStatus: "ACTIVE",
-            },
-          });
-          const subName = sub.trial?.name || sub.tariff?.name || `Подписка #${sub.subscriptionIndex + 1}`;
-          appliedDescription = `${wonSector.label} (${subName})`;
-        } catch (e) {
-          console.error("Рулетка: ошибка продления Remna-пользователя:", e);
+    const sectors = settings.sectors.filter(s => Number.isFinite(s.weight) && s.weight > 0 && Number.isFinite(s.value) && s.value >= 0);
+    if (!sectors.length) throw new Error("В рулетке нет доступных призов");
+    let rand = Math.random() * sectors.reduce((sum, s) => sum + s.weight, 0);
+    let sector = sectors[sectors.length - 1];
+    for (const candidate of sectors) { rand -= candidate.weight; if (rand < 0) { sector = candidate; break; } }
+    const plan: AwardPlan = { sector: { ...sector }, cooldownHours: settings.cooldownHours };
+    let label = sector.label;
+    if (sector.type === "balance") plan.balance = sector.value;
+    if (sector.type === "discount") plan.discount = Math.min(100, sector.value);
+    if ((sector.type === "days" || sector.type === "traffic") && sector.value > 0) {
+      const sub = await resolveTargetSubscription(clientId, targetSubscriptionId, db);
+      if (!sub?.remnawaveUuid) {
+        if (sector.type === "days") {
+          plan.balance = sector.value * 10;
+          label = `+${plan.balance} ₽ на баланс (нет подписки)`;
+        } else {
+          label = "Нет подписки для добавления трафика";
         }
       } else {
-        // Если активной подписки нет — конвертируем в рубли на баланс по 10 руб/день
-        const fallbackAmount = wonSector.value * 10;
-        await prisma.client.update({
-          where: { id: clientId },
-          data: { balance: { increment: fallbackAmount } },
-        });
-        appliedDescription = `+${fallbackAmount} ₽ на баланс (нет активной подписки)`;
-      }
-    } else if (wonSector.type === "traffic" && wonSector.value > 0) {
-      const sub = await resolveTargetSubscription(clientId, targetSubscriptionId);
-      if (sub && sub.remnawaveUuid) {
-        try {
-          const remnaUser = await remnaGetUser(sub.remnawaveUuid);
-          const curLimit = extractCurrentTrafficLimitBytes(remnaUser, (sub as any).trafficLimitBytes);
-          const extraBytes = wonSector.value * 1024 * 1024 * 1024;
-          const newLimit = curLimit > 0 ? curLimit + extraBytes : extraBytes;
-          await remnaUpdateUser({ uuid: sub.remnawaveUuid, trafficLimitBytes: newLimit });
-          await prisma.subscription.update({
-            where: { id: sub.id },
-            data: { trafficLimitBytes: newLimit },
-          });
-          const subName = sub.trial?.name || sub.tariff?.name || `Подписка #${sub.subscriptionIndex + 1}`;
-          appliedDescription = `${wonSector.label} (${subName})`;
-        } catch (e) {
-          console.error("Рулетка: ошибка добавления трафика Remna:", e);
+        const user = await readRemnaUser(sub.remnawaveUuid);
+        plan.subscriptionId = sub.id;
+        plan.uuid = sub.remnawaveUuid;
+        if (sector.type === "days") {
+          if (typeof user.expireAt !== "string" || !Number.isFinite(Date.parse(user.expireAt))) throw new Error("Не удалось определить срок подписки");
+          plan.expireAt = calculateExpireAt(extractCurrentExpireAt(user), sector.value);
+        } else {
+          const limit = Number(user.trafficLimitBytes);
+          if (user.trafficLimitBytes == null || !Number.isSafeInteger(limit) || limit < 0) throw new Error("Не удалось определить лимит трафика");
+          if (limit === 0) label = "У подписки уже безлимитный трафик";
+          else {
+            const target = limit + Math.round(sector.value * 1024 ** 3);
+            if (!Number.isSafeInteger(target)) throw new Error("Слишком большой приз трафика");
+            plan.trafficLimitBytes = target;
+          }
         }
       }
-    } else if (wonSector.type === "discount" && wonSector.value > 0) {
-      await prisma.client.update({
-        where: { id: clientId },
-        data: {
-          personalDiscountPercent: wonSector.value,
-          personalDiscountIsOneTime: true,
-        },
-      });
     }
+    plan.sector.label = label;
+    return db.clientRouletteSpin.create({ data: {
+      clientId, rewardType: sector.type, rewardValue: sector.value, rewardLabel: label,
+      sectorId: sector.id, status: "PENDING", awardPlan: plan as unknown as Prisma.InputJsonValue,
+    } });
+  }, { maxWait: 15_000, timeout: 30_000 });
+}
 
-    // Сохраняем результат вращения
-    const spinRecord = await prisma.clientRouletteSpin.create({
-      data: {
-        clientId,
-        rewardType: wonSector.type,
-        rewardValue: wonSector.value,
-        rewardLabel: appliedDescription,
-        sectorId: wonSector.id,
-      },
-    });
+async function deliverSpin(clientId: string, spinId: string) {
+  return prisma.$transaction(async db => {
+    const client = await lockClient(db, clientId);
+    const spin = await db.clientRouletteSpin.findFirstOrThrow({ where: { id: spinId, clientId } });
+    if (spin.status === "APPLIED") return spin;
+    const plan = spin.awardPlan as unknown as AwardPlan;
+    if (!plan?.sector) throw new Error("Не удалось прочитать сохранённый приз");
+    if (plan.expireAt || plan.trafficLimitBytes != null) {
+      const sub = await db.subscription.findFirst({ where: {
+        id: plan.subscriptionId, ownerId: clientId, remnawaveUuid: plan.uuid,
+        giftStatus: null, subRevokedAt: null,
+      } });
+      if (!sub || !plan.uuid) throw new Error("Подписка изменилась. Приз сохранён, обратитесь в поддержку.");
+      const user = await readRemnaUser(plan.uuid);
+      const patch: { uuid: string; expireAt?: string; trafficLimitBytes?: number } = { uuid: plan.uuid };
+      if (plan.expireAt) {
+        const current = typeof user.expireAt === "string" ? Date.parse(user.expireAt) : NaN;
+        if (!Number.isFinite(current)) throw new Error("Не удалось определить срок подписки");
+        patch.expireAt = new Date(Math.max(current, Date.parse(plan.expireAt))).toISOString();
+      } else {
+        const current = Number(user.trafficLimitBytes);
+        if (user.trafficLimitBytes == null || !Number.isSafeInteger(current) || current < 0) throw new Error("Не удалось определить лимит трафика");
+        patch.trafficLimitBytes = current === 0 ? 0 : Math.max(current, plan.trafficLimitBytes!);
+      }
+      const result = await remnaUpdateUser(patch);
+      if (result.error || result.status < 200 || result.status >= 300) {
+        throw new Error("Не удалось выдать приз. Он сохранён — нажмите «Получить приз» ещё раз.");
+      }
+      await db.subscription.update({ where: { id: sub.id }, data: {
+        ...(patch.expireAt ? { expireAt: new Date(patch.expireAt) } : {}),
+        ...(patch.trafficLimitBytes != null ? { trafficLimitBytes: patch.trafficLimitBytes } : {}),
+      } });
+    }
+    if (plan.balance != null && plan.balance > 0) {
+      await db.client.update({ where: { id: clientId }, data: { balance: { increment: plan.balance } } });
+    }
+    if (plan.discount != null && plan.discount > (client.personalDiscountPercent ?? 0)) {
+      // A permanent discount must not become a disposable one.
+      await db.client.update({ where: { id: clientId }, data: {
+        personalDiscountPercent: plan.discount,
+        personalDiscountIsOneTime: client.personalDiscountPercent && !client.personalDiscountIsOneTime ? false : true,
+      } });
+    }
+    return db.clientRouletteSpin.update({ where: { id: spin.id }, data: { status: "APPLIED" } });
+  }, { maxWait: 15_000, timeout: 30_000 });
+}
 
-    const nextSpinAt = new Date(Date.now() + cooldownMs).toISOString();
-
-    return {
-      spinId: spinRecord.id,
-      sectorId: wonSector.id,
-      reward: {
-        id: wonSector.id,
-        type: wonSector.type,
-        value: wonSector.value,
-        label: appliedDescription,
-        color: wonSector.color || "#6366f1",
-        icon: wonSector.icon || "gift",
-      },
-      nextSpinAt,
-    };
-  } finally {
-    activeSpins.delete(clientId);
-  }
+export async function spinRoulette(clientId: string, targetSubscriptionId?: string) {
+  const reserved = await reserveSpin(clientId, targetSubscriptionId);
+  const spin = await deliverSpin(clientId, reserved.id);
+  const plan = spin.awardPlan as unknown as AwardPlan;
+  return {
+    spinId: spin.id, sectorId: spin.sectorId,
+    reward: { ...plan.sector, label: spin.rewardLabel, color: plan.sector.color || "#6366f1", icon: plan.sector.icon || "gift" },
+    nextSpinAt: new Date(spin.createdAt.getTime() + plan.cooldownHours * 3_600_000).toISOString(),
+  };
 }
 
 export async function getAdminRouletteStats() {

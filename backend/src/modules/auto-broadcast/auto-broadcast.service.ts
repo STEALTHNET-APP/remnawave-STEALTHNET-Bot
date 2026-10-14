@@ -11,6 +11,7 @@
  */
 
 import { prisma } from "../../db.js";
+import { excludeLegacyAutoRenewSubs } from "../payment/legacy-auto-renew-scope.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { sendEmail, isMailConfigured, mailConfigFromSystem } from "../mail/mail.service.js";
 import { proxyFetch } from "../proxy-util/proxy-fetch.js";
@@ -548,6 +549,7 @@ export async function getEligibleTargets(
         where: {
           expireAt: { gte: windowStart, lte: windowEnd },
           autoRenewEnabled: false,
+          ...excludeLegacyAutoRenewSubs(),
           tariffId: { not: null },
           // подписки в инвентаре подарков
           // (purchasedAsGift=true) не уведомляем — это «товар» в gift-flow дарителя,
@@ -584,6 +586,7 @@ export async function getEligibleTargets(
         where: {
           expireAt: { gte: windowStart, lt: windowEnd },
           autoRenewEnabled: false,
+          ...excludeLegacyAutoRenewSubs(),
           tariffId: { not: null },
           owner: baseWhere,
         },
@@ -606,6 +609,7 @@ export async function getEligibleTargets(
         where: {
           expireAt: { gte: windowStart, lt: windowEnd },
           autoRenewEnabled: false,
+          ...excludeLegacyAutoRenewSubs(),
           tariffId: { not: null },
           owner: baseWhere,
         },
