@@ -408,6 +408,7 @@ async function deliverSpin(clientId: string, spinId: string) {
         giftStatus: null, subRevokedAt: null,
       } });
       if (!sub || !plan.uuid) throw new Error("Подписка изменилась. Приз сохранён, обратитесь в поддержку.");
+      if (sub.bannedUntil) throw new Error("Подписка заблокирована. Приз сохранён, получите его после разблокировки.");
       const user = await readRemnaUser(plan.uuid);
       const patch: { uuid: string; expireAt?: string; trafficLimitBytes?: number; status?: string } = { uuid: plan.uuid };
       if (plan.expireAt) {
@@ -424,9 +425,13 @@ async function deliverSpin(clientId: string, spinId: string) {
       if (result.error || result.status < 200 || result.status >= 300) {
         throw new Error("Не удалось выдать приз. Он сохранён — нажмите «Получить приз» ещё раз.");
       }
+      const remote = result.data as { response?: { status?: unknown }; status?: unknown } | undefined;
+      const remoteStatus = remote?.response?.status ?? remote?.status;
+      const status = typeof remoteStatus === "string" && ["ACTIVE", "DISABLED", "LIMITED", "EXPIRED"].includes(remoteStatus)
+        ? remoteStatus : patch.status;
       await db.subscription.update({ where: { id: sub.id }, data: {
         ...(patch.expireAt ? { expireAt: new Date(patch.expireAt) } : {}),
-        ...(patch.status ? { remnaStatus: patch.status } : {}),
+        ...(status ? { remnaStatus: status } : {}),
         ...(patch.trafficLimitBytes != null ? { trafficLimitBytes: patch.trafficLimitBytes } : {}),
       } });
     }

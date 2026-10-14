@@ -16,6 +16,8 @@ const fake=http.createServer(async(req,res)=>{
  }
  if(failWrite){res.statusCode=503;res.end('{}');return;}
  const user=users.get(body.uuid);if(!user){res.statusCode=404;res.end('{}');return;}
+ if(user.status==='LIMITED' && body.trafficLimitBytes!=null && (body.trafficLimitBytes>user.trafficLimitBytes || body.trafficLimitBytes===0)) user.status='ACTIVE';
+ if(user.status==='EXPIRED' && body.expireAt && !body.status && Date.parse(body.expireAt)>Date.now()) user.status='ACTIVE';
  Object.assign(user,body);patches.push(body);
  if(ambiguous){res.statusCode=503;res.end('{}');return;}
  res.end(JSON.stringify({response:user}));
@@ -71,8 +73,9 @@ try{
  await setup('traffic');const unlimited=await makeClient(),unlimitedSub=await subscription(unlimited.id,0),count=patches.length;
  const noLimit=await service.spinRoulette(unlimited.id,unlimitedSub.id);assert.equal(patches.length,count);
  assert.equal(users.get(unlimitedSub.remnawaveUuid!).trafficLimitBytes,0);assert.match(noLimit.reward.label,/безлимит/);
- const finite=await makeClient(),finiteSub=await subscription(finite.id,100);await service.spinRoulette(finite.id,finiteSub.id);
+ const finite=await makeClient(),finiteSub=await subscription(finite.id,100,'LIMITED');await service.spinRoulette(finite.id,finiteSub.id);
  assert.equal(users.get(finiteSub.remnawaveUuid!).trafficLimitBytes,100+5*1024**3);
+ assert.equal((await prisma.subscription.findUniqueOrThrow({where:{id:finiteSub.id}})).remnaStatus,'ACTIVE');
  console.log('PASS: unlimited stays unlimited, finite traffic reward is added');
  await setup('days');const disabled=await makeClient(),disabledSub=await subscription(disabled.id,100,'DISABLED');await service.spinRoulette(disabled.id,disabledSub.id);
  assert.equal(users.get(disabledSub.remnawaveUuid!).status,'DISABLED');
@@ -84,7 +87,9 @@ try{
  await service.spinRoulette(expired.id,expiredSub.id);assert.equal(users.get(expiredSub.remnawaveUuid!).status,'ACTIVE');
  const banned=await makeClient(),bannedSub=await subscription(banned.id,100,'EXPIRED');
  await prisma.subscription.update({where:{id:bannedSub.id},data:{bannedUntil:new Date(Date.now()+86400000)}});
- await service.spinRoulette(banned.id,bannedSub.id);assert.equal(users.get(bannedSub.remnawaveUuid!).status,'EXPIRED');
+ await assert.rejects(service.spinRoulette(banned.id,bannedSub.id),/заблокирована/);assert.equal(users.get(bannedSub.remnawaveUuid!).status,'EXPIRED');
+ await prisma.subscription.update({where:{id:bannedSub.id},data:{bannedUntil:null}});
+ await service.spinRoulette(banned.id,bannedSub.id);assert.equal(users.get(bannedSub.remnawaveUuid!).status,'ACTIVE');
  console.log('PASS: disabled subscriptions remain disabled; blocked and foreign owners cannot claim');
  await setup('discount',10);const discount=await makeClient({personalDiscountPercent:30,personalDiscountIsOneTime:false});await service.spinRoulette(discount.id);
  const after=await prisma.client.findUniqueOrThrow({where:{id:discount.id}});assert.equal(after.personalDiscountPercent,30);assert.equal(after.personalDiscountIsOneTime,false);
