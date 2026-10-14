@@ -1015,7 +1015,7 @@ export const api = {
     token: string,
     subscriptionId: string,
     payload: { tariffId?: string; tariffPriceOptionId?: string; customDurationDays?: number; note?: string; createPaymentRecord?: boolean },
-  ): Promise<{ ok: boolean; paymentId: string | null; subscriptionId: string; tariff: { id: string; name: string; durationDays: number }; message?: string }> {
+  ): Promise<{ ok: boolean; paymentId: string | null; subscriptionId: string; mode?: "days_only"; expireAt?: string; tariff: { id: string; name: string; durationDays: number } | null; message?: string }> {
     return request(`/admin/subscriptions/${encodeURIComponent(subscriptionId)}/grant-extend`, {
       method: "POST",
       body: JSON.stringify(payload),

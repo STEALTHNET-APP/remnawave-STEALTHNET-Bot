@@ -112,6 +112,7 @@ import { markPaymentPaid } from "../payment/mark-paid.service.js";
 // подписки (grant-extend): тот же механизм, что и оплаченное продление.
 import { extendSecondarySubscription } from "../tariff/tariff-activation.service.js";
 import { logAdmin } from "../audit/audit.service.js";
+import { chooseGrantExtendMode, extendSubscriptionDaysOnly } from "./grant-extend-days.service.js";
 import { registerBackupRoutes } from "../backup/backup.routes.js";
 import { invalidateBrandCache } from "../branding/spa-html.js";
 import { getBroadcastRecipientsCount, startBroadcastJob, getBroadcastJob, cancelBroadcastJob, listBroadcastHistory, getBroadcastHistoryItem, sendDirectTelegramMessage, sendDirectEmail, startListSendJob, getListSendJob } from "../broadcast/broadcast.service.js";
@@ -2414,10 +2415,45 @@ adminRouter.post("/subscriptions/:subId/grant-extend", asyncRoute(async (req, re
 
   const sub = await prisma.subscription.findUnique({
     where: { id: subId },
-    select: { id: true, ownerId: true, subscriptionIndex: true, tariffId: true, remnawaveUuid: true },
+    select: { id: true, ownerId: true, subscriptionIndex: true, tariffId: true, trialId: true, remnawaveUuid: true },
   });
   if (!sub) return res.status(404).json({ message: "Подписка не найдена" });
   if (!sub.remnawaveUuid) return res.status(400).json({ message: "Подписка не привязана к Remnawave" });
+
+  // Триал / подписка без тарифа и тариф явно не выбран → продлеваем только дату
+  // (лимиты, сквады, trialId не трогаем). Явный tariffId = конвертация в тариф (ниже).
+  if (chooseGrantExtendMode(sub, body.data.tariffId) === "days_only") {
+    const days = body.data.customDurationDays;
+    if (!days) return res.status(400).json({ message: "Укажите срок продления (дней)" });
+    const daysResult = await extendSubscriptionDaysOnly({ id: sub.id, remnawaveUuid: sub.remnawaveUuid }, days);
+    if (!daysResult.ok) {
+      return res.status(daysResult.status >= 400 ? daysResult.status : 500).json({ ok: false, message: daysResult.error });
+    }
+    await logAdmin(req, "subscription.grant_extend", { type: "subscription", id: sub.id }, {
+      tariffId: null,
+      trialId: sub.trialId,
+      mode: "days_only",
+      days,
+      expireAt: daysResult.expireAt.toISOString(),
+      reactivated: daysResult.reactivated,
+      note: body.data.note ?? null,
+    });
+    try {
+      const { notifySubscriptionExtendedByAdmin } = await import("../notification/telegram-notify.service.js");
+      await notifySubscriptionExtendedByAdmin(sub.ownerId, daysResult.expireAt);
+    } catch (e) {
+      console.error("[admin/grant-extend] notify client failed:", e);
+    }
+    return res.json({
+      ok: true,
+      paymentId: null,
+      subscriptionId: sub.id,
+      subscriptionIndex: sub.subscriptionIndex,
+      mode: "days_only",
+      expireAt: daysResult.expireAt.toISOString(),
+      tariff: null,
+    });
+  }
 
   const effectiveTariffId = body.data.tariffId ?? sub.tariffId;
   if (!effectiveTariffId) {

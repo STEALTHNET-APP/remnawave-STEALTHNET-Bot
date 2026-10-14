@@ -911,6 +911,17 @@ export async function notifySingboxSlotsCreated(clientId: string, slotIds: strin
   await sendTelegramToUser(client.telegramId, text, null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
 }
 
+/** Админ продлил подписку (только дата, без смены тарифа) — короткое уведомление клиенту. */
+export async function notifySubscriptionExtendedByAdmin(clientId: string, expireAt: Date): Promise<void> {
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { telegramId: true, id: true } });
+  if (!client?.telegramId) return;
+  const text = `✅ <b>Подписка продлена</b>
+
+Действует до: ${formatDate(expireAt)}`;
+  const cfg = await getSystemConfig();
+  await sendTelegramToUser(client.telegramId, text, null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
+}
+
 export async function notifyAutoRenewSuccess(clientId: string, tariffName: string, amount: number, currency: string): Promise<void> {
   const client = await prisma.client.findUnique({ where: { id: clientId }, select: { telegramId: true, id: true } });
   if (!client?.telegramId) return;
