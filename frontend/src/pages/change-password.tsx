@@ -37,7 +37,7 @@ export function ChangePasswordPage() {
     try {
       const res = await api.changePassword(current, newPass, token);
       if (res.admin) updateAdmin(res.admin);
-      navigate("/", { replace: true });
+      navigate("/admin", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка смены пароля");
     } finally {

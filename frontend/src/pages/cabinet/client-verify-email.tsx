@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Mail, Shield, Loader2 } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
@@ -8,10 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 export function ClientVerifyEmailPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
-  const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
+  const [status, setStatus] = useState<"loading" | "ok" | "already_verified" | "error">("loading");
   const [message, setMessage] = useState("");
-  const { verifyEmail } = useClientAuth();
+  const { verifyEmail, state } = useClientAuth();
   const navigate = useNavigate();
+  const hasSession = Boolean(state.token);
+  // Один запрос на токен (StrictMode/повторный рендер не должны дёргать verify дважды).
+  const requestedTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -19,8 +22,14 @@ export function ClientVerifyEmailPage() {
       setMessage("Ссылка недействительна");
       return;
     }
+    if (requestedTokenRef.current === token) return;
+    requestedTokenRef.current = token;
     verifyEmail(token)
-      .then(() => {
+      .then((result) => {
+        if (result === "already_verified") {
+          setStatus("already_verified");
+          return;
+        }
         setStatus("ok");
         setTimeout(() => navigate("/cabinet/dashboard", { replace: true }), 1500);
       })
@@ -60,6 +69,20 @@ export function ClientVerifyEmailPage() {
             )}
             {status === "ok" && (
               <p className="text-green-600">Регистрация завершена. Перенаправление в кабинет…</p>
+            )}
+            {status === "already_verified" && (
+              <div className="space-y-3">
+                <p className="text-green-600">Email уже подтверждён.</p>
+                {hasSession ? (
+                  <Link to="/cabinet/dashboard" replace className="text-primary hover:underline">Перейти в кабинет</Link>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    <Link to="/cabinet/login" replace className="text-primary hover:underline">Войдите в аккаунт</Link>
+                    . Если пароль ещё не задан —{" "}
+                    <Link to="/cabinet/forgot-password" className="text-primary hover:underline">восстановите доступ</Link>.
+                  </p>
+                )}
+              </div>
             )}
             {status === "error" && (
               <p className="text-destructive">{message}</p>

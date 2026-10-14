@@ -39,13 +39,14 @@ type ClientAuthState = {
 type ClientAuthValue = {
   state: ClientAuthState;
   login: (email: string, password: string) => Promise<void>;
-  register: (data: { email: string; password: string; preferredLang?: string; preferredCurrency?: string; referralCode?: string; utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_content?: string; utm_term?: string }) => Promise<{ requiresVerification: true } | void>;
+  register: (data: { email: string; password?: string; preferredLang?: string; preferredCurrency?: string; referralCode?: string; utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_content?: string; utm_term?: string }) => Promise<{ requiresVerification: true } | void>;
   registerByTelegram: (data: { telegramId: string; telegramUsername?: string; preferredLang?: string; preferredCurrency?: string; referralCode?: string; utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_content?: string; utm_term?: string }) => Promise<void>;
   loginByGoogle: (idToken: string) => Promise<void>;
   loginByApple: (idToken: string) => Promise<void>;
   /** Авторизация через deep-link (tg:// протокол). Принимает ответ от telegram-login-check */
   loginByTelegramDeepLink: (res: { token?: string; client?: ClientProfile; requires2FA?: boolean; tempToken?: string }) => void;
-  verifyEmail: (token: string) => Promise<void>;
+  /** "already_verified" — ссылка уже использована; сессия не выдаётся, нужно войти. */
+  verifyEmail: (token: string) => Promise<"already_verified" | void>;
   /** Подтвердить привязку email по токену из письма */
   verifyLinkEmail: (verificationToken: string) => Promise<void>;
   /** Ввести код 2FA после ответа requires2FA (пароль/Telegram уже проверены) */
@@ -170,7 +171,7 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const register = useCallback(
-    async (data: { email: string; password: string; preferredLang?: string; preferredCurrency?: string; referralCode?: string; utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_content?: string; utm_term?: string }) => {
+    async (data: { email: string; password?: string; preferredLang?: string; preferredCurrency?: string; referralCode?: string; utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_content?: string; utm_term?: string }) => {
       const res = await api.clientRegister({
         email: data.email,
         password: data.password,
@@ -262,6 +263,7 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
 
   const verifyEmail = useCallback(async (token: string) => {
     const res = await api.clientVerifyEmail(token);
+    if ("alreadyVerified" in res && res.alreadyVerified) return "already_verified";
     if ("requires2FA" in res && res.requires2FA) {
       setState((prev) => ({ ...prev, miniappAuthLoading: false, miniappAuthAttempted: true, pending2FAToken: res.tempToken }));
       return;

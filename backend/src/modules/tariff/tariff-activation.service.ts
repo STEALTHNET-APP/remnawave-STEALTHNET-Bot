@@ -635,7 +635,7 @@ export async function extendSecondarySubscription(
 
   const sec = await prisma.subscription.findUnique({
     where: { id: secondaryId },
-    select: { id: true, remnawaveUuid: true, tariffId: true, ownerId: true, customPrice: true, extraDevices: true, extraDevicesMonthlyPrice: true, trialId: true, currentPricePerDay: true },
+    select: { id: true, remnawaveUuid: true, tariffId: true, autoRenewTariffId: true, ownerId: true, customPrice: true, extraDevices: true, extraDevicesMonthlyPrice: true, trialId: true, promoGranted: true, currentPricePerDay: true },
   });
   if (!sec) {
     return { ok: false, error: "Доп. подписка не найдена", status: 404 };
@@ -686,7 +686,8 @@ export async function extendSecondarySubscription(
   // сквады заменяются на сквады целевого тарифа (уход с триального сквада),
   // трафик начинается заново. Остаток бесплатных дней не конвертируется
   // (currentPricePerDay у триала нет → computeConvertedDays вернёт 0).
-  const isTrialConversion = sec.trialId != null || legacyTrial === true;
+  if (sec.promoGranted) hardReplace = false;
+  const isTrialConversion = sec.trialId != null || legacyTrial === true || sec.promoGranted;
   const effectiveConvert = convertMode || isTrialConversion || hardReplace;
 
   // ── Конвертация: остаток дней переносится pro-rata по ставке, отсчёт от «сейчас» ──
@@ -731,7 +732,9 @@ export async function extendSecondarySubscription(
     ? currentExpireAt
     : new Date();
   const totalDays = effectiveDays + convertedDays;
-  const expireAt = new Date(baseDate.getTime() + totalDays * 24 * 60 * 60 * 1000).toISOString();
+  const expireAt = sec.promoGranted
+    ? calculateExpireAt(currentExpireAt, effectiveDays)
+    : new Date(baseDate.getTime() + totalDays * 24 * 60 * 60 * 1000).toISOString();
 
   // Конвертация = переход на другой тариф: сквады ЗАМЕНЯЮТСЯ (юзер уходит со старых
   // серверов — в т.ч. с триального сквада — на сервера нового тарифа).
@@ -790,9 +793,16 @@ export async function extendSecondarySubscription(
     data: {
       expireAt: new Date(expireAt),
       trialId: null,
+      promoGranted: false,
       extraDevices: effectiveExtras,
       extraDevicesMonthlyPrice: effectiveExtrasMonthly,
       ...(tariff.id && tariff.id !== sec.tariffId ? { tariffId: tariff.id } : {}),
+      // Смена тарифа (конвертация): опция автопродления от старого тарифа больше не валидна,
+      // а autoRenewTariffId (fallback cron-а, если tariffId станет null) переводим на новый
+      // тариф — но только если он был задан, чтобы не включать новых настроек.
+      ...(tariff.id && tariff.id !== sec.tariffId
+        ? { autoRenewPriceOptionId: null, ...(sec.autoRenewTariffId ? { autoRenewTariffId: tariff.id || null } : {}) }
+        : {}),
       ...(effectiveConvert && newPriceForDb != null && newPriceForDb > 0 ? {
         customPrice: newPriceForDb,
         currentPricePerDay: effectiveDays > 0 ? newPriceForDb / effectiveDays : null,
@@ -838,7 +848,7 @@ export async function findConvertibleSubscription(
     /** config.trialSquadUuid — по нему опознаётся легаси-триал (trialId=null, tariffId=null) */
     trialSquadUuid?: string | null;
   } = {},
-): Promise<{ id: string; subscriptionIndex: number; tariffId: string | null; tariffName: string | null; expireAt: Date | null; currentPricePerDay: number | null; trialId: string | null; /** легаси-триал (POST /trial): конвертируется на месте, как триал */ isLegacyTrial: boolean; /** покупается ТОТ ЖЕ тариф → это продление (стек дней), а не конвертация */ sameTariff: boolean } | null> {
+): Promise<{ id: string; subscriptionIndex: number; tariffId: string | null; tariffName: string | null; expireAt: Date | null; currentPricePerDay: number | null; trialId: string | null; promoGranted: boolean; /** легаси-триал (POST /trial): конвертируется на месте, как триал */ isLegacyTrial: boolean; /** покупается ТОТ ЖЕ тариф → это продление (стек дней), а не конвертация */ sameTariff: boolean } | null> {
   const tariff = await prisma.tariff.findUnique({
     where: { id: tariffId },
     select: { categoryId: true, category: { select: { singleSubscriptionMode: true } } },
@@ -857,6 +867,7 @@ export async function findConvertibleSubscription(
       currentPricePerDay: true,
       customPrice: true,
       trialId: true,
+      promoGranted: true,
       purchasedAsGift: true,
       giftStatus: true,
       remnawaveUuid: true,
@@ -893,6 +904,7 @@ export async function findConvertibleSubscription(
       tariffId: r.tariffId,
       categoryId: r.tariff?.categoryId ?? null,
       trialId: r.trialId,
+      promoGranted: r.promoGranted,
       expireAt: r.expireAt,
       isLegacyTrial: legacyIds.has(r.id),
     })),
@@ -915,6 +927,7 @@ export async function findConvertibleSubscription(
     currentPricePerDay: candidate.currentPricePerDay,
     trialId: candidate.trialId,
     isLegacyTrial: picked.isLegacyTrial,
+    promoGranted: candidate.promoGranted,
     // тот же тариф = продление (дни складываются, сквады/трафик
     // не сбрасываются), конвертация только при ДРУГОМ тарифе. Триал не считается
     // «тем же» — переход с пробного на платный всегда конвертация.

@@ -35,7 +35,7 @@ export function LoginPage() {
   }, []);
 
   useEffect(() => {
-    if (state.accessToken) navigate("/", { replace: true });
+    if (state.accessToken) navigate("/admin", { replace: true });
   }, [state.accessToken, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {

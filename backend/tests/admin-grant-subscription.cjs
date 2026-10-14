@@ -24,7 +24,8 @@ const tariff={id:'paid',durationDays:7,price:15,trafficLimitBytes:123n,includedD
  failure=true;calls=[];assert.equal((await grant('client',tariff)).ok,false);assert.equal(calls.some(x=>x[0]==='create'),false);failure=false;
  candidate=null;calls=[];assert.equal((await grant('client',tariff)).data.subscriptionId,'new');assert.equal(calls.filter(x=>x[0]==='create').length,1);
  assert.deepEqual(calls.find(x=>x[0]==='consolidate'),['consolidate','client','new']);
- multi=true;candidate={id:'trial'};calls=[];await grant('client',tariff,1);assert.equal(calls.length,1);assert.equal(calls[0][0],'create');assert.equal(calls[0][3].purchasedAsGift,false);
+ multi=true;candidate={id:'trial'};calls=[];await grant('client',tariff,1);assert.equal(calls.length,2);assert.equal(calls[0][0],'find');assert.equal(calls[1][0],'create');assert.equal(calls[1][3].purchasedAsGift,false);
+ candidate={id:'promo',subscriptionIndex:0,sameTariff:false,promoGranted:true};calls=[];const promo=await grant('client',tariff);assert.equal(promo.data.subscriptionId,'promo');assert.equal(calls.some(x=>x[0]==='create'),false);
  configFailure=true;calls=[];await assert.rejects(()=>grant('client',tariff));assert.equal(calls.length,0);
  console.log('PASS: single trial/different/same, new client, multi enabled, update failure, config failure, overrides and existing subscription identity');
 })().catch(e=>{console.error(e);process.exitCode=1;});

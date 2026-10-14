@@ -41,6 +41,7 @@ export type ConvertibleCandidate = {
   trialId: string | null;
   expireAt: Date | null;
   isLegacyTrial: boolean;
+  promoGranted?: boolean;
 };
 
 export type PickOptions = {
@@ -83,6 +84,10 @@ export function pickConvertibleSubscription(
   candidates: readonly ConvertibleCandidate[],
   opts: PickOptions,
 ): ConvertibleCandidate | null {
+  // Первая платная покупка переиспользует выданную промокодом основную подписку (#210).
+  const promo = candidates.find((c) => c.subscriptionIndex === 0 && c.promoGranted);
+  if (promo) return promo;
+
   const preferred = opts.preferredSubId
     ? candidates.find((c) => c.id === opts.preferredSubId) ?? null
     : null;

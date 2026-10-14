@@ -148,3 +148,11 @@ test("multi OFF: expired paid subs still beat a live trial (null expireAt last)"
 test("multi OFF: no subscriptions → null (create the first one)", () => {
   assert.equal(pickConvertibleSubscription([], { tariffId: "z", categoryId: null, multiSubEnabled: false, perCategorySingle: false }), null);
 });
+
+test('first paid purchase keeps the promo primary in both subscription modes', () => {
+  const promo = sub({id:'promo',subscriptionIndex:0,tariffId:'promo-tariff',promoGranted:true});
+  const paid = sub({id:'paid',subscriptionIndex:1,tariffId:'target',expireAt:new Date(now+30*day)});
+  for (const multiSubEnabled of [true,false]) {
+    assert.equal(pickConvertibleSubscription([paid,promo],{tariffId:'target',categoryId:null,multiSubEnabled,perCategorySingle:false})?.id,'promo');
+  }
+});
