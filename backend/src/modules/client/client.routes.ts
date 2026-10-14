@@ -566,6 +566,7 @@ clientAuthRouter.post("/verify-email", async (req, res) => {
 
   await prisma.pendingEmailRegistration.delete({ where: { id: pending.id } }).catch(() => {});
 
+  notifyAdminsAboutNewClient(client.id).catch(() => {});
   const signToken = signClientToken(client.id);
   return res.status(201).json({ token: signToken, client: toClientShape(client) });
 });
@@ -743,6 +744,7 @@ clientAuthRouter.post("/telegram-miniapp", async (req, res) => {
       onboardingCompleted: false,
     }),
   });
+  notifyAdminsAboutNewClient(client.id).catch(() => {});
   const token = signClientToken(client.id);
   // isNewClient=true — клиент только что создан.
   // Бот после регистрации проверяет флаг и запускает event-driven welcome (after_registration).
@@ -1012,6 +1014,7 @@ clientAuthRouter.post("/google", async (req, res) => {
       autoRenewEnabled: configForDefaults.defaultAutoRenewEnabled ?? false,
     }),
   });
+  notifyAdminsAboutNewClient(client.id).catch(() => {});
   const token = signClientToken(client.id);
   // isNewClient=true — клиент только что создан.
   // Бот после регистрации проверяет флаг и запускает event-driven welcome (after_registration).
@@ -1092,6 +1095,7 @@ clientAuthRouter.post("/apple", async (req, res) => {
       autoRenewEnabled: configForDefaults.defaultAutoRenewEnabled ?? false,
     }),
   });
+  notifyAdminsAboutNewClient(client.id).catch(() => {});
   const token = signClientToken(client.id);
   // isNewClient=true — клиент только что создан.
   // Бот после регистрации проверяет флаг и запускает event-driven welcome (after_registration).
