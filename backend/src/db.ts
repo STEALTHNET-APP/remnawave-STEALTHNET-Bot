@@ -1,5 +1,5 @@
 import { PrismaClient, Prisma } from "@prisma/client";
-import { parsePaymentIntentMetadata } from "./modules/payment/payment-intent.js";
+import { isRenewalTargetTariffAllowed, parsePaymentIntentMetadata } from "./modules/payment/payment-intent.js";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
@@ -74,12 +74,12 @@ export async function assertRenewalTargetForPayment(params: {
       id: intent.renewalTargetId,
       OR: [{ ownerId: params.clientId }, { giftedToClientId: params.clientId }],
     },
-    select: { tariffId: true },
+    select: { tariffId: true, trialId: true },
   });
   if (!target) {
     throw paymentTargetError("Подписка для продления не найдена или не принадлежит вам.", "SUBSCRIPTION_TARGET_INVALID");
   }
-  if (target.tariffId !== params.tariffId) {
+  if (!isRenewalTargetTariffAllowed(target, params.tariffId)) {
     throw paymentTargetError("Продление возможно только для текущего тарифа подписки.", "SUBSCRIPTION_TARGET_INVALID");
   }
 }

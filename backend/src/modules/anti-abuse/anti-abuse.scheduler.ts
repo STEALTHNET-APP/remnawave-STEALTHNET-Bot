@@ -19,6 +19,7 @@ import {
   resolveWindow,
   windowHours,
   collectUsageForWindow,
+  collectLifetimeUsage,
   type AbuseWindowKind,
 } from "./anti-abuse.usage.js";
 import { sendAbuseNotification, type AbuseChannels } from "./anti-abuse.notify.js";
@@ -247,14 +248,16 @@ async function runRuleTickInner(ruleId: string): Promise<void> {
   const hrs = windowHours(kind, rule.windowValueHours);
   const topN = await getTopN();
 
-  const usage = await collectUsageForWindow(win.start, win.end, topN, now.getTime());
+  const usage = kind === "hour"
+    ? await collectLifetimeUsage(now.getTime())
+    : await collectUsageForWindow(win.start, win.end, topN, now.getTime());
   if (usage.size === 0) return;
 
   const limit = Number(rule.limitBytes);
   const isRolling = kind === "rolling";
   // Rolling: кандидаты — все из usage (топ за сегодня), дельта lifetime считается по снапшоту.
   // Остальные окна: те, кто превысил лимит за период (periodBytes).
-  const candidateUuids = isRolling
+  const candidateUuids = isRolling || kind === "hour"
     ? [...usage.values()].map((u) => u.uuid)
     : [...usage.values()].filter((u) => u.periodBytes > limit).map((u) => u.uuid);
   if (candidateUuids.length === 0) {
@@ -291,7 +294,9 @@ async function runRuleTickInner(ruleId: string): Promise<void> {
     let m = usageCache.get(sig);
     if (!m) {
       const w = resolveWindow(r.windowKind as AbuseWindowKind, r.windowValueHours, now);
-      m = await collectUsageForWindow(w.start, w.end, topN, now.getTime());
+      m = r.windowKind === "hour"
+        ? await collectLifetimeUsage(now.getTime())
+        : await collectUsageForWindow(w.start, w.end, topN, now.getTime());
       usageCache.set(sig, m);
     }
     return m;
@@ -312,6 +317,14 @@ async function runRuleTickInner(ruleId: string): Promise<void> {
         });
         const snap = st?.lastLifetimeBytes != null ? Number(st.lastLifetimeBytes) : null;
         if (snap != null && e.lifetimeBytes - snap > hLimit) return true;
+      } else if (h.windowKind === "hour") {
+        const st = await prisma.trafficAbuseState.findUnique({
+          where: { subscriptionId_ruleId: { subscriptionId: s.id, ruleId: h.id } },
+        });
+        const w = resolveWindow("hour", null, now);
+        if (st?.windowKey === w.windowKey && st.lastLifetimeBytes != null &&
+            e.lifetimeBytes >= Number(st.lastLifetimeBytes) &&
+            e.lifetimeBytes - Number(st.lastLifetimeBytes) > hLimit) return true;
       } else if (e.periodBytes > hLimit) {
         return true;
       }
@@ -327,7 +340,13 @@ async function runRuleTickInner(ruleId: string): Promise<void> {
     // Уступаем более приоритетному правилу, под которое подписка тоже подпадает.
     if (await outrankedBy(sub)) continue;
     try {
-      if (isRolling) await applyRolling(rule, sub, entry, hrs, now);
+      if (kind === "hour") {
+        const bytes = await hourlyBytes(rule, sub, entry, win, now);
+        if (bytes != null && bytes > limit) {
+          if (rule.action === "BAN") await applyBan(rule, sub, bytes, win, hrs, now);
+          else await applyWarn(rule, sub, bytes, win, now);
+        }
+      } else if (isRolling) await applyRolling(rule, sub, entry, hrs, now);
       else if (rule.action === "BAN") await applyBan(rule, sub, entry.periodBytes, win, hrs, now);
       else await applyWarn(rule, sub, entry.periodBytes, win, now);
     } catch (e) {
@@ -347,6 +366,30 @@ async function runRuleTickInner(ruleId: string): Promise<void> {
   }
 
   await prisma.trafficAbuseRule.update({ where: { id: rule.id }, data: { lastRunAt: now } }).catch(() => undefined);
+}
+
+async function hourlyBytes(
+  rule: TrafficAbuseRule, sub: SubForRule,
+  entry: { lifetimeBytes: number; sampledAt?: number },
+  win: ReturnType<typeof resolveWindow>, now: Date,
+): Promise<number | null> {
+  const sample = entry.sampledAt;
+  if (sample == null || !Number.isSafeInteger(entry.lifetimeBytes) || entry.lifetimeBytes < 0 ||
+      Math.floor(sample / 3_600_000) !== Math.floor(now.getTime() / 3_600_000)) return null;
+  const where = { subscriptionId_ruleId: { subscriptionId: sub.id, ruleId: rule.id } };
+  const state = await prisma.trafficAbuseState.findUnique({ where });
+  if (state?.lastSnapshotAt && sample < state.lastSnapshotAt.getTime()) return null;
+  if (state?.windowKey !== win.windowKey || state.lastLifetimeBytes == null ||
+      !state.lastSnapshotAt || entry.lifetimeBytes < Number(state.lastLifetimeBytes)) {
+    await prisma.trafficAbuseState.upsert({ where,
+      create: { subscriptionId: sub.id, ruleId: rule.id, windowKey: win.windowKey,
+        lastLifetimeBytes: BigInt(entry.lifetimeBytes), lastSnapshotAt: new Date(sample) },
+      update: { windowKey: win.windowKey, lastLifetimeBytes: BigInt(entry.lifetimeBytes),
+        lastSnapshotAt: new Date(sample), warnedAt: null, lastPeriodBytes: null },
+    });
+    return null;
+  }
+  return entry.lifetimeBytes - Number(state.lastLifetimeBytes);
 }
 
 /**
@@ -465,7 +508,12 @@ async function applyBan(
   const bannedUntil = computeBanUntil(rule, windowHrs, now);
 
   // Физический бан в Remna (отключаем подключение).
-  if (sub.remnawaveUuid) await remnaDisableUser(sub.remnawaveUuid);
+  if (sub.remnawaveUuid) {
+    const result = await remnaDisableUser(sub.remnawaveUuid);
+    if (result.error || result.status < 200 || result.status >= 300) {
+      throw new Error(result.error || `Remna disable failed: ${result.status}`);
+    }
+  }
 
   await prisma.subscription.update({
     where: { id: sub.id },
@@ -563,7 +611,12 @@ async function applyRolling(
     const bannedUntil = computeBanUntil(rule, windowHrs, now);
     // Сначала применяем бан; если remnaDisableUser бросит — снапшот НЕ сдвинется,
     // дельта сохранится и нарушитель будет пойман на следующем тике.
-    if (sub.remnawaveUuid) await remnaDisableUser(sub.remnawaveUuid);
+    if (sub.remnawaveUuid) {
+      const result = await remnaDisableUser(sub.remnawaveUuid);
+      if (result.error || result.status < 200 || result.status >= 300) {
+        throw new Error(result.error || `Remna disable failed: ${result.status}`);
+      }
+    }
     await prisma.subscription.update({
       where: { id: sub.id },
       data: { bannedUntil, banReason: rule.name, banRuleId: rule.id, banNotifiedAt: now },
@@ -624,11 +677,18 @@ async function runAutoUnbanInner(): Promise<void> {
   });
   if (banned.length === 0) return;
 
+  let unbanned = 0;
   for (const sub of banned) {
     try {
-      if (sub.remnawaveUuid) await remnaEnableUser(sub.remnawaveUuid);
+      if (sub.remnawaveUuid) {
+        const result = await remnaEnableUser(sub.remnawaveUuid);
+        if (result.error || result.status < 200 || result.status >= 300) {
+          throw new Error(result.error || `Remna enable failed: ${result.status}`);
+        }
+      }
     } catch (e) {
       console.error(`[anti-abuse] авто-разбан Remna enable ${sub.id}:`, e instanceof Error ? e.message : e);
+      continue; // Keep the ban pending so the next tick retries.
     }
     await prisma.subscription.update({
       where: { id: sub.id },
@@ -648,6 +708,7 @@ async function runAutoUnbanInner(): Promise<void> {
         detail: "Авто-разбан по истечении срока блокировки",
       },
     });
+    unbanned++;
   }
-  console.log(`[anti-abuse] авто-разбан: разблокировано ${banned.length}`);
+  console.log(`[anti-abuse] авто-разбан: разблокировано ${unbanned}`);
 }

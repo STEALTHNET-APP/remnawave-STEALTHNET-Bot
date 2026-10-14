@@ -88,7 +88,7 @@ export async function getPlategaTransactionStatus(
   config: PlategaConfig,
   transactionId: string,
 ): Promise<
-  | { ok: true; status: string; amount?: number; currency?: string; raw: Record<string, unknown> }
+  | { ok: true; status: string; id?: string; amount?: number; currency?: string; payload?: string; raw: Record<string, unknown> }
   | { error: string; status?: number }
 > {
   if (!transactionId.trim()) return { error: "transactionId required" };
@@ -152,16 +152,105 @@ export async function getPlategaTransactionStatus(
         return { error: "Platega: API ответил без status" };
       }
 
-      const amountRaw = data.amount ?? tx.amount;
-      const currencyRaw = data.currency ?? tx.currency;
-      const amount = typeof amountRaw === "number" ? amountRaw : typeof amountRaw === "string" ? Number(amountRaw) : undefined;
-      const currency = typeof currencyRaw === "string" ? currencyRaw : undefined;
+      // Документированный ответ Platega: `paymentDetails: { amount, currency }` и `payload`
+      // (то же, что мы шлём в /transaction/process). Плоские поля — для совместимости.
+      const details = (data.paymentDetails && typeof data.paymentDetails === "object")
+        ? (data.paymentDetails as Record<string, unknown>)
+        : {};
+      const amountRaw = details.amount ?? data.amount ?? tx.amount;
+      const currencyRaw = details.currency ?? data.currency ?? tx.currency;
+      const amountNum = typeof amountRaw === "number" ? amountRaw : typeof amountRaw === "string" ? Number(amountRaw) : NaN;
+      const amount = Number.isFinite(amountNum) ? amountNum : undefined;
+      const currency = typeof currencyRaw === "string" && currencyRaw.trim() ? currencyRaw.trim() : undefined;
+      const payloadRaw = data.payload ?? tx.payload;
+      const payload = typeof payloadRaw === "string" && payloadRaw.trim() ? payloadRaw.trim() : undefined;
+      const idRaw = data.id ?? data.transactionId ?? tx.id;
+      const id = typeof idRaw === "string" && idRaw.trim() ? idRaw.trim() : undefined;
 
-      return { ok: true, status: statusStr, amount, currency, raw: data };
+      return { ok: true, status: statusStr, id, amount, currency, payload, raw: data };
     } catch (e) {
       lastErr = e instanceof Error ? e.message : String(e);
     }
   }
 
   return { error: `Platega API status check failed: ${lastErr}`, status: lastStatus };
+}
+
+export type PlategaBindingPayment = {
+  orderId: string;
+  externalId: string | null;
+  amount: number;
+  currency: string;
+};
+
+export type PlategaApiTransaction = {
+  id?: string;
+  amount?: number;
+  currency?: string;
+  payload?: string;
+};
+
+export type PlategaBindingResult = { ok: true } | { ok: false; reason: string };
+
+/** Допуск на округление при сравнении суммы (в рублях — те же единицы, что в /transaction/process). */
+const PLATEGA_AMOUNT_TOLERANCE = 0.01;
+
+function storedPlategaTxId(payment: PlategaBindingPayment): string | null {
+  const id = payment.externalId?.trim();
+  return id ? id : null;
+}
+
+/**
+ * Id транзакции, которую надо проверять через API: выданный Platega при создании
+ * нашего платежа (externalId), а для старых платежей без него — id из webhook'а.
+ */
+export function plategaTxIdToVerify(payment: PlategaBindingPayment, webhookTxId: string | null): string | null {
+  return storedPlategaTxId(payment) ?? (webhookTxId?.trim() || null);
+}
+
+/** Webhook должен ссылаться на ту же транзакцию, что Platega выдала при создании платежа. */
+export function checkPlategaWebhookTxId(payment: PlategaBindingPayment, webhookTxId: string | null): PlategaBindingResult {
+  const stored = storedPlategaTxId(payment);
+  const incoming = webhookTxId?.trim();
+  if (stored && incoming && incoming !== stored) {
+    return { ok: false, reason: `transaction id mismatch: webhook=${incoming} stored=${stored}` };
+  }
+  return { ok: true };
+}
+
+/**
+ * Проверка, что подтверждённая Platega API транзакция относится к этому платежу:
+ * тот же id, тот же payload (orderId), та же сумма и валюта.
+ * Без сохранённого id (старые платежи) payload из ответа API обязателен.
+ */
+export function checkPlategaBinding(
+  payment: PlategaBindingPayment,
+  webhookTxId: string | null,
+  apiTx: PlategaApiTransaction,
+): PlategaBindingResult {
+  const idCheck = checkPlategaWebhookTxId(payment, webhookTxId);
+  if (!idCheck.ok) return idCheck;
+
+  const expectedId = plategaTxIdToVerify(payment, webhookTxId);
+  if (apiTx.id && expectedId && apiTx.id !== expectedId) {
+    return { ok: false, reason: `api transaction id mismatch: api=${apiTx.id} expected=${expectedId}` };
+  }
+
+  if (apiTx.payload !== undefined) {
+    if (apiTx.payload !== payment.orderId) {
+      return { ok: false, reason: `payload mismatch: api=${apiTx.payload} orderId=${payment.orderId}` };
+    }
+  } else if (!storedPlategaTxId(payment)) {
+    return { ok: false, reason: "no stored transaction id and api returned no payload" };
+  }
+
+  if (apiTx.amount !== undefined && Math.abs(apiTx.amount - payment.amount) > PLATEGA_AMOUNT_TOLERANCE) {
+    return { ok: false, reason: `amount mismatch: api=${apiTx.amount} expected=${payment.amount}` };
+  }
+
+  if (apiTx.currency && payment.currency && apiTx.currency.toUpperCase() !== payment.currency.toUpperCase()) {
+    return { ok: false, reason: `currency mismatch: api=${apiTx.currency} expected=${payment.currency}` };
+  }
+
+  return { ok: true };
 }

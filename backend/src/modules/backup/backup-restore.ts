@@ -89,8 +89,7 @@ export async function runPgRestore(db: DbConnection, input: Buffer | Readable | 
     dir = await mkdtemp(path.join(tempRoot, "stealthnet-restore-"));
     const sqlPath = path.join(dir, "restore.sql");
     await prepareRestore(input, sqlPath, filename, limits);
-    await runPsql(db, ["-c", CLEAN_SCHEMA_SQL]);
-    await runPsql(db, ["-f", sqlPath]);
+    await runPsql(db, ["--single-transaction", "-c", CLEAN_SCHEMA_SQL, "-f", sqlPath]);
   } finally {
     try {
       if (input instanceof Readable) input.destroy();

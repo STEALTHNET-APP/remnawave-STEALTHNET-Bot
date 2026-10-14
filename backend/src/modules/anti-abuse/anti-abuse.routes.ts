@@ -328,9 +328,13 @@ antiAbuseRouter.post("/ban/:subscriptionId", async (req: Request, res: Response)
   // Физический бан в Remna (отключаем подключение) — как авто-бан правила.
   if (sub.remnawaveUuid) {
     try {
-      await remnaDisableUser(sub.remnawaveUuid);
+      const result = await remnaDisableUser(sub.remnawaveUuid);
+      if (result.error || result.status < 200 || result.status >= 300) {
+        return res.status(502).json({ message: "Remna не подтвердила изменение блокировки. Попробуйте ещё раз." });
+      }
     } catch (e) {
       console.error("[anti-abuse] manual ban Remna disable error:", e instanceof Error ? e.message : e);
+      return res.status(502).json({ message: "Remna недоступна. Попробуйте ещё раз." });
     }
   }
 
@@ -368,9 +372,13 @@ antiAbuseRouter.post("/unban/:subscriptionId", async (req: Request, res: Respons
   if (!sub) return res.status(404).json({ message: "Subscription not found" });
   if (sub.remnawaveUuid) {
     try {
-      await remnaEnableUser(sub.remnawaveUuid);
+      const result = await remnaEnableUser(sub.remnawaveUuid);
+      if (result.error || result.status < 200 || result.status >= 300) {
+        return res.status(502).json({ message: "Remna не подтвердила изменение блокировки. Попробуйте ещё раз." });
+      }
     } catch (e) {
       console.error("[anti-abuse] manual unban Remna enable error:", e instanceof Error ? e.message : e);
+      return res.status(502).json({ message: "Remna недоступна. Попробуйте ещё раз." });
     }
   }
   // T-abuse-grace (29.06.2026, WolfVPN): иммунитет от авто-бана. Админ задаёт срок (дней),

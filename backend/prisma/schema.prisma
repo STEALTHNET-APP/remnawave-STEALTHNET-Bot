@@ -377,7 +377,11 @@ model PromoCode {
   // Для DISCOUNT:
   discountPercent   Float?    @map("discount_percent") // Скидка в %
   discountFixed     Float?    @map("discount_fixed") // Или фикс. скидка в валюте
-  // Для FREE_DAYS:
+  // Для FREE_DAYS (squadUuid/лимиты оставлены для старых промокодов):
+  tariffId          String?   @map("tariff_id")
+  tariffPriceOptionId String? @map("tariff_price_option_id")
+  tariff            Tariff? @relation(fields: [tariffId], references: [id], onDelete: SetNull)
+  tariffPriceOption TariffPriceOption? @relation(fields: [tariffPriceOptionId], references: [id], onDelete: SetNull)
   squadUuid         String?   @map("squad_uuid")
   trafficLimitBytes BigInt?   @map("traffic_limit_bytes")
   deviceLimit       Int?      @map("device_limit")
@@ -482,6 +486,7 @@ model Tariff {
   autoRenewSubscriptions Subscription[]      @relation("SubscriptionAutoRenewTariff")
   priceOptions           TariffPriceOption[]
   // T15 (11.05.2026, WolfVPN): пресеты пробных подписок, привязанные к этому тарифу.
+  promoCodes             PromoCode[]
   trials                 Trial[]
 
   @@index([categoryId])
@@ -503,6 +508,7 @@ model TariffPriceOption {
 
   tariff   Tariff    @relation(fields: [tariffId], references: [id], onDelete: Cascade)
   payments Payment[]
+  promoCodes PromoCode[]
 
   @@index([tariffId])
   @@index([sortOrder])
@@ -967,6 +973,8 @@ model ContestWinner {
 // Теперь: ВСЕ подписки клиента живут в одной таблице. subscriptionIndex=0 — главная.
 // Поля Client.remnawaveUuid / currentTariffId / autoRenew* помечены deprecated (читаются для совместимости кабинета).
 model Subscription {
+  /// Created by a free-days promo; the first paid purchase/grant upgrades this same subscription.
+  promoGranted Boolean @default(false) @map("promo_granted")
   id                       String    @id @default(cuid())
   ownerId                  String    @map("owner_id")
   remnawaveUuid            String?   @map("remnawave_uuid")
@@ -1590,6 +1598,6 @@ model TrafficAbuseEvent {
 
   @@index([subscriptionId])
   @@index([eventType])
-  @@index([createdAt])
+  @@index([createdAt(sort: Desc)])
   @@map("traffic_abuse_events")
 }

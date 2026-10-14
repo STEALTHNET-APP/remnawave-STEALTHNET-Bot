@@ -72,7 +72,7 @@ test('overlapping restore is rejected and failed preparation releases the guard'
   await assert.rejects(first);
   assert.equal(calls.length, 0);
   await runPgRestore(db, Buffer.from('SELECT 1;'));
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
 });
 
 test('server gzip file is fully prepared before schema clear and import', async t => {
@@ -80,9 +80,11 @@ test('server gzip file is fully prepared before schema clear and import', async 
   const file = path.join(dir, 'saved.sql.gz');
   await writeFile(file, gzipSync('SELECT 1;\n'));
   await runPgRestore(db, file, 'saved.sql.gz');
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
   assert.ok(calls[0].some(arg => arg.startsWith('DROP SCHEMA')));
-  assert.ok(calls[1].includes('-f'));
+  assert.ok(calls[0].includes('-f'));
+  assert.ok(calls[0].includes('--single-transaction'));
+  assert.ok(calls[0].includes('ON_ERROR_STOP=1'));
 });
 
 test('missing server file is a caught preparation failure and never invokes psql', async t => {
