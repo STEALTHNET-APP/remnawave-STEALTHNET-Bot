@@ -4,7 +4,7 @@
  * Источник цифры — Remna bandwidth-stats (GET /api/bandwidth-stats/nodes/{uuid}/users),
  * который отдаёт top-N потребителей на ноду за диапазон ДАТ. Гранулярность — день
  * (categories = даты), поэтому окна считаем в часах и конвертируем в date-range
- * [start, end] (YYYY-MM-DD). Sub-day окна (hour) округляются до текущего дня.
+ * [start, end] (YYYY-MM-DD). Для hour используются отдельные замеры lifetime-счётчика.
  *
  * node-usage возвращает username, а у нас в БД хранится только remnawaveUuid — поэтому
  * резолвим username→uuid через список users Remna (с TTL-кэшем в пределах прогона).
@@ -40,6 +40,7 @@ export interface UsageEntry {
   lifetimeBytes: number;
   /** Статус юзера в Remna (ACTIVE / DISABLED / LIMITED / EXPIRED). */
   status: string;
+  sampledAt?: number;
 }
 
 function pad2(n: number): string {
@@ -128,7 +129,7 @@ interface RemnaUsersPage {
 function liftLifetime(u: RemnaUserRow): number {
   const raw: unknown = u.userTraffic?.lifetimeUsedTrafficBytes;
   const n = typeof raw === "number" ? raw : Number(raw);
-  return Number.isFinite(n) ? n : 0;
+  return raw != null && Number.isSafeInteger(n) && n >= 0 ? n : Number.NaN;
 }
 
 async function loadUserIndex(): Promise<Map<string, RemnaUserLite>> {
@@ -196,6 +197,30 @@ export function invalidateUserIndexCache(): void {
 // не дублируют запросы к нодам Remna (node-usage) и резолв индекса.
 const USAGE_TTL_MS = 60 * 1000;
 const _usageCache = new Map<string, { data: Map<string, UsageEntry>; ts: number }>();
+
+let lifetimeCache: { data: Map<string, UsageEntry>; ts: number } | null = null;
+let lifetimeLoading: Promise<Map<string, UsageEntry>> | null = null;
+
+export async function collectLifetimeUsage(nowMs: number): Promise<Map<string, UsageEntry>> {
+  if (lifetimeCache && nowMs >= lifetimeCache.ts && nowMs - lifetimeCache.ts < USAGE_TTL_MS) {
+    return lifetimeCache.data;
+  }
+  if (lifetimeLoading) return lifetimeLoading;
+  lifetimeLoading = (async () => {
+    const users = await loadUserIndex();
+    const data = new Map<string, UsageEntry>();
+    // A request crossing the hour boundary cannot establish a reliable baseline.
+    const completedAt = Date.now();
+    if (Math.floor(nowMs / 3_600_000) !== Math.floor(completedAt / 3_600_000)) return data;
+    for (const u of users.values()) {
+      if (!Number.isSafeInteger(u.lifetimeBytes) || u.lifetimeBytes < 0) continue;
+      data.set(u.uuid, { ...u, periodBytes: 0, sampledAt: nowMs });
+    }
+    lifetimeCache = { data, ts: nowMs };
+    return data;
+  })();
+  try { return await lifetimeLoading; } finally { lifetimeLoading = null; }
+}
 
 // ---- Сбор потребления за окно ----------------------------------------------
 

@@ -3,13 +3,14 @@ const path = require('node:path');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const ts = require('typescript');
-function load(name, deps) {
+function load(name, deps, globals = {}) {
   const module = { exports: {} };
   const source = fs.readFileSync(path.join(__dirname, '../src/modules/anti-abuse', name), 'utf8');
   vm.runInNewContext(ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
   }}).outputText, { exports: module.exports, Date, Set, Map, Error,
     console: { log() {}, error() {}, warn() {} },
+    ...globals,
     require(id) { if (id in deps) return deps[id]; throw Error(`Unexpected import: ${id}`); }
   });
   return module.exports;

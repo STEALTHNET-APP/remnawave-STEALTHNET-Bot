@@ -384,9 +384,9 @@ function RuleDialog({
                 options={[
                   { value: "day", label: "Сутки (точно)" },
                   { value: "week", label: "Неделя (точно)" },
-                  { value: "rolling", label: "Между проверками (точный час)" },
+                  { value: "rolling", label: "Между проверками" },
                   { value: "custom", label: "Произвольно (дни)" },
-                  { value: "hour", label: "Час (≈ сутки, неточно)" },
+                  { value: "hour", label: "Текущий час (UTC)" },
                 ]}
               />
               {draft.windowKind === "rolling" && (
@@ -396,7 +396,7 @@ function RuleDialog({
               )}
               {draft.windowKind === "hour" && (
                 <p className="mt-1 text-[11px] text-amber-500">
-                  Remna не отдаёт почасово — «час» фактически считается за текущие сутки. Для точного часа выбери «Между проверками».
+                  Считается прирост трафика после первого замера в текущем часе UTC. Первый замер начинает отсчёт. В следующем часе отсчёт начинается заново; для проверки лимита нужны хотя бы два замера за час.
                 </p>
               )}
               {(draft.windowKind === "custom" || draft.windowKind === "rolling") && (
