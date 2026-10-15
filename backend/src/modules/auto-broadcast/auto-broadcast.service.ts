@@ -1,3 +1,4 @@
+import { sendBroadcastEmail, subscribedEmailFilter, isEmailUnsubscribed } from "../email-unsubscribe/email-unsubscribe.service.js";
 /**
  * Авто-рассылка: настраиваемые правила (после регистрации, неактивность, без платежа и т.д.).
  * Джоб выбирает подходящих клиентов, отправляет сообщение и пишет лог.
@@ -13,7 +14,7 @@
 import { prisma } from "../../db.js";
 import { excludeLegacyAutoRenewSubs } from "../payment/legacy-auto-renew-scope.js";
 import { getSystemConfig } from "../client/client.service.js";
-import { sendEmail, isMailConfigured, mailConfigFromSystem } from "../mail/mail.service.js";
+import { isMailConfigured, mailConfigFromSystem } from "../mail/mail.service.js";
 import { proxyFetch } from "../proxy-util/proxy-fetch.js";
 import { getProxyUrl } from "../proxy-util/get-proxy-url.js";
 
@@ -229,11 +230,12 @@ async function getSentSubscriptionSnapshots(
  * telegram-правила) попадали в eligible, отправка пропускалась, лог не писался —
  * и клиент висел как «подходящий» навечно, завышая eligibleCount в админке.
  */
-function channelFilter(channel: string): Record<string, unknown> {
+async function channelFilter(channel: string): Promise<Record<string, unknown>> {
   if (channel === "telegram") return { telegramId: { not: null } };
-  if (channel === "email") return { email: { not: null } };
+  const emailFilter = await subscribedEmailFilter();
+  if (channel === "email") return emailFilter;
   // both — хотя бы один из каналов
-  return { OR: [{ telegramId: { not: null } }, { email: { not: null } }] };
+  return { OR: [{ telegramId: { not: null } }, emailFilter] };
 }
 
 /**
@@ -354,7 +356,7 @@ export async function getEligibleTargets(
   const delayDays = Math.max(0, rule.delayDays);
 
   // Базовая часть WHERE: не заблокирован + есть канал доставки, подходящий правилу
-  const baseWhere = { isBlocked: false, ...channelFilter(rule.channel) };
+  const baseWhere = { isBlocked: false, ...await channelFilter(rule.channel) };
 
   let targets: BroadcastTarget[] = [];
 
@@ -378,10 +380,11 @@ export async function getEligibleTargets(
           select: { id: true, isBlocked: true, telegramId: true, email: true },
         });
         if (c && !c.isBlocked) {
+          const canEmail = rule.channel !== "telegram" && !!c.email && !(await isEmailUnsubscribed(c.email));
           const passChannel =
             rule.channel === "telegram" ? !!c.telegramId :
-            rule.channel === "email" ? !!c.email :
-            !!(c.telegramId || c.email);
+            rule.channel === "email" ? canEmail :
+            !!c.telegramId || canEmail;
           if (passChannel) targets = [{ clientId: c.id }];
         }
       } else {
@@ -774,6 +777,7 @@ export async function runRule(ruleId: string, opts?: { onlyClientId?: string }):
     if (!c) continue;
     let telegramOk = false;
     let emailOk = false;
+    let emailSkipped = false;
     let telegramSkipped = false;
 
     // Личная скидка: выставляем один раз на клиента, даже если у него несколько target'ов.
@@ -861,9 +865,11 @@ export async function runRule(ruleId: string, opts?: { onlyClientId?: string }):
     if (doEmail && smtpConfig && isMailConfigured(smtpConfig) && c.email?.trim() && !alreadyMessagedClient) {
       try {
         const perClientHtml = `<!DOCTYPE html><html><body style="font-family: sans-serif;">${perClientMessage.replace(/\n/g, "<br>\n")}</body></html>`;
-        const res = await sendEmail(smtpConfig, c.email.trim(), subject, perClientHtml);
+        const res = await sendBroadcastEmail(smtpConfig, config.publicAppUrl, c.email.trim(), subject, perClientHtml);
         emailOk = res.ok;
-        if (!emailOk && errors.length < 20) {
+        emailSkipped = res.skipped === true;
+        if (emailSkipped && !telegramSkipped && !telegramOk) skipped++;
+        if (!emailOk && !emailSkipped && errors.length < 20) {
           errors.push(`Email fail: ${c.email}`);
         }
       } catch (err) {

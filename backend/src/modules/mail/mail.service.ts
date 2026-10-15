@@ -102,12 +102,13 @@ export async function sendEmail(
   to: string,
   subject: string,
   html: string,
-  attachments?: EmailAttachment[]
+  attachments?: EmailAttachment[],
+  headers?: Record<string, string>,
 ): Promise<{ ok: boolean; error?: string }> {
   if (config.provider === "resend") {
-    return sendViaResend(config, to, subject, html, attachments);
+    return sendViaResend(config, to, subject, html, attachments, headers);
   }
-  return sendViaSmtp(config, to, subject, html, attachments);
+  return sendViaSmtp(config, to, subject, html, attachments, headers);
 }
 
 /** Транспорт Resend (HTTP API, без SMTP). */
@@ -116,7 +117,8 @@ async function sendViaResend(
   to: string,
   subject: string,
   html: string,
-  attachments?: EmailAttachment[]
+  attachments?: EmailAttachment[],
+  headers?: Record<string, string>,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!isResendConfigured(config)) {
     return { ok: false, error: "Resend not configured" };
@@ -135,6 +137,7 @@ async function sendViaResend(
         to: [to],
         subject,
         html,
+        ...(headers ? { headers } : {}),
         ...(attachments?.length
           ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.content.toString("base64") })) }
           : {}),
@@ -157,7 +160,8 @@ async function sendViaSmtp(
   to: string,
   subject: string,
   html: string,
-  attachments?: EmailAttachment[]
+  attachments?: EmailAttachment[],
+  headers?: Record<string, string>,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!isSmtpConfigured(config)) {
     return { ok: false, error: "SMTP not configured" };
@@ -184,6 +188,7 @@ async function sendViaSmtp(
       to,
       subject,
       html,
+      ...(headers ? { headers } : {}),
       ...(attachments?.length ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.content })) } : {}),
     });
     return { ok: true };

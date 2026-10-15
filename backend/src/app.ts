@@ -1,3 +1,4 @@
+import { emailUnsubscribeRouter } from "./modules/email-unsubscribe/email-unsubscribe.routes.js";
 import { paritypayWebhooksRouter } from "./modules/webhooks/paritypay.webhooks.routes.js";
 import express from "express";
 import path from "path";
@@ -383,6 +384,7 @@ app.use("/api/admin/admin-permissions", adminPermissionsRouter);
 app.use("/api/admin/email-templates", emailTemplatesRouter);
 app.use("/api/admin/bot-messages", botMessagesRouter);
 app.use("/api/admin/bot-conversations", botConversationsRouter);
+app.use("/api/public/email-unsubscribe", rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false }), emailUnsubscribeRouter);
 app.use("/api/public", publicConfigRouter);
 app.use("/api/public", botAssetsRouter);
 app.use("/api/public", contestPublicRouter);

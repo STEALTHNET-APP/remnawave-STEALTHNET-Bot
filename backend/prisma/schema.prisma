@@ -1621,3 +1621,10 @@ model TrafficAbuseEvent {
   @@index([createdAt(sort: Desc)])
   @@map("traffic_abuse_events")
 }
+
+model EmailUnsubscribe {
+  email     String   @id
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("email_unsubscribes")
+}
