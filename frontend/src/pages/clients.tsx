@@ -1,3 +1,4 @@
+import { AdminReferralQr } from "@/components/referral-qr";
 import { useEffect, useState, useCallback } from "react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import {
@@ -1293,6 +1294,7 @@ function ClientEditModal({
                       <span className="flex items-center gap-1">
                         {editing.referralCode ? <code className="text-xs">{editing.referralCode}</code> : "—"}
                         {editing.referralCode && <CopyButton text={editing.referralCode} />}
+                        {editing.referralCode && <AdminReferralQr key={editing.id} code={editing.referralCode} />}
                       </span>
                     </div>
                     <div className="flex justify-between">

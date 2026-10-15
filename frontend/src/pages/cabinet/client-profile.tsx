@@ -1,3 +1,4 @@
+import { ReferralQrButton } from "@/components/referral-qr";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -815,6 +816,7 @@ async function startTopUpParitypay() {
                       <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-background/80 border border-border/30 dark:bg-white/5 dark:border-white/5">
                         <div className="shrink-0 w-12 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t("cabinet.profile.site_label")}</div>
                         <code className="flex-1 min-w-[140px] truncate text-xs font-mono text-primary/80 select-all">{referralLinkSite}</code>
+                        <ReferralQrButton code={client!.referralCode!} links={[{ kind: "site", url: referralLinkSite }]} />
                         <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 hover:bg-black/5 dark:hover:bg-white/10 rounded-lg ml-auto" onClick={() => copyReferral("site")}>
                           {copiedRef === "site" ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                         </Button>
@@ -824,6 +826,7 @@ async function startTopUpParitypay() {
                       <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-background/80 border border-border/30 dark:bg-white/5 dark:border-white/5">
                         <div className="shrink-0 w-12 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t("cabinet.profile.bot_label")}</div>
                         <code className="flex-1 min-w-[140px] truncate text-xs font-mono text-primary/80 select-all">{referralLinkBot}</code>
+                        <ReferralQrButton code={client!.referralCode!} links={[{ kind: "bot", url: referralLinkBot }]} />
                         <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 hover:bg-black/5 dark:hover:bg-white/10 rounded-lg ml-auto" onClick={() => copyReferral("bot")}>
                           {copiedRef === "bot" ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                         </Button>

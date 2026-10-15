@@ -1,3 +1,4 @@
+import { ReferralQrButton } from "@/components/referral-qr";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -1485,12 +1486,13 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                 )}
                 <div className="rounded-2xl border border-border/40 bg-background/30 backdrop-blur-xl divide-y divide-border/40 overflow-hidden">
                   {referralLinkSite && (
+                    <div className="flex min-w-0 items-center gap-2 pr-3">
                     <button
                       type="button"
                       onClick={() => copyReferral("site")}
                       title={referralLinkSite}
                       aria-label={referralCopied === "site" ? "Ссылка на сайт скопирована" : "Скопировать реферальную ссылку на сайт"}
-                      className="group/row w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-primary/[0.06] transition-colors"
+                      className="group/row min-w-0 flex-1 flex items-center gap-3 px-3.5 py-3 text-left hover:bg-primary/[0.06] transition-colors"
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
                         <Globe className="h-4 w-4 text-primary" />
@@ -1503,14 +1505,17 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                         {referralCopied === "site" ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                       </span>
                     </button>
+                    <ReferralQrButton code={client.referralCode!} links={[{ kind: "site", url: referralLinkSite }]} />
+                    </div>
                   )}
                   {referralLinkBot && (
+                    <div className="flex min-w-0 items-center gap-2 pr-3">
                     <button
                       type="button"
                       onClick={() => copyReferral("bot")}
                       title={referralLinkBot}
                       aria-label={referralCopied === "bot" ? "Ссылка на бота скопирована" : "Скопировать реферальную ссылку на бота"}
-                      className="group/row w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-violet-500/[0.06] transition-colors"
+                      className="group/row min-w-0 flex-1 flex items-center gap-3 px-3.5 py-3 text-left hover:bg-violet-500/[0.06] transition-colors"
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
                         <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
@@ -1523,6 +1528,8 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                         {referralCopied === "bot" ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                       </span>
                     </button>
+                    <ReferralQrButton code={client.referralCode!} links={[{ kind: "bot", url: referralLinkBot }]} />
+                    </div>
                   )}
                 </div>
                 <div className="mt-auto pt-1">

@@ -1,4 +1,17 @@
 {
+  "referralQr": {
+    "open": "QR code",
+    "title": "Referral link QR code",
+    "printHint": "For printing: 1024×1024 PNG or scalable SVG.",
+    "destination": "QR code destination",
+    "site": "Website",
+    "bot": "Bot",
+    "download": "Download {{format}}",
+    "failed": "Could not download the file. Try again or choose SVG.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Could not copy the link."
+  },
   "admin": {
     "nav": {
       "category_overview": "OVERVIEW",

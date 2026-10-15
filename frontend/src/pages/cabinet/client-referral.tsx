@@ -1,3 +1,4 @@
+import { ReferralQrButton } from "@/components/referral-qr";
 import { AuroraReferral } from "./aurora/aurora-referral";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
@@ -251,6 +252,7 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
                     </div>
                     <div className="flex items-center gap-2 min-w-0">
                       <code className="flex-1 min-w-0 truncate text-xs font-mono text-primary/80 select-all bg-background/50 px-3 py-2 rounded-xl border border-border/50">{referralLinkSite}</code>
+                        <ReferralQrButton code={stats!.referralCode!} links={[{ kind: "site", url: referralLinkSite }]} />
                       <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 hover:bg-black/5 dark:hover:bg-white/10 rounded-xl" onClick={() => copyLink("site")}>
                         {copiedRef === "site" ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                       </Button>
@@ -267,6 +269,7 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
                     </div>
                     <div className="flex items-center gap-2 min-w-0">
                       <code className="flex-1 min-w-0 truncate text-xs font-mono text-primary/80 select-all bg-background/50 px-3 py-2 rounded-xl border border-border/50">{referralLinkBot}</code>
+                        <ReferralQrButton code={stats!.referralCode!} links={[{ kind: "bot", url: referralLinkBot }]} />
                       <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 hover:bg-black/5 dark:hover:bg-white/10 rounded-xl" onClick={() => copyLink("bot")}>
                         {copiedRef === "bot" ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                       </Button>

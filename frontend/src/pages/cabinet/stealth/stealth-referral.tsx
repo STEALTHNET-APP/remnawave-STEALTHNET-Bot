@@ -1,3 +1,5 @@
+import { ReferralQrLinks } from "@/components/referral-qr";
+import { buildReferralLinks } from "@/lib/referral-links";
 /**
  * Stealth Referral — реферальная система в Hundler-style.
  *
@@ -9,7 +11,7 @@
  *   4. Accordion «Правила и бонусы» — 2-3 TipCard'а с цветовой кодировкой
  */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Gift, Send, Copy, Check, Users, ChevronDown, Award, Repeat, AlertTriangle, ChevronRight } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { useCabinetConfig } from "@/contexts/cabinet-config";
@@ -33,16 +35,8 @@ export function StealthReferral() {
   const [copied, setCopied] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
 
-  const link = useMemo(() => {
-    if (!stats?.referralCode) return null;
-    if (config?.telegramBotUsername) {
-      return `https://t.me/${config.telegramBotUsername.replace(/^@/, "")}?start=ref_${stats.referralCode}`;
-    }
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/cabinet/register?ref=${encodeURIComponent(stats.referralCode)}`;
-    }
-    return null;
-  }, [stats, config]);
+  const links = buildReferralLinks(stats?.referralCode, config?.publicAppUrl || window.location.origin, config?.telegramBotUsername);
+  const link = links.find((item) => item.kind === "bot")?.url ?? links[0]?.url ?? null;
 
   const currency = state.client?.preferredCurrency ?? "rub";
 
@@ -103,10 +97,9 @@ export function StealthReferral() {
 
       {/* Your link */}
       <div className="rounded-2xl border border-white/[0.08] bg-zinc-900/40 p-4 space-y-3">
-        <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-zinc-500">Твоя ссылка</p>
-        <div className="rounded-xl border border-white/[0.06] bg-zinc-950/60 p-3">
-          <p className="font-mono text-xs text-zinc-200 break-all">{link ?? "Ссылка появится после привязки"}</p>
-        </div>
+        {stats?.referralCode && links.length > 0
+          ? <ReferralQrLinks code={stats.referralCode} links={links} />
+          : <p className="text-sm">Ссылки пока недоступны</p>}
         <div className="grid grid-cols-2 gap-2.5">
           <StadiumButton variant="ghost" size="md" iconLeft={copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />} onClick={copy} disabled={!link}>
             {copied ? "Скопировано" : "Скопировать"}
