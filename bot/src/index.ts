@@ -1728,6 +1728,8 @@ async function editMessageContent(ctx: {
 function buildHelpScreen(opts: {
   helpIntroText?: string | null;
   supportLink?: string | null;
+  publicAppUrl?: string | null;
+  ticketsEnabled?: boolean;
   botBackLabel?: string | null;
   botEmojis?: Record<string, { unicode?: string; tgEmojiId?: string }> | null;
   tgId: string;
@@ -1746,7 +1748,7 @@ function buildHelpScreen(opts: {
   lines.push(`🗒 Активных подписок: ${opts.subsCount}`);
   const { text, entities } = applyMarkdownAndEmoji(lines.join("\n"), opts.botEmojis ?? null);
   const markup = helpMainMenu(
-    { support: opts.supportLink },
+    { support: opts.supportLink, appUrl: opts.publicAppUrl, ticketsEnabled: opts.ticketsEnabled },
     opts.botBackLabel ?? null,
     opts.backStyle,
     opts.emojiIds,
@@ -2464,6 +2466,8 @@ composer.command("support", async (ctx) => {
     const { text, entities, markup } = buildHelpScreen({
       helpIntroText: cfg?.helpIntroText,
       supportLink: cfg?.supportLink,
+      publicAppUrl: cfg?.publicAppUrl,
+      ticketsEnabled: cfg?.ticketsEnabled,
       botBackLabel: cfg?.botBackLabel,
       botEmojis: cfg?.botEmojis,
       tgId,
@@ -3502,6 +3506,8 @@ composer.on("callback_query:data", async (ctx) => {
       const { text, entities, markup } = buildHelpScreen({
         helpIntroText: config?.helpIntroText,
         supportLink: config?.supportLink,
+        publicAppUrl: config?.publicAppUrl,
+        ticketsEnabled: config?.ticketsEnabled,
         botBackLabel: config?.botBackLabel,
         botEmojis: config?.botEmojis,
         tgId,

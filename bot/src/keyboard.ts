@@ -270,7 +270,7 @@ export function mainMenu(opts: {
       if (b.id === "singbox" || b.id === "my_singbox") return opts.showSingbox === true;
       if (b.id === "cabinet") return !!opts.appUrl?.trim();
       if (b.id === "tickets") return opts.showTickets === true && !!opts.appUrl?.trim();
-      if (b.id === "support") return !!opts.hasSupportLinks;
+      if (b.id === "support") return !!opts.hasSupportLinks || (opts.showTickets === true && !!opts.appUrl?.trim());
       if (b.id === "extra_options") return opts.showExtraOptions === true;
       if (b.id === "gift") return opts.showGift === true;
       return true;
@@ -356,7 +356,7 @@ const DEFAULT_BACK_LABEL = "🏠 Главное меню";
  *   - 🏠 Главное меню
  */
 export function helpMainMenu(
-  links: { support?: string | null },
+  links: { support?: string | null; appUrl?: string | null; ticketsEnabled?: boolean },
   backLabel?: string | null,
   backStyle?: string,
   emojiIds?: InnerEmojiIds,
@@ -364,10 +364,14 @@ export function helpMainMenu(
 ): InlineMarkup {
   const back = (backLabel && backLabel.trim()) || _t("back_to_menu", lang);
   const backSty = resolveStyle(toStyle(backStyle), "danger");
-  const rows: (InlineButton | UrlButton)[][] = [];
+  const rows: (InlineButton | WebAppButton | UrlButton)[][] = [];
   const support = (links.support ?? "").trim();
   if (support) rows.push([{ text: "🧑‍💼 Написать в поддержку", url: support }]);
   rows.push([btn("📄 Документы", "menu:docs", undefined, undefined)]);
+  const base = links.appUrl?.trim().replace(/\/+$/, "");
+  if (links.ticketsEnabled === true && base) {
+    rows.push([{ text: _t("menu.btn_tickets", lang), web_app: { url: `${base}/cabinet/tickets` } }]);
+  }
   rows.push([btn(back, "menu:main", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }
