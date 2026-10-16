@@ -111,19 +111,49 @@ export async function tryMarkSubDedup(
   ttlMs: number,
   bucketOverride?: string,
 ): Promise<boolean> {
+  return claimDedupMarker(
+    async () => (await prisma.subscription.findUnique({ where: { id: subscriptionId }, select: { lastNotifiedKey: true } }))?.lastNotifiedKey,
+    async (previous, next) => (await prisma.subscription.updateMany({
+      where: { id: subscriptionId, lastNotifiedKey: previous },
+      data: { lastNotifiedKey: next },
+    })).count === 1,
+    marker, ttlMs, bucketOverride,
+  );
+}
+
+export async function tryMarkClientDedup(
+  clientId: string,
+  marker: string,
+  ttlMs: number,
+  bucketOverride?: string,
+): Promise<boolean> {
+  return claimDedupMarker(
+    async () => (await prisma.client.findUnique({ where: { id: clientId }, select: { lastArnNotifiedKey: true } }))?.lastArnNotifiedKey,
+    async (previous, next) => (await prisma.client.updateMany({
+      where: { id: clientId, lastArnNotifiedKey: previous },
+      data: { lastArnNotifiedKey: next },
+    })).count === 1,
+    marker, ttlMs, bucketOverride,
+  );
+}
+
+async function claimDedupMarker(
+  read: () => Promise<string | null | undefined>,
+  write: (previous: string | null, next: string) => Promise<boolean>,
+  marker: string,
+  ttlMs: number,
+  bucketOverride?: string,
+): Promise<boolean> {
   const bucket = bucketOverride ?? String(Math.floor(Date.now() / ttlMs));
-  const sec = await prisma.subscription.findUnique({
-    where: { id: subscriptionId },
-    select: { lastNotifiedKey: true },
-  }).catch(() => null);
-  const map = parseDedupMap(sec?.lastNotifiedKey);
-  if (map[marker] === bucket) return false;
-  map[marker] = bucket;
-  await prisma.subscription.update({
-    where: { id: subscriptionId },
-    data: { lastNotifiedKey: JSON.stringify(capDedupMap(map)) },
-  }).catch(() => {});
-  return true;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const previous = await read();
+    if (previous === undefined) return false;
+    const map = parseDedupMap(previous);
+    if (map[marker] === bucket) return false;
+    map[marker] = bucket;
+    if (await write(previous, JSON.stringify(capDedupMap(map)))) return true;
+  }
+  return false;
 }
 
 function renderTemplate(template: string, ctx: AutoRenewNotifContext): string {
@@ -207,18 +237,10 @@ export async function dispatchAutoRenewNotification(
     // Дедуп для root — та же карта, но в clients.lastArnNotifiedKey.
     if (context.dedupKeyForRoot?.clientId) {
       const ttl = context.dedupKeyForRoot.ttlMs ?? 60 * 60 * 1000;
-      const bucket = dedupBucketFor(ttl);
-      const cli = await prisma.client.findUnique({
-        where: { id: context.dedupKeyForRoot.clientId },
-        select: { lastArnNotifiedKey: true },
-      }).catch(() => null);
-      const map = parseDedupMap(cli?.lastArnNotifiedKey);
-      if (map[t.id] === bucket) continue;
-      map[t.id] = bucket;
-      await prisma.client.update({
-        where: { id: context.dedupKeyForRoot.clientId },
-        data: { lastArnNotifiedKey: JSON.stringify(capDedupMap(map)) },
-      }).catch(() => {});
+      const allowed = await tryMarkClientDedup(
+        context.dedupKeyForRoot.clientId, t.id, ttl, dedupBucketFor(ttl),
+      );
+      if (!allowed) continue;
     }
 
     const text = renderTemplate(t.messageText, context);

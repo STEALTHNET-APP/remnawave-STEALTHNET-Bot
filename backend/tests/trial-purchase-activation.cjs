@@ -45,7 +45,8 @@ const prisma = {
     update: async ({ where, data }) => { state.calls.push(['payment.update', where.id, data]); return {}; },
   },
   client: {
-    findUnique: async () => ({ id: 'c1', remnawaveUuid: null, email: null, telegramId: '42', telegramUsername: null }),
+    findUnique: async () => ({ id: 'c1', remnawaveUuid: state.clientUuid ?? null, currentPricePerDay: state.clientPricePerDay ?? null, email: null, telegramId: '42', telegramUsername: null }),
+    update: async ({ data }) => { state.calls.push(['client.update', data]); return {}; },
     updateMany: async () => ({ count: 0 }),
   },
   tariff: {
@@ -91,6 +92,21 @@ const remnaUpdates = () => state.calls.filter((c) => c[0] === 'remna.update').ma
 const legacy = () => addSub({ id: 'L', remnawaveUuid: 'u-L', squads: [TRIAL_SQUAD], expireAt: new Date(Date.now() + 2 * DAY) });
 
 const cases = [
+  ['legacy auto-renew extends the same VPN user and keeps device count', async () => {
+    reset({ multiRaw: 'true' });
+    state.clientUuid = 'u-paid'; state.clientPricePerDay = 4;
+    Object.assign(state.tariffs.paid, { price: 100, pricePerExtraDevice: 20, maxExtraDevices: 5 });
+    const expires = new Date(Date.now() + DAY);
+    addSub({ id: 'P', tariffId: 'paid', remnawaveUuid: 'u-paid', extraDevices: 1, extraDevicesMonthlyPrice: 20, expireAt: expires, squads: ['sq-paid'] });
+    state.payments.p1 = { id: 'p1', tariffId: 'paid', tariffPriceOptionId: null, deviceCount: 1, clientId: 'c1', metadata: JSON.stringify({ autoRenew: true }), tariffPriceOption: null };
+    const r = await svc.activateTariffByPaymentId('p1');
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.ok(!kinds().includes('create'), 'auto-renew must not buy an additional subscription');
+    const [update] = remnaUpdates();
+    assert.equal(update.uuid, 'u-paid');
+    assert.equal(update.hwidDeviceLimit, 2);
+    assert.ok(Math.abs(new Date(update.expireAt) - expires - 30 * DAY) < 1000);
+  }],
   ['multi ON: legacy trial converted in place, no _1', async () => {
     reset({ multiRaw: 'true' }); legacy();
     const r = await pay();

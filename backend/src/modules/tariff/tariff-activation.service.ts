@@ -1034,6 +1034,22 @@ export async function activateTariffByPaymentId(paymentId: string): Promise<Acti
       }).catch(() => { /* ignore */ });
     };
 
+    let isAutoRenew = false;
+    try { isAutoRenew = JSON.parse(payment.metadata || "{}")?.autoRenew === true; } catch {}
+    if (isAutoRenew && !extendsSecondaryId) {
+      if (!client.remnawaveUuid) return { ok: false, error: "Подписка для автопродления не найдена", status: 409 };
+      const renewed = await prisma.subscription.findFirst({
+        where: { ownerId: client.id, remnawaveUuid: client.remnawaveUuid },
+        select: { id: true },
+      });
+      const result = await activateTariffForClient(client, tariff, selectedOption, payment.deviceCount ?? undefined);
+      if (result.ok) {
+        if (renewed) await prisma.payment.update({ where: { id: payment.id }, data: { subscriptionId: renewed.id } }).catch(() => {});
+        await resetOneTimeDiscount();
+      }
+      return result;
+    }
+
     // ── Ветка 1: явное продление конкретной подписки ──────────────────────
     if (extendsSecondaryId) {
       // конвертация триала: разрешение и список целевых тарифов

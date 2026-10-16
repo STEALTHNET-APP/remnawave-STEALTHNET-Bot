@@ -16,7 +16,7 @@ import {
   notifyAdminsAboutAutoRenewFailed,
 } from "../notification/telegram-notify.service.js";
 import { LEGACY_AUTO_RENEW_CLIENT_WHERE } from "./legacy-auto-renew-scope.js";
-import { dispatchAutoRenewNotification, tryMarkSubDedup } from "../notification/auto-renew-notifications.service.js";
+import { dispatchAutoRenewNotification, tryMarkSubDedup, tryMarkClientDedup } from "../notification/auto-renew-notifications.service.js";
 import { computeSecondaryRenewPrice, resolveSecondaryRenewPlan, resolveSecondaryRenewTariffId } from "./secondary-renew-plan.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -233,6 +233,7 @@ export async function processAutoRenewals() {
 
       // Фаза 2: Попытка продления
       if (timeLeft <= renewThreshold && timeLeft >= -gracePeriod) {
+        if (!(await tryMarkClientDedup(client.id, "root_renew_attempt", 60 * 60 * 1000))) continue;
         const baseTariffPrice = renewBase.amount;
         const personalPct = typeof client.personalDiscountPercent === "number" && client.personalDiscountPercent > 0
           ? Math.min(100, client.personalDiscountPercent)
@@ -265,7 +266,6 @@ export async function processAutoRenewals() {
               metaObj.personalDiscountPercent = personalPct;
               if (!metaObj.originalPrice) metaObj.originalPrice = baseTariffPrice;
             }
-            const hasExtras = autoRenewPromoCodeId || personalPct > 0;
             const { paymentId } = await prisma.$transaction(async (tx) => {
               const payment = await tx.payment.create({
                 data: {
@@ -279,7 +279,7 @@ export async function processAutoRenewals() {
                   tariffPriceOptionId: renewBase.priceOptionId,
                   deviceCount: renewBase.extras,
                   paidAt: new Date(),
-                  metadata: hasExtras ? JSON.stringify(metaObj) : null,
+                  metadata: JSON.stringify(metaObj),
                 },
               });
 
@@ -420,7 +420,6 @@ export async function processAutoRenewals() {
                     ypMeta.balancePortion = balancePortion;
                     ypMeta.cardPortion = cardPortion;
                   }
-                  const ypHasExtras = autoRenewPromoCodeId || personalPct > 0 || balancePortion > 0;
                   const p = await tx.payment.create({
                     data: {
                       clientId: client.id,
@@ -434,7 +433,7 @@ export async function processAutoRenewals() {
                       deviceCount: renewBase.extras,
                       paidAt: new Date(),
                       externalId: autopayResult.paymentId,
-                      metadata: ypHasExtras ? JSON.stringify(ypMeta) : null,
+                      metadata: JSON.stringify(ypMeta),
                     },
                   });
 
