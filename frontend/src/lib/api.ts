@@ -337,8 +337,9 @@ export interface RemnaCapabilities {
 export type PanelUpdateState = {
   connected: boolean;
   installed: { version: string; commit: string | null; builtAt: string | null };
-  settings?: { enabled: boolean; channel: "stable" | "main"; hourUtc: number };
-  status?: { phase: string; message?: string; available?: boolean; version?: string; target?: string; changes?: string; backup?: string; rolledBack?: boolean; checkedAt?: string };
+  settings?: { enabled: boolean; channel: "stable" | "main"; hourUtc: number; backupRetentionDays: number };
+  backups?: { name: string; createdAt: string; expiresAt: string; protected: boolean; complete: boolean }[];
+  status?: { phase: string; message?: string; available?: boolean; version?: string; target?: string; changes?: string; backup?: string; rolledBack?: boolean; checkedAt?: string; recoveryRequired?: boolean; blockedReason?: string | null };
 };
 
 export const api = {

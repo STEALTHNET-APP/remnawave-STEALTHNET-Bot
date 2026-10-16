@@ -39,7 +39,7 @@ export function updaterRequest(path: string, body?: unknown): Promise<{ status: 
   });
 }
 
-const settingsSchema = z.object({ enabled: z.boolean(), channel: z.enum(["stable", "main"]), hourUtc: z.number().int().min(0).max(23) }).strict();
+const settingsSchema = z.object({ enabled: z.boolean(), channel: z.enum(["stable", "main"]), hourUtc: z.number().int().min(0).max(23), backupRetentionDays: z.number().int().min(1).max(30).default(3) }).strict();
 
 updateRouter.get("/", async (_req, res) => {
   try {

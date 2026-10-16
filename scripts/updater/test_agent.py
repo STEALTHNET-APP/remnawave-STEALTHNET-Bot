@@ -1,5 +1,6 @@
 import datetime as dt
 import importlib.util
+import sys
 import json
 import io
 from pathlib import Path
@@ -8,6 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).parent))
 spec = importlib.util.spec_from_file_location('agent', Path(__file__).with_name('agent.py'))
 agent = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(agent)
@@ -26,6 +28,9 @@ class UpdaterTests(unittest.TestCase):
         self.commit()
         self.state = Path(self.temp.name) / 'state'
         self.updater = agent.Updater({'project': str(self.root), 'stateDir': str(self.state)})
+        patcher = patch.object(self.updater, 'cleanup_images')
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def commit(self):
         subprocess.run(['git', '-C', str(self.root), 'add', '.'], check=True)
@@ -50,17 +55,49 @@ class UpdaterTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.updater.configure(invalid)
 
+    def test_checks_every_fifteen_minutes_without_auto_install(self):
+        with patch.object(self.updater, 'start') as start:
+            for minute in (0, 1, 14, 15, 16, 30):
+                self.updater.scheduled(dt.datetime(2026, 10, 16, 3, minute))
+            self.assertEqual(start.call_args_list, [unittest.mock.call('check')] * 3)
+
     def test_schedule_once_daily_only_in_selected_hour(self):
         self.updater.configure({'enabled': True, 'channel': 'main', 'hourUtc': 6})
         with patch.object(self.updater, 'start') as start:
             for instant in [dt.datetime(2026, 10, 16, 5), dt.datetime(2026, 10, 16, 6), dt.datetime(2026, 10, 16, 6, 10), dt.datetime(2026, 10, 17, 6)]:
                 self.updater.scheduled(instant)
-            self.assertEqual(start.call_count, 2)
+            self.assertEqual(sum(call.args == ('install',) for call in start.call_args_list), 2)
 
-    def test_schedule_disabled_by_default(self):
-        with patch.object(self.updater, 'start') as start:
+    def test_retention_preserves_failed_and_recent_backups(self):
+        for name, outcome, day in [('old', 'success', 10), ('recent', 'success', 15), ('failed', 'pending', 10), ('rollback', 'rolledBack', 10)]:
+            folder = self.state / ('backup-' + name)
+            folder.mkdir()
+            agent.save(folder / 'manifest.json', {'createdAt': f'2026-10-{day}T00:00:00+00:00', 'outcome': outcome, 'complete': True})
+        with patch('deployment.subprocess.run'):
+            self.updater.cleanup_backups(dt.datetime(2026, 10, 16, tzinfo=dt.timezone.utc))
+        self.assertEqual(sorted(path.name for path in self.state.glob('backup-*')), ['backup-failed', 'backup-recent'])
+
+    def test_image_cleanup_keeps_images_of_existing_containers(self):
+        responses = ['container-id', 'sha256:current', '\n'.join(json.dumps(value) for value in [
+            {'ID': 'sha256:current', 'Repository': 'stealthnet-update-api', 'Tag': 'current'},
+            {'ID': 'sha256:old', 'Repository': 'stealthnet-update-api', 'Tag': 'old'},
+        ]), '']
+        with patch.object(self.updater, 'run', side_effect=responses) as run:
+            agent.Deployment.cleanup_images(self.updater)
+        self.assertEqual(run.call_args.args[0], ['docker', 'image', 'rm', 'stealthnet-update-api:old'])
+
+    def test_cleanup_holds_the_operation_lock(self):
+        with patch.object(self.updater, 'cleanup_images'), patch.object(self.updater, 'start') as start:
+            self.updater.cleanup_images.side_effect = lambda: self.assertTrue(self.updater.lock.locked())
             self.updater.scheduled(dt.datetime(2026, 10, 16, 3))
-            start.assert_not_called()
+            start.assert_called_once_with('check')
+        self.assertFalse(self.updater.lock.locked())
+
+    def test_retention_validation_and_legacy_settings(self):
+        self.assertEqual(self.updater.settings['backupRetentionDays'], 3)
+        for days in (0, 31, True, '3'):
+            with self.assertRaises(ValueError):
+                self.updater.configure({'enabled': False, 'channel': 'main', 'hourUtc': 3, 'backupRetentionDays': days})
 
     def test_busy_operation_rejected(self):
         self.updater.lock.acquire()
@@ -82,14 +119,18 @@ class UpdaterTests(unittest.TestCase):
             updater.scheduled(dt.datetime(2026, 10, 16, 3))
             start.assert_not_called()
 
-    def test_database_and_infrastructure_changes_never_stop_services(self):
-        for path in ['backend/prisma/schema.prisma', 'docker-compose.yml', 'backend/docker-entrypoint.sh', 'scripts/updater/agent.py', 'nginx/default.conf']:
-            updater = self.updater
-            with patch.object(updater, 'check'), patch.object(updater, 'git', return_value=path), patch.object(updater, 'clean'), patch.object(updater, 'compose') as compose:
-                updater.status.update(available=True, target='b' * 40, current='a' * 40)
-                with self.assertRaises(RuntimeError):
-                    updater.install()
-                compose.assert_not_called()
+    def test_layout_allows_application_updates_but_preserves_storage(self):
+        before = {'services': {'api': {'image': 'old', 'environment': {'VALUE': 'old'}}, 'postgres': {'image': 'postgres:16'}}, 'volumes': {'database': {}}}
+        after = json.loads(json.dumps(before))
+        after['services']['api'].update(image='new', environment={'VALUE': 'new'})
+        self.updater.validate_layout(before, after)
+        after['services']['postgres']['image'] = 'postgres:17'
+        with self.assertRaises(RuntimeError):
+            self.updater.validate_layout(before, after)
+        after = json.loads(json.dumps(before))
+        after['volumes'] = {'another': {}}
+        with self.assertRaises(RuntimeError):
+            self.updater.validate_layout(before, after)
 
     def test_check_fetches_fixed_origin_and_rejects_downgrade(self):
         previous = self.updater.git('rev-parse', 'HEAD')

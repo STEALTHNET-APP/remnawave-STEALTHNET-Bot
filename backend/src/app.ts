@@ -63,6 +63,13 @@ import { requireAuth } from "./modules/auth/middleware.js";
 import { renderSpaIndex } from "./modules/branding/spa-html.js";
 
 const app = express();
+if (process.env.UPDATER_VERIFY_ONLY === "1") {
+  app.use((req, res) => {
+    if (req.method === "GET" && req.path === "/api/health") return res.json({ status: "ok", maintenance: true });
+    res.setHeader("Retry-After", "60");
+    return res.status(503).json({ message: "Устанавливается обновление. Повторите запрос позже." });
+  });
+}
 
 // За nginx: иначе express-rate-limit падает из-за X-Forwarded-For
 app.set("trust proxy", 1);

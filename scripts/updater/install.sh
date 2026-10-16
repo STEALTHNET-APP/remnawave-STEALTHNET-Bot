@@ -42,4 +42,4 @@ EOF
 systemctl daemon-reload
 systemctl enable --now stealthnet-updater
 systemctl restart stealthnet-updater
-printf 'Служба установлена. Автообновление выключено по умолчанию. Настройте его в панели: Настройки → Обновления.\n'
+printf 'Служба установлена. Проверка обновлений включена, автоматическая установка выключена. Настройте её в панели: Настройки → Обновления.\n'

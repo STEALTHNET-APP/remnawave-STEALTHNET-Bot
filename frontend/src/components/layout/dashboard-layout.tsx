@@ -20,6 +20,7 @@ import { useTheme, ACCENT_PALETTES, type ThemeMode, type ThemeAccent } from "@/c
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api, type AdminNotificationCounters } from "@/lib/api";
+import { UpdateNotice } from "@/components/admin/update-notice";
 import { InboxBell } from "@/components/inbox-bell";
 import appVersion from "../../../../version.json";
 
@@ -572,6 +573,7 @@ export function DashboardLayout() {
           </div>
         </header>
         <div className="flex-1 px-5 pt-4 pb-10 animate-in fade-in duration-200 relative z-10">
+          {state.admin?.role === "ADMIN" && state.accessToken && <UpdateNotice token={state.accessToken} />}
           <Outlet />
         </div>
       </main>

@@ -1,4 +1,9 @@
 #!/bin/sh
+if [ "${UPDATER_VERIFY_ONLY:-}" = "1" ]; then
+  npx prisma migrate deploy || exit $?
+  exec node dist/index.js
+fi
+
 # Старт API: migrate deploy → node.
 #
 # Сценарии:

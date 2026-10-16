@@ -1,3 +1,4 @@
+import { useLocation } from "react-router-dom";
 import { PanelUpdates } from "@/components/admin/panel-updates";
 import { useEffect, useState } from "react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -396,7 +397,9 @@ export function SettingsPage() {
   const [message, setMessage] = useState("");
   const [sshMessage, setSshMessage] = useState("");
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("general");
+  const updateLocation = useLocation();
+  useEffect(() => { if (new URLSearchParams(updateLocation.search).get("tab") === "updates") setActiveTab("updates"); }, [updateLocation.search]);
+  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get("tab") === "updates" ? "updates" : "general");
   const defaultJourneySteps = [
     { title: "Выбираешь сценарий", desc: "Доступны гибкие тарифы: выбери то, что подходит именно тебе, без переплат." },
     { title: "Оплачиваешь как удобно", desc: "Карта, СБП, крипта — выбирай любой удобный и безопасный метод оплаты." },

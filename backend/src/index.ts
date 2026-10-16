@@ -24,8 +24,18 @@ import { migrateRemnaIds } from "./scripts/migrate-remna-ids.js";
 import { registerCron } from "./modules/diagnostics/cron-registry.js";
 import { runContestDailyReminder } from "./modules/contest/contest-daily-reminder.service.js";
 
+import { verifyUpdateDatabase } from "./modules/update/verify-database.js";
+
 async function main() {
   await prisma.$connect();
+  if (process.env.UPDATER_VERIFY_ONLY === "1") {
+    await verifyUpdateDatabase();
+    const server = app.listen(env.PORT, "0.0.0.0");
+    const shutdown = async () => { server.close(); await prisma.$disconnect(); process.exit(0); };
+    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
+    return;
+  }
 
   await ensureFirstAdmin(env);
   await ensureSystemSettings();
