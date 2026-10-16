@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Loader2, RefreshCw, AlertTriangle, Activity,
   Users, Server, TrendingUp, ChevronDown, ChevronUp, Search, Copy, Check,
@@ -192,7 +192,28 @@ function AbuserRow({ user, index }: { user: TrafficAbuser; index: number }) {
 }
 
 export function TrafficAbusePage() {
-  const token = useAuth().state.accessToken!;
+  const { state } = useAuth();
+  const token = state.accessToken!;
+  const canEdit = state.admin?.role === "ADMIN";
+  const queryClient = useQueryClient();
+  const [excludeUuid, setExcludeUuid] = useState("");
+  const [exclusionBusy, setExclusionBusy] = useState(false);
+  const [exclusionError, setExclusionError] = useState<string | null>(null);
+  const exclusions = useQuery({ queryKey: ["admin", "traffic-exclusions", token], queryFn: () => api.getTrafficExclusions(token) });
+  async function changeExclusion(uuid: string, excluded: boolean) {
+    if (exclusionBusy) return;
+    setExclusionBusy(true);
+    setExclusionError(null);
+    try {
+      await api.setTrafficExclusion(token, uuid.trim(), excluded);
+      setExcludeUuid("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin", "traffic-exclusions"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "traffic-abuse"] }),
+      ]);
+    } catch (error) { setExclusionError(error instanceof Error ? error.message : "Не удалось изменить исключение"); }
+    finally { setExclusionBusy(false); }
+  }
   const [days, setDays] = useState("7");
   const [search, setSearch] = useState("");
   // фильтр по squads (тарифные группы Remnawave).
@@ -268,6 +289,22 @@ export function TrafficAbusePage() {
           </Button>
         </div>
       </motion.div>
+
+      <Card className="rounded-2xl p-4 space-y-3">
+        <h2 className="font-semibold">Исключения из анализа</h2>
+        <p className="text-xs text-muted-foreground">Админские и служебные аккаунты можно исключить из списка и расчёта среднего трафика. На доступ к VPN это не влияет.</p>
+        {canEdit && <form className="flex flex-col sm:flex-row gap-2" onSubmit={event => { event.preventDefault(); void changeExclusion(excludeUuid, true); }}>
+          <Input aria-label="ID или UUID пользователя Remnawave" placeholder="ID или UUID пользователя Remnawave" value={excludeUuid} onChange={event => setExcludeUuid(event.target.value)} disabled={exclusionBusy} />
+          <Button type="submit" disabled={exclusionBusy || !excludeUuid.trim()}>Исключить</Button>
+        </form>}
+        {exclusions.isLoading && <p className="text-sm">Загрузка исключений…</p>}
+        {(exclusionError || exclusions.error) && <p role="alert" className="text-sm text-destructive">{exclusionError || "Не удалось загрузить исключения"}</p>}
+        {exclusions.data?.items.length === 0 && <p className="text-sm text-muted-foreground">Исключений пока нет</p>}
+        {exclusions.data?.items.map(item => <div key={item.uuid} className="flex items-center justify-between gap-2">
+          <div className="min-w-0"><p className="text-sm break-all">{item.username}</p><p className="text-xs text-muted-foreground break-all">{item.uuid}</p></div>
+          {canEdit && <Button type="button" variant="outline" size="sm" disabled={exclusionBusy} onClick={() => void changeExclusion(item.uuid, false)}>Вернуть в анализ</Button>}
+        </div>)}
+      </Card>
 
       {error && (
         <motion.div
@@ -389,7 +426,10 @@ export function TrafficAbusePage() {
             )}
             <div className="p-4 space-y-2">
               {filtered.length > 0 ? (
-                filtered.map((u, i) => <AbuserRow key={`${u.uuid}-${u.username}`} user={u} index={i} />)
+                filtered.map((u, i) => <div key={`${u.uuid}-${u.username}`}>
+                  <AbuserRow user={u} index={i} />
+                  {canEdit && u.uuid && <Button variant="ghost" size="sm" disabled={exclusionBusy} onClick={() => void changeExclusion(u.uuid, true)}>Исключить из анализа</Button>}
+                </div>)
               ) : data.abusers.length > 0 ? (
                 <div className="text-sm text-muted-foreground py-6 text-center">Нет совпадений по запросу «{search}»</div>
               ) : (

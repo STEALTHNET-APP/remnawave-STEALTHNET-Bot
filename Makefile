@@ -163,3 +163,6 @@ alias: ## ⚡ Add/remove 'st' command for 'make'
 		chmod +x "$$install_dir/st"; \
 		printf "Added\n"; \
 	'
+.PHONY: reset-admin-password
+reset-admin-password:
+	docker compose exec api node dist/scripts/reset-admin-password.js

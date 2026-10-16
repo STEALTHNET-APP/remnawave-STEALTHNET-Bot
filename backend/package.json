@@ -13,6 +13,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "seed": "tsx src/scripts/seed-admin.ts",
+    "admin:reset-password": "node dist/scripts/reset-admin-password.js",
     "db:loadtest-clients": "tsx src/scripts/seed-loadtest-clients.ts"
   },
   "engines": {

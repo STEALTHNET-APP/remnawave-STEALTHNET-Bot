@@ -1215,6 +1215,13 @@ export const api = {
     });
   },
 
+  async getTrafficExclusions(token: string): Promise<{ items: { uuid: string; username: string }[] }> {
+    return request("/admin/traffic-abuse/exclusions", { token });
+  },
+  async setTrafficExclusion(token: string, uuid: string, excluded: boolean): Promise<{ ok: boolean }> {
+    return request(`/admin/traffic-abuse/exclusions/${encodeURIComponent(uuid)}`, { method: excluded ? "PUT" : "DELETE", token });
+  },
+
   async getTrafficAbuseAnalytics(
     token: string,
     params?: { days?: number; threshold?: number; minBytes?: number }
