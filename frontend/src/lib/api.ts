@@ -334,7 +334,17 @@ export interface RemnaCapabilities {
   realtimeBandwidth: boolean;
 }
 
+export type PanelUpdateState = {
+  connected: boolean;
+  installed: { version: string; commit: string | null; builtAt: string | null };
+  settings?: { enabled: boolean; channel: "stable" | "main"; hourUtc: number };
+  status?: { phase: string; message?: string; available?: boolean; version?: string; target?: string; changes?: string; backup?: string; rolledBack?: boolean; checkedAt?: string };
+};
+
 export const api = {
+  getPanelUpdate: (token: string) => request<PanelUpdateState>("/admin/updates", { token }),
+  panelUpdateAction: (token: string, action: "check" | "install" | "settings", body: unknown = {}) =>
+    request<PanelUpdateState>(`/admin/updates/${action}`, { token, method: "POST", body: JSON.stringify(body) }),
   /** Возможности подключённой Remnawave (бэкенд кэширует на 10 минут). */
   async getRemnaCapabilities(token: string): Promise<RemnaCapabilities> {
     return request("/admin/remna/capabilities", { token });

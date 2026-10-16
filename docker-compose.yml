@@ -38,6 +38,9 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        BUILD_COMMIT: ${STEALTHNET_BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${STEALTHNET_BUILD_DATE:-}
     container_name: stealthnet-api
     restart: unless-stopped
     ports:
@@ -63,6 +66,7 @@ services:
       INIT_ADMIN_PASSWORD: "${INIT_ADMIN_PASSWORD:-}"
       BOT_TOKEN: "${BOT_TOKEN:-}"
     volumes:
+      - /run/stealthnet-updater:/run/stealthnet-updater:ro
       - /etc/ssh:/host-etc/ssh
       - /proc:/host-proc:ro
       - uploads_data:/app/uploads
@@ -156,6 +160,9 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        BUILD_COMMIT: ${STEALTHNET_BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${STEALTHNET_BUILD_DATE:-}
     container_name: stealthnet-frontend-build
     volumes:
       - frontend_dist:/out

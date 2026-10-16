@@ -1,3 +1,4 @@
+import { PanelUpdates } from "@/components/admin/panel-updates";
 import { useEffect, useState } from "react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { qk } from "@/lib/query-client";
@@ -1155,8 +1156,10 @@ export function SettingsPage() {
           <TabsTrigger value="sync" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <ArrowLeftRight className="h-4 w-4 shrink-0" />{t("admin.settings.tab_sync")}
           </TabsTrigger>
+          {state.admin?.role === "ADMIN" && <TabsTrigger value="updates" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Download className="h-4 w-4 shrink-0" />Обновления</TabsTrigger>}
         </TabsList>
 
+        {state.admin?.role === "ADMIN" && <TabsContent value="updates"><PanelUpdates token={token} /></TabsContent>}
         <form onSubmit={handleSubmit}>
           <TabsContent value="general">
             <Card className="overflow-hidden border-border">

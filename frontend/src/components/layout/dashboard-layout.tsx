@@ -24,6 +24,8 @@ import { InboxBell } from "@/components/inbox-bell";
 import appVersion from "../../../../version.json";
 
 const PANEL_VERSION = appVersion.version;
+const PANEL_BUILD = appVersion as { commit?: string; builtAt?: string };
+const PANEL_COMMIT = PANEL_BUILD.commit && PANEL_BUILD.commit !== "unknown" ? PANEL_BUILD.commit.slice(0, 7) : null;
 const GITHUB_URL = "https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot";
 
 // пункт меню может быть защищён action'ом
@@ -564,7 +566,7 @@ export function DashboardLayout() {
                 
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
               </span>
-              <span>v{PANEL_VERSION}</span>
+              <span title={PANEL_BUILD.builtAt}>v{PANEL_VERSION}{PANEL_COMMIT ? ` · ${PANEL_COMMIT}` : ""}</span>
               <ExternalLink className="h-3 w-3 opacity-50" />
             </a>
           </div>

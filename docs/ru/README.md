@@ -13,7 +13,9 @@
 
 ---
 
-<h1 align="center">STEALTHNET 6.1.1</h1>
+<h1 align="center">STEALTHNET</h1>
+
+[Автообновление: подключение и ограничения](../auto-update.md).
 
 <p align="center">
   <img src="https://img.shields.io/badge/STEALTHNET-3.0-blueviolet?style=for-the-badge&logoColor=white" alt="STEALTHNET 3.0" />

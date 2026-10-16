@@ -1,3 +1,4 @@
+import { updateRouter } from "../update/update.routes.js";
 import { freeDaysSettings, PromoCodeError } from "../promo-code/free-days.service.js";
 /**
  * Админские эндпоинты — прокси к Remna API + клиенты панели + настройки
@@ -9,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express, { Router } from "express";
 import multer from "multer";
-import { APP_VERSION } from "../../config/app-version.js";
+import { APP_BUILD } from "../../config/app-version.js";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma, createPayment } from "../../db.js";
@@ -140,6 +141,7 @@ adminRouter.use(requireAuth);
 // 🔒 SECURITY: секционный RBAC ДОЛЖЕН стоять ДО регистрации под-роутеров — иначе backup
 // (pg_dump/restore БД) и /languages обходят requireAdminSection (менеджер дампит/перезаписывает БД).
 adminRouter.use(requireAdminSection);
+adminRouter.use("/updates", updateRouter);
 
 /** Обёртка для async-роутов: ошибки передаются в next() и возвращают 500. */
 function asyncRoute(
@@ -2759,7 +2761,7 @@ adminRouter.get("/settings", asyncRoute(async (_req, res) => {
 
 /** Версия панели — для мониторинга. Под auth, чтобы не светить наружу. */
 adminRouter.get("/version", asyncRoute(async (_req, res) => {
-  return res.json({ version: APP_VERSION });
+  return res.json(APP_BUILD);
 }));
 
 /**
