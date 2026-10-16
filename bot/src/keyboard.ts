@@ -1,3 +1,4 @@
+import { isBotButtonUrl } from "./button-url.js";
 /**
  * Inline-клавиатуры с цветными кнопками (Telegram Bot API: style — primary, success, danger).
  * Эмодзи в тексте кнопок (Unicode).
@@ -18,7 +19,7 @@ type WebAppButton = { text: string; web_app: { url: string }; icon_custom_emoji_
 type UrlButton = { text: string; url: string; icon_custom_emoji_id?: string; style?: ButtonStyle };
 export type InlineMarkup = { inline_keyboard: (InlineButton | WebAppButton | UrlButton)[][] };
 
-export type BotButtonConfig = { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean };
+export type BotButtonConfig = { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; url?: string };
 
 type DeviceButtonTheme = {
   botButtons?: (BotButtonConfig & { emojiKey?: string })[] | null;
@@ -287,7 +288,14 @@ export function mainMenu(opts: {
     // Telegram Bot API игнорирует поле для не-callback кнопок, но мы передаём
     // его на случай поддержки в будущих версиях клиента.
     const styleForBtn = toStyle(b.style);
-    if (b.id === "cabinet") {
+    if (b.id.startsWith("custom_")) {
+      const url = b.url?.trim() ?? "";
+      if (!isBotButtonUrl(url) || !labelForIcon.trim()) continue;
+      const node: UrlButton = { text: labelForIcon, url };
+      if (iconId) node.icon_custom_emoji_id = iconId;
+      if (styleForBtn) node.style = styleForBtn;
+      items.push({ node, onePerRow });
+    } else if (b.id === "cabinet") {
       if (base) {
         const w: WebAppButton = { text: labelForIcon, web_app: { url: `${base}/cabinet` } };
         if (iconId) w.icon_custom_emoji_id = iconId;

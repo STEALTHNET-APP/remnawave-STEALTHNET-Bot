@@ -1,3 +1,4 @@
+import { parseConfiguredBotButtons } from "../bot/menu-buttons.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { randomBytes } from "crypto";
@@ -273,7 +274,7 @@ export type SellOptionDeviceProduct = { id: string; name: string; deviceCount: n
 /** Продукт «Доп. сервер»: сквад Remna, опционально трафик (ГБ), цена */
 export type SellOptionServerProduct = { id: string; name: string; squadUuid: string; trafficGb?: number; price: number; currency: string };
 
-export type BotButtonConfig = { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean };
+export type BotButtonConfig = { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean; url?: string };
 export type BotEmojiEntry = { unicode?: string; tgEmojiId?: string };
 export type BotEmojisConfig = Record<string, BotEmojiEntry>;
 const DEFAULT_BOT_BUTTONS: BotButtonConfig[] = [
@@ -487,37 +488,8 @@ function parseBotMenuLineVisibility(raw: string | undefined): Required<BotMenuLi
 }
 
 function parseBotButtons(raw: string | undefined): BotButtonConfig[] {
-  if (!raw || !raw.trim()) return DEFAULT_BOT_BUTTONS;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return DEFAULT_BOT_BUTTONS;
-    const result = parsed.map((x: unknown, i: number) => {
-      const o = x as Record<string, unknown>;
-      const id = typeof o.id === "string" ? o.id : String(o.id ?? "button");
-      const def = DEFAULT_BOT_BUTTONS.find((d) => d.id === id) ?? { label: id, order: i, style: "" as string };
-      return {
-        id,
-        visible: typeof o.visible === "boolean" ? o.visible : true,
-        label: typeof o.label === "string" && o.label.trim() ? o.label.trim() : def.label,
-        order: typeof o.order === "number" ? o.order : (typeof o.order === "string" ? parseFloat(o.order) : i),
-        style: typeof o.style === "string" ? o.style : (def as BotButtonConfig).style ?? "",
-        emojiKey: typeof o.emojiKey === "string" ? o.emojiKey.trim() : undefined,
-        onePerRow: typeof o.onePerRow === "boolean" ? o.onePerRow : (def as BotButtonConfig).onePerRow,
-      };
-    });
-    // Дополняем кнопками из дефолтов, которых нет в сохранённом списке
-    const savedIds = new Set(result.map((b) => b.id));
-    for (const def of DEFAULT_BOT_BUTTONS) {
-      if (!savedIds.has(def.id)) {
-        result.push({ id: def.id, visible: def.visible, label: def.label, order: def.order, style: def.style ?? "", emojiKey: undefined, onePerRow: def.onePerRow });
-      }
-    }
-    return result;
-  } catch {
-    return DEFAULT_BOT_BUTTONS;
-  }
+  return parseConfiguredBotButtons(raw, DEFAULT_BOT_BUTTONS);
 }
-
 function parseBotEmojis(raw: string | undefined): BotEmojisConfig {
   if (!raw || !raw.trim()) return {};
   try {
@@ -1132,7 +1104,7 @@ function parseSellOptionServerProducts(raw: string | undefined): SellOptionServe
 }
 
 /** Кнопка для бота: label уже с эмодзи (Unicode) и опционально TG custom emoji ID для премиум-эмодзи. onePerRow = всегда в одну кнопку в ряд. */
-export type PublicBotButton = { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; emojiKey?: string };
+export type PublicBotButton = { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; emojiKey?: string; url?: string };
 
 function stripLeadingEmoji(label: string): string {
   return label.replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "");
@@ -1207,7 +1179,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
         label = (entry.unicode + " " + base).trim();
       }
     }
-    return { id: b.id, visible: b.visible, label, order: b.order, style: b.style, iconCustomEmojiId, onePerRow: b.onePerRow, emojiKey: emojiKey ?? undefined };
+    return { id: b.id, visible: b.visible, label, order: b.order, style: b.style, iconCustomEmojiId, onePerRow: b.onePerRow, emojiKey: emojiKey ?? undefined, ...(b.url ? { url: b.url } : {}) };
   });
 
   const menuTexts = full.botMenuTexts ?? DEFAULT_BOT_MENU_TEXTS;

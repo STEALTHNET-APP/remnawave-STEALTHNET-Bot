@@ -1,3 +1,4 @@
+import { isBotButtonUrl } from "@/lib/bot-button-url";
 import { MailTest } from "@/components/admin/mail-test";
 import { useLocation } from "react-router-dom";
 import { PanelUpdates } from "@/components/admin/panel-updates";
@@ -64,7 +65,7 @@ const DEFAULT_PLATEGA_METHODS: { id: number; enabled: boolean; label: string }[]
   { id: 13, enabled: false, label: "Криптовалюта" },
 ];
 
-type BotButtonItem = { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean };
+type BotButtonItem = { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean; url?: string };
 const DEFAULT_BOT_BUTTONS: BotButtonItem[] = [
   { id: "tariffs", visible: true, label: " Купить доступ / Продлить", order: 2, style: "" },
   { id: "proxy", visible: true, label: " Прокси", order: 0.5, style: "primary", emojiKey: "SERVERS" },
@@ -472,10 +473,10 @@ export function SettingsPage() {
       botButtons: (() => {
         const raw = (data as AdminSettings).botButtons;
         const loaded = Array.isArray(raw) ? raw : [];
-        return DEFAULT_BOT_BUTTONS.map((def) => {
+        return [...DEFAULT_BOT_BUTTONS.map((def) => {
           const fromApi = loaded.find((b: { id: string }) => b.id === def.id);
           return fromApi ? { ...def, ...fromApi } : def;
-        }) as BotButtonItem[];
+        }), ...loaded.filter((b) => b.id.startsWith("custom_"))] as BotButtonItem[];
       })(),
       botButtonsPerRow: (data as AdminSettings).botButtonsPerRow ?? 1,
       botEmojis: (data as AdminSettings).botEmojis ?? {},
@@ -759,10 +760,32 @@ export function SettingsPage() {
     saveSettingsMut.mutate(payload);
   }
 
+  function validateBotMenu(): boolean {
+    if (!settings) return false;
+    const invalidButton = settings.botButtons?.find((button) => button.id.startsWith("custom_") && (!button.label.trim() || button.label.trim().length > 64 || !isBotButtonUrl(button.url?.trim() ?? "")));
+    if (invalidButton) {
+      setMessage(`Проверьте кнопку «${invalidButton.label || "Без названия"}»: нужно название до 64 символов и ссылка https://, http:// или tg://.`);
+      document.getElementById(`bot-button-url-${invalidButton.id}`)?.focus();
+      return false;
+    }
+    return true;
+  }
+
+  function saveBotMenu() {
+    if (!settings || !validateBotMenu()) return;
+    setMessage("");
+    saveSettingsMut.mutate({
+      botButtons: JSON.stringify(settings.botButtons ?? DEFAULT_BOT_BUTTONS),
+      botButtonsPerRow: settings.botButtonsPerRow ?? 1,
+      botBackLabel: settings.botBackLabel ?? " В меню",
+    });
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!settings) return;
     setMessage("");
+    if (!validateBotMenu()) return;
     const allowedLangs = installedLangCodes.length ? installedLangCodes : FALLBACK_LANGS;
     const langs = Array.isArray(settings.activeLanguages) ? settings.activeLanguages.filter((l) => allowedLangs.includes(l)) : allowedLangs;
     const currs = Array.isArray(settings.activeCurrencies) ? settings.activeCurrencies.filter((c) => ALLOWED_CURRENCIES.includes(c)) : ALLOWED_CURRENCIES;
@@ -1822,7 +1845,7 @@ export function SettingsPage() {
                       <div className="flex items-center gap-2.5">
                         <h3 className="text-base font-semibold">Кнопки главного меню</h3>
                       </div>
-                      <p className="text-xs text-muted-foreground">Переименуй, скрой или поменяй порядок кнопок главного меню. Каждой кнопке можно задать иконку (эмодзи), цвет и режим «во всю ширину».</p>
+                      <p className="text-xs text-muted-foreground">Добавляйте свои кнопки со ссылками на канал, сайт или инструкции. Меняйте порядок, название, видимость и оформление любых кнопок.</p>
                       <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-card border border-border">
                         <Label htmlFor="bot-buttons-per-row" className="text-sm font-medium">Кнопок в ряд:</Label>
                         <select
@@ -1839,6 +1862,8 @@ export function SettingsPage() {
                         <span className="text-xs text-muted-foreground">Глобально для всего меню (отдельные кнопки можно вытолкнуть в свою строку флагом ниже)</span>
                       </div>
                       <BotButtonsList
+                        onSave={saveBotMenu}
+                        saving={saving}
                         buttons={[...(settings.botButtons ?? DEFAULT_BOT_BUTTONS)].sort((a, b) => a.order - b.order)}
                         onChange={(updated) => setSettings((s) => (s ? { ...s, botButtons: updated } : s))}
                       />
@@ -5647,9 +5672,13 @@ export function SettingsPage() {
 function BotButtonsList({
   buttons,
   onChange,
+  onSave,
+  saving,
 }: {
   buttons: BotButtonItem[];
   onChange: (updated: BotButtonItem[]) => void;
+  onSave: () => void;
+  saving: boolean;
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -5669,21 +5698,37 @@ function BotButtonsList({
     onChange(buttons.map((b) => (b.id === id ? { ...b, ...patch } : b)));
   };
 
+  const customCount = buttons.filter((button) => button.id.startsWith("custom_")).length;
+  const addButton = () => {
+    if (customCount >= 20) return;
+    onChange([{ id: `custom_${crypto.randomUUID()}`, label: "Новая кнопка", url: "", visible: true, order: Math.min(0, ...buttons.map((button) => button.order)) - 1, style: "", onePerRow: true }, ...buttons]);
+  };
+
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={buttons.map((b) => b.id)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-2">
-          {buttons.map((btn, idx) => (
-            <SortableBotButtonCard
-              key={btn.id}
-              btn={btn}
-              idx={idx}
-              onUpdate={(patch) => updateButton(btn.id, patch)}
-            />
-          ))}
-        </div>
-      </SortableContext>
-    </DndContext>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="button" variant="outline" onClick={addButton} disabled={customCount >= 20}>
+          <Plus className="mr-2 h-4 w-4" />Добавить кнопку-ссылку
+        </Button>
+        <Button type="button" onClick={onSave} disabled={saving}>{saving ? "Сохраняем…" : "Сохранить меню"}</Button>
+        <span className="text-xs text-muted-foreground">{customCount} из 20 своих кнопок</span>
+      </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={buttons.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-2">
+            {buttons.map((btn, idx) => (
+              <SortableBotButtonCard
+                key={btn.id}
+                btn={btn}
+                idx={idx}
+                onUpdate={(patch) => updateButton(btn.id, patch)}
+                onRemove={btn.id.startsWith("custom_") ? () => onChange(buttons.filter((button) => button.id !== btn.id)) : undefined}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+    </div>
   );
 }
 
@@ -5691,10 +5736,12 @@ function SortableBotButtonCard({
   btn,
   idx,
   onUpdate,
+  onRemove,
 }: {
   btn: BotButtonItem;
   idx: number;
   onUpdate: (patch: Partial<BotButtonItem>) => void;
+  onRemove?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: btn.id });
   const style = {
@@ -5729,13 +5776,14 @@ function SortableBotButtonCard({
         <span className={`h-3 w-3 rounded-full ${swatch} shrink-0 ring-2 ring-white/10`} title={styleLabel} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold truncate">{BOT_BUTTON_HUMAN_NAMES[btn.id] ?? btn.id}</span>
-            <code className="text-[10px] text-muted-foreground bg-white/[0.04] rounded px-1.5 py-0.5 hidden sm:inline">{btn.id}</code>
+            <span className="text-sm font-semibold truncate">{btn.id.startsWith("custom_") ? "Своя кнопка-ссылка" : BOT_BUTTON_HUMAN_NAMES[btn.id] ?? btn.id}</span>
+            {!onRemove && <code className="text-[10px] text-muted-foreground bg-white/[0.04] rounded px-1.5 py-0.5 hidden sm:inline">{btn.id}</code>}
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <Switch checked={btn.visible} onCheckedChange={(checked: boolean) => onUpdate({ visible: checked === true })} />
+          <Switch aria-label={`Видимость: ${btn.label}`} checked={btn.visible} onCheckedChange={(checked: boolean) => onUpdate({ visible: checked === true })} />
           <Label className="text-xs text-muted-foreground cursor-pointer">{btn.visible ? "Виден" : "Скрыт"}</Label>
+          {onRemove && <Button type="button" variant="ghost" size="icon" onClick={onRemove} aria-label={`Удалить кнопку: ${btn.label}`}><Trash2 className="h-4 w-4" /></Button>}
         </div>
       </div>
 
@@ -5755,10 +5803,15 @@ function SortableBotButtonCard({
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-[1fr_140px_140px_auto]">
+      {onRemove && <div className="space-y-1 mb-3">
+        <Label htmlFor={`bot-button-url-${btn.id}`}>Ссылка</Label>
+        <Input id={`bot-button-url-${btn.id}`} type="url" maxLength={1000} value={btn.url ?? ""} onChange={(event) => onUpdate({ url: event.target.value })} placeholder="https://t.me/your_channel" required aria-invalid={!!btn.url && !isBotButtonUrl(btn.url.trim())} />
+        <p className="text-xs text-muted-foreground">Адрес сайта или Telegram: https://, http:// или tg://. Изменения появятся при следующем открытии меню, в течение минуты после сохранения.</p>
+      </div>}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_140px_140px_auto]">
         <div className="space-y-1">
           <Label className="text-[10px] uppercase text-muted-foreground tracking-wider">Текст кнопки</Label>
-          <Input className="h-9" value={btn.label} onChange={(e) => onUpdate({ label: e.target.value })} placeholder=" Подключиться" />
+          <Input aria-label={`Название кнопки ${idx + 1}`} maxLength={onRemove ? 64 : undefined} className="h-9" value={btn.label} onChange={(e) => onUpdate({ label: e.target.value })} placeholder=" Подключиться" />
         </div>
         <div className="space-y-1">
           <Label className="text-[10px] uppercase text-muted-foreground tracking-wider">Иконка (premium)</Label>

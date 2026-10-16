@@ -124,7 +124,7 @@ export async function getPublicConfig(): Promise<{
   botWelcomeText?: string | null;
   botWelcomeImage?: string | null;
   botWelcomeShowOnce?: boolean;
-  botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; emojiKey?: string }[] | null;
+  botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; emojiKey?: string; url?: string }[] | null;
   botButtonsPerRow?: 1 | 2;
   resolvedBotMenuTexts?: Record<string, string>;
   menuTextCustomEmojiIds?: Record<string, string>;

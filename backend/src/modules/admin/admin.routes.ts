@@ -1,3 +1,4 @@
+import { botButtonsJsonSchema } from "../bot/menu-buttons.js";
 import { mailTestRouter } from "../mail/mail-test.routes.js";
 import { updateRouter } from "../update/update.routes.js";
 import { freeDaysSettings, PromoCodeError } from "../promo-code/free-days.service.js";
@@ -3001,7 +3002,7 @@ const updateSettingsSchema = z.object({
   groqFallback2: z.string().max(100).nullable().optional(),
   groqFallback3: z.string().max(100).nullable().optional(),
   aiSystemPrompt: z.string().max(5000).nullable().optional(),
-  botButtons: z.string().max(10000).nullable().optional(),
+  botButtons: botButtonsJsonSchema.nullable().optional(),
   botButtonsPerRow: z.union([z.literal(1), z.literal(2), z.number().int().min(1).max(2)]).optional(),
   botEmojis: z.union([z.string().max(15000), z.record(z.object({ unicode: z.string().max(20).optional(), tgEmojiId: z.string().max(50).optional() }))]).nullable().optional(),
   botBackLabel: z.string().max(200).nullable().optional(),

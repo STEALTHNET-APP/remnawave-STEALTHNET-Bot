@@ -3930,7 +3930,7 @@ export interface AdminSettings {
   groqFallback3?: string | null;
   aiSystemPrompt?: string | null;
   /** Кнопки главного меню бота: порядок, видимость, текст, стиль, ключ эмодзи, в один ряд */
-  botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean }[];
+  botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean; url?: string }[];
   /** Кнопок в ряд в главном меню: 1 или 2 (по умолчанию 1) */
   botButtonsPerRow?: 1 | 2;
   /** Эмодзи по ключам: Unicode и/или TG custom emoji ID (премиум). Ключи: TRIAL, PACKAGE, CARD, LINK, SERVERS, … */
