@@ -1,3 +1,4 @@
+import { createTermsGate } from "./terms.js";
 import { DeviceFlow, formatDeviceCount, subscriptionDeviceLimit } from "./device-flow.js";
 import { titleEmojiPrefix } from "./title-emoji.js";
 /**
@@ -140,6 +141,10 @@ async function createBotWithProxy(token: string): Promise<Bot> {
 
 /** Общая логика для основного (единственного) бота. */
 const composer = new Composer<Context>();
+composer.use(createTermsGate(api, async (ctx, payload) => {
+  if (ctx.from) startThrottle.delete(ctx.from.id);
+  await handleStart(ctx, payload);
+}));
 
 // ——— Принудительная подписка на канал ———
 
@@ -1881,7 +1886,7 @@ setInterval(() => {
   for (const [k, v] of startThrottle) if (v < cutoff) startThrottle.delete(k);
 }, 60 * 1000).unref?.();
 
-composer.command("start", async (ctx) => {
+async function handleStart(ctx: Context, payload: string) {
   const from = ctx.from;
   if (!from) return;
   const now = Date.now();
@@ -1890,7 +1895,6 @@ composer.command("start", async (ctx) => {
   startThrottle.set(from.id, now);
   const telegramId = String(from.id);
   const telegramUsername = from.username ?? undefined;
-  const payload = ctx.match?.trim() || "";
 
   // Сбрасываем состояние рассылки, чтобы баннер/фото не «залипало»
   lastBroadcastMessage.delete(from.id);
@@ -2284,7 +2288,9 @@ composer.command("start", async (ctx) => {
     const msg = e instanceof Error ? e.message : "Ошибка входа";
     await ctx.reply(`❌ ${msg}`);
   }
-});
+}
+
+composer.command("start", (ctx) => handleStart(ctx, ctx.match?.trim() || ""));
 
 // ——— /link КОД — привязка Telegram к аккаунту (код из кабинета на сайте)
 composer.command("link", async (ctx) => {

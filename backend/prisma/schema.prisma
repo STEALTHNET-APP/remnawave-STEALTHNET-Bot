@@ -1628,3 +1628,14 @@ model EmailUnsubscribe {
 
   @@map("email_unsubscribes")
 }
+
+model TelegramConsent {
+  telegramId        String    @id @map("telegram_id")
+  presentedVersion  String    @map("presented_version")
+  acceptedVersion   String?   @map("accepted_version")
+  acceptedDocuments String?   @map("accepted_documents") @db.Text
+  acceptedAt        DateTime? @map("accepted_at")
+  pendingStart      String?   @map("pending_start")
+
+  @@map("telegram_consents")
+}

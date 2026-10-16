@@ -1169,3 +1169,25 @@ export async function checkSubscriptionsCooldownBatch(
 ): Promise<{ items: Array<{ subscriptionId: string; blocked: boolean; daysLeft?: number; message?: string; tariffName?: string; cooldownDays?: number }> }> {
   return fetchJson("/api/client/subscriptions/cooldown-check", { token, method: "POST", body: { ids } });
 }
+
+export type BotTermsStatus = {
+  required: boolean;
+  accepted: boolean;
+  documents: { kind: string; url: string }[];
+  version: string;
+  completed: boolean;
+  pendingStart: string | null;
+};
+
+export function getBotTerms(telegramId: number, pendingStart?: string): Promise<BotTermsStatus> {
+  return fetchJson("/api/bot/terms/status", { method: "POST", body: { telegramId: String(telegramId), pendingStart } });
+}
+
+export async function acceptBotTerms(telegramId: number, version: string): Promise<BotTermsStatus> {
+  const response = await fetch(`${API_URL}/api/bot/terms/accept`, {
+    method: "POST", headers: getHeaders(), body: JSON.stringify({ telegramId: String(telegramId), version }),
+  });
+  if (response.status === 409) return getBotTerms(telegramId);
+  if (!response.ok) throw new Error("Не удалось сохранить согласие");
+  return response.json() as Promise<BotTermsStatus>;
+}
