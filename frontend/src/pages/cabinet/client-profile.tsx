@@ -1,3 +1,4 @@
+import { PasswordHint } from "@/components/password-hint";
 import { ReferralQrButton } from "@/components/referral-qr";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -1528,10 +1529,14 @@ async function startTopUpParitypay() {
                   <Input
                     type="password"
                     placeholder={t("cabinet.profile.new_password")}
+                    aria-describedby="change-password-hint"
+                    autoComplete="new-password"
+                    minLength={6}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     className="h-12 rounded-xl"
                   />
+                  <PasswordHint id="change-password-hint" minLength={6} />
                   <Input
                     type="password"
                     placeholder={t("cabinet.profile.confirm_password")}
@@ -1580,11 +1585,15 @@ async function startTopUpParitypay() {
                   <Input
                     type="password"
                     placeholder={t("cabinet.profile.new_password")}
+                    aria-describedby="set-password-hint"
+                    autoComplete="new-password"
+                    minLength={6}
                     value={setPasswordNew}
                     onChange={(e) => setSetPasswordNew(e.target.value)}
                     className="h-12 rounded-xl"
                     autoFocus
                   />
+                  <PasswordHint id="set-password-hint" minLength={6} />
                   <Input
                     type="password"
                     placeholder={t("cabinet.profile.confirm_password")}

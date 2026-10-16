@@ -1,3 +1,4 @@
+import { useLocation } from "react-router-dom";
 import { ClassicTariffCatalog } from "./classic-tariff-catalog";
 import "./classic-payment.css";
 import { AuroraTariffs } from "./aurora/aurora-tariffs";
@@ -232,7 +233,8 @@ function ClassicTariffsPage() {
     : tariffs;
 
   // Промокод
-  const [promoInput, setPromoInput] = useState("");
+  const promoLocation = useLocation();
+  const [promoInput, setPromoInput] = useState(() => typeof promoLocation.state?.promoCode === "string" ? promoLocation.state.promoCode : "");
   const [promoChecking, setPromoChecking] = useState(false);
   const [promoResult, setPromoResult] = useState<{ type: string; discountPercent?: number | null; discountFixed?: number | null; name: string } | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);

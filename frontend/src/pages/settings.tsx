@@ -1,3 +1,4 @@
+import { MailTest } from "@/components/admin/mail-test";
 import { useLocation } from "react-router-dom";
 import { PanelUpdates } from "@/components/admin/panel-updates";
 import { useEffect, useState } from "react";
@@ -4249,6 +4250,7 @@ export function SettingsPage() {
                   </div>
                 </div>
                 </div>
+                {state.admin?.role === "ADMIN" && <MailTest token={token} initialEmail={state.admin.email} />}
               </CardContent>
             </Card>
             <Card className="mt-6 overflow-hidden border-border">

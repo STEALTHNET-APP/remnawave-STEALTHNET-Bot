@@ -1,3 +1,4 @@
+import { PasswordHint } from "@/components/password-hint";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -86,8 +87,10 @@ export function ChangePasswordPage() {
                   onChange={(e) => setNewPass(e.target.value)}
                   required
                   minLength={8}
+                  aria-describedby="new-password-hint"
                   autoComplete="new-password"
                 />
+                <PasswordHint id="new-password-hint" minLength={8} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm">Подтверждение</Label>

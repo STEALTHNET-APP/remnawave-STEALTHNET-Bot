@@ -1,3 +1,4 @@
+import { mailTestRouter } from "../mail/mail-test.routes.js";
 import { updateRouter } from "../update/update.routes.js";
 import { freeDaysSettings, PromoCodeError } from "../promo-code/free-days.service.js";
 /**
@@ -142,6 +143,7 @@ adminRouter.use(requireAuth);
 // (pg_dump/restore БД) и /languages обходят requireAdminSection (менеджер дампит/перезаписывает БД).
 adminRouter.use(requireAdminSection);
 adminRouter.use("/updates", updateRouter);
+adminRouter.use("/settings/mail-test", mailTestRouter);
 
 /** Обёртка для async-роутов: ошибки передаются в next() и возвращают 500. */
 function asyncRoute(

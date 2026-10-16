@@ -1,4 +1,20 @@
 {
+  "mailTest": {
+    "title": "Test email delivery",
+    "hint": "Uses saved SMTP or Resend settings. Save any changes above before sending a test.",
+    "send": "Send test email",
+    "success": "The mail service accepted the message. Check your inbox and spam folder; delivery may take a few minutes.",
+    "failed": "Could not send email"
+  },
+  "homePromo": {
+    "title": "Promo code",
+    "placeholder": "Enter promo code",
+    "activate": "Activate",
+    "failed": "Could not apply promo code",
+    "discount": "This discount code is valid. Choose a plan and apply the prefilled code before paying.",
+    "tariffs": "Choose a plan"
+  },
+  "passwordHint": "At least {{count}} characters. We recommend combining letters, numbers and special characters.",
   "referralQr": {
     "open": "QR code",
     "title": "Referral link QR code",

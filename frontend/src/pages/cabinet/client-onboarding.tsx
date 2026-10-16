@@ -1,3 +1,4 @@
+import { PasswordHint } from "@/components/password-hint";
 import { onboardingSteps, nextOnboardingStep, type OnboardingStep } from "@/lib/client-onboarding";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
@@ -586,7 +587,10 @@ export function ClientOnboardingPage() {
                   <div className="relative">
                     <Input
                       type={showPassword ? "text" : "password"}
-                      placeholder="Новый пароль (мин. 6 символов)"
+                      placeholder="Новый пароль"
+                      aria-describedby="onboarding-password-hint"
+                      autoComplete="new-password"
+                      minLength={6}
                       value={newPassword}
                       onChange={e => { setNewPassword(e.target.value); setPasswordError(""); }}
                       className="h-12 rounded-xl pr-10"
@@ -600,6 +604,7 @@ export function ClientOnboardingPage() {
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                  <PasswordHint id="onboarding-password-hint" minLength={6} />
                   <Input
                     type="password"
                     placeholder="Повторите пароль"

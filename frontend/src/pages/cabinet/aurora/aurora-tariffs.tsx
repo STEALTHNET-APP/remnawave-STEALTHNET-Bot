@@ -1,3 +1,4 @@
+import { useLocation } from "react-router-dom";
 /** Aurora: categories contain complete tariff cards; each card opens the
  * existing checkout with its chosen duration. Subscription changes are
  * explained in checkout using the server conversion preview. */
@@ -69,7 +70,8 @@ export function AuroraTariffs() {
   const [selectedTariffId, setSelectedTariffId] = useState<string | null>(null);
   const [selectedPriceOptionId, setSelectedPriceOptionId] = useState<string | null>(null);
 
-  const [promoInput, setPromoInput] = useState("");
+  const promoLocation = useLocation();
+  const [promoInput, setPromoInput] = useState(() => typeof promoLocation.state?.promoCode === "string" ? promoLocation.state.promoCode : "");
   const [promoApplied, setPromoApplied] = useState<string | null>(null);
   const [promoMsg, setPromoMsg] = useState<string | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);

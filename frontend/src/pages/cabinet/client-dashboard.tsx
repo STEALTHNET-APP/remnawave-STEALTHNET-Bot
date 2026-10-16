@@ -1,3 +1,4 @@
+import { PromoCodeForm } from "@/components/cabinet/promo-code-form";
 import { ReferralQrButton } from "@/components/referral-qr";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -137,6 +138,7 @@ export function ClientDashboardPage() {
     <>
       <LinkTelegramPrompt />
       {design === "stealth" ? <StealthDashboard /> : <ClassicDashboardPage compact={design === "aurora"} />}
+      {design !== "stealth" && <section className="mt-4 rounded-2xl border border-border bg-card p-4"><PromoCodeForm /></section>}
     </>
   );
 }

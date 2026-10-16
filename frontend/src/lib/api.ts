@@ -1106,6 +1106,10 @@ export const api = {
     return request(`/admin/subscriptions/${subId}/remna/devices/delete`, { method: "POST", body: JSON.stringify({ hwid }), token });
   },
 
+  async testMail(token: string, toEmail: string): Promise<{ ok: boolean }> {
+    return request("/admin/settings/mail-test", { method: "POST", body: JSON.stringify({ toEmail }), token });
+  },
+
   async getSettings(token: string): Promise<AdminSettings> {
     return request("/admin/settings", { token });
   },

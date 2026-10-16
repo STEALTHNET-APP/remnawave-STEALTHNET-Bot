@@ -1,3 +1,4 @@
+import { useLocation } from "react-router-dom";
 /**
  * Stealth Tariffs / Payment — выбор подписки в стиле Hundler VPN.
  *
@@ -98,7 +99,8 @@ export function StealthTariffs() {
 
   const categories = useMemo(() => (tariffsQuery.data?.items ?? []).filter((cat) => cat.tariffs.length > 0), [tariffsQuery.data]);
 
-  const [promoInput, setPromoInput] = useState("");
+  const promoLocation = useLocation();
+  const [promoInput, setPromoInput] = useState(() => typeof promoLocation.state?.promoCode === "string" ? promoLocation.state.promoCode : "");
   const [promoApplied, setPromoApplied] = useState<string | null>(null);
   const [promoMsg, setPromoMsg] = useState<string | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
