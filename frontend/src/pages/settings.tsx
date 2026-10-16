@@ -765,7 +765,10 @@ export function SettingsPage() {
     const invalidButton = settings.botButtons?.find((button) => button.id.startsWith("custom_") && (!button.label.trim() || button.label.trim().length > 64 || !isBotButtonUrl(button.url?.trim() ?? "")));
     if (invalidButton) {
       setMessage(`Проверьте кнопку «${invalidButton.label || "Без названия"}»: нужно название до 64 символов и ссылка https://, http:// или tg://.`);
-      document.getElementById(`bot-button-url-${invalidButton.id}`)?.focus();
+      const input = document.getElementById(`bot-button-url-${invalidButton.id}`);
+      const details = input?.closest("details");
+      if (details) details.open = true;
+      input?.focus();
       return false;
     }
     return true;
@@ -5667,7 +5670,6 @@ export function SettingsPage() {
   );
 }
 
-//  Sortable cards для кнопок главного меню 
 
 function BotButtonsList({
   buttons,
@@ -5682,16 +5684,16 @@ function BotButtonsList({
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
+  const moveButton = (id: string, newIdx: number) => {
+    const oldIdx = buttons.findIndex((button) => button.id === id);
+    if (oldIdx < 0 || newIdx < 0 || newIdx >= buttons.length || oldIdx === newIdx) return;
+    onChange(arrayMove(buttons, oldIdx, newIdx).map((button, index) => ({ ...button, order: index + 1 })));
+  };
+
   const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const oldIdx = buttons.findIndex((b) => b.id === active.id);
-    const newIdx = buttons.findIndex((b) => b.id === over.id);
-    if (oldIdx < 0 || newIdx < 0) return;
-    const reordered = arrayMove(buttons, oldIdx, newIdx);
-    // Пересчитываем order по позиции в списке (1, 2, 3, ...). Стабильность других полей сохраняется.
-    const withOrder = reordered.map((b, idx) => ({ ...b, order: idx + 1 }));
-    onChange(withOrder);
+    moveButton(String(active.id), buttons.findIndex((button) => button.id === over.id));
   };
 
   const updateButton = (id: string, patch: Partial<BotButtonItem>) => {
@@ -5713,6 +5715,7 @@ function BotButtonsList({
         <Button type="button" onClick={onSave} disabled={saving}>{saving ? "Сохраняем…" : "Сохранить меню"}</Button>
         <span className="text-xs text-muted-foreground">{customCount} из 20 своих кнопок</span>
       </div>
+      <p className="text-xs text-muted-foreground">Перетащите строку за ⋮⋮ или выберите её номер. Нажмите на название, чтобы раскрыть настройки. Скрытые кнопки занимают место в списке, но не появляются в боте.</p>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={buttons.map((b) => b.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-2">
@@ -5721,6 +5724,8 @@ function BotButtonsList({
                 key={btn.id}
                 btn={btn}
                 idx={idx}
+                total={buttons.length}
+                onMove={(position) => moveButton(btn.id, position)}
                 onUpdate={(patch) => updateButton(btn.id, patch)}
                 onRemove={btn.id.startsWith("custom_") ? () => onChange(buttons.filter((button) => button.id !== btn.id)) : undefined}
               />
@@ -5735,14 +5740,19 @@ function BotButtonsList({
 function SortableBotButtonCard({
   btn,
   idx,
+  total,
+  onMove,
   onUpdate,
   onRemove,
 }: {
   btn: BotButtonItem;
   idx: number;
+  total: number;
+  onMove: (position: number) => void;
   onUpdate: (patch: Partial<BotButtonItem>) => void;
   onRemove?: () => void;
 }) {
+  const [expanded, setExpanded] = useState(btn.id.startsWith("custom_") && !btn.url);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: btn.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -5753,41 +5763,48 @@ function SortableBotButtonCard({
   const styleLabel = BOT_STYLE_OPTIONS.find((o) => o.value === (btn.style ?? ""))?.label ?? "По умолчанию";
 
   return (
-    <div
+    <details
       ref={setNodeRef}
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
       style={style}
-      className={`group rounded-xl border  bg-muted p-3 transition-all ${
-        btn.visible ? "border-border" : "border-border opacity-50"
-      } ${isDragging ? "shadow-2xl ring-2 ring-sky-500/40 z-10" : ""}`}
+      className={`relative group rounded-xl border bg-muted ${btn.visible ? "border-border" : "border-dashed border-border"} ${isDragging ? "shadow-2xl ring-2 ring-sky-500/40 z-10" : ""}`}
     >
-      <div className="flex items-center gap-2 mb-2.5">
+      <summary className="flex list-none cursor-pointer items-center gap-2 p-2.5 [&::-webkit-details-marker]:hidden">
         <button
           type="button"
-          className="cursor-grab active:cursor-grabbing touch-none p-1 rounded-md hover:bg-card transition-colors shrink-0"
+          className="cursor-grab active:cursor-grabbing touch-none p-1 rounded-md hover:bg-card shrink-0"
           {...attributes}
           {...listeners}
+          aria-label={`Переместить: ${btn.label}`}
           title="Перетащите чтобы изменить порядок"
+          onClick={(event) => event.preventDefault()}
         >
           <GripVertical className="h-4 w-4 text-muted-foreground" />
         </button>
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-sky-200 text-xs font-bold border border-sky-500/30 shrink-0">
-          {idx + 1}
+        <select
+          aria-label={`Позиция: ${btn.label}`}
+          className="h-8 w-14 shrink-0 rounded-md border border-input bg-background px-1 text-sm"
+          value={idx}
+          onChange={(event) => onMove(Number(event.target.value))}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {Array.from({ length: total }, (_, index) => <option key={index} value={index}>{index + 1}</option>)}
+        </select>
+        <span className={`h-2.5 w-2.5 rounded-full ${swatch} shrink-0`} title={styleLabel} />
+        <span className={`flex-1 min-w-0 truncate text-sm font-medium ${btn.visible ? "" : "text-muted-foreground"}`} title={btn.label}>
+          {btn.label || "Без названия"}
         </span>
-        <span className={`h-3 w-3 rounded-full ${swatch} shrink-0 ring-2 ring-white/10`} title={styleLabel} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold truncate">{btn.id.startsWith("custom_") ? "Своя кнопка-ссылка" : BOT_BUTTON_HUMAN_NAMES[btn.id] ?? btn.id}</span>
-            {!onRemove && <code className="text-[10px] text-muted-foreground bg-white/[0.04] rounded px-1.5 py-0.5 hidden sm:inline">{btn.id}</code>}
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <span className="text-xs text-muted-foreground shrink-0">{btn.visible ? "" : "Скрыта"}</span>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 ${expanded ? "rotate-180" : ""}`} />
+      </summary>
+      <div className="border-t border-border p-3">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="flex-1 text-xs text-muted-foreground">{btn.id.startsWith("custom_") ? "Своя кнопка-ссылка" : BOT_BUTTON_HUMAN_NAMES[btn.id] ?? btn.id}</span>
           <Switch aria-label={`Видимость: ${btn.label}`} checked={btn.visible} onCheckedChange={(checked: boolean) => onUpdate({ visible: checked === true })} />
-          <Label className="text-xs text-muted-foreground cursor-pointer">{btn.visible ? "Виден" : "Скрыт"}</Label>
+          <span className="text-xs text-muted-foreground">{btn.visible ? "Видна" : "Скрыта"}</span>
           {onRemove && <Button type="button" variant="ghost" size="icon" onClick={onRemove} aria-label={`Удалить кнопку: ${btn.label}`}><Trash2 className="h-4 w-4" /></Button>}
         </div>
-      </div>
-
-      {/* Preview как будет выглядеть кнопка в боте */}
       <div className="mb-2.5 p-2 rounded-lg bg-card border border-border">
         <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
           <Eye className="h-3 w-3" />
@@ -5847,6 +5864,7 @@ function SortableBotButtonCard({
           <Label htmlFor={`onePerRow-${btn.id}`} className="text-xs cursor-pointer whitespace-nowrap">Во всю ширину</Label>
         </div>
       </div>
-    </div>
+      </div>
+    </details>
   );
 }
