@@ -1005,7 +1005,7 @@ clientAuthRouter.post("/google", async (req, res) => {
   // 🔒 SECURITY: email из Google доверяем ТОЛЬКО при email_verified=true (иначе линковка
   // по email к существующему аккаунту = захват).
   const emailVerified = payload.email_verified === true;
-  const googleEmail = payload.email ?? null;
+  const googleEmail = emailVerified ? payload.email ?? null : null;
 
   const existing = await prisma.client.findUnique({
     where: { googleId },
