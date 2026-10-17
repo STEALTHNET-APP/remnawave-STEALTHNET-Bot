@@ -194,7 +194,7 @@ services:
 
   # ── Certbot (авто-SSL) ─────────────────────────────────────────
   certbot:
-    image: certbot/certbot:latest
+    image: ${CERTBOT_IMAGE:-certbot/certbot:latest}
     container_name: stealthnet-certbot
     profiles:
       - builtin-nginx

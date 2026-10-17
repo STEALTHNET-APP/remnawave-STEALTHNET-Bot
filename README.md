@@ -559,3 +559,5 @@ The full text of the license is in the [LICENSE](LICENSE) file. When using, modi
   <b>STEALTHNET 3.0</b> — sell VPN beautifully.<br/>
   <sub>Built with TypeScript, React, Grammy, Prisma, Docker</sub><br/><br/>
 </p>
+
+SSL через Cloudflare DNS API и wildcard: [инструкция](docs/CLOUDFLARE_SSL.md).
