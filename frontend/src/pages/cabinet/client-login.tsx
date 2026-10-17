@@ -506,56 +506,26 @@ export function ClientLoginPage() {
                     <span className="text-xs text-muted-foreground px-2">{t("cabinet.login.or")}</span>
                     <div className="flex-1 border-t border-border" />
                   </div>
-                  {googleEnabled && googleClientId && (
-                    <div className="flex flex-wrap items-center justify-center gap-3">
-                      <button
-                        type="button"
-                        onClick={handleGoogleLogin}
-                        disabled={loading}
-                        title={t("cabinet.login.google_title")}
-                        className={cn(
-                          "h-11 w-11 shrink-0 rounded-full flex items-center justify-center",
-                          "border border-border bg-muted/50 hover:bg-muted transition-colors",
-                          "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        )}
-                      >
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    {googleEnabled && googleClientId && (
+                      <Button type="button" variant="outline" className="h-11 w-11 shrink-0 rounded-full p-0 flex items-center justify-center border border-border bg-muted/50 hover:bg-muted transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" onClick={handleGoogleLogin} disabled={loading} title={t("cabinet.login.google_title")} aria-label={t("cabinet.login.google_title")}>
                         <GoogleIcon className="h-5 w-5" />
-                      </button>
-                    </div>
-                  )}
-                  {appleEnabled && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full h-11 gap-2"
-                      onClick={handleAppleLogin}
-                      disabled={loading}
-                    >
-                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
-                      {t("cabinet.login.apple")}
-                    </Button>
-                  )}
-                  {telegramBotUsername && (
-                    <div className="space-y-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full h-11 gap-2"
-                        onClick={handleTelegramLogin}
-                        disabled={loading || tgAuthPending}
-                      >
-                        {tgAuthPending ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            {t("cabinet.login.telegram_pending")}
-                          </>
-                        ) : (
-                          <>
-                            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
-                            {t("cabinet.login.telegram")}
-                          </>
-                        )}
                       </Button>
+                    )}
+                    {appleEnabled && (
+                      <Button type="button" variant="outline" className="h-11 w-11 shrink-0 rounded-full p-0 flex items-center justify-center border border-border bg-muted/50 hover:bg-muted transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" onClick={handleAppleLogin} disabled={loading} title={t("cabinet.login.apple")} aria-label={t("cabinet.login.apple")}>
+                        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+                      </Button>
+                    )}
+                    {telegramBotUsername && (
+                      <Button type="button" variant="outline" className="h-11 w-11 shrink-0 rounded-full p-0 flex items-center justify-center border border-border bg-muted/50 hover:bg-muted transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" onClick={handleTelegramLogin} disabled={loading || tgAuthPending} title={t("cabinet.login.telegram")} aria-label={t("cabinet.login.telegram")} aria-busy={tgAuthPending}>
+                        {tgAuthPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>}
+                      </Button>
+                    )}
+                  </div>
+                  {tgAuthPending && <p role="status" className="text-center text-xs text-muted-foreground">{t("cabinet.login.telegram_pending")}</p>}
+                  {telegramBotUsername && (
+                    <div>
                       {showTgFallback && telegramBotId && (
                         <Button
                           type="button"
