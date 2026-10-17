@@ -1,3 +1,4 @@
+import { ReferralRewardSummary, referralRewardLabel, referralRewardDescription } from "@/components/referral-reward-summary";
 import { ReferralQrLinks } from "@/components/referral-qr";
 import { buildReferralLinks } from "@/lib/referral-links";
 /**
@@ -68,6 +69,8 @@ export function StealthReferral() {
           <p className="text-xs text-zinc-500">Приглашай друзей — получай бонусы</p>
         </div>
       </div>
+
+      {stats && <ReferralRewardSummary stats={stats} />}
 
       {/* KPI card with red border */}
       <div className="relative overflow-hidden rounded-3xl border border-saccent-500/40 bg-zinc-900/40 p-5">
@@ -152,11 +155,11 @@ export function StealthReferral() {
             <TipCard
               tone="rose"
               icon={Repeat}
-              title="За каждую оплату друга"
-              chip={`${Math.round(stats.referralPercent)}%`}
+              title={stats.referralRewardMode && stats.referralRewardMode !== "percent" ? "За первую оплату друга" : "За каждую оплату друга"}
+              chip={referralRewardLabel(stats)}
             >
               <ul className="space-y-1">
-                <li>• 1-й уровень — <strong>{Math.round(stats.referralPercent)}%</strong> от каждой оплаты твоих рефералов</li>
+                <li>{referralRewardDescription(stats)}</li>
                 {stats.referralPercentLevel2 > 0 && (
                   <li>• 2-й уровень — <strong>{Math.round(stats.referralPercentLevel2)}%</strong> от оплат рефералов 2-го уровня</li>
                 )}
@@ -171,8 +174,7 @@ export function StealthReferral() {
               icon={AlertTriangle}
               title="Условия"
             >
-              Бонусы начисляются автоматически на твой баланс после успешной оплаты другом.
-              С баланса можно оплачивать любые тарифы и услуги внутри сервиса.
+              {stats.referralRewardMode === "days" ? "Дни автоматически добавляются к основной подписке. Если её пока нет — бонус сохраняется." : "Бонусы зачисляются на баланс после успешной оплаты другом. С баланса можно оплачивать тарифы и услуги."}
             </TipCard>
           </div>
         )}

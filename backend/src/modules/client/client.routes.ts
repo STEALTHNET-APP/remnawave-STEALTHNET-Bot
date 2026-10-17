@@ -2057,15 +2057,24 @@ clientRouter.get("/referral-stats", async (req, res) => {
     totalWithdrawn = 0;
   }
 
+  const dayRewards = await prisma.referralReward.groupBy({ by: ["appliedAt"], where: { referrerId: client.id, kind: "days" }, _sum: { days: true } });
+  const referralDaysEarned = dayRewards.reduce((sum, row) => sum + (row._sum.days ?? 0), 0);
+  const referralDaysPending = dayRewards.filter(row => !row.appliedAt).reduce((sum, row) => sum + (row._sum.days ?? 0), 0);
   const l1Earned = l1Sum._sum.amount ?? 0;
   const l2Earned = l2Sum._sum.amount ?? 0;
   const totalEarned = l1Earned + l2Earned;
 
   return res.json({
     referralCode: c.referralCode,
-    referralPercent,
-    referralPercentLevel2: config.referralPercentLevel2 ?? 0,
-    referralPercentLevel3: config.referralPercentLevel3 ?? 0,
+    referralRewardMode: config.referralRewardMode,
+    referralRewardAmount: config.referralRewardAmount,
+    referralRewardDays: config.referralRewardDays,
+    referralRewardCurrency: config.defaultCurrency,
+    referralDaysEarned,
+    referralDaysPending,
+    referralPercent: config.referralRewardMode === "percent" ? referralPercent : 0,
+    referralPercentLevel2: config.referralRewardMode === "percent" ? config.referralPercentLevel2 ?? 0 : 0,
+    referralPercentLevel3: config.referralRewardMode === "percent" ? config.referralPercentLevel3 ?? 0 : 0,
     referralCount: c._count.referrals,
     // T-fix (11.05.2026): расширенная статистика
     l1Clicks: c._count.referrals, // переходов = кол-во зарегистрированных по ссылке

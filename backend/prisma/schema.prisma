@@ -142,6 +142,8 @@ model Client {
   payments              Payment[]
   autoRenewTariff       Tariff?             @relation("ClientAutoRenewTariff", fields: [autoRenewTariffId], references: [id], onDelete: SetNull)
   currentTariff         Tariff?             @relation("ClientCurrentTariff", fields: [currentTariffId], references: [id], onDelete: SetNull)
+  referralRewards       ReferralReward[] @relation("ReferralRewardOwner")
+  referralReward        ReferralReward? @relation("ReferralRewardSource")
   referralCredits       ReferralCredit[]
   withdrawalRequests    WithdrawalRequest[]
   promoActivations      PromoActivation[]
@@ -1638,4 +1640,26 @@ model TelegramConsent {
   pendingStart      String?   @map("pending_start")
 
   @@map("telegram_consents")
+}
+
+model ReferralReward {
+  id String @id @default(cuid())
+  refereeId String @unique @map("referee_id")
+  referrerId String @map("referrer_id")
+  paymentId String @unique @map("payment_id")
+  kind String
+  amount Float @default(0)
+  days Int @default(0)
+  currency String
+  subscriptionId String? @map("subscription_id")
+  remnawaveUuid String? @map("remnawave_uuid")
+  targetExpireAt DateTime? @map("target_expire_at")
+  appliedAt DateTime? @map("applied_at")
+  nextAttemptAt DateTime @default(now()) @map("next_attempt_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  referee Client @relation("ReferralRewardSource", fields: [refereeId], references: [id], onDelete: Cascade)
+  referrer Client @relation("ReferralRewardOwner", fields: [referrerId], references: [id], onDelete: Cascade)
+  @@index([referrerId, appliedAt])
+  @@index([kind, appliedAt, nextAttemptAt])
+  @@map("referral_rewards")
 }

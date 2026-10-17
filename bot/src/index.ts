@@ -1,3 +1,4 @@
+import { referralRewardLines } from "./referral-rewards.js";
 import { createTermsGate } from "./terms.js";
 import { DeviceFlow, formatDeviceCount, subscriptionDeviceLimit } from "./device-flow.js";
 import { titleEmojiPrefix } from "./title-emoji.js";
@@ -2425,10 +2426,12 @@ composer.command("referral", async (ctx) => {
       "Telegram Бот:",
       linkBot,
     ];
+    const rewardLines = referralRewardLines(stats);
+    if (rewardLines) lines.splice(2, lines.indexOf("🔗 Ваша реферальная ссылка:") - 2, ...rewardLines);
     if (linkSite) {
       lines.push("", "Сайт:", linkSite);
     }
-    lines.push("", "💡 С реферального баланса можно оплатить подписку или вывести эти средства на свой кошелёк.");
+    lines.push("", stats?.referralRewardMode === "days" ? "💡 Дни продлевают основную подписку автоматически." : "💡 С реферального баланса можно оплатить подписку или вывести эти средства на свой кошелёк.");
     // формат как в gift — `url=` + `text=`.
     // Ссылку В САМ ТЕКСТ НЕ кладём — она уже идёт через параметр `url=` и
     // выводится TG-клиентом ПЕРВОЙ строкой автоматически. Если продублировать
@@ -6777,6 +6780,8 @@ if (data.startsWith("topup_paritypay:")) {
         "Telegram Бот:",
         linkBot,
       ];
+      const rewardLines = referralRewardLines(stats);
+      if (rewardLines) lines.splice(2, lines.indexOf("🔗 Ваша реферальная ссылка:") - 2, ...rewardLines);
       if (linkSite) {
         lines.push("");
         lines.push("Сайт:");
@@ -6784,7 +6789,7 @@ if (data.startsWith("topup_paritypay:")) {
       }
       lines.push("");
       lines.push(
-        (config?.botReferralFooterText ?? "").trim()
+        stats?.referralRewardMode === "days" ? "💡 Дни продлевают основную подписку автоматически." : (config?.botReferralFooterText ?? "").trim()
           || "💡 С реферального баланса можно оплатить подписку или вывести эти средства на свой кошелёк.",
       );
 

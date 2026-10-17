@@ -314,6 +314,13 @@ export async function createWithdrawal(
 
 /** расширенная статистика реферальной программы. */
 export async function getReferralStats(token: string): Promise<{
+  referralRewardMode?: "percent" | "balance" | "days";
+  referralRewardAmount?: number;
+  referralRewardDays?: number;
+  referralRewardCurrency?: string;
+  referralDaysEarned?: number;
+  referralDaysPending?: number;
+
   referralCode: string | null;
   referralPercent: number;
   referralPercentLevel2: number;

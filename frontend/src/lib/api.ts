@@ -3175,6 +3175,13 @@ export interface MarketplaceReportDto {
 }
 
 export interface ClientReferralStats {
+  referralRewardMode?: "percent" | "balance" | "days";
+  referralRewardAmount?: number;
+  referralRewardDays?: number;
+  referralRewardCurrency?: string;
+  referralDaysEarned?: number;
+  referralDaysPending?: number;
+
   referralCode: string | null;
   referralPercent: number;
   referralPercentLevel2: number;
@@ -3337,6 +3344,9 @@ export type UpdateSettingsPayload = {
   activeCurrencies?: string;
   defaultLanguage?: string;
   defaultCurrency?: string;
+  referralRewardMode?: "percent" | "balance" | "days";
+  referralRewardAmount?: number;
+  referralRewardDays?: number;
   defaultReferralPercent?: number;
   referralPercentLevel2?: number;
   referralPercentLevel3?: number;
@@ -3839,6 +3849,9 @@ export interface AdminSettings {
   activeCurrencies: string[];
   defaultLanguage?: string;
   defaultCurrency?: string;
+  referralRewardMode?: "percent" | "balance" | "days";
+  referralRewardAmount?: number;
+  referralRewardDays?: number;
   defaultReferralPercent: number;
   referralPercentLevel2: number;
   referralPercentLevel3: number;

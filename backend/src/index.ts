@@ -1,3 +1,4 @@
+import { startReferralRewardsScheduler, stopReferralRewardsScheduler } from "./modules/referral/referral-rewards.scheduler.js";
 // Установить захват логов в кольцевой буфер ДО первого console.log в импортах.
 // Это даёт нам логи всех последующих вызовов в /api/admin/diagnostics/logs.
 import { installLogCapture } from "./modules/diagnostics/log-buffer.js";
@@ -73,6 +74,7 @@ async function main() {
   await startAutoBroadcastScheduler();
   startContestDailyReminderScheduler(env.CONTEST_REMINDER_CRON ?? undefined);
   startAutoRenewScheduler();
+  startReferralRewardsScheduler();
   startGiftExpiryCron();
   // крон удаления «заброшенных» аккаунтов УДАЛЁН.
   // Он удалял всех с onboardingCompleted=false старше 30 мин — а теперь этот флаг ставится
@@ -95,6 +97,7 @@ async function main() {
   });
   registerCron({ name: "auto-renew", cron: "*/15 * * * *", description: "Авто-продление подписок с баланса/yookassa" });
   registerCron({ name: "gift-expiry", cron: "*/30 * * * *", description: "Истёкшие gift-коды → освобождаем зарезервированные подписки" });
+  registerCron({ name: "referral-days", cron: "* * * * *", description: "Начисление бонусных дней за рефералов" });
   registerCron({ name: "auto-backup", cron: "0 4 * * *", description: "Автоматический бэкап БД" });
   registerCron({ name: "marketplace-heartbeat", cron: "*/10 * * * *", description: "Heartbeat в маркетплейс-хаб" });
 
@@ -104,6 +107,7 @@ async function main() {
 
   const shutdown = async () => {
     stopAutoBroadcastScheduler();
+    stopReferralRewardsScheduler();
     stopBroadcastStaleScheduler();
     stopContestDailyReminderScheduler();
     stopAutoBackupScheduler();

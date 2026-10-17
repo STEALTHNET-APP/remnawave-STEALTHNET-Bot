@@ -2865,7 +2865,10 @@ const updateSettingsSchema = z.object({
   activeCurrencies: z.string().optional(),
   defaultLanguage: z.string().max(10).optional(),
   defaultCurrency: z.string().max(10).optional(),
-  defaultReferralPercent: z.number().optional(),
+  referralRewardMode: z.enum(["percent", "balance", "days"]).optional(),
+  referralRewardAmount: z.number().finite().min(0.01).max(1000000).multipleOf(0.01).optional(),
+  referralRewardDays: z.number().int().min(1).max(365).optional(),
+  defaultReferralPercent: z.number().min(0).max(100).optional(),
   referralPercentLevel2: z.number().min(0).max(100).optional(),
   referralPercentLevel3: z.number().min(0).max(100).optional(),
   trialDays: z.number().int().min(0).optional(),
@@ -3231,6 +3234,21 @@ adminRouter.patch("/settings", async (req, res) => {
       update: { value: updates.defaultCurrency },
     });
   }
+  const referralSettings = [
+    ["referral_reward_mode", updates.referralRewardMode],
+    ["referral_reward_amount", updates.referralRewardAmount],
+    ["referral_reward_days", updates.referralRewardDays],
+  ] as const;
+  await prisma.$transaction(async tx => {
+    const previous = await tx.systemSetting.findUnique({ where: { key: "referral_reward_mode" } });
+    if (updates.referralRewardMode && updates.referralRewardMode !== "percent" && (!previous || previous.value === "percent")) {
+      const now = new Date().toISOString();
+      await tx.systemSetting.upsert({ where: { key: "referral_reward_enabled_at" }, create: { key: "referral_reward_enabled_at", value: now }, update: { value: now } });
+    }
+    for (const [key, value] of referralSettings) {
+      if (value !== undefined) await tx.systemSetting.upsert({ where: { key }, create: { key, value: String(value) }, update: { value: String(value) } });
+    }
+  });
   if (updates.defaultReferralPercent != null) {
     await prisma.systemSetting.upsert({
       where: { key: "default_referral_percent" },

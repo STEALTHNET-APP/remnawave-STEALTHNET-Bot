@@ -98,6 +98,7 @@ export function generateReferralCode(): string {
 const SYSTEM_CONFIG_KEYS = [
   "active_languages", "active_currencies", "default_language", "default_currency",
   "default_referral_percent", "referral_percent_level_2", "referral_percent_level_3",
+  "referral_reward_mode", "referral_reward_amount", "referral_reward_days", "referral_reward_enabled_at",
   "trial_days", "trial_squad_uuid", "trial_device_limit", "trial_traffic_limit",
   "service_name", "service_description", "logo", "logo_bot", "favicon", "remna_client_url",
   // UI design selector for client cabinet/mini app: "classic" (default) | "stealth" | "aurora"
@@ -576,6 +577,10 @@ async function loadSystemConfigFromDb() {
     activeCurrencies: activeCurrs,
     defaultLanguage: map.default_language && activeLangs.includes(map.default_language) ? map.default_language : activeLangs[0] ?? "ru",
     defaultCurrency: map.default_currency && activeCurrs.includes(map.default_currency) ? map.default_currency : activeCurrs[0] ?? "usd",
+    referralRewardMode: (map.referral_reward_mode === "balance" || map.referral_reward_mode === "days" ? map.referral_reward_mode : "percent") as "percent" | "balance" | "days",
+    referralRewardEnabledAt: map.referral_reward_enabled_at || null,
+    referralRewardAmount: Number(map.referral_reward_amount || "50"),
+    referralRewardDays: Number(map.referral_reward_days || "3"),
     defaultReferralPercent: parseFloat(map.default_referral_percent || "30"),
     referralPercentLevel2: parseFloat(map.referral_percent_level_2 || "10"),
     referralPercentLevel3: parseFloat(map.referral_percent_level_3 || "10"),
@@ -1320,6 +1325,9 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     botTariffsFields: full.botTariffsFields ?? DEFAULT_BOT_TARIFF_LINE_FIELDS,
     botPaymentText: full.botPaymentText ?? DEFAULT_BOT_PAYMENT_TEXT,
     categoryEmojis: full.categoryEmojis,
+    referralRewardMode: full.referralRewardMode,
+    referralRewardAmount: full.referralRewardAmount,
+    referralRewardDays: full.referralRewardDays,
     defaultReferralPercent: full.defaultReferralPercent ?? 0,
     referralPercentLevel2: full.referralPercentLevel2 ?? 0,
     referralPercentLevel3: full.referralPercentLevel3 ?? 0,

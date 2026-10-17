@@ -58,6 +58,10 @@ export function getReferralBaseAmount(amount: number, metadata: string | null | 
  */
 export async function distributeReferralRewards(paymentId: string): Promise<{ distributed: boolean; message: string }> {
   const config = await getSystemConfig();
+  if (config.referralRewardMode && config.referralRewardMode !== "percent") {
+    const { grantReferralReward } = await import("./referral-rewards.service.js");
+    return grantReferralReward(paymentId, config);
+  }
   const p1 = config.defaultReferralPercent;
   const p2 = config.referralPercentLevel2;
   const p3 = config.referralPercentLevel3;

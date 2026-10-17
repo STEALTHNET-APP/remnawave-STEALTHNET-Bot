@@ -1,3 +1,4 @@
+import { ReferralRewardSummary, referralRewardDescription } from "@/components/referral-reward-summary";
 import { ReferralQrLinks } from "@/components/referral-qr";
 import { buildReferralLinks } from "@/lib/referral-links";
 /**
@@ -117,8 +118,10 @@ export function AuroraReferral() {
     <div className="space-y-3">
       <header className="px-1 pb-1">
         <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">Друзья</h1>
-        <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">Приглашайте — получайте процент с их оплат</p>
+        <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">{stats ? referralRewardDescription(stats) : "Приглашайте друзей — получайте бонусы"}</p>
       </header>
+
+      {stats && <ReferralRewardSummary stats={stats} />}
 
       {/* ── Накоплено и друзья ── */}
       <section className="relative overflow-hidden rounded-[26px] bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] p-5 text-white">
@@ -179,7 +182,7 @@ export function AuroraReferral() {
           {[
             "Отправьте ссылку другу — в чат, сторис или куда удобно.",
             "Друг переходит по ней и оформляет подписку.",
-            "Процент с его оплаты падает вам на баланс — им можно платить за свою подписку.",
+            stats ? referralRewardDescription(stats) : "Получайте бонусы за приглашения.",
           ].map((step, i) => (
             <li key={i} className="flex gap-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-[13px] font-bold text-white">

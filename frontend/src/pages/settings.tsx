@@ -464,6 +464,9 @@ export function SettingsPage() {
       ...data,
       activeLanguages: (data.activeLanguages || []).filter((l: string) => allowed.includes(l)),
       activeCurrencies: (data.activeCurrencies || []).filter((c: string) => ALLOWED_CURRENCIES.includes(c)),
+      referralRewardMode: data.referralRewardMode ?? "percent",
+      referralRewardAmount: data.referralRewardAmount ?? 50,
+      referralRewardDays: data.referralRewardDays ?? 3,
       defaultReferralPercent: data.defaultReferralPercent ?? 30,
       referralPercentLevel2: (data as AdminSettings).referralPercentLevel2 ?? 10,
       referralPercentLevel3: (data as AdminSettings).referralPercentLevel3 ?? 10,
@@ -801,6 +804,9 @@ export function SettingsPage() {
         activeCurrencies: currs.length ? currs.join(",") : ALLOWED_CURRENCIES.join(","),
         defaultLanguage: defaultLang,
         defaultCurrency: defaultCurr,
+        referralRewardMode: settings.referralRewardMode ?? "percent",
+        referralRewardAmount: settings.referralRewardAmount ?? 50,
+        referralRewardDays: settings.referralRewardDays ?? 3,
         defaultReferralPercent: settings.defaultReferralPercent,
         referralPercentLevel2: settings.referralPercentLevel2 ?? 10,
         referralPercentLevel3: settings.referralPercentLevel3 ?? 10,
@@ -2675,11 +2681,32 @@ export function SettingsPage() {
                     <h2 className="text-xl font-bold tracking-tight text-foreground">
                       {t("admin.settings.referral_title")}
                     </h2>
-                    <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.referral_subtitle")}</p>
+                    <p className="text-[12.5px] text-muted-foreground mt-1">{(settings.referralRewardMode ?? "percent") === "percent" ? t("admin.settings.referral_subtitle") : "Выберите награду за первую успешную оплату приглашённого друга."}</p>
                   </div>
                 </div>
               </div>
               <CardContent className="space-y-5 p-4 sm:p-4">
+                <div className="rounded-xl border border-border bg-card/50 p-4 space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="referral-reward-mode">Награда за реферала</Label>
+                    <select id="referral-reward-mode" className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={settings.referralRewardMode ?? "percent"} onChange={e => setSettings(s => s ? { ...s, referralRewardMode: e.target.value as "percent" | "balance" | "days" } : s)}>
+                      <option value="percent">Процент от оплат</option>
+                      <option value="balance">Фиксированная сумма на баланс</option>
+                      <option value="days">Дни подписки</option>
+                    </select>
+                  </div>
+                  {(settings.referralRewardMode ?? "percent") !== "percent" && <p className="text-xs text-muted-foreground">Разовый бонус за первую успешную оплату прямого реферала. Повторные оплаты бонус не дают. Проценты 2-го и 3-го уровней в этом режиме не начисляются.</p>}
+                  {settings.referralRewardMode === "balance" && <div className="space-y-2">
+                    <Label htmlFor="referral-reward-amount">Сумма бонуса ({settings.defaultCurrency?.toUpperCase()})</Label>
+                    <Input id="referral-reward-amount" type="number" min={0.01} max={1000000} step={0.01} value={settings.referralRewardAmount ?? 50} onChange={e => setSettings(s => s ? { ...s, referralRewardAmount: Number(e.target.value) } : s)} />
+                  </div>}
+                  {settings.referralRewardMode === "days" && <div className="space-y-2">
+                    <Label htmlFor="referral-reward-days">Дней за одного реферала</Label>
+                    <Input id="referral-reward-days" type="number" min={1} max={365} step={1} value={settings.referralRewardDays ?? 3} onChange={e => setSettings(s => s ? { ...s, referralRewardDays: Number(e.target.value) } : s)} />
+                    <p className="text-xs text-muted-foreground">Дни добавляются к основной подписке. Если подписки ещё нет, бонус сохранится и применится после её появления.</p>
+                  </div>}
+                </div>
+                {(settings.referralRewardMode ?? "percent") === "percent" && <>
                 <div className="rounded-xl border border-violet-500/20 bg-muted p-4 space-y-4">
                   <div className="flex items-center gap-2.5">
                     <h3 className="text-base font-semibold">3-уровневая реферальная сеть</h3>
@@ -2742,6 +2769,8 @@ export function SettingsPage() {
                     </div>
                   </div>
                 </div>
+
+                </>}
 
                 {/* заявки на вывод реф. баланса: вкл/выкл + мин. сумма.
                     Выключение прячет кнопку в боте и блок в кабинете/на сайте. */}
