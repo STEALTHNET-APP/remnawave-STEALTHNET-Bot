@@ -121,7 +121,7 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) requestClose(); else onOpenChange(true); }}>
-      <DialogContent ref={contentRef} className="max-w-2xl p-0 gap-0 overflow-hidden border-border/50 bg-card/95 backdrop-blur-xl">
+      <DialogContent ref={contentRef} className="max-w-2xl p-0 gap-0 overflow-hidden border-border/50 bg-card/95 backdrop-blur-xl [&>button]:z-20">
         {/* Декоративные blur-блобы — pointer-events-none чтобы не перекрывали крестик закрытия. */}
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 rounded-full bg-emerald-500/15 blur-[80px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-40 h-40 rounded-full bg-violet-500/15 blur-[80px] pointer-events-none" />

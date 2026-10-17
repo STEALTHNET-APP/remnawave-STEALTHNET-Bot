@@ -2224,6 +2224,7 @@ async function handleStart(ctx: Context, payload: string) {
       hasSupportLinks,
       showTickets: config?.ticketsEnabled === true,
       showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
+      menuMode: config?.botMenuMode ?? "classic",
       buttonsPerRow: config?.botButtonsPerRow ?? 1,
       remnaSubscriptionUrl: config?.useRemnaSubscriptionPage ? vpnUrl : null,
     });
@@ -2819,6 +2820,7 @@ composer.on("callback_query:data", async (ctx) => {
         hasSupportLinks,
         showTickets: config?.ticketsEnabled === true,
         showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
+        menuMode: config?.botMenuMode ?? "classic",
         buttonsPerRow: config?.botButtonsPerRow ?? 1,
         remnaSubscriptionUrl: config?.useRemnaSubscriptionPage ? vpnUrl : null,
       });
@@ -3460,6 +3462,7 @@ composer.on("callback_query:data", async (ctx) => {
         hasSupportLinks,
         showTickets: config?.ticketsEnabled === true,
         showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
+        menuMode: config?.botMenuMode ?? "classic",
         buttonsPerRow: config?.botButtonsPerRow ?? 1,
         remnaSubscriptionUrl: config?.useRemnaSubscriptionPage ? vpnUrl : null,
       });

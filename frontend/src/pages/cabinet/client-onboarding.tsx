@@ -1,7 +1,8 @@
+import { clientMenuReturnTo } from "@/lib/client-menu-return";
 import { PasswordHint } from "@/components/password-hint";
 import { onboardingSteps, nextOnboardingStep, type OnboardingStep } from "@/lib/client-onboarding";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, KeyRound, Mail, Shield, Check, Eye, EyeOff, Loader2, ChevronRight } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -142,6 +143,7 @@ export function ClientOnboardingPage() {
   const { state, refreshProfile, clearNewTelegramUser } = useClientAuth();
   const config = useCabinetConfig();
   const navigate = useNavigate();
+  const location = useLocation();
   const token = state.token;
   const client = state.client;
   // T-onb-email (27.05.2026, WolfVPN): нужна ли верификация email через письмо.
@@ -221,7 +223,7 @@ export function ClientOnboardingPage() {
       setExitOverlay(true);
       setTimeout(() => {
         clearNewTelegramUser();
-        navigate("/cabinet/dashboard", { replace: true });
+        navigate(clientMenuReturnTo(location.state?.returnTo), { replace: true });
       }, 600);
     } catch {
       setDoneLoading(false);

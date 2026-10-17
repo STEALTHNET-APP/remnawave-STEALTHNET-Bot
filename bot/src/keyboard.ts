@@ -1,3 +1,4 @@
+import { menuWebAppUrl } from "./menu-web-app.js";
 import { isBotButtonUrl } from "./button-url.js";
 /**
  * Inline-клавиатуры с цветными кнопками (Telegram Bot API: style — primary, success, danger).
@@ -230,6 +231,7 @@ export function mainMenu(opts: {
   showTickets?: boolean;
   showExtraOptions?: boolean;
   showGift?: boolean;
+  menuMode?: "classic" | "web";
   /** Кнопок в ряд: 1 или 2 (по умолчанию 1) */
   buttonsPerRow?: 1 | 2;
   /** URL страницы подписки Remna (если задан — кнопка VPN ведёт туда) */
@@ -292,6 +294,11 @@ export function mainMenu(opts: {
       const url = b.url?.trim() ?? "";
       if (!isBotButtonUrl(url) || !labelForIcon.trim()) continue;
       const node: UrlButton = { text: labelForIcon, url };
+      if (iconId) node.icon_custom_emoji_id = iconId;
+      if (styleForBtn) node.style = styleForBtn;
+      items.push({ node, onePerRow });
+    } else if (opts.menuMode === "web" && menuWebAppUrl(base, b.id)) {
+      const node: WebAppButton = { text: labelForIcon, web_app: { url: menuWebAppUrl(base, b.id)! } };
       if (iconId) node.icon_custom_emoji_id = iconId;
       if (styleForBtn) node.style = styleForBtn;
       items.push({ node, onePerRow });

@@ -1,0 +1,10 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const ts = require('typescript');
+const moduleScope = { exports: {}, URL, Set };
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/client-menu-return.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, moduleScope);
+const resolve = moduleScope.exports.clientMenuReturnTo;
+for (const path of ['/cabinet/tariffs', '/cabinet/menu/promocode', '/cabinet/menu/topup', '/cabinet/subscribe?uuid=test#connect']) assert.equal(resolve(path), path);
+for (const path of [undefined, null, {}, '//evil.example', 'https://evil.example', '/cabinet/login', '/cabinet/onboarding', '/cabinet/menu/../../admin', '/cabinet/menu/unknown']) assert.equal(resolve(path), '/cabinet/dashboard');
+console.log('PASS: onboarding preserves cabinet destinations and rejects external/unknown return paths');

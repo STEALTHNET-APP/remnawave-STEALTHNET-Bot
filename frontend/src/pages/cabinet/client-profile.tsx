@@ -53,7 +53,7 @@ export function ClientProfilePage() {
   return <ClassicProfilePage />;
 }
 
-function ClassicProfilePage({ aurora = false }: { aurora?: boolean }) {
+export function ClassicProfilePage({ aurora = false, topupOnly = false }: { aurora?: boolean; topupOnly?: boolean }) {
   const { t } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
   const [payments, setPayments] = useState<ClientPayment[]>([]);
@@ -610,6 +610,229 @@ async function startTopUpParitypay() {
   const isTgMiniapp = isMiniapp && Boolean((window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData?.trim());
   const cardClass = isMiniapp ? "min-w-0 overflow-hidden" : "";
 
+  const topupCard = (plategaMethods.length > 0 || yoomoneyEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled) && (
+          <div id="topup" className="relative flex flex-col rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)]">
+            <div className="absolute inset-0 overflow-hidden rounded-[2rem] border border-white/10 dark:border-white/5 bg-background/40 backdrop-blur-2xl">
+              <div className="absolute -top-32 -left-32 h-64 w-64 rounded-full bg-primary/20 blur-[80px] pointer-events-none" />
+            </div>
+
+            <div className="relative p-6 sm:p-8 flex flex-col h-full">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-inner shrink-0">
+                  <CreditCard className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold tracking-tight text-foreground">{t("cabinet.profile.top_up_balance")}</h3>
+                  <p className="text-sm text-muted-foreground mt-0.5">{t("cabinet.profile.top_up_opens_tab")}</p>
+                </div>
+              </div>
+
+              <div className="space-y-6 mt-auto">
+                <div className="relative flex h-32 w-full items-center justify-center rounded-3xl border border-border/50 bg-background/50 shadow-sm transition-all focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20">
+                  <Input
+                    type="number"
+                    min={1}
+                    step={0.01}
+                    placeholder="0"
+                    value={topUpAmount}
+                    onChange={(e) => setTopUpAmount(e.target.value)}
+                    className="absolute inset-0 h-full w-full border-0 bg-transparent px-20 text-center text-5xl sm:text-6xl font-extrabold tracking-tighter shadow-none focus-visible:ring-0"
+                    style={{ WebkitAppearance: "none", MozAppearance: "textfield" }}
+                  />
+                  <span className="pointer-events-none absolute right-[12%] top-1/2 -translate-y-1/2 text-2xl sm:text-3xl font-bold text-muted-foreground uppercase opacity-80">
+                    {currency}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2">
+                  {[100, 300, 500, 1000].map((n) => {
+                    const isActive = topUpAmount === String(n);
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setTopUpAmount(String(n))}
+                        className={cn(
+                          "flex items-center justify-center rounded-2xl py-3 text-sm font-bold transition-all duration-300",
+                          isActive
+                            ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105"
+                            : "bg-muted/60 text-foreground hover:bg-muted hover:scale-105"
+                        )}
+                      >
+                        {n}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {topUpError && (
+                  <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-center text-sm font-medium text-destructive">
+                    {topUpError}
+                  </div>
+                )}
+
+                <Button
+                  className="group relative w-full overflow-hidden rounded-2xl py-7 text-lg font-bold shadow-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-primary/25"
+                  onClick={() => {
+                    const amount = Number(topUpAmount?.replace(",", "."));
+                    if (!Number.isFinite(amount) || amount < 1) {
+                      setTopUpError(t("cabinet.profile.top_up_min"));
+                      return;
+                    }
+                    setTopUpError(null);
+                    setTopUpModalOpen(true);
+                  }}
+                >
+                  <div className="absolute inset-0 bg-white/20 translate-y-full transition-transform duration-300 group-hover:translate-y-0" />
+                  <span className="relative flex items-center justify-center gap-2">
+                    <CreditCard className="h-5 w-5" />
+                    {t("cabinet.profile.top_up_pay")} {topUpAmount ? `${topUpAmount} ${currency.toUpperCase()}` : ""}
+                  </span>
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+  const topupDialog = (<Dialog
+        open={topUpModalOpen}
+        onOpenChange={(open) => {
+          if (topUpLoading) return;
+          setTopUpModalOpen(open);
+          if (!open) setReadyUrl(null);
+        }}
+      >
+        <DialogContent className="max-w-md p-6 rounded-3xl border border-border/50 bg-card/60 backdrop-blur-3xl shadow-2xl" showCloseButton={!topUpLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
+          <DialogHeader className="mb-4 text-center sm:text-left">
+            <DialogTitle className="text-2xl font-bold flex items-center justify-center sm:justify-start gap-2">
+              <div className="p-2 bg-primary/10 rounded-xl">
+                <Wallet className="h-6 w-6 text-primary" />
+              </div>
+              {t("cabinet.profile.payment_method")}
+            </DialogTitle>
+            <DialogDescription className="text-base font-medium mt-2">
+              <div className="flex flex-col gap-2 mt-4 bg-background/50 p-4 rounded-2xl border border-border/50 text-left relative overflow-hidden group">
+                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="flex justify-between items-center relative z-10">
+                  <span className="text-muted-foreground">{t("cabinet.profile.top_up_to_pay")}</span>
+                  <span className="font-bold text-xl text-primary">
+                    {topUpAmount ? formatMoney(Number(topUpAmount.replace(",", ".")), currency.toUpperCase()) : "—"}
+                  </span>
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+
+          {topUpError && (
+            <div className="p-3 mb-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm text-center font-medium animate-in fade-in slide-in-from-top-2">
+              {topUpError}
+            </div>
+          )}
+
+          {readyUrl ? (
+            <PayNowPanel
+              url={readyUrl.url}
+              provider={readyUrl.provider}
+              onBack={() => setReadyUrl(null)}
+              onPaid={() => {
+                const pid = readyUrl.paymentId;
+                const u = readyUrl.url, prov = readyUrl.provider;
+                setTopUpModalOpen(false); setReadyUrl(null);
+                if (pid) navigate(`/cabinet/payment-wait?id=${encodeURIComponent(pid)}&kind=topup`, { state: { url: u, provider: prov } });
+              }}
+            />
+          ) : (
+          <div className="flex flex-col gap-3">
+            {(() => {
+              const providerLabel = (id: string, fallback: string) => paymentProviders.find((p) => p.id === id)?.label || fallback;
+              const btnCls = cn("w-full", isMiniapp ? "justify-start gap-4 px-6 h-16 rounded-2xl border-white/5 bg-card/40 hover:bg-card/60" : "gap-3 hover:bg-background/80 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-xl h-14 border-border/50 group justify-center px-6 relative");
+
+              const colorMap: Record<string, { bg10: string; bg20: string; text: string }> = {
+                cryptopay: { bg10: "bg-yellow-500/10", bg20: "group-hover:bg-yellow-500/20", text: "text-yellow-500" },
+                heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
+                rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                paritypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                yookassa: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
+                yoomoney: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
+                lava: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                overpay: { bg10: "bg-indigo-500/10", bg20: "group-hover:bg-indigo-500/20", text: "text-indigo-500" },
+              };
+
+              type ProviderEntry = { id: string; enabled: boolean; onClick: () => void; label: string; icon: "crypto" | "card" };
+              const providers: ProviderEntry[] = [
+                { id: "cryptopay", enabled: cryptopayEnabled, onClick: () => startTopUpCryptopay(), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
+                { id: "heleket", enabled: heleketEnabled, onClick: () => startTopUpHeleket(), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
+                { id: "rollypay", enabled: rollypayEnabled, onClick: () => startTopUpRollypay(), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
+                { id: "paritypay", enabled: paritypayEnabled, onClick: () => startTopUpParitypay(), label: providerLabel("paritypay", "ParityPay"), icon: "card" },
+                { id: "yookassa", enabled: yookassaEnabled, onClick: () => startTopUpYookassa(), label: providerLabel("yookassa", t("cabinet.tariffs.sbp_cards_ru")), icon: "card" },
+                { id: "yoomoney", enabled: yoomoneyEnabled, onClick: () => startTopUpYoomoneyForm("AC"), label: providerLabel("yoomoney", t("cabinet.tariffs.yoomoney_cards")), icon: "card" },
+                { id: "lava", enabled: lavaEnabled && currency.toLowerCase() === "rub", onClick: () => startTopUpLava(), label: providerLabel("lava", "LAVA"), icon: "card" },
+                // Lava.top — только subscription для тарифов, не для top-up баланса
+                { id: "overpay", enabled: overpayEnabled, onClick: () => startTopUpOverpay(), label: providerLabel("overpay", "Overpay"), icon: "card" },
+              ];
+
+              const sortedProviders = paymentProviders.length > 0
+                ? paymentProviders.map((pp) => providers.find((p) => p.id === pp.id)).filter((p): p is ProviderEntry => !!p)
+                : providers;
+
+              return (
+                <>
+                  {sortedProviders.filter((p) => p.enabled).map((p) => {
+                    const c = colorMap[p.id] ?? colorMap.yookassa;
+                    return (
+                    <Button key={p.id} size="lg" variant="outline" onClick={p.onClick} disabled={topUpLoading} className={btnCls}>
+                      {isMiniapp ? (
+                        <>
+                          <div className={cn("p-2 rounded-xl", c.bg10)}>
+                            {topUpLoading ? <Loader2 className={cn("h-6 w-6 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-6 w-6", c.text)} /> : <CreditCard className={cn("h-6 w-6", c.text)} />}
+                          </div>
+                          <span className="text-base font-bold">{p.label}</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className={cn("absolute left-6 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20)}>
+                            {topUpLoading ? <Loader2 className={cn("h-5 w-5 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-5 w-5", c.text)} /> : <CreditCard className={cn("h-5 w-5", c.text)} />}
+                          </div>
+                          <span className="text-base font-medium">{p.label}</span>
+                        </>
+                      )}
+                    </Button>
+                    );
+                  })}
+                  {plategaMethods.map((m) => (
+                    <Button key={m.id} size="lg" variant="outline" onClick={() => startTopUp(m.id)} disabled={topUpLoading} className={btnCls}>
+                      {isMiniapp ? (
+                        <>
+                          <div className="p-2 rounded-xl bg-green-500/10">
+                            {topUpLoading ? <Loader2 className="h-6 w-6 animate-spin text-green-500" /> : <CreditCard className="h-6 w-6 text-green-500" />}
+                          </div>
+                          <span className="text-base font-bold">{m.label}</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="absolute left-6 p-1.5 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
+                            {topUpLoading ? <Loader2 className="h-5 w-5 animate-spin text-green-500" /> : <CreditCard className="h-5 w-5 text-green-500" />}
+                          </div>
+                          <span className="text-base font-medium">{m.label}</span>
+                        </>
+                      )}
+                    </Button>
+                  ))}
+                </>
+              );
+            })()}
+          </div>
+          )}
+          {!readyUrl && (
+          <DialogFooter className="mt-4 sm:justify-center border-t border-border/50 pt-4">
+            <Button variant="ghost" onClick={() => setTopUpModalOpen(false)} disabled={topUpLoading} className="rounded-xl hover:bg-background/50 hover:text-foreground text-muted-foreground transition-colors">
+              {t("cabinet.profile.cancel")}
+            </Button>
+          </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>);
+  if (topupOnly) return <div className="space-y-4">{topupCard || <p className="rounded-xl border border-border bg-card p-4">Пополнение баланса сейчас недоступно.</p>}{topupDialog}</div>;
+
   return (
     <div className="space-y-6 w-full min-w-0 pb-10">
       {aurora ? <div className="au-profile">
@@ -1048,89 +1271,7 @@ async function startTopUpParitypay() {
         transition={{ duration: 0.3, delay: 0.1 }}
         className={`grid gap-6 ${isMiniapp ? "grid-cols-1" : "lg:grid-cols-2"} min-w-0`}
       >
-        {(plategaMethods.length > 0 || yoomoneyEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled) && (
-          <div id="topup" className="relative flex flex-col rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)]">
-            <div className="absolute inset-0 overflow-hidden rounded-[2rem] border border-white/10 dark:border-white/5 bg-background/40 backdrop-blur-2xl">
-              <div className="absolute -top-32 -left-32 h-64 w-64 rounded-full bg-primary/20 blur-[80px] pointer-events-none" />
-            </div>
-
-            <div className="relative p-6 sm:p-8 flex flex-col h-full">
-              <div className="flex items-center gap-4 mb-8">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-inner shrink-0">
-                  <CreditCard className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold tracking-tight text-foreground">{t("cabinet.profile.top_up_balance")}</h3>
-                  <p className="text-sm text-muted-foreground mt-0.5">{t("cabinet.profile.top_up_opens_tab")}</p>
-                </div>
-              </div>
-
-              <div className="space-y-6 mt-auto">
-                <div className="relative flex h-32 w-full items-center justify-center rounded-3xl border border-border/50 bg-background/50 shadow-sm transition-all focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20">
-                  <Input
-                    type="number"
-                    min={1}
-                    step={0.01}
-                    placeholder="0"
-                    value={topUpAmount}
-                    onChange={(e) => setTopUpAmount(e.target.value)}
-                    className="absolute inset-0 h-full w-full border-0 bg-transparent px-20 text-center text-5xl sm:text-6xl font-extrabold tracking-tighter shadow-none focus-visible:ring-0"
-                    style={{ WebkitAppearance: "none", MozAppearance: "textfield" }}
-                  />
-                  <span className="pointer-events-none absolute right-[12%] top-1/2 -translate-y-1/2 text-2xl sm:text-3xl font-bold text-muted-foreground uppercase opacity-80">
-                    {currency}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-4 gap-2">
-                  {[100, 300, 500, 1000].map((n) => {
-                    const isActive = topUpAmount === String(n);
-                    return (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => setTopUpAmount(String(n))}
-                        className={cn(
-                          "flex items-center justify-center rounded-2xl py-3 text-sm font-bold transition-all duration-300",
-                          isActive
-                            ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105"
-                            : "bg-muted/60 text-foreground hover:bg-muted hover:scale-105"
-                        )}
-                      >
-                        {n}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {topUpError && (
-                  <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-center text-sm font-medium text-destructive">
-                    {topUpError}
-                  </div>
-                )}
-
-                <Button
-                  className="group relative w-full overflow-hidden rounded-2xl py-7 text-lg font-bold shadow-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-primary/25"
-                  onClick={() => {
-                    const amount = Number(topUpAmount?.replace(",", "."));
-                    if (!Number.isFinite(amount) || amount < 1) {
-                      setTopUpError(t("cabinet.profile.top_up_min"));
-                      return;
-                    }
-                    setTopUpError(null);
-                    setTopUpModalOpen(true);
-                  }}
-                >
-                  <div className="absolute inset-0 bg-white/20 translate-y-full transition-transform duration-300 group-hover:translate-y-0" />
-                  <span className="relative flex items-center justify-center gap-2">
-                    <CreditCard className="h-5 w-5" />
-                    {t("cabinet.profile.top_up_pay")} {topUpAmount ? `${topUpAmount} ${currency.toUpperCase()}` : ""}
-                  </span>
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        {topupCard}
 
         <div className="relative flex flex-col rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)] min-h-[400px]">
           <div className="absolute inset-0 overflow-hidden rounded-[2rem] border border-white/10 dark:border-white/5 bg-background/40 backdrop-blur-2xl">
@@ -1247,144 +1388,7 @@ async function startTopUpParitypay() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={topUpModalOpen}
-        onOpenChange={(open) => {
-          if (topUpLoading) return;
-          setTopUpModalOpen(open);
-          if (!open) setReadyUrl(null);
-        }}
-      >
-        <DialogContent className="max-w-md p-6 rounded-3xl border border-border/50 bg-card/60 backdrop-blur-3xl shadow-2xl" showCloseButton={!topUpLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
-          <DialogHeader className="mb-4 text-center sm:text-left">
-            <DialogTitle className="text-2xl font-bold flex items-center justify-center sm:justify-start gap-2">
-              <div className="p-2 bg-primary/10 rounded-xl">
-                <Wallet className="h-6 w-6 text-primary" />
-              </div>
-              {t("cabinet.profile.payment_method")}
-            </DialogTitle>
-            <DialogDescription className="text-base font-medium mt-2">
-              <div className="flex flex-col gap-2 mt-4 bg-background/50 p-4 rounded-2xl border border-border/50 text-left relative overflow-hidden group">
-                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                <div className="flex justify-between items-center relative z-10">
-                  <span className="text-muted-foreground">{t("cabinet.profile.top_up_to_pay")}</span>
-                  <span className="font-bold text-xl text-primary">
-                    {topUpAmount ? formatMoney(Number(topUpAmount.replace(",", ".")), currency.toUpperCase()) : "—"}
-                  </span>
-                </div>
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-
-          {topUpError && (
-            <div className="p-3 mb-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm text-center font-medium animate-in fade-in slide-in-from-top-2">
-              {topUpError}
-            </div>
-          )}
-
-          {readyUrl ? (
-            <PayNowPanel
-              url={readyUrl.url}
-              provider={readyUrl.provider}
-              onBack={() => setReadyUrl(null)}
-              onPaid={() => {
-                const pid = readyUrl.paymentId;
-                const u = readyUrl.url, prov = readyUrl.provider;
-                setTopUpModalOpen(false); setReadyUrl(null);
-                if (pid) navigate(`/cabinet/payment-wait?id=${encodeURIComponent(pid)}&kind=topup`, { state: { url: u, provider: prov } });
-              }}
-            />
-          ) : (
-          <div className="flex flex-col gap-3">
-            {(() => {
-              const providerLabel = (id: string, fallback: string) => paymentProviders.find((p) => p.id === id)?.label || fallback;
-              const btnCls = cn("w-full", isMiniapp ? "justify-start gap-4 px-6 h-16 rounded-2xl border-white/5 bg-card/40 hover:bg-card/60" : "gap-3 hover:bg-background/80 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 rounded-xl h-14 border-border/50 group justify-center px-6 relative");
-
-              const colorMap: Record<string, { bg10: string; bg20: string; text: string }> = {
-                cryptopay: { bg10: "bg-yellow-500/10", bg20: "group-hover:bg-yellow-500/20", text: "text-yellow-500" },
-                heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
-                rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
-                paritypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
-                yookassa: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
-                yoomoney: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
-                lava: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
-                overpay: { bg10: "bg-indigo-500/10", bg20: "group-hover:bg-indigo-500/20", text: "text-indigo-500" },
-              };
-
-              type ProviderEntry = { id: string; enabled: boolean; onClick: () => void; label: string; icon: "crypto" | "card" };
-              const providers: ProviderEntry[] = [
-                { id: "cryptopay", enabled: cryptopayEnabled, onClick: () => startTopUpCryptopay(), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
-                { id: "heleket", enabled: heleketEnabled, onClick: () => startTopUpHeleket(), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
-                { id: "rollypay", enabled: rollypayEnabled, onClick: () => startTopUpRollypay(), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
-                { id: "paritypay", enabled: paritypayEnabled, onClick: () => startTopUpParitypay(), label: providerLabel("paritypay", "ParityPay"), icon: "card" },
-                { id: "yookassa", enabled: yookassaEnabled, onClick: () => startTopUpYookassa(), label: providerLabel("yookassa", t("cabinet.tariffs.sbp_cards_ru")), icon: "card" },
-                { id: "yoomoney", enabled: yoomoneyEnabled, onClick: () => startTopUpYoomoneyForm("AC"), label: providerLabel("yoomoney", t("cabinet.tariffs.yoomoney_cards")), icon: "card" },
-                { id: "lava", enabled: lavaEnabled && currency.toLowerCase() === "rub", onClick: () => startTopUpLava(), label: providerLabel("lava", "LAVA"), icon: "card" },
-                // Lava.top — только subscription для тарифов, не для top-up баланса
-                { id: "overpay", enabled: overpayEnabled, onClick: () => startTopUpOverpay(), label: providerLabel("overpay", "Overpay"), icon: "card" },
-              ];
-
-              const sortedProviders = paymentProviders.length > 0
-                ? paymentProviders.map((pp) => providers.find((p) => p.id === pp.id)).filter((p): p is ProviderEntry => !!p)
-                : providers;
-
-              return (
-                <>
-                  {sortedProviders.filter((p) => p.enabled).map((p) => {
-                    const c = colorMap[p.id] ?? colorMap.yookassa;
-                    return (
-                    <Button key={p.id} size="lg" variant="outline" onClick={p.onClick} disabled={topUpLoading} className={btnCls}>
-                      {isMiniapp ? (
-                        <>
-                          <div className={cn("p-2 rounded-xl", c.bg10)}>
-                            {topUpLoading ? <Loader2 className={cn("h-6 w-6 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-6 w-6", c.text)} /> : <CreditCard className={cn("h-6 w-6", c.text)} />}
-                          </div>
-                          <span className="text-base font-bold">{p.label}</span>
-                        </>
-                      ) : (
-                        <>
-                          <div className={cn("absolute left-6 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20)}>
-                            {topUpLoading ? <Loader2 className={cn("h-5 w-5 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-5 w-5", c.text)} /> : <CreditCard className={cn("h-5 w-5", c.text)} />}
-                          </div>
-                          <span className="text-base font-medium">{p.label}</span>
-                        </>
-                      )}
-                    </Button>
-                    );
-                  })}
-                  {plategaMethods.map((m) => (
-                    <Button key={m.id} size="lg" variant="outline" onClick={() => startTopUp(m.id)} disabled={topUpLoading} className={btnCls}>
-                      {isMiniapp ? (
-                        <>
-                          <div className="p-2 rounded-xl bg-green-500/10">
-                            {topUpLoading ? <Loader2 className="h-6 w-6 animate-spin text-green-500" /> : <CreditCard className="h-6 w-6 text-green-500" />}
-                          </div>
-                          <span className="text-base font-bold">{m.label}</span>
-                        </>
-                      ) : (
-                        <>
-                          <div className="absolute left-6 p-1.5 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
-                            {topUpLoading ? <Loader2 className="h-5 w-5 animate-spin text-green-500" /> : <CreditCard className="h-5 w-5 text-green-500" />}
-                          </div>
-                          <span className="text-base font-medium">{m.label}</span>
-                        </>
-                      )}
-                    </Button>
-                  ))}
-                </>
-              );
-            })()}
-          </div>
-          )}
-          {!readyUrl && (
-          <DialogFooter className="mt-4 sm:justify-center border-t border-border/50 pt-4">
-            <Button variant="ghost" onClick={() => setTopUpModalOpen(false)} disabled={topUpLoading} className="rounded-xl hover:bg-background/50 hover:text-foreground text-muted-foreground transition-colors">
-              {t("cabinet.profile.cancel")}
-            </Button>
-          </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
+      {topupDialog}
 
       <Dialog open={twoFaEnableOpen} onOpenChange={(open) => !open && closeTwoFaEnable()}>
         <DialogContent className="sm:max-w-md p-0 overflow-hidden border-border/50 backdrop-blur-3xl" showCloseButton={!twoFaLoading} onOpenAutoFocus={(e) => e.preventDefault()}>

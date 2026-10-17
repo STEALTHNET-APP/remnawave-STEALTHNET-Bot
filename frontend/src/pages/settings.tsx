@@ -478,6 +478,7 @@ export function SettingsPage() {
           return fromApi ? { ...def, ...fromApi } : def;
         }), ...loaded.filter((b) => b.id.startsWith("custom_"))] as BotButtonItem[];
       })(),
+      botMenuMode: data.botMenuMode ?? "classic",
       botButtonsPerRow: (data as AdminSettings).botButtonsPerRow ?? 1,
       botEmojis: (data as AdminSettings).botEmojis ?? {},
       botBackLabel: (data as AdminSettings).botBackLabel ?? " В меню",
@@ -779,6 +780,7 @@ export function SettingsPage() {
     setMessage("");
     saveSettingsMut.mutate({
       botButtons: JSON.stringify(settings.botButtons ?? DEFAULT_BOT_BUTTONS),
+      botMenuMode: settings.botMenuMode ?? "classic",
       botButtonsPerRow: settings.botButtonsPerRow ?? 1,
       botBackLabel: settings.botBackLabel ?? " В меню",
     });
@@ -906,6 +908,7 @@ export function SettingsPage() {
         groqFallback3: settings.groqFallback3 ?? undefined,
         aiSystemPrompt: settings.aiSystemPrompt ?? undefined,
         botButtons: settings.botButtons != null ? JSON.stringify(settings.botButtons) : undefined,
+        botMenuMode: settings.botMenuMode ?? "classic",
         botButtonsPerRow: settings.botButtonsPerRow ?? 1,
         botEmojis: settings.botEmojis != null ? settings.botEmojis : undefined,
         botBackLabel: settings.botBackLabel ?? null,
@@ -1863,6 +1866,14 @@ export function SettingsPage() {
                           <option value={2}>2 — парами</option>
                         </select>
                         <span className="text-xs text-muted-foreground">Глобально для всего меню (отдельные кнопки можно вытолкнуть в свою строку флагом ниже)</span>
+                      </div>
+                      <div className="space-y-2 rounded-xl border border-border bg-card p-3">
+                        <Label htmlFor="bot-menu-mode">Режим меню бота</Label>
+                        <select id="bot-menu-mode" className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm" value={settings.botMenuMode ?? "classic"} onChange={(e) => setSettings((s) => s ? { ...s, botMenuMode: e.target.value === "web" ? "web" : "classic" } : s)}>
+                          <option value="classic">Классический — разделы в переписке</option>
+                          <option value="web">Web — разделы в Mini App</option>
+                        </select>
+                        <p className="text-xs text-muted-foreground">Web-режиму нужен публичный HTTPS-адрес кабинета. Свои ссылки сохраняются. Новое меню появится после /start или возврата в меню; старые кнопки продолжат работать.</p>
                       </div>
                       <BotButtonsList
                         onSave={saveBotMenu}

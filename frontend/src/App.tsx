@@ -1,3 +1,5 @@
+import { clientMenuReturnTo } from "@/lib/client-menu-return";
+import { ClientBotMenuPage } from "@/pages/cabinet/client-bot-menu";
 import { needsClientOnboarding } from "@/lib/client-onboarding";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
@@ -139,16 +141,17 @@ function RequireClientAuth({ children }: { children: React.ReactNode }) {
   // Проверяем серверный флаг onboardingCompleted ИЛИ эфемерный isNewTelegramUser
   const needsOnboarding = needsClientOnboarding(state.client, state.isNewTelegramUser);
   if (needsOnboarding && location.pathname !== "/cabinet/onboarding") {
-    return <Navigate to="/cabinet/onboarding" replace />;
+    return <Navigate to="/cabinet/onboarding" replace state={{ returnTo: location.pathname + location.search + location.hash }} />;
   }
   return <>{children}</>;
 }
 
 function RequireOnboarding({ children }: { children: React.ReactNode }) {
   const { state } = useClientAuth();
+  const location = useLocation();
   const needsOnboarding = needsClientOnboarding(state.client, state.isNewTelegramUser);
   if (!needsOnboarding) {
-    return <Navigate to="/cabinet/dashboard" replace />;
+    return <Navigate to={clientMenuReturnTo(location.state?.returnTo)} replace />;
   }
   return <>{children}</>;
 }
@@ -351,6 +354,7 @@ function AppRoutes() {
         <Route path="documents/offer" element={<ClientLegalDocsPage kind="offer" />} />
         <Route path="documents/refund" element={<ClientLegalDocsPage kind="refund" />} />
         <Route path="verify-link-email" element={<ClientVerifyLinkEmailPage />} />
+        <Route path="menu/:section" element={<RequireClientAuth><ClientBotMenuPage /></RequireClientAuth>} />
         <Route
           path="dashboard"
           element={
