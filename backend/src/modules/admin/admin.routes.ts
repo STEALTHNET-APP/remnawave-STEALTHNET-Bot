@@ -2861,6 +2861,10 @@ adminRouter.get("/default-subscription-page-config", asyncRoute(async (req, res)
 }));
 
 const updateSettingsSchema = z.object({
+  maintenanceEnabled: z.boolean().optional(),
+  maintenanceMessage: z.string().trim().max(1000).optional(),
+  remnaAutoSyncEnabled: z.boolean().optional(),
+  remnaAutoSyncIntervalMinutes: z.number().int().min(5).max(1440).optional(),
   activeLanguages: z.string().optional(),
   activeCurrencies: z.string().optional(),
   defaultLanguage: z.string().max(10).optional(),
@@ -3233,6 +3237,12 @@ adminRouter.patch("/settings", async (req, res) => {
       create: { key: "default_currency", value: updates.defaultCurrency },
       update: { value: updates.defaultCurrency },
     });
+  }
+  for (const [key, value] of [["remna_auto_sync_enabled", updates.remnaAutoSyncEnabled], ["remna_auto_sync_interval_minutes", updates.remnaAutoSyncIntervalMinutes]] as const) {
+    if (value !== undefined) await prisma.systemSetting.upsert({ where: { key }, create: { key, value: String(value) }, update: { value: String(value) } });
+  }
+  for (const [key, value] of [["maintenance_enabled", updates.maintenanceEnabled], ["maintenance_message", updates.maintenanceMessage]] as const) {
+    if (value !== undefined) await prisma.systemSetting.upsert({ where: { key }, create: { key, value: String(value) }, update: { value: String(value) } });
   }
   const referralSettings = [
     ["referral_reward_mode", updates.referralRewardMode],

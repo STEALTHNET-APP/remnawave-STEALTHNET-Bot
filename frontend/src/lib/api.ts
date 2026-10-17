@@ -3357,6 +3357,8 @@ export type UpdateSettingsPayload = {
   trialSquadUuid?: string | null;
   trialDeviceLimit?: number | null;
   trialTrafficLimitBytes?: number | null;
+  maintenanceEnabled?: boolean;
+  maintenanceMessage?: string;
   serviceName?: string;
   serviceDescription?: string | null;
   logo?: string | null;
@@ -3517,6 +3519,8 @@ export type UpdateSettingsPayload = {
   customBuildCurrency?: string;
   customBuildMaxDays?: number;
   customBuildMaxDevices?: number;
+  remnaAutoSyncEnabled?: boolean;
+  remnaAutoSyncIntervalMinutes?: number;
   defaultAutoRenewEnabled?: boolean;
   autoRenewDaysBeforeExpiry?: number;
   autoRenewNotifyDaysBefore?: number;
@@ -3859,6 +3863,8 @@ export interface AdminSettings {
   trialSquadUuid?: string | null;
   trialDeviceLimit?: number | null;
   trialTrafficLimitBytes?: number | null;
+  maintenanceEnabled?: boolean;
+  maintenanceMessage?: string;
   serviceName: string;
   serviceDescription?: string | null;
   logo?: string | null;
@@ -3879,6 +3885,8 @@ export interface AdminSettings {
   passwordResetEnabled?: boolean;
   publicAppUrl?: string | null;
   telegramBotToken?: string | null;
+  remnaAutoSyncEnabled?: boolean;
+  remnaAutoSyncIntervalMinutes?: number;
   defaultAutoRenewEnabled?: boolean;
   autoRenewDaysBeforeExpiry?: number;
   autoRenewNotifyDaysBefore?: number;
@@ -5447,6 +5455,8 @@ export interface PublicConfig {
   activeCurrencies: string[];
   defaultLanguage?: string;
   defaultCurrency?: string;
+  maintenanceEnabled?: boolean;
+  maintenanceMessage?: string;
   serviceName: string;
   serviceDescription?: string | null;
   logo?: string | null;

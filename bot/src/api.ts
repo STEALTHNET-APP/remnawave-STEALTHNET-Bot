@@ -102,6 +102,8 @@ export async function getActiveContest(): Promise<{
 
 /** Публичный конфиг (тарифы, кнопки, способы оплаты, trial и т.д.) */
 export async function getPublicConfig(): Promise<{
+  maintenanceEnabled?: boolean;
+  maintenanceMessage?: string;
   serviceName?: string | null;
   logo?: string | null;
   logoBot?: string | null;

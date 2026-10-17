@@ -7998,6 +7998,14 @@ clientRouter.delete("/tickets/:id", async (req, res, next) => {
 
 // Публичный конфиг для бота, mini app, сайта (без паролей и секретов)
 export const publicConfigRouter = Router();
+publicConfigRouter.get("/availability", async (_req, res, next) => {
+  try {
+    const config = await getSystemConfig();
+    res.setHeader("Cache-Control", "no-store");
+    return res.json({ enabled: config.maintenanceEnabled, message: config.maintenanceMessage });
+  } catch (error) { next(error); }
+});
+
 publicConfigRouter.use(optionalBot);
 publicConfigRouter.get("/config", async (req, res) => {
   const bot = (req as Request & Partial<ReqWithBot>).bot;

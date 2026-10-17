@@ -804,6 +804,10 @@ export function SettingsPage() {
         activeCurrencies: currs.length ? currs.join(",") : ALLOWED_CURRENCIES.join(","),
         defaultLanguage: defaultLang,
         defaultCurrency: defaultCurr,
+        remnaAutoSyncEnabled: settings.remnaAutoSyncEnabled ?? false,
+        remnaAutoSyncIntervalMinutes: settings.remnaAutoSyncIntervalMinutes ?? 60,
+        maintenanceEnabled: settings.maintenanceEnabled ?? false,
+        maintenanceMessage: settings.maintenanceMessage ?? "",
         referralRewardMode: settings.referralRewardMode ?? "percent",
         referralRewardAmount: settings.referralRewardAmount ?? 50,
         referralRewardDays: settings.referralRewardDays ?? 3,
@@ -1214,6 +1218,12 @@ export function SettingsPage() {
                 </div>
               </div>
               <CardContent className="space-y-5 p-4 sm:p-4">
+                <div className="rounded-xl border border-border p-4 space-y-3">
+                  <Label className="flex items-center justify-between gap-3">Режим технических работ<Switch checked={settings.maintenanceEnabled ?? false} onCheckedChange={value => setSettings(s => s ? { ...s, maintenanceEnabled: value } : s)} /></Label>
+                  <p className="text-xs text-muted-foreground">Кабинет и бот временно недоступны клиентам. Админка, уже оплаченные заказы и действующие VPN-подключения продолжают работать.</p>
+                  <Label htmlFor="maintenance-message">Сообщение клиентам</Label>
+                  <Textarea id="maintenance-message" maxLength={1000} value={settings.maintenanceMessage ?? ""} placeholder="Обновляем сервис. Пожалуйста, зайдите немного позже." onChange={e => setSettings(s => s ? { ...s, maintenanceMessage: e.target.value } : s)} />
+                </div>
                 {/* === Функции сервиса === */}
                 <div className="rounded-xl border border-sky-500/20 bg-muted p-4 space-y-3">
                   <div className="flex items-center gap-2.5">
@@ -5591,6 +5601,13 @@ export function SettingsPage() {
               </div>
             </div>
             <CardContent className="space-y-4 p-4 sm:p-4">
+              <div className="rounded-xl border border-border p-4 space-y-3">
+                <Label className="flex items-center justify-between gap-3">Автосинхронизация из Remnawave<Switch checked={settings.remnaAutoSyncEnabled ?? false} onCheckedChange={value => setSettings(s => s ? { ...s, remnaAutoSyncEnabled: value } : s)} /></Label>
+                <p className="text-xs text-muted-foreground">По расписанию импортирует клиентов и обновляет данные подписок в панели. Изменения в Remnawave не отправляются.</p>
+                <Label htmlFor="remna-sync-interval">Интервал, минут</Label>
+                <Input id="remna-sync-interval" type="number" min={5} max={1440} value={settings.remnaAutoSyncIntervalMinutes ?? 60} onChange={e => setSettings(s => s ? { ...s, remnaAutoSyncIntervalMinutes: Number(e.target.value) } : s)} />
+                <Button onClick={handleSubmit} disabled={saving}>Сохранить</Button>
+              </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <button type="button" onClick={handleSyncFromRemna} disabled={syncFromRemnaMut.isPending} className="group relative overflow-hidden rounded-xl border border-violet-500/30 bg-transparent p-4 text-left transition-all hover:border-violet-500/50 hover:shadow-violet-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
                   <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-violet-500/10 blur-2xl group-hover:bg-violet-500/20 transition-colors" />

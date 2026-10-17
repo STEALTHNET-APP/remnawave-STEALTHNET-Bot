@@ -1,3 +1,4 @@
+import { MaintenanceGate } from "@/components/maintenance-gate";
 import { clientMenuReturnTo } from "@/lib/client-menu-return";
 import { ClientBotMenuPage } from "@/pages/cabinet/client-bot-menu";
 import { needsClientOnboarding } from "@/lib/client-onboarding";
@@ -215,7 +216,7 @@ function AppRoutes() {
   }, []);
 
   return (
-    <Routes>
+    <MaintenanceGate><Routes>
       {/* Главная: лендинг (если включён в настройках) или редирект в кабинет */}
       <Route path="/" element={<RootRoute />} />
 
@@ -471,7 +472,7 @@ function AppRoutes() {
       </Route>
       {/* Всё неизвестное тоже ведём в кабинет */}
       <Route path="*" element={<Navigate to="/cabinet" replace />} />
-    </Routes>
+    </Routes></MaintenanceGate>
   );
 }
 

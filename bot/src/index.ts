@@ -142,6 +142,14 @@ async function createBotWithProxy(token: string): Promise<Bot> {
 
 /** Общая логика для основного (единственного) бота. */
 const composer = new Composer<Context>();
+composer.use(async (ctx, next) => {
+  if (ctx.message?.successful_payment || ctx.preCheckoutQuery || (!ctx.message && !ctx.callbackQuery)) return next();
+  const config = await api.getPublicConfig();
+  if (!config?.maintenanceEnabled) return next();
+  const message = config.maintenanceMessage || "Обновляем сервис. Пожалуйста, зайдите немного позже.";
+  if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: message.slice(0, 200), show_alert: true });
+  else if (ctx.chat) await ctx.reply(message);
+});
 composer.use(createTermsGate(api, async (ctx, payload) => {
   if (ctx.from) startThrottle.delete(ctx.from.id);
   await handleStart(ctx, payload);

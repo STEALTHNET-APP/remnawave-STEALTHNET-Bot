@@ -96,6 +96,8 @@ export function generateReferralCode(): string {
 }
 
 const SYSTEM_CONFIG_KEYS = [
+  "remna_auto_sync_enabled", "remna_auto_sync_interval_minutes",
+  "maintenance_enabled", "maintenance_message",
   "active_languages", "active_currencies", "default_language", "default_currency",
   "default_referral_percent", "referral_percent_level_2", "referral_percent_level_3",
   "referral_reward_mode", "referral_reward_amount", "referral_reward_days", "referral_reward_enabled_at",
@@ -573,6 +575,10 @@ async function loadSystemConfigFromDb() {
   const activeLangs = (map.active_languages || "ru,en").split(",").map((s: string) => s.trim());
   const activeCurrs = (map.active_currencies || "usd,rub").split(",").map((s: string) => s.trim());
   return {
+    remnaAutoSyncEnabled: map.remna_auto_sync_enabled === "true",
+    remnaAutoSyncIntervalMinutes: Math.min(1440, Math.max(5, parseInt(map.remna_auto_sync_interval_minutes || "60", 10) || 60)),
+    maintenanceEnabled: map.maintenance_enabled === "true",
+    maintenanceMessage: map.maintenance_message?.trim() || "Обновляем сервис. Пожалуйста, зайдите немного позже.",
     activeLanguages: activeLangs,
     activeCurrencies: activeCurrs,
     defaultLanguage: map.default_language && activeLangs.includes(map.default_language) ? map.default_language : activeLangs[0] ?? "ru",
@@ -1325,6 +1331,8 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     botTariffsFields: full.botTariffsFields ?? DEFAULT_BOT_TARIFF_LINE_FIELDS,
     botPaymentText: full.botPaymentText ?? DEFAULT_BOT_PAYMENT_TEXT,
     categoryEmojis: full.categoryEmojis,
+    maintenanceEnabled: full.maintenanceEnabled,
+    maintenanceMessage: full.maintenanceMessage,
     referralRewardMode: full.referralRewardMode,
     referralRewardAmount: full.referralRewardAmount,
     referralRewardDays: full.referralRewardDays,

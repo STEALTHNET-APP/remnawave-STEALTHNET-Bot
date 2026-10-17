@@ -1,3 +1,4 @@
+import { maintenanceGuard } from "./modules/client/maintenance.js";
 import { botTermsRouter } from "./modules/bot/terms.routes.js";
 import { emailUnsubscribeRouter } from "./modules/email-unsubscribe/email-unsubscribe.routes.js";
 import { paritypayWebhooksRouter } from "./modules/webhooks/paritypay.webhooks.routes.js";
@@ -367,6 +368,7 @@ app.use("/api/admin/proxy", proxyAdminRouter);
 app.use("/api/admin/singbox", singboxAdminRouter);
 app.use("/api/proxy-nodes", proxyAgentRouter);
 app.use("/api/singbox-nodes", singboxAgentRouter);
+app.use("/api/client", maintenanceGuard);
 app.use("/api/client", clientRouter);
 app.use("/api/client/contests", contestClientRouter);
 app.use("/api/client/gift", giftRouter);
