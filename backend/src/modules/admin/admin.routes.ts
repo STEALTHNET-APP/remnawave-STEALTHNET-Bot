@@ -1,3 +1,4 @@
+import { ClientProfileError, updateClientSchema, updateAdminClientProfile } from "./client-profile.service.js";
 import { botButtonsJsonSchema } from "../bot/menu-buttons.js";
 import { mailTestRouter } from "../mail/mail-test.routes.js";
 import { updateRouter } from "../update/update.routes.js";
@@ -1600,64 +1601,18 @@ adminRouter.get("/clients/:id", async (req, res) => {
   return res.json(client);
 });
 
-const updateClientSchema = z.object({
-  email: z.string().email().nullable().optional(),
-  preferredLang: z.string().max(5).optional(),
-  preferredCurrency: z.string().max(5).optional(),
-  balance: z.number().optional(),
-  isBlocked: z.boolean().optional(),
-  blockReason: z.string().nullable().optional(),
-  referralPercent: z.number().min(0).max(100).nullable().optional(),
-  personalDiscountPercent: z.number().min(0).max(100).nullable().optional(),
-  // флаг одноразовости персональной скидки.
-  // true → скидка сгорит после первой продуктовой покупки (mark-paid). false → бессрочно.
-  personalDiscountIsOneTime: z.boolean().optional(),
-});
-
-adminRouter.patch("/clients/:id", async (req, res) => {
+adminRouter.patch("/clients/:id", asyncRoute(async (req, res) => {
   const parsed = clientIdParam.safeParse(req.params);
   if (!parsed.success) return res.status(400).json({ message: "Invalid client id" });
   const body = updateClientSchema.safeParse(req.body);
-  if (!body.success) return res.status(400).json({ message: "Invalid input", errors: body.error.flatten() });
-  const client = await prisma.client.findUnique({ where: { id: parsed.data.id } });
-  if (!client) return res.status(404).json({ message: "Клиент не найден" });
-  const updates: Record<string, unknown> = {};
-  if (body.data.email !== undefined) updates.email = body.data.email;
-  if (body.data.preferredLang !== undefined) updates.preferredLang = body.data.preferredLang;
-  if (body.data.preferredCurrency !== undefined) updates.preferredCurrency = body.data.preferredCurrency;
-  if (body.data.balance !== undefined) updates.balance = body.data.balance;
-  if (body.data.isBlocked !== undefined) updates.isBlocked = body.data.isBlocked;
-  if (body.data.blockReason !== undefined) updates.blockReason = body.data.blockReason;
-  if (body.data.referralPercent !== undefined) updates.referralPercent = body.data.referralPercent;
-  if (body.data.personalDiscountPercent !== undefined) updates.personalDiscountPercent = body.data.personalDiscountPercent;
-  if (body.data.personalDiscountIsOneTime !== undefined) updates.personalDiscountIsOneTime = body.data.personalDiscountIsOneTime;
-  const updated = await prisma.client.update({
-    where: { id: parsed.data.id },
-    data: updates,
-    select: {
-      id: true,
-      email: true,
-      telegramId: true,
-      telegramUsername: true,
-      preferredLang: true,
-      preferredCurrency: true,
-      balance: true,
-      referralCode: true,
-      remnawaveUuid: true,
-      trialUsed: true,
-      isBlocked: true,
-      blockReason: true,
-      referralPercent: true,
-      personalDiscountPercent: true,
-      personalDiscountIsOneTime: true,
-      restrictedTariffIds: true,
-      tariffRestrictionReason: true,
-      createdAt: true,
-      _count: { select: { referrals: true } },
-    },
-  });
-  return res.json(updated);
-});
+  if (!body.success) return res.status(400).json({ message: body.error.issues[0]?.message ?? "Проверьте данные клиента", errors: body.error.flatten() });
+  try {
+    return res.json(await updateAdminClientProfile(parsed.data.id, body.data));
+  } catch (error) {
+    if (error instanceof ClientProfileError) return res.status(error.status).json({ message: error.message });
+    throw error;
+  }
+}));
 
 // T-admin-services (портировано из WolfVPN): вкладка «Услуги» — выдать/забрать доп. устройства подписке (action manage_services).
 adminRouter.get("/clients/:id/services", requireAction("manage_services"), asyncRoute(async (req, res) => {

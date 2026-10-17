@@ -149,6 +149,7 @@ export function ClientsPage() {
       // показали бы пустые значения после save, и нужно было бы переоткрыть карточку.
       setEditForm({
         email: updated.email ?? undefined,
+        telegramId: updated.telegramId ?? "",
         preferredLang: updated.preferredLang,
         preferredCurrency: updated.preferredCurrency,
         balance: updated.balance,
@@ -285,6 +286,7 @@ export function ClientsPage() {
     setEditing(c);
     setEditForm({
       email: c.email ?? undefined,
+      telegramId: c.telegramId ?? "",
       preferredLang: c.preferredLang,
       preferredCurrency: c.preferredCurrency,
       balance: c.balance,
@@ -304,6 +306,10 @@ export function ClientsPage() {
       id: editing.id,
       payload: {
         email: editForm.email ?? null,
+        ...((editForm.telegramId?.trim() || null) !== (editing.telegramId ?? null) ? {
+          telegramId: editForm.telegramId?.trim() || null,
+          expectedTelegramId: editing.telegramId ?? null,
+        } : {}),
         preferredLang: editForm.preferredLang,
         preferredCurrency: editForm.preferredCurrency,
         balance: editForm.balance,
@@ -921,7 +927,7 @@ function ClientEditModal({
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="truncate text-[17px] font-extrabold">{editing.email || editing.telegramUsername ? `@${editing.telegramUsername}` : editing.telegramId || "Клиент"}</span>
+                  <span className="truncate text-[17px] font-extrabold">{editing.telegramUsername ? `@${editing.telegramUsername}` : editing.email || editing.telegramId || "Клиент"}</span>
                   {editing.remnawaveUuid && (
                     <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium", statusInfo.color)}>
                       {statusInfo.label}
@@ -1447,6 +1453,20 @@ function ClientEditModal({
                       onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value || undefined }))}
                       placeholder="email@example.com"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="client-telegram-id">Telegram ID</Label>
+                    <Input
+                      id="client-telegram-id"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={16}
+                      value={editForm.telegramId ?? ""}
+                      onChange={(e) => setEditForm((f) => ({ ...f, telegramId: e.target.value }))}
+                      placeholder="123456789"
+                      aria-describedby="client-telegram-hint"
+                    />
+                    <p id="client-telegram-hint" className="text-xs text-muted-foreground">Числовой ID пользователя, не @username. Этот Telegram получит доступ к кабинету клиента. Очистите поле, чтобы отвязать.</p>
                   </div>
                   <div className="space-y-2">
                     <Label>{t("admin.clients.language")}</Label>

@@ -3691,6 +3691,8 @@ export interface ClientRecord {
 
 export type UpdateClientPayload = {
   email?: string | null;
+  telegramId?: string | null;
+  expectedTelegramId?: string | null;
   preferredLang?: string;
   preferredCurrency?: string;
   balance?: number;
