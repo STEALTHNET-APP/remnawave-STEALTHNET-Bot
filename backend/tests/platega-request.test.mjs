@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mock, test } from "node:test";
 
 const requests = [];
+mock.module("../dist/modules/payment/payment-description.js", { namedExports: { paymentDescription: async fallback => fallback } });
 mock.module("../dist/modules/proxy-util/get-proxy-url.js", {
   namedExports: { getProxyUrl: async () => null },
 });

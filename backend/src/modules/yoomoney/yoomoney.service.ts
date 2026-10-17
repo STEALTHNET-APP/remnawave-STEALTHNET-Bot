@@ -1,3 +1,4 @@
+import { paymentDescription } from "../payment/payment-description.js";
 /**
  * Интеграция с API кошелька ЮMoney (OAuth, request-payment, process-payment).
  * Документация: https://yoomoney.ru/docs/wallet
@@ -76,7 +77,8 @@ export async function requestPayment(
     label: params.label,
   });
   if (params.message?.trim()) body.set("message", params.message.trim());
-  if (params.comment?.trim()) body.set("comment", params.comment.trim());
+  const comment = await paymentDescription(params.comment ?? "");
+  if (comment.trim()) body.set("comment", comment.trim());
 
   const proxy = await getProxyUrl("payments");
   const res = await proxyFetch(`${YOOMONEY_API}/request-payment`, {

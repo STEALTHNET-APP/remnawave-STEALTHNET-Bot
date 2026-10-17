@@ -856,6 +856,7 @@ export function SettingsPage() {
         autoRenewNotifyDaysBefore: settings.autoRenewNotifyDaysBefore ?? 3,
         autoRenewGracePeriodDays: settings.autoRenewGracePeriodDays ?? 2,
         autoRenewMaxRetries: settings.autoRenewMaxRetries ?? 3,
+        paymentDescription: settings.paymentDescription ?? "",
         yookassaRecurringEnabled: settings.yookassaRecurringEnabled ?? false,
         useRemnaSubscriptionPage: settings.useRemnaSubscriptionPage ?? false,
         publicAppUrl: settings.publicAppUrl ?? null,
@@ -2829,6 +2830,11 @@ export function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="payments" className="space-y-4">
+            <Card><CardContent className="space-y-2 pt-6">
+              <Label htmlFor="payment-description">Описание платежа</Label>
+              <Input id="payment-description" maxLength={128} value={settings.paymentDescription ?? ""} onChange={e => setSettings(s => s ? { ...s, paymentDescription: e.target.value } : s)} placeholder="По умолчанию — название тарифа или пополнение баланса" />
+              <p className="text-xs text-muted-foreground">Для новых платежей через ЮKassa, ЮMoney, Platega, Crypto Pay, Overpay и ParityPay. Пустое поле возвращает стандартные описания. Название позиции в чеке ЮKassa сохраняется. Lava.top использует название своего оффера.</p>
+            </CardContent></Card>
             <Card className="overflow-hidden border-border">
               <div className="relative bg-muted p-4 border-b border-border">
                 <div className="absolute inset-0 bg-transparent pointer-events-none" />

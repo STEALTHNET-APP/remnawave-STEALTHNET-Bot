@@ -2965,6 +2965,7 @@ const updateSettingsSchema = z.object({
   groqFallback3: z.string().max(100).nullable().optional(),
   aiSystemPrompt: z.string().max(5000).nullable().optional(),
   botButtons: botButtonsJsonSchema.nullable().optional(),
+  paymentDescription: z.string().trim().max(128).optional(),
   botGroupCabinet: z.boolean().optional(),
   botMenuMode: z.enum(["classic", "web"]).optional(),
   botButtonsPerRow: z.union([z.literal(1), z.literal(2), z.number().int().min(1).max(2)]).optional(),
@@ -3661,6 +3662,10 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.botButtons !== undefined) {
     const val = updates.botButtons ?? "";
     await prisma.systemSetting.upsert({ where: { key: "bot_buttons" }, create: { key: "bot_buttons", value: val }, update: { value: val } });
+  }
+  if (updates.paymentDescription !== undefined) {
+    const value = updates.paymentDescription;
+    await prisma.systemSetting.upsert({ where: { key: "payment_description" }, create: { key: "payment_description", value }, update: { value } });
   }
   if (updates.botGroupCabinet !== undefined) {
     const value = String(updates.botGroupCabinet);

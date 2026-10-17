@@ -1,3 +1,4 @@
+import { paymentDescription } from "../payment/payment-description.js";
 /**
  * Crypto Pay API (Crypto Bot) — создание инвойсов и приём webhook.
  * Документация: https://help.send.tg/en/articles/10279948-crypto-pay-api
@@ -54,7 +55,7 @@ export async function createCryptopayInvoice(params: CreateCryptopayInvoiceParam
   const currencyType = params.currencyType ?? "crypto";
   const body: Record<string, unknown> = {
     amount: String(amount),
-    description: description.slice(0, 1024),
+    description: (await paymentDescription(description)).slice(0, 1024),
     payload: payload.slice(0, 4096),
     expires_in: Math.min(2678400, Math.max(1, expiresIn)),
   };

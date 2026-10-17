@@ -11,6 +11,7 @@ function load(path, mocks = {}) {
 
 let fetchImpl = async () => { throw new Error('no fetch'); };
 const service = load('src/modules/platega/platega.service.ts', {
+  '../payment/payment-description.js': { paymentDescription: async fallback => fallback },
   './platega-request.js': load('src/modules/platega/platega-request.ts'),
   '../proxy-util/proxy-fetch.js': { proxyFetch: (...a) => fetchImpl(...a) },
   '../proxy-util/get-proxy-url.js': { getProxyUrl: async () => null },

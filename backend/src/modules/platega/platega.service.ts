@@ -1,3 +1,4 @@
+import { paymentDescription } from "../payment/payment-description.js";
 /**
  * Platega.io — создание платежей и обработка callback
  * https://docs.platega.io/
@@ -27,7 +28,7 @@ export async function createPlategaTransaction(
   params: PlategaTransactionParams
 ): Promise<{ paymentUrl: string; transactionId: string } | { error: string }> {
   const url = `${PLATEGA_API_BASE}/transaction/process`;
-  const body = buildPlategaTransactionBody(params);
+  const body = buildPlategaTransactionBody({ ...params, description: await paymentDescription(params.description || `Оплата заказа ${params.orderId}`) });
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",

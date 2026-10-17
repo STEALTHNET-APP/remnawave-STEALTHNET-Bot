@@ -1,3 +1,4 @@
+import { paymentDescription } from "../payment/payment-description.js";
 /**
  * ЮKassa API - создание платежа (redirect на страницу оплаты).
  * Документация: https://yookassa.ru/developers/api#create_payment
@@ -83,7 +84,7 @@ export async function createYookassaPayment(params: CreatePaymentParams): Promis
     amount: { value: valueStr, currency: currencyUpper },
     capture: true,
     confirmation: { type: "redirect" as const, return_url: returnUrl },
-    description: description.slice(0, 128),
+    description: (await paymentDescription(description)).slice(0, 128),
     metadata,
     receipt,
   };
@@ -237,7 +238,7 @@ export async function createYookassaAutopayment(params: AutopaymentParams): Prom
     amount: { value: valueStr, currency: currencyUpper },
     capture: true,
     payment_method_id: paymentMethodId,
-    description: description.slice(0, 128),
+    description: (await paymentDescription(description)).slice(0, 128),
     metadata,
     receipt,
   };

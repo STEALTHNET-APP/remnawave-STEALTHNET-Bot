@@ -3442,6 +3442,7 @@ export type UpdateSettingsPayload = {
   groqFallback3?: string | null;
   aiSystemPrompt?: string | null;
   botButtons?: string | null;
+  paymentDescription?: string;
   botGroupCabinet?: boolean;
   botMenuMode?: "classic" | "web";
   botButtonsPerRow?: 1 | 2;
@@ -3956,6 +3957,7 @@ export interface AdminSettings {
   aiSystemPrompt?: string | null;
   /** Кнопки главного меню бота: порядок, видимость, текст, стиль, ключ эмодзи, в один ряд */
   botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean; url?: string }[];
+  paymentDescription?: string;
   botGroupCabinet?: boolean;
   botMenuMode?: "classic" | "web";
   /** Кнопок в ряд в главном меню: 1 или 2 (по умолчанию 1) */
@@ -5446,6 +5448,7 @@ export type PublicSellOption =
   | { kind: "servers"; id: string; name: string; squadUuid: string; trafficGb?: number; price: number; currency: string };
 
 export interface PublicConfig {
+  paymentDescription?: string;
   botGroupCabinet?: boolean;
   botMenuMode?: "classic" | "web";
   supportLink?: string | null;

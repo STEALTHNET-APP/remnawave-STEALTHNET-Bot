@@ -137,7 +137,7 @@ const SYSTEM_CONFIG_KEYS = [
   "lavatop_api_key", "lavatop_default_offer_id",
   "overpay_api_url", "overpay_project_id", "overpay_login", "overpay_password",
   "groq_api_key", "groq_model", "groq_fallback_1", "groq_fallback_2", "groq_fallback_3", "ai_system_prompt",
-  "bot_buttons", "bot_menu_mode", "bot_group_cabinet", "bot_buttons_per_row", "bot_back_label", "bot_menu_texts", "bot_menu_line_visibility", "bot_inner_button_styles",
+  "payment_description", "bot_buttons", "bot_menu_mode", "bot_group_cabinet", "bot_buttons_per_row", "bot_back_label", "bot_menu_texts", "bot_menu_line_visibility", "bot_inner_button_styles",
   "bot_tariffs_text", "bot_tariffs_fields", "bot_payment_text",
   "bot_emojis", // JSON: { "TRIAL": { "unicode": "🎁", "tgEmojiId": "..." }, "PACKAGE": ... } — эмодзи кнопок/текста, TG ID для премиум
   "category_emojis", // JSON: { "ordinary": "📦", "premium": "⭐" } — эмодзи категорий по коду
@@ -731,6 +731,7 @@ async function loadSystemConfigFromDb() {
     appleKeyId: (map.apple_key_id ?? "").trim() || null,
     applePrivateKey: (map.apple_private_key ?? "").trim() || null,
     botButtons: parseBotButtons(map.bot_buttons),
+    paymentDescription: map.payment_description ?? "",
     botGroupCabinet: map.bot_group_cabinet === "true",
     botMenuMode: map.bot_menu_mode === "web" ? "web" as const : "classic" as const,
     botButtonsPerRow: map.bot_buttons_per_row === "2" ? 2 : 1,

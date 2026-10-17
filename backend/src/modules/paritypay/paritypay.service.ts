@@ -1,3 +1,4 @@
+import { paymentDescription } from "../payment/payment-description.js";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 /** ParityPay API v2: https://docs.paritypay.net/. Amounts are RUB. */
@@ -46,7 +47,7 @@ export async function createParitypayPayment(params: {
   try {
     const body = await request(params.config, "create", {
       order_id: params.orderId, amount: Math.round(amount * 100) / 100,
-      ...(params.description ? { comment: params.description.slice(0,255) } : {}),
+      comment: (await paymentDescription(params.description ?? "")).slice(0,255),
       ...(params.successRedirectUrl ? { success_url: params.successRedirectUrl } : {}),
       ...(params.failRedirectUrl ? { fail_url: params.failRedirectUrl } : {}),
       ...(params.callbackUrl ? { callback_url: params.callbackUrl } : {}),
