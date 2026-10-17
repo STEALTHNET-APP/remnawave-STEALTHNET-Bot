@@ -4,7 +4,7 @@
  * Подпись: md5(base64_encode(body) + API_KEY)
  */
 
-import { createHash } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 import { proxyFetch } from "../proxy-util/proxy-fetch.js";
 import { getProxyUrl } from "../proxy-util/get-proxy-url.js";
 
@@ -140,19 +140,20 @@ export async function createHeleketInvoice(params: CreateHeleketInvoiceParams): 
  * В JSON при формировании строки слэши экранируют: \/ (как в PHP).
  */
 export function verifyHeleketWebhookSignature(apiKey: string, rawBody: string, signFromBody: string | undefined): boolean {
-  if (!apiKey?.trim() || !signFromBody?.trim()) return false;
+  if (!apiKey?.trim() || typeof signFromBody !== "string" || !/^[a-fA-F0-9]{32}$/.test(signFromBody.trim())) return false;
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(rawBody) as Record<string, unknown>;
   } catch {
     return false;
   }
-  const receivedSign = parsed.sign as string | undefined;
-  if (!receivedSign) return false;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+  const receivedSign = parsed.sign;
+  if (typeof receivedSign !== "string" || receivedSign.trim() !== signFromBody.trim()) return false;
   delete parsed.sign;
   // Heleket отправляет JSON с экранированием слэшей (как PHP)
   const bodyStr = JSON.stringify(parsed).replace(/\//g, "\\/");
   const base64 = Buffer.from(bodyStr, "utf8").toString("base64");
   const hash = createHash("md5").update(base64 + apiKey.trim()).digest("hex");
-  return hash === receivedSign.trim();
+  return timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(receivedSign.trim(), "hex"));
 }
