@@ -125,10 +125,10 @@ bash install.sh
 
 | 服务         | 技术                                                   | 用途                                            |
 | ------------ | ------------------------------------------------------ | ---------------------------------------------- |
-| **backend**  | Node.js, Express, Prisma, PostgreSQL                   | REST API：授权、客户、套餐、支付、推荐、促销、分析 |
-| **frontend** | React 18, Vite, Tailwind CSS, shadcn/ui, Framer Motion | 管理面板 + 客户面板 + Telegram Mini App          |
-| **bot**      | Grammy (TypeScript)                                    | 带有客户面板的完整 Telegram 机器人               |
-| **nginx**    | Nginx + Certbot                                        | 反向代理、SSL、静态文件、gzip                    |
+| **backend**  | Node.js 22, Express 4.22.1, Prisma 6.19.2, PostgreSQL 16                   | REST API：授权、客户、套餐、支付、推荐、促销、分析 |
+| **frontend** | React 18.3.1, Vite 5.4.21, Tailwind CSS 4.2.2, shadcn/ui, Framer Motion 11.18.2 | 管理面板 + 客户面板 + Telegram Mini App          |
+| **bot**      | grammY 1.40.0, TypeScript 5.9.3                                    | 带有客户面板的完整 Telegram 机器人               |
+| **nginx**    | Nginx 1.28 + Certbot                                        | 反向代理、SSL、静态文件、gzip                    |
 | **postgres** | PostgreSQL 16                                          | 数据存储                                        |
 
 ---

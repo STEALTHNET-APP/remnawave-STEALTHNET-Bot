@@ -128,10 +128,10 @@ bash install.sh
 
 | Сервис       | Технологии                                             | Назначение                                                                  |
 | ------------ | ------------------------------------------------------ | --------------------------------------------------------------------------- |
-| **backend**  | Node.js, Express, Prisma, PostgreSQL                   | REST API: авторизация, клиенты, тарифы, платежи, рефералы, промо, аналитика |
-| **frontend** | React 18, Vite, Tailwind CSS, shadcn/ui, Framer Motion | Админ-панель + клиентский кабинет + Telegram Mini App                       |
-| **bot**      | Grammy (TypeScript)                                    | Полноценный Telegram-бот с кабинетом клиента                                |
-| **nginx**    | Nginx + Certbot                                        | Reverse proxy, SSL, статика, gzip                                           |
+| **backend**  | Node.js 22, Express 4.22.1, Prisma 6.19.2, PostgreSQL 16                   | REST API: авторизация, клиенты, тарифы, платежи, рефералы, промо, аналитика |
+| **frontend** | React 18.3.1, Vite 5.4.21, Tailwind CSS 4.2.2, shadcn/ui, Framer Motion 11.18.2 | Админ-панель + клиентский кабинет + Telegram Mini App                       |
+| **bot**      | grammY 1.40.0, TypeScript 5.9.3                                    | Полноценный Telegram-бот с кабинетом клиента                                |
+| **nginx**    | Nginx 1.28 + Certbot                                        | Reverse proxy, SSL, статика, gzip                                           |
 | **postgres** | PostgreSQL 16                                          | Хранение всех данных                                                        |
 
 ---

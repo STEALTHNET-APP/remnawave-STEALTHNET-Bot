@@ -134,10 +134,10 @@ Estimated configurations for running all services (API, frontend, bot, Nginx, Po
 
 | Service      | Technologies                                           | Purpose                                                                 |
 | ------------ | ------------------------------------------------------ | ----------------------------------------------------------------------- |
-| **backend**  | Node.js, Express, Prisma, PostgreSQL                   | REST API: auth, clients, tariffs, payments, referrals, promo, analytics |
-| **frontend** | React 18, Vite, Tailwind CSS, shadcn/ui, Framer Motion | Admin panel + client dashboard + Telegram Mini App                      |
-| **bot**      | Grammy (TypeScript)                                    | Full Telegram bot with client dashboard                                 |
-| **nginx**    | Nginx + Certbot                                        | Reverse proxy, SSL, static, gzip                                        |
+| **backend**  | Node.js 22, Express 4.22.1, Prisma 6.19.2, PostgreSQL 16                   | REST API: auth, clients, tariffs, payments, referrals, promo, analytics |
+| **frontend** | React 18.3.1, Vite 5.4.21, Tailwind CSS 4.2.2, shadcn/ui, Framer Motion 11.18.2 | Admin panel + client dashboard + Telegram Mini App                      |
+| **bot**      | grammY 1.40.0, TypeScript 5.9.3                                    | Full Telegram bot with client dashboard                                 |
+| **nginx**    | Nginx 1.28 + Certbot                                        | Reverse proxy, SSL, static, gzip                                        |
 | **postgres** | PostgreSQL 16                                          | Data storage                                                            |
 
 ---
