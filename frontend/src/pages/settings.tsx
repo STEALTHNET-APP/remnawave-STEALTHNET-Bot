@@ -482,6 +482,7 @@ export function SettingsPage() {
         }), ...loaded.filter((b) => b.id.startsWith("custom_"))] as BotButtonItem[];
       })(),
       botMenuMode: data.botMenuMode ?? "classic",
+      botGroupCabinet: data.botGroupCabinet ?? false,
       botButtonsPerRow: (data as AdminSettings).botButtonsPerRow ?? 1,
       botEmojis: (data as AdminSettings).botEmojis ?? {},
       botBackLabel: (data as AdminSettings).botBackLabel ?? " В меню",
@@ -784,6 +785,7 @@ export function SettingsPage() {
     saveSettingsMut.mutate({
       botButtons: JSON.stringify(settings.botButtons ?? DEFAULT_BOT_BUTTONS),
       botMenuMode: settings.botMenuMode ?? "classic",
+      botGroupCabinet: settings.botGroupCabinet ?? false,
       botButtonsPerRow: settings.botButtonsPerRow ?? 1,
       botBackLabel: settings.botBackLabel ?? " В меню",
     });
@@ -919,6 +921,7 @@ export function SettingsPage() {
         aiSystemPrompt: settings.aiSystemPrompt ?? undefined,
         botButtons: settings.botButtons != null ? JSON.stringify(settings.botButtons) : undefined,
         botMenuMode: settings.botMenuMode ?? "classic",
+      botGroupCabinet: settings.botGroupCabinet ?? false,
         botButtonsPerRow: settings.botButtonsPerRow ?? 1,
         botEmojis: settings.botEmojis != null ? settings.botEmojis : undefined,
         botBackLabel: settings.botBackLabel ?? null,
@@ -1891,6 +1894,10 @@ export function SettingsPage() {
                         </select>
                         <p className="text-xs text-muted-foreground">Web-режиму нужен публичный HTTPS-адрес кабинета. Свои ссылки сохраняются. Новое меню появится после /start или возврата в меню; старые кнопки продолжат работать.</p>
                       </div>
+                      <label className="flex items-start gap-3 rounded-xl border border-border p-3">
+                        <input type="checkbox" className="mt-1" checked={settings.botGroupCabinet ?? false} onChange={e => setSettings(s => s ? { ...s, botGroupCabinet: e.target.checked } : s)} />
+                        <span>Разделы внутри личного кабинета<span className="block text-xs text-muted-foreground">Тарифы, подписки, устройства, баланс и бонусы будут внутри «Профиля». Кнопка профиля останется доступной. Web-кабинет и поддержка останутся в главном меню.</span></span>
+                      </label>
                       <BotButtonsList
                         onSave={saveBotMenu}
                         saving={saving}

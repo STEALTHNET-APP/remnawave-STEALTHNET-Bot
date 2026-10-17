@@ -2965,6 +2965,7 @@ const updateSettingsSchema = z.object({
   groqFallback3: z.string().max(100).nullable().optional(),
   aiSystemPrompt: z.string().max(5000).nullable().optional(),
   botButtons: botButtonsJsonSchema.nullable().optional(),
+  botGroupCabinet: z.boolean().optional(),
   botMenuMode: z.enum(["classic", "web"]).optional(),
   botButtonsPerRow: z.union([z.literal(1), z.literal(2), z.number().int().min(1).max(2)]).optional(),
   botEmojis: z.union([z.string().max(15000), z.record(z.object({ unicode: z.string().max(20).optional(), tgEmojiId: z.string().max(50).optional() }))]).nullable().optional(),
@@ -3660,6 +3661,10 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.botButtons !== undefined) {
     const val = updates.botButtons ?? "";
     await prisma.systemSetting.upsert({ where: { key: "bot_buttons" }, create: { key: "bot_buttons", value: val }, update: { value: val } });
+  }
+  if (updates.botGroupCabinet !== undefined) {
+    const value = String(updates.botGroupCabinet);
+    await prisma.systemSetting.upsert({ where: { key: "bot_group_cabinet" }, create: { key: "bot_group_cabinet", value }, update: { value } });
   }
   if (updates.botMenuMode !== undefined) {
     const value = updates.botMenuMode;

@@ -2234,6 +2234,7 @@ async function handleStart(ctx: Context, payload: string) {
       showTickets: config?.ticketsEnabled === true,
       showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
       menuMode: config?.botMenuMode ?? "classic",
+      groupCabinet: config?.botGroupCabinet === true,
       buttonsPerRow: config?.botButtonsPerRow ?? 1,
       remnaSubscriptionUrl: config?.useRemnaSubscriptionPage ? vpnUrl : null,
     });
@@ -2832,6 +2833,7 @@ composer.on("callback_query:data", async (ctx) => {
         showTickets: config?.ticketsEnabled === true,
         showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
         menuMode: config?.botMenuMode ?? "classic",
+      groupCabinet: config?.botGroupCabinet === true,
         buttonsPerRow: config?.botButtonsPerRow ?? 1,
         remnaSubscriptionUrl: config?.useRemnaSubscriptionPage ? vpnUrl : null,
       });
@@ -3474,6 +3476,7 @@ composer.on("callback_query:data", async (ctx) => {
         showTickets: config?.ticketsEnabled === true,
         showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
         menuMode: config?.botMenuMode ?? "classic",
+      groupCabinet: config?.botGroupCabinet === true,
         buttonsPerRow: config?.botButtonsPerRow ?? 1,
         remnaSubscriptionUrl: config?.useRemnaSubscriptionPage ? vpnUrl : null,
       });
@@ -6342,7 +6345,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
         `${_t("profile.title", lang)}\n\n${_t("profile.balance", lang)}${formatMoney(client?.balance ?? 0, client?.preferredCurrency ?? "usd")}\n${_t("profile.lang", lang)}${client?.preferredLang ?? "ru"}\n${_t("profile.currency", lang)}${client?.preferredCurrency ?? "usd"}\n${_t("profile.autorenew", lang)}${autoRenewStr}\n\n${_t("profile.change", lang)}`,
         config?.botEmojis
       );
-      await editMessageContent(ctx, text, profileButtons(config?.botBackLabel ?? null, innerStyles, innerEmojiIds, client?.autoRenewEnabled, lang), entities);
+      await editMessageContent(ctx, text, profileButtons(config?.botBackLabel ?? null, innerStyles, innerEmojiIds, client?.autoRenewEnabled, lang, await groupedProfileMenu(config, token, client?.trialUsed ?? false)), entities);
       return;
     }
 
@@ -6403,7 +6406,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
           `${_t("profile.title", lang)}\n\n${_t("profile.balance", lang)}${formatMoney(client?.balance ?? 0, client?.preferredCurrency ?? "usd")}\n${_t("profile.lang", lang)}${client?.preferredLang ?? "ru"}\n${_t("profile.currency", lang)}${client?.preferredCurrency ?? "usd"}\n${_t("profile.autorenew", lang)}${autoRenewStr}\n\n${_t("profile.change", lang)}`,
           config?.botEmojis
         );
-        await editMessageContent(ctx, text, profileButtons(config?.botBackLabel ?? null, innerStyles, innerEmojiIds, client?.autoRenewEnabled, lang), entities);
+        await editMessageContent(ctx, text, profileButtons(config?.botBackLabel ?? null, innerStyles, innerEmojiIds, client?.autoRenewEnabled, lang, await groupedProfileMenu(config, token, client?.trialUsed ?? false)), entities);
       } catch (err: any) {
         await ctx.answerCallbackQuery({ text: err.message || "Ошибка", show_alert: true });
       }
@@ -8704,5 +8707,28 @@ for (const b of botInstances) {
         console.error(`[Bot @${info.username}] setMyCommands failed:`, e);
       }
     },
+  });
+}
+
+async function groupedProfileMenu(config: Awaited<ReturnType<typeof api.getPublicConfig>>, token: string, trialUsed: boolean): Promise<InlineMarkup | undefined> {
+  if (!config?.botGroupCabinet) return undefined;
+  const [subscriptions, trials, proxy, singbox] = await Promise.all([
+    api.getAllSubscriptions(token).catch(() => ({ items: [] })),
+    api.getAvailableTrials(token).catch(() => ({ items: [], hasAnyEnabled: false })),
+    api.getPublicProxyTariffs().catch(() => ({ items: [] })),
+    api.getPublicSingboxTariffs().catch(() => ({ items: [] })),
+  ]);
+  return mainMenu({
+    section: "profile", groupCabinet: true,
+    showTrial: trials.hasAnyEnabled ? trials.items.length > 0 : Boolean(config.trialEnabled && !trialUsed),
+    showVpn: subscriptions.items.length > 0,
+    showProxy: proxy.items.some(c => c.tariffs.length > 0),
+    showSingbox: singbox.items.some(c => c.tariffs.length > 0),
+    appUrl: config.publicAppUrl ?? null,
+    botButtons: config.botButtons,
+    menuMode: config.botMenuMode,
+    buttonsPerRow: config.botButtonsPerRow,
+    showExtraOptions: config.sellOptionsEnabled && (config.sellOptions?.length ?? 0) > 0,
+    showGift: config.giftSubscriptionsEnabled,
   });
 }

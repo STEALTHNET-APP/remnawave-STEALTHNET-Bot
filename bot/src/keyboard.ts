@@ -232,6 +232,8 @@ export function mainMenu(opts: {
   showExtraOptions?: boolean;
   showGift?: boolean;
   menuMode?: "classic" | "web";
+  groupCabinet?: boolean;
+  section?: "main" | "profile";
   /** Кнопок в ряд: 1 или 2 (по умолчанию 1) */
   buttonsPerRow?: 1 | 2;
   /** URL страницы подписки Remna (если задан — кнопка VPN ведёт туда) */
@@ -239,7 +241,7 @@ export function mainMenu(opts: {
 }): InlineMarkup {
   const configButtons = opts.botButtons ?? [];
   const fromConfig = configButtons.length > 0;
-  let list = fromConfig ? [...configButtons] : [...DEFAULT_BUTTONS];
+  let list = (fromConfig ? configButtons : DEFAULT_BUTTONS).map(b => ({ ...b }));
   if (fromConfig && !list.some((b) => b.id === "devices")) {
     list.push({ id: "devices", visible: true, label: "📱 Устройства", order: 1.5, style: "primary" });
   }
@@ -264,7 +266,14 @@ export function mainMenu(opts: {
   if (fromConfig && !!opts.appUrl?.trim() && !list.some((b) => b.id === "site")) {
     list.push({ id: "site", visible: true, label: "🌐 Сайт", order: 10, style: "primary", onePerRow: true });
   }
+  const cabinetIds = new Set(["tariffs", "my_subs", "proxy", "my_proxy", "singbox", "my_singbox", "devices", "topup", "referral", "trial", "vpn", "promocode", "extra_options", "gift", "roulette", "tg_proxy"]);
+  if (opts.groupCabinet && opts.section !== "profile") {
+    const profile = list.find(b => b.id === "profile");
+    if (profile) profile.visible = true;
+    else list.push({ ...DEFAULT_BUTTONS.find(b => b.id === "profile")! });
+  }
   list = list
+    .filter(b => opts.section === "profile" ? cabinetIds.has(b.id) : !opts.groupCabinet || !cabinetIds.has(b.id))
     .filter((b) => b.visible)
     .filter((b) => {
       if (b.id === "trial") return opts.showTrial;
@@ -297,7 +306,7 @@ export function mainMenu(opts: {
       if (iconId) node.icon_custom_emoji_id = iconId;
       if (styleForBtn) node.style = styleForBtn;
       items.push({ node, onePerRow });
-    } else if (opts.menuMode === "web" && menuWebAppUrl(base, b.id)) {
+    } else if (opts.menuMode === "web" && !(opts.groupCabinet && b.id === "profile") && menuWebAppUrl(base, b.id)) {
       const node: WebAppButton = { text: labelForIcon, web_app: { url: menuWebAppUrl(base, b.id)! } };
       if (iconId) node.icon_custom_emoji_id = iconId;
       if (styleForBtn) node.style = styleForBtn;
@@ -1100,7 +1109,7 @@ export function optionPaymentMethodButtons(
   return { inline_keyboard: rows };
 }
 
-export function profileButtons(backLabel?: string | null, innerStyles?: InnerButtonStyles, emojiIds?: InnerEmojiIds, autoRenewEnabled?: boolean, lang = "ru"): InlineMarkup {
+export function profileButtons(backLabel?: string | null, innerStyles?: InnerButtonStyles, emojiIds?: InnerEmojiIds, autoRenewEnabled?: boolean, lang = "ru", cabinet?: InlineMarkup): InlineMarkup {
   const back = (backLabel && backLabel.trim()) || _t("back_to_menu", lang);
   const profile = resolveStyle(toStyle(innerStyles?.profile), "primary");
   const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
@@ -1109,6 +1118,7 @@ export function profileButtons(backLabel?: string | null, innerStyles?: InnerBut
   const autoRenewData = autoRenewEnabled ? "profile:autorenew:off" : "profile:autorenew:on";
   return {
     inline_keyboard: [
+      ...(cabinet?.inline_keyboard ?? []),
       [btn(autoRenewText, autoRenewData, profile, profileId)],
       [btn(_t("profile.btn_lang", lang), "profile:lang", profile, profileId), btn(_t("profile.btn_currency", lang), "profile:currency", profile, profileId)],
       [btn(back, "menu:main", backSty, emojiIds?.back)],
