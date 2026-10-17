@@ -351,7 +351,7 @@ function SettingsPopover() {
       </Button>
       <div id="cabinet-settings-panel"
         className={cn(
-          "absolute -right-2 sm:right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[260px] max-w-[260px] rounded-[2rem] border border-white/40 dark:border-white/10 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-[32px] p-5 shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)] transition-all duration-300 origin-top-right",
+          "absolute -right-2 sm:right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[260px] max-w-[260px] rounded-[2rem] border border-border bg-card text-card-foreground p-5 shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)] transition-all duration-300 origin-top-right",
           show ? "visible opacity-100 scale-100 pointer-events-auto translate-y-0" : "invisible opacity-0 scale-95 pointer-events-none -translate-y-2"
         )}
       >
@@ -361,13 +361,13 @@ function SettingsPopover() {
           </div>
           <div className="min-w-0 flex-1">
             <h4 className="text-base font-bold tracking-tight text-foreground truncate">{t("cabinet.layout.settings")}</h4>
-            <p className="text-[10px] text-muted-foreground mt-[1px] uppercase tracking-wider font-semibold truncate">{t("cabinet.layout.settings_subtitle")}</p>
+            <p className="text-xs text-muted-foreground mt-[1px] uppercase tracking-wider font-semibold truncate">{t("cabinet.layout.settings_subtitle")}</p>
           </div>
         </div>
 
         <div className="space-y-4 mb-5">
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground font-medium pl-1 flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> {t("cabinet.layout.language")}</label>
+            <label className="text-xs text-foreground font-medium pl-1 flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> {t("cabinet.layout.language")}</label>
             <GlassSelect
               value={preferredLang}
               onChange={(v) => setPreferredLang(v)}
@@ -375,7 +375,7 @@ function SettingsPopover() {
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground font-medium pl-1 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {t("cabinet.layout.currency")}</label>
+            <label className="text-xs text-foreground font-medium pl-1 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {t("cabinet.layout.currency")}</label>
             <GlassSelect
               value={preferredCurrency}
               onChange={(v) => setPreferredCurrency(v)}
