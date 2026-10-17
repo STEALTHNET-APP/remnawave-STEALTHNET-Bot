@@ -156,6 +156,25 @@ async function claimDedupMarker(
   return false;
 }
 
+async function releaseNotificationClaim(context: AutoRenewNotifContext, marker: string, bucketFor: (ttl: number) => string) {
+  const sec = context.dedupKeyForSec;
+  const root = context.dedupKeyForRoot;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const previous = sec
+      ? (await prisma.subscription.findUnique({ where: { id: sec.secondarySubscriptionId }, select: { lastNotifiedKey: true } }))?.lastNotifiedKey
+      : root ? (await prisma.client.findUnique({ where: { id: root.clientId }, select: { lastArnNotifiedKey: true } }))?.lastArnNotifiedKey : undefined;
+    if (previous == null) return;
+    const map = parseDedupMap(previous);
+    if (map[marker] !== bucketFor((sec ?? root)?.ttlMs ?? 3600000)) return;
+    delete map[marker];
+    const next = JSON.stringify(map);
+    const result = sec
+      ? await prisma.subscription.updateMany({ where: { id: sec.secondarySubscriptionId, lastNotifiedKey: previous }, data: { lastNotifiedKey: next } })
+      : await prisma.client.updateMany({ where: { id: root!.clientId, lastArnNotifiedKey: previous }, data: { lastArnNotifiedKey: next } });
+    if (result.count) return;
+  }
+}
+
 function renderTemplate(template: string, ctx: AutoRenewNotifContext): string {
   const fmt = (n: number) => Math.round(n).toLocaleString("ru-RU");
   const days = ctx.minutesLeft != null ? Math.max(0, Math.floor(ctx.minutesLeft / (60 * 24))) : 0;
@@ -216,10 +235,11 @@ export async function dispatchAutoRenewNotification(
   const cfg = await getSystemConfig();
   const backLabel = (cfg.botBackLabel ?? "🏠 Главное меню").trim() || "🏠 Главное меню";
 
+  const notificationTime = Date.now();
   const dedupBucketFor = (ttlMs: number): string =>
     triggerType === "UPCOMING"
-      ? upcomingDedupBucket(context.expireAt, Date.now(), ttlMs)
-      : String(Math.floor(Date.now() / ttlMs));
+      ? upcomingDedupBucket(context.expireAt, notificationTime, ttlMs)
+      : String(Math.floor(notificationTime / ttlMs));
 
   let sentCount = 0;
   for (const t of matched) {
@@ -250,9 +270,13 @@ export async function dispatchAutoRenewNotification(
         [{ text: backLabel, callback_data: "menu:main" }],
       ],
     };
-    await sendTelegramToUser(client.telegramId, text, null, replyMarkup, { clientIdForBotToken: client.id })
-      .catch((e) => console.error(`[arn-notif] sendTelegramToUser failed for client ${clientId}, template ${t.id}:`, e));
-    sentCount += 1;
+    try {
+      await sendTelegramToUser(client.telegramId, text, null, replyMarkup, { clientIdForBotToken: client.id, throwOnError: true });
+      sentCount += 1;
+    } catch (error) {
+      await releaseNotificationClaim(context, t.id, dedupBucketFor);
+      console.error(`[arn-notif] sendTelegramToUser failed for client ${clientId}, template ${t.id}:`, error);
+    }
   }
   return sentCount;
 }

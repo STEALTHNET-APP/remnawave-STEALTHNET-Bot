@@ -1,3 +1,4 @@
+import { subscriptionReminderWindow, verifySubscriptionReminder } from "./subscription-reminder.service.js";
 import { sendBroadcastEmail, subscribedEmailFilter, isEmailUnsubscribed } from "../email-unsubscribe/email-unsubscribe.service.js";
 /**
  * Авто-рассылка: настраиваемые правила (после регистрации, неактивность, без платежа и т.д.).
@@ -39,9 +40,6 @@ const RECURRING_COOLDOWN_DAYS = 30;
  * Cron работает ежедневно — 3 дня дают достаточный буфер на случай простоя / ребилдов.
  */
 const ONE_TIME_WINDOW_DAYS = 3;
-
-/** Окно для subscription_expired: показывать только недавно истёкшие (чтобы не спамить годами). */
-const EXPIRED_WINDOW_DAYS = 7;
 
 const LOG_PREFIX = "[auto-broadcast]";
 
@@ -545,75 +543,16 @@ export async function getEligibleTargets(
     // клиента независимо. Раньше был distinct(ownerId), и юзер с 5 истекающими
     // подписками получал уведомление только за одну.
 
-    case "subscription_expired": {
-      const windowEnd = new Date(now.getTime() - delayDays * dayMs);
-      const windowStart = new Date(windowEnd.getTime() - EXPIRED_WINDOW_DAYS * dayMs);
-      const subs = await prisma.subscription.findMany({
-        where: {
-          expireAt: { gte: windowStart, lte: windowEnd },
-          autoRenewEnabled: false,
-          ...excludeLegacyAutoRenewSubs(),
-          tariffId: { not: null },
-          // подписки в инвентаре подарков
-          // (purchasedAsGift=true) не уведомляем — это «товар» в gift-flow дарителя,
-          // не «активная подписка» юзера.
-          //
-          // Что покрывает фильтр:
-          //   purchasedAsGift=true + giftStatus=null         → куплена в инвентарь, не подарена → НЕ слать
-          //   purchasedAsGift=true + giftStatus=GIFT_RESERVED → код создан, ждёт активации     → НЕ слать
-          //
-          // Что НЕ исключает (покрывается логикой purchasedAsGift=false):
-          //   purchasedAsGift=false + giftStatus=GIFTED          → передана получателю, теперь его → СЛАТЬ
-          //   purchasedAsGift=false + giftStatus=ACTIVATED_SELF  → даритель забрал себе → СЛАТЬ
-          //   purchasedAsGift=false + giftStatus=null            → обычная подписка → СЛАТЬ
-          purchasedAsGift: false,
-          owner: baseWhere,
-        },
-        select: { id: true, ownerId: true, expireAt: true, tariff: { select: { name: true } } },
-      });
-      targets = subs.map((s) => ({
-        clientId: s.ownerId,
-        subscriptionId: s.id,
-        tariffName: s.tariff?.name ?? undefined,
-        subExpireAt: s.expireAt ?? undefined,
-      }));
-      break;
-    }
-
-    case "subscription_ending_minutes": {
-      const minutesLeft = Math.max(1, delayDays);
-      const minuteMs = 60 * 1000;
-      const windowStart = new Date(now.getTime() + (minutesLeft - 1) * minuteMs);
-      const windowEnd = new Date(now.getTime() + minutesLeft * minuteMs);
-      const subs = await prisma.subscription.findMany({
-        where: {
-          expireAt: { gte: windowStart, lt: windowEnd },
-          autoRenewEnabled: false,
-          ...excludeLegacyAutoRenewSubs(),
-          tariffId: { not: null },
-          owner: baseWhere,
-        },
-        select: { id: true, ownerId: true, expireAt: true, tariff: { select: { name: true } } },
-      });
-      targets = subs.map((s) => ({
-        clientId: s.ownerId,
-        subscriptionId: s.id,
-        tariffName: s.tariff?.name ?? undefined,
-        subExpireAt: s.expireAt ?? undefined,
-      }));
-      break;
-    }
-
+    case "subscription_expired":
+    case "subscription_ending_minutes":
     case "subscription_ending_soon": {
-      const daysLeft = Math.max(1, delayDays);
-      const windowStart = new Date(now.getTime() + (daysLeft - 1) * dayMs);
-      const windowEnd = new Date(now.getTime() + daysLeft * dayMs);
       const subs = await prisma.subscription.findMany({
         where: {
-          expireAt: { gte: windowStart, lt: windowEnd },
+          expireAt: subscriptionReminderWindow(rule, now.getTime()),
           autoRenewEnabled: false,
           ...excludeLegacyAutoRenewSubs(),
           tariffId: { not: null },
+          purchasedAsGift: false,
           owner: baseWhere,
         },
         select: { id: true, ownerId: true, expireAt: true, tariff: { select: { name: true } } },
@@ -676,7 +615,19 @@ export type RunRuleResult = {
 /**
  * Выполнить одно правило: отправить сообщение подходящим клиентам и записать лог.
  */
+const runningRules = new Map<string, Promise<RunRuleResult>>();
+
 export async function runRule(ruleId: string, opts?: { onlyClientId?: string }): Promise<RunRuleResult> {
+  const key = `${ruleId}:${opts?.onlyClientId ?? ""}`;
+  const current = runningRules.get(key);
+  if (current) return current;
+  const task = executeRule(ruleId, opts);
+  runningRules.set(key, task);
+  try { return await task; }
+  finally { runningRules.delete(key); }
+}
+
+async function executeRule(ruleId: string, opts?: { onlyClientId?: string }): Promise<RunRuleResult> {
   // подгружаем promoCode для подстановки в текст + проверки лимита.
   const rule = await prisma.autoBroadcastRule.findUnique({
     where: { id: ruleId },
@@ -763,16 +714,20 @@ export async function runRule(ruleId: string, opts?: { onlyClientId?: string }):
   const errors: string[] = [];
   const SKIP_PATTERNS = /blocked by the user|can't initiate conversation|send messages to bots|chat not found|user is deactivated|bot was kicked/i;
   const personalDiscountAlreadyApplied = new Set<string>();
-  // Анти-задвоение: для subscription_* триггеров у клиента может быть несколько
-  // подписок (несколько target'ов в одном прогоне). Шлём ОДНО сообщение на клиента
-  // за прогон, но в лог пишем КАЖДУЮ подписку (чтобы дедуп-снапшоты по подпискам
-  // сохранялись и правило не сработало повторно в следующих тиках).
-  const isSubTrigger = isSubscriptionTrigger(rule.triggerType);
-  const clientMessagedThisRun = new Set<string>();
 
   console.log(`${LOG_PREFIX} Rule "${rule.name}": sending to ${targets.length} targets (${uniqueClientIds.length} unique clients)...`);
 
-  for (const t of targets) {
+  for (let t of targets) {
+    if (t.subscriptionId) {
+      try {
+        const verified = await verifySubscriptionReminder(rule, t.subscriptionId, t.clientId);
+        if (!verified) { skipped++; continue; }
+        t = verified;
+      } catch (error) {
+        if (errors.length < 20) errors.push(error instanceof Error ? error.message : String(error));
+        continue;
+      }
+    }
     const c = clientsMap.get(t.clientId);
     if (!c) continue;
     let telegramOk = false;
@@ -830,10 +785,6 @@ export async function runRule(ruleId: string, opts?: { onlyClientId?: string }):
     // Реальные переносы (из seed) не содержат backslash и не затрагиваются.
     perClientMessage = perClientMessage.replace(/\\r\\n|\\n/g, "\n");
 
-    // Анти-задвоение: этому клиенту в этом прогоне уже отправили — не шлём повтор,
-    // но ниже всё равно запишем лог по текущей подписке (для дедуп-снапшота).
-    const alreadyMessagedClient = isSubTrigger && clientMessagedThisRun.has(c.id);
-
     const subB1Url = rule.buttonUrl && subscriptionIdForButton
       ? rule.buttonUrl.split("{{SUBSCRIPTION_ID}}").join(subscriptionIdForButton)
       : rule.buttonUrl;
@@ -845,11 +796,9 @@ export async function runRule(ruleId: string, opts?: { onlyClientId?: string }):
       rule.button2Text, subB2Url,
     );
 
-    // Telegram (пропускаем, если клиенту уже отправили в этом прогоне — анти-задвоение)
-    if (doTelegram && botToken && c.telegramId?.trim() && !alreadyMessagedClient) {
+    if (doTelegram && botToken && c.telegramId?.trim()) {
       const tgResult = await sendTelegram(botToken, c.telegramId.trim(), perClientMessage, perClientMarkup);
       telegramOk = tgResult.ok;
-      if (telegramOk) clientMessagedThisRun.add(c.id);
       if (!telegramOk) {
         if (tgResult.error && SKIP_PATTERNS.test(tgResult.error)) {
           skipped++;
@@ -861,8 +810,7 @@ export async function runRule(ruleId: string, opts?: { onlyClientId?: string }):
       await delay(TELEGRAM_DELAY_MS);
     }
 
-    // Email (пропускаем, если клиенту уже отправили в этом прогоне — анти-задвоение)
-    if (doEmail && smtpConfig && isMailConfigured(smtpConfig) && c.email?.trim() && !alreadyMessagedClient) {
+    if (doEmail && smtpConfig && isMailConfigured(smtpConfig) && c.email?.trim()) {
       try {
         const perClientHtml = `<!DOCTYPE html><html><body style="font-family: sans-serif;">${perClientMessage.replace(/\n/g, "<br>\n")}</body></html>`;
         const res = await sendBroadcastEmail(smtpConfig, config.publicAppUrl, c.email.trim(), subject, perClientHtml);
@@ -881,10 +829,7 @@ export async function runRule(ruleId: string, opts?: { onlyClientId?: string }):
     }
 
     const anySent = telegramOk || emailOk;
-    // Логируем (= помечаем подписку обработанной) если отправили, либо клиент
-    // заблокировал бота, либо пропустили как дубль клиента в этом прогоне —
-    // во всех случаях по этой подписке больше слать не нужно.
-    const shouldLog = anySent || telegramSkipped || alreadyMessagedClient;
+    const shouldLog = anySent || telegramSkipped;
     if (shouldLog) {
       try {
         await prisma.autoBroadcastLog.create({
