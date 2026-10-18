@@ -583,6 +583,7 @@ const DEFAULT_MENU_TEXTS: Record<string, string> = {
     "👥 Выгодная реферальная программа",
   ].join("\n"),
   balancePrefix: "💰 Ваш Баланс: ",
+  telegramIdPrefix: "🆔 Telegram ID: ",
   tariffPrefix: "💎 Ваш тариф : ",
   subscriptionPrefix: "{{CHART}} Статус подписки — ",
   statusInactive: "{{STATUS_INACTIVE}} Истекла",
@@ -609,6 +610,7 @@ const DEFAULT_MENU_TEXTS: Record<string, string> = {
 const DEFAULT_MENU_LINE_VISIBILITY: Record<string, boolean> = {
   welcomeTitlePrefix: false,
   balancePrefix: false,
+  telegramIdPrefix: true,
   tariffPrefix: false,
   subscriptionPrefix: false,
   expirePrefix: false,
@@ -1084,6 +1086,7 @@ function formatSubLine(item: {
 
 function buildMainMenuText(opts: {
   serviceName: string;
+  telegramId: number;
   balance: number;
   currency: string;
   subscription: unknown;
@@ -1140,6 +1143,7 @@ function buildMainMenuText(opts: {
   pushLine("welcomeGreeting", `**${t(menuTexts, "welcomeGreeting")}${t(menuTexts, "welcomeTitlePrefix")}${name}**`);
   // Баланс — сразу под шапкой (выше списка подписок), жирным.
   pushLine("balancePrefix", `**${t(menuTexts, "balancePrefix")}${balanceStr}**`);
+  pushLine("telegramIdPrefix", t(menuTexts, "telegramIdPrefix") + "`" + opts.telegramId + "`");
 
   // Блок «список подписок» — все root + secondary активные/полученные в подарок
   // (как в «Мои подписки»), сразу после шапки.
@@ -2203,6 +2207,7 @@ async function handleStart(ctx: Context, payload: string) {
 
     const { text, entities } = buildMainMenuText({
       serviceName: name,
+      telegramId: from.id,
       balance: client?.balance ?? 0,
       currency: client?.preferredCurrency ?? config?.defaultCurrency ?? "usd",
       subscription: subRes.subscription,
@@ -2806,6 +2811,7 @@ composer.on("callback_query:data", async (ctx) => {
       const appUrl = config?.publicAppUrl?.replace(/\/$/, "") ?? null;
       const { text, entities } = buildMainMenuText({
         serviceName: config?.serviceName?.trim() || "Кабинет",
+        telegramId: userId,
         balance: me.balance ?? 0,
         currency: me.preferredCurrency ?? config?.defaultCurrency ?? "usd",
         subscription: subRes.subscription,
@@ -3449,6 +3455,7 @@ composer.on("callback_query:data", async (ctx) => {
       const name = config?.serviceName?.trim() || "Кабинет";
       const { text, entities } = buildMainMenuText({
         serviceName: name,
+        telegramId: userId,
         balance: client?.balance ?? 0,
         currency: client?.preferredCurrency ?? config?.defaultCurrency ?? "usd",
         subscription: subRes.subscription,

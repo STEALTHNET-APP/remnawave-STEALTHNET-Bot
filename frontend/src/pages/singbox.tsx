@@ -355,17 +355,17 @@ export function SingboxPage() {
       </motion.div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex flex-wrap w-full max-w-md bg-foreground/[0.03] dark:bg-white/[0.02] border border-border rounded-xl p-1">
-          <TabsTrigger value="nodes" className="flex items-center gap-1.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
-            <Server className="h-4 w-4" />
+        <TabsList className="grid grid-cols-3 h-auto w-full max-w-md bg-foreground/[0.03] dark:bg-white/[0.02] border border-border rounded-xl p-1">
+          <TabsTrigger value="nodes" className="flex min-w-0 items-center gap-1.5 px-2 sm:px-4 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <Server className="hidden h-4 w-4 shrink-0 sm:block" />
             Ноды
           </TabsTrigger>
-          <TabsTrigger value="categories" className="flex items-center gap-1.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
-            <Layers className="h-4 w-4" />
+          <TabsTrigger value="categories" className="flex min-w-0 items-center gap-1.5 px-2 sm:px-4 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <Layers className="hidden h-4 w-4 shrink-0 sm:block" />
             Категории
           </TabsTrigger>
-          <TabsTrigger value="tariffs" className="flex items-center gap-1.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
-            <Tag className="h-4 w-4" />
+          <TabsTrigger value="tariffs" className="flex min-w-0 items-center gap-1.5 px-2 sm:px-4 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <Tag className="hidden h-4 w-4 shrink-0 sm:block" />
             Тарифы
           </TabsTrigger>
         </TabsList>

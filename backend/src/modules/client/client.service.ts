@@ -309,6 +309,7 @@ export type BotMenuTexts = {
   welcomeTitlePrefix?: string;
   welcomeGreeting?: string;
   balancePrefix?: string;
+  telegramIdPrefix?: string;
   tariffPrefix?: string;
   subscriptionPrefix?: string;
   statusInactive?: string;
@@ -331,6 +332,7 @@ const DEFAULT_BOT_MENU_TEXTS: Required<BotMenuTexts> = {
   welcomeTitlePrefix: "🛡 ",
   welcomeGreeting: "👋 Добро пожаловать в ",
   balancePrefix: "💰 Ваш Баланс: ",
+  telegramIdPrefix: "🆔 Telegram ID: ",
   tariffPrefix: "💎 Ваш тариф : ",
   subscriptionPrefix: "{{CHART}} Статус подписки — ",
   statusInactive: "{{STATUS_INACTIVE}} Истекла",
@@ -374,6 +376,7 @@ export type BotMenuLineVisibility = {
   welcomeTitlePrefix?: boolean;
   welcomeGreeting?: boolean;
   balancePrefix?: boolean;
+  telegramIdPrefix?: boolean;
   tariffPrefix?: boolean;
   subscriptionPrefix?: boolean;
   expirePrefix?: boolean;
@@ -388,6 +391,7 @@ const DEFAULT_BOT_MENU_LINE_VISIBILITY: Required<BotMenuLineVisibility> = {
   welcomeTitlePrefix: true,
   welcomeGreeting: true,
   balancePrefix: true,
+  telegramIdPrefix: true,
   tariffPrefix: true,
   subscriptionPrefix: true,
   expirePrefix: true,
