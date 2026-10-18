@@ -1,0 +1,7 @@
+__pycache__
+*.pyc
+tests
+.env
+*.sqlite*
+uploads
+backups

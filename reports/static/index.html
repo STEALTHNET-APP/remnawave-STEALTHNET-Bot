@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Сообщить об ошибке STEALTHNET и следить за исправлениями."><title>Ошибки и исправления — STEALTHNET</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script></head>
+<body>
+<header class="top"><a class="brand" href="/" aria-label="STEALTHNET — главная"><span class="mark">S</span><strong>STEALTHNET</strong><span class="division">/ reports</span></a><nav aria-label="Основная навигация"><a href="/">Все заявки</a><a href="/new" class="button small">Сообщить об ошибке <span aria-hidden="true">↗</span></a></nav></header>
+<main id="main">
+<section id="board" hidden>
+<div class="heading"><div><p class="eyebrow">ПАНЕЛЬ И TELEGRAM-БОТ</p><h1>Ошибки<br>и исправления<span class="dot">.</span></h1></div><p class="intro">Здесь собираем проблемы STEALTHNET.<br>Проверьте, не сообщал ли о вашей ошибке кто-то ещё, или оставьте новую заявку.</p></div>
+<div class="toolbar"><div class="filters" aria-label="Статус заявки"><button class="selected" data-status="">Все</button><button data-status="triage">Проверяем</button><button data-status="in_progress">В работе</button><button data-status="done">Исправлено</button></div><label class="search"><span class="sr-only">Поиск заявок</span><input id="search" type="search" placeholder="Название или номер заявки" maxlength="120"></label></div>
+<div class="list-caption"><span id="count">Загружаем заявки…</span><span>ОБНОВЛЕНО</span></div><div id="rows" aria-live="polite"></div>
+<div class="pagination"><button id="prev" class="secondary" hidden>Назад</button><span id="page"></span><button id="next" class="secondary" hidden>Далее</button></div>
+</section>
+<section id="new-report" hidden>
+<a class="back" href="/">← Все заявки</a><div class="form-layout"><div><h1 class="form-title">Что сломалось<span class="dot">?</span></h1><p class="intro">Опишите проблему так, чтобы мы могли её повторить.</p>
+<form id="report-form">
+<label>Коротко о проблеме <input name="title" required minlength="5" maxlength="160" placeholder="Например: не сохраняется название тарифа"></label>
+<div class="pair"><label>Раздел <select name="area"><option>Панель</option><option>Telegram-бот</option><option>Подписки</option><option>Оплата</option><option>Установка и обновление</option><option>Другое</option></select></label><label>Версия или коммит <input name="version" maxlength="80" placeholder="Например: 6.7.1 · d0cab46"></label></div>
+<label>Как повторить <textarea name="steps" required minlength="10" maxlength="6000" rows="5" placeholder="Где возникла ошибка? Какие действия к ней привели? Укажите браузер или устройство."></textarea></label>
+<div class="pair"><label>Что ожидали <textarea name="expected" maxlength="3000" rows="3"></textarea></label><label>Что получилось <textarea name="actual" maxlength="3000" rows="3"></textarea></label></div>
+<label class="upload">Скриншоты <span class="hint">До 3 изображений по 3 МБ. PNG, JPEG или WebP.</span><input id="files" name="files" type="file" multiple accept="image/png,image/jpeg,image/webp"></label><div id="previews"></div>
+<label>Контакт для уточнений <span class="hint">Необязательно. Email или @username — увидят только администраторы.</span><input name="contact" maxlength="254" placeholder="@username" autocomplete="off"></label>
+<div class="trap" aria-hidden="true"><label>Сайт<input name="website" tabindex="-1" autocomplete="off"></label></div>
+<p class="privacy">Скриншоты доступны только администраторам. Описание может появиться в списке заявок после проверки.</p><div id="form-error" class="error" role="alert"></div><button class="button" type="submit">Отправить заявку <span aria-hidden="true">↗</span></button>
+</form></div><aside><div class="aside-rule"></div><h2>Чтобы разобраться быстрее</h2><p>Укажите версию панели и точную последовательность действий. Если проблема возникает не всегда — напишите, когда её замечали.</p><h2>Без секретных данных</h2><p>Уберите со скриншотов пароли, токены, платёжные реквизиты и данные клиентов.</p><h2>Проблема с вашим VPN?</h2><p>По оплате или доступу к конкретной подписке обратитесь в поддержку своего VPN-сервиса. Здесь принимаем ошибки программного обеспечения.</p></aside></div>
+</section>
+<section id="receipt" class="receipt" hidden><p class="eyebrow">ЗАЯВКА ПОЛУЧЕНА</p><h1>Спасибо.<br>Разберёмся<span class="dot">.</span></h1><p id="receipt-number"></p><p>После проверки описание может появиться в общем списке. Если понадобится уточнение, используем оставленный контакт.</p><a href="/" class="button">К списку заявок</a></section>
+<section id="login" hidden><a class="back" href="/">← Все заявки</a><div class="login-box"><h1 class="form-title">Для команды<span class="dot">.</span></h1><p class="intro">Войдите с аккаунтом администратора стендовой панели.</p><form id="login-form"><div id="credentials"><label>Email<input name="email" type="email" required autocomplete="username"></label><label>Пароль<input name="password" type="password" required autocomplete="current-password"></label></div><label id="otp" hidden>Код подтверждения<input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"></label><div id="login-error" class="error" role="alert"></div><button class="button" type="submit">Войти</button></form></div></section>
+<section id="detail" hidden></section>
+<div id="global-error" class="error" role="alert"></div>
+</main>
+<footer><span>STEALTHNET · Трекер ошибок</span><div><a href="https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot" target="_blank" rel="noopener noreferrer">Исходный код ↗</a><a id="team-link" href="/admin">Для команды</a><button id="logout" hidden>Выйти</button></div></footer>
+<dialog id="editor"><button id="close-editor" class="close" aria-label="Закрыть">×</button><div id="editor-content"></div></dialog>
+</body></html>
