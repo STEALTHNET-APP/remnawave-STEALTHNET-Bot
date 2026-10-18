@@ -245,7 +245,7 @@ export function checkPlategaBinding(
     return { ok: false, reason: "no stored transaction id and api returned no payload" };
   }
 
-  if (apiTx.amount !== undefined && Math.abs(apiTx.amount - payment.amount) > PLATEGA_AMOUNT_TOLERANCE) {
+  if (apiTx.amount !== undefined && apiTx.amount < payment.amount - PLATEGA_AMOUNT_TOLERANCE) {
     return { ok: false, reason: `amount mismatch: api=${apiTx.amount} expected=${payment.amount}` };
   }
 
