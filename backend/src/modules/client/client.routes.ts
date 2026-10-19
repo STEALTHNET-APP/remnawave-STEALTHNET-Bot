@@ -3929,7 +3929,7 @@ const payByBalanceSchema = z.object({
   replaceTrialSubId: z.string().min(1).max(64).optional(),
 }).refine((d) => (d.tariffId ? 1 : 0) + (d.proxyTariffId ? 1 : 0) + (d.singboxTariffId ? 1 : 0) === 1, { message: "Укажите tariffId, proxyTariffId или singboxTariffId" });
 
-clientRouter.post("/payments/balance", async (req, res) => {
+clientRouter.post("/payments/balance", async (req, res, next) => {
   const clientRaw = (req as unknown as { client: { id: string; remnawaveUuid: string | null; email: string | null; telegramId: string | null } }).client;
   const parsed = payByBalanceSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: "Проверьте введённые данные", errors: parsed.error.flatten() });
@@ -4100,7 +4100,11 @@ clientRouter.post("/payments/balance", async (req, res) => {
   // Параметр deviceCount/requestedExtras в API остаётся для legacy/tariff-extras flow;
   // в нашем sell-options flow он = 0 (юзер докупает устройства отдельно через extra-options).
   const requestedExtras = Math.max(0, deviceCount ?? 0);
-  await validateTariffDevices(prisma, clientRaw.id, tariff.id, requestedExtras, { extendsSecondarySubId, removeExtrasOnActivate });
+  try {
+    await validateTariffDevices(prisma, clientRaw.id, tariff.id, requestedExtras, { extendsSecondarySubId, removeExtrasOnActivate });
+  } catch (error) {
+    return next(error);
+  }
 
   let extrasMonthlyPrice = 0;
   // T-extras-universal: при «убрать устройства» доплату за существующие extras не берём —
