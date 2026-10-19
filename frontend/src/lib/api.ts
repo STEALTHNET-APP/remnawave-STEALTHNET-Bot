@@ -281,6 +281,13 @@ export interface GramadsBotShowedMyPostDto {
 }
 
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit & { token?: string; _retry?: boolean } = {}
@@ -300,7 +307,7 @@ async function request<T>(
   try {
     data = text ? JSON.parse(text) : undefined;
   } catch {
-    throw new Error(res.statusText || "Request failed");
+    throw new ApiError(res.statusText || "Request failed", res.status);
   }
 
   // выбор refresh-функции по типу пути: /client/* (кроме /client/auth/* —
@@ -318,7 +325,7 @@ async function request<T>(
 
   if (!res.ok) {
     const message = (data as { message?: string })?.message ?? res.statusText;
-    throw new Error(message);
+    throw new ApiError(message, res.status);
   }
   return data as T;
 }

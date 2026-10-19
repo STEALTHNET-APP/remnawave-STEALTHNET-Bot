@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { ClientProfile, ClientAuthResponse } from "@/lib/api";
-import { api, setClientTokenRefreshFn } from "@/lib/api";
+import { api, ApiError, setClientTokenRefreshFn } from "@/lib/api";
 
 const STORAGE_TOKEN = "stealthnet_client_token";
 const STORAGE_CLIENT = "stealthnet_client_profile";
@@ -67,8 +67,14 @@ function loadState(): Pick<ClientAuthState, "token" | "client"> {
   const token = isJwtFresh(stored) ? stored : null;
   if (!token && stored) localStorage.removeItem(STORAGE_TOKEN);
   const raw = localStorage.getItem(STORAGE_CLIENT);
-  const client = raw ? (JSON.parse(raw) as ClientProfile) : null;
-  return { token, client };
+  try {
+    const client = raw ? JSON.parse(raw) : null;
+    if (client !== null && (typeof client !== "object" || typeof client.id !== "string")) throw new Error("Invalid saved client");
+    return { token, client: client as ClientProfile | null };
+  } catch {
+    saveState(null, null);
+    return { token: null, client: null };
+  }
 }
 
 function saveState(token: string | null, client: ClientProfile | null) {
@@ -145,16 +151,19 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
     try {
       const client = await api.clientMe(state.token);
       setState((prev) => {
+        if (prev.token !== state.token) return prev;
         const next = { ...prev, client };
         saveState(prev.token, client);
         return next;
       });
-    } catch {
-      // сбрасываем флаг попытки, чтобы эффект обмена initData
-      // мог переавторизовать миниаппку (иначе при невалидном токене юзер застрянет).
-      miniappAttemptedRef.current = false;
-      setState({ token: null, client: null, miniappAuthLoading: false, miniappAuthAttempted: false, pending2FAToken: null, isNewTelegramUser: false });
-      saveState(null, null);
+    } catch (error) {
+      if (!(error instanceof ApiError) || ![401, 403].includes(error.status)) return;
+      setState((prev) => {
+        if (prev.token !== state.token) return prev;
+        miniappAttemptedRef.current = false;
+        saveState(null, null);
+        return { token: null, client: null, miniappAuthLoading: false, miniappAuthAttempted: false, pending2FAToken: null, isNewTelegramUser: false };
+      });
     }
   }, [state.token]);
 

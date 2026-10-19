@@ -15,14 +15,17 @@ export function ConsoleAccessCard({ token }: { token: string | null }) {
   const [showPass, setShowPass] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
+    setError(null);
     try {
       setData(await consoleApi.get(token));
-    } catch {
-      /* тихо */
+    } catch (e) {
+      setData(null);
+      setError(e instanceof Error ? e.message : "Не удалось загрузить доступ к консоли.");
     } finally {
       setLoading(false);
     }
@@ -32,21 +35,28 @@ export function ConsoleAccessCard({ token }: { token: string | null }) {
     void load();
   }, [load]);
 
-  const copy = (text: string, key: string) => {
-    navigator.clipboard?.writeText(text);
-    setCopied(key);
-    setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
+  const copy = async (text: string, key: string) => {
+    setError(null);
+    try {
+      if (!navigator.clipboard) throw new Error("Копирование недоступно. Выделите и скопируйте текст вручную.");
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied((c) => (c === key ? null : c)), 1500);
+    } catch {
+      setError("Не удалось скопировать. Выделите и скопируйте текст вручную.");
+    }
   };
 
   const regenerate = async () => {
     if (!token) return;
     if (!confirm("Сгенерировать новый доступ? Старые логин/порт/пароль перестанут работать.")) return;
     setRegenerating(true);
+    setError(null);
     try {
       setData(await consoleApi.regenerate(token));
       setShowPass(false);
-    } catch {
-      /* тихо */
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Не удалось обновить доступ к консоли.");
     } finally {
       setRegenerating(false);
     }
@@ -64,13 +74,16 @@ export function ConsoleAccessCard({ token }: { token: string | null }) {
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">SSH-консоль мониторинга</h2>
           <p className="text-xs text-muted-foreground/70">Живой терминальный дашборд этого сервера по SSH</p>
         </div>
-        <Button size="sm" variant="ghost" onClick={() => void load()} className="ml-auto rounded-xl" disabled={loading}>
+        <Button size="sm" variant="ghost" onClick={() => void load()} className="ml-auto rounded-xl shrink-0" disabled={loading} aria-label="Обновить доступ к консоли">
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
         </Button>
       </div>
       <CardContent className="p-5 space-y-3">
+        {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
         {!data ? (
-          <p className="text-sm text-muted-foreground">{loading ? "Загрузка…" : "Нет данных"}</p>
+          <p className="text-sm text-muted-foreground">{loading ? "Загрузка…" : error ? "Нажмите обновление, чтобы повторить запрос." : "Нет данных"}</p>
+        ) : !data.user || !data.password || !Number.isInteger(data.port) || data.port < 1 || data.port > 65535 ? (
+          <p className="text-sm text-muted-foreground">Доступ к консоли пока не настроен. Обновите данные позже.</p>
         ) : (
           <>
             <div>

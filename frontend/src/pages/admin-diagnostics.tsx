@@ -31,14 +31,14 @@ export function AdminDiagnosticsPage() {
   const [logsFilter, setLogsFilter] = useState("");
   const healthQuery = useQuery({
     queryKey: ["admin", "diagnostics-health"] as const,
-    queryFn: () => diagnosticsApi.health(token!).catch(() => null),
+    queryFn: () => diagnosticsApi.health(token!),
     enabled: !!token,
   });
   const health = healthQuery.data ?? null;
 
   const cronsQuery = useQuery({
     queryKey: ["admin", "diagnostics-crons"] as const,
-    queryFn: () => diagnosticsApi.crons(token!).catch(() => null),
+    queryFn: () => diagnosticsApi.crons(token!),
     enabled: !!token,
   });
   const crons = cronsQuery.data?.items ?? [];
@@ -46,12 +46,12 @@ export function AdminDiagnosticsPage() {
   // Логи — по кнопке «Tail» (не авто): enabled=false, запрос запускаем вручную.
   const logsQuery = useQuery({
     queryKey: ["admin", "diagnostics-logs", logsLines, logsFilter] as const,
-    queryFn: () => diagnosticsApi.logs(token!, { lines: logsLines, filter: logsFilter || undefined }).catch(() => null),
+    queryFn: () => diagnosticsApi.logs(token!, { lines: logsLines, filter: logsFilter || undefined }),
     enabled: false,
   });
   const logs = logsQuery.data?.text ?? "";
-  const error = healthQuery.error || cronsQuery.error
-    ? String(healthQuery.error ?? cronsQuery.error)
+  const error = healthQuery.error || cronsQuery.error || logsQuery.error
+    ? String(healthQuery.error ?? cronsQuery.error ?? logsQuery.error)
     : null;
 
   const triggerCronMutation = useMutation({
@@ -139,7 +139,7 @@ export function AdminDiagnosticsPage() {
               })}
             </div>
           ) : (
-            <div className="flex h-20 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+            <div className="flex h-20 items-center justify-center">{healthQuery.isFetching ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /> : <p className="text-sm text-muted-foreground">Не удалось загрузить состояние сервисов. Повторите запрос.</p>}</div>
           )}
         </CardContent>
       </Card>
@@ -204,26 +204,26 @@ export function AdminDiagnosticsPage() {
       {/* Logs viewer */}
       <Card className="bg-card border-border rounded-2xl">
         <CardContent className="p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="mb-3 flex flex-col items-start sm:flex-row sm:items-center justify-between gap-3">
             <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
               <FileText className="h-4 w-4" /> Логи API
             </h2>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-end gap-2 min-w-0">
               <div>
-                <Label className="text-[10px] uppercase">Lines</Label>
+                <Label className="text-[10px] uppercase">Строк</Label>
                 <Input type="number" value={logsLines} onChange={(e) => setLogsLines(Number(e.target.value) || 200)} className="h-8 w-20 text-xs" />
               </div>
               <div>
-                <Label className="text-[10px] uppercase">Filter (regex)</Label>
-                <Input value={logsFilter} onChange={(e) => setLogsFilter(e.target.value)} placeholder="error|webhook" className="h-8 w-48 text-xs" />
+                <Label className="text-[10px] uppercase">Фильтр (regex)</Label>
+                <Input value={logsFilter} onChange={(e) => setLogsFilter(e.target.value)} placeholder="error|webhook" className="h-8 w-40 sm:w-48 max-w-full text-xs" />
               </div>
               <Button onClick={() => void logsQuery.refetch()} variant="outline" size="sm" disabled={logsQuery.isFetching} className="gap-1.5 mt-4">
                 {logsQuery.isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Tail
+                Загрузить
               </Button>
             </div>
           </div>
-          <Textarea readOnly value={logs} rows={20} className="font-mono text-[11px] leading-relaxed" placeholder="Нажми «Tail» чтобы получить последние строки логов api-контейнера." />
+          <Textarea readOnly value={logs} rows={20} className="font-mono text-[11px] leading-relaxed" placeholder="Нажмите «Загрузить», чтобы получить последние строки логов API." />
         </CardContent>
       </Card>
     </div>

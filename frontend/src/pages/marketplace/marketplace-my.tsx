@@ -20,6 +20,7 @@ export function MarketplaceMyListingsPage() {
   const reload = () => {
     if (!state.accessToken) return;
     setLoading(true);
+    setError(null);
     api.marketplaceMyListings(state.accessToken)
       .then((r) => setItems(r.items))
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))

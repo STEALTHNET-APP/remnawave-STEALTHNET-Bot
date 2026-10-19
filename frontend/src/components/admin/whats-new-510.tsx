@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { EASE_OUT, reducedMotion } from "@/lib/gsap-utils";
 
+import appVersion from "../../../../version.json";
+
 const STORAGE_KEY = "stealthnet_whatsnew_5.1.0_seen";
 
 interface Slide {
@@ -122,7 +124,7 @@ export function WhatsNew510() {
 
   useEffect(() => {
     try {
-      if (!localStorage.getItem(STORAGE_KEY)) setOpen(true);
+      if (appVersion.version === "5.1.0" && !localStorage.getItem(STORAGE_KEY)) setOpen(true);
     } catch { /* private mode — просто не показываем */ }
   }, []);
 

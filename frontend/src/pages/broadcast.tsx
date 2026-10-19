@@ -510,7 +510,7 @@ export function BroadcastPage() {
         className="relative overflow-hidden bg-card border border-border p-4 rounded-[2.5rem]"
       >
         <div className="absolute inset-0 bg-transparent pointer-events-none" />
-        <div className="absolute -top-10 -right-10 w-40 h-40 bg-primary/20 blur-3xl rounded-full pointer-events-none" />
+        <div className="absolute top-0 right-0 w-40 h-40 bg-primary/20 blur-3xl rounded-full pointer-events-none" />
         <div className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3">
             <motion.div
@@ -540,7 +540,7 @@ export function BroadcastPage() {
       </motion.div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "compose" | "history")} className="w-full">
-        <TabsList className="bg-card border border-border rounded-xl p-1.5 h-auto">
+        <TabsList className="bg-card border border-border rounded-xl p-1.5 h-auto max-w-full flex-wrap">
           <TabsTrigger value="compose" className="rounded-xl px-5 py-2.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Send className="h-4 w-4 mr-2" /> Создать
           </TabsTrigger>
