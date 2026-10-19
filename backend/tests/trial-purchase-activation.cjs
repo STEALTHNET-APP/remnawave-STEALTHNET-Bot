@@ -13,6 +13,7 @@ function load(rel, requireFn) {
 const pureRequire = (name) => { throw Error('unexpected require ' + name); };
 const target = load('modules/tariff/subscription-target.ts', pureRequire);
 const multi = load('modules/client/multi-subscriptions.ts', pureRequire);
+const deviceLimits = load('modules/extra-options/device-limit.ts', pureRequire);
 
 const DAY = 86_400_000;
 const TRIAL_SQUAD = 'sq-trial';
@@ -39,6 +40,8 @@ function matches(row, where = {}) {
 }
 const withTariff = (r) => ({ ...r, tariff: r.tariffId ? { name: state.tariffs[r.tariffId]?.name ?? r.tariffId, categoryId: state.tariffs[r.tariffId]?.categoryId ?? null } : null });
 const prisma = {
+  $transaction: async fn => fn(prisma),
+  $executeRaw: async () => 1,
   payment: {
     findUnique: async ({ where }) => state.payments[where.id] ?? null,
     findMany: async ({ where }) => state.paidLinks.filter((l) => where.status === 'PAID' && where.subscriptionId.in.includes(l)).map((subscriptionId) => ({ subscriptionId })),
@@ -73,6 +76,7 @@ const remna = {
 };
 const svc = load('modules/tariff/tariff-activation.service.ts', (name) => {
   if (name.endsWith('/db.js')) return { prisma };
+  if (name.endsWith('/device-limit.js')) return deviceLimits;
   if (name.includes('remna.client')) return remna;
   if (name.includes('gift.service')) return {
     createAdditionalSubscription: async (clientId, tariff, opts) => { state.calls.push(['create', clientId, tariff.id, opts]); return { ok: true, data: { subscriptionId: 'new', subscriptionIndex: state.subs.length } }; },

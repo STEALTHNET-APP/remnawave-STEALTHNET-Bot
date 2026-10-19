@@ -4,7 +4,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {randomUUID} from 'node:crypto';
 import {prisma} from '../dist/db.js';
-const dist=path.resolve(import.meta.dirname,'../dist');
+const dist=process.env.QA_DIST || path.resolve(import.meta.dirname,'../dist');
 const context=vm.createContext({console,Date,JSON,Promise,Error,Number,Math,Set,Map});
 const loaded=new Map();
 let remoteDevices=1, remoteUpdates=0, giftCalls=0, giftFailure=false;
@@ -23,8 +23,10 @@ async function resolve(spec,ref){
  if(spec==='node:crypto')return synthetic('crypto',{randomUUID});
  if(spec.endsWith('/client.service.js'))return synthetic('config',{getSystemConfig:async()=>({multiSubscriptionsEnabled:true})});
  if(spec.endsWith('/telegram-notify.service.js'))return synthetic('notify',{notifyAdminsAboutTrialActivated:async()=>{}});
- if(spec.endsWith('/remna.client.js'))return synthetic('remna',{isRemnaConfigured:()=>true,remnaGetUser:async()=>({data:{response:{hwidDeviceLimit:remoteDevices,subscriptionUrl:'https://example.invalid/qa'}}}),remnaUpdateUser:async({hwidDeviceLimit})=>{remoteDevices=hwidDeviceLimit;remoteUpdates++;return{data:{},status:200};}});
- if(spec.endsWith('/gift.service.js'))return synthetic('gift',{createAdditionalSubscription:async(clientId)=>{
+ if(spec.endsWith('/subscription.helpers.js'))return synthetic('subscriptionHelpers',{upsertSubscriptionByRemnaUuid:()=>{throw Error('Unexpected upsert');}});
+ if(spec.endsWith('/multi-subscriptions.js'))return synthetic('multi',{isMultiSubscriptionsEnabled:()=>true});
+ if(spec.endsWith('/remna.client.js'))return synthetic('remna',{remnaCreateUser:()=>{},remnaGetUserByTelegramId:()=>{},remnaGetUserByEmail:()=>{},extractRemnaUuid:()=>{},remnaUsernameFromClient:()=>{},remnaResetUserTraffic:async()=>({status:200}),remnaDeleteUser:()=>{},isRemnaConfigured:()=>true,remnaGetUser:async()=>({data:{response:{hwidDeviceLimit:remoteDevices,status:'ACTIVE',expireAt:new Date(Date.now()+86400000).toISOString(),subscriptionUrl:'https://example.invalid/qa'}}}),remnaUpdateUser:async({hwidDeviceLimit})=>{await new Promise(resolve=>setTimeout(resolve,10));remoteDevices=hwidDeviceLimit;remoteUpdates++;return{data:{},status:200};}});
+ if(spec.endsWith('/gift.service.js'))return synthetic('gift',{deleteSubscription:()=>{throw Error('Unexpected delete');},createAdditionalSubscription:async(clientId)=>{
   giftCalls++;
   if(giftFailure)return{ok:false,status:400,error:'test refusal'};
   const sub=await prisma.subscription.create({data:{ownerId:clientId,subscriptionIndex:0,remnawaveUuid:'qa-'+randomUUID(),expireAt:new Date(Date.now()+86400000)}});
@@ -74,6 +76,21 @@ try{
  assert.equal(remoteUpdates,2);
  assert.equal((await prisma.client.findUnique({where:{id:deviceClient.id}})).balance,130);
  await assert.rejects(()=>prisma.$transaction(tx=>cap.validateDevicePurchase(tx,deviceClient.id,JSON.stringify({extraOption:{kind:'devices',deviceCount:2}}))));
+ const renewals=(await moduleAt(path.join(dist,'modules/tariff/tariff-activation.service.js'))).namespace;
+ await prisma.tariff.update({where:{id:tariff.id},data:{maxExtraDevices:1}});
+ const racing=await fresh();
+ const racingSub=await prisma.subscription.create({data:{ownerId:racing.id,subscriptionIndex:0,tariffId:tariff.id,remnawaveUuid:'qa-'+randomUUID(),expireAt:new Date(Date.now()+86400000)}});
+ const racingMeta=await cap.validateDevicePurchase(prisma,racing.id,JSON.stringify({extraOption:{kind:'devices',deviceCount:1,productPriceMonthly:10}}));
+ const racingPayment=await prisma.payment.create({data:{clientId:racing.id,orderId:randomUUID(),amount:10,currency:'RUB',provider:'qa',status:'PAID',metadata:racingMeta}});
+ remoteDevices=1;remoteUpdates=0;
+ const [renewed,packageResult]=await Promise.all([
+  renewals.extendSecondarySubscription(racingSub.id,{...tariff,maxExtraDevices:1},undefined,1),
+  extra.applyExtraOptionByPaymentId(racingPayment.id)
+ ]);
+ assert.equal((await prisma.subscription.findUnique({where:{id:racingSub.id}})).extraDevices,1);
+ assert.equal(remoteDevices,2);assert.equal(remoteUpdates,1);
+ assert(renewed.ok ? packageResult.creditedToBalance : packageResult.ok && !packageResult.creditedToBalance);
+ console.log('PASS PostgreSQL: renewal and separate device package share one lock and cannot exceed the cap');
  console.log('PASS PostgreSQL: concurrent paid trials debit once; insufficient balance rolls back; rejection refunds; device cap and late invoice credit are atomic and idempotent');
 }finally{
  for(const client of clients){await prisma.clientTrialUsage.deleteMany({where:{clientId:client.id}});await prisma.payment.deleteMany({where:{clientId:client.id}});await prisma.subscription.deleteMany({where:{ownerId:client.id}});await prisma.client.delete({where:{id:client.id}});}

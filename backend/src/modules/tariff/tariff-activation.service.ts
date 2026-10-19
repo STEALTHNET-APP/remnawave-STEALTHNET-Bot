@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client";
+import { lockDevicePurchases } from "../extra-options/device-limit.js";
 /**
  * Сервис активации тарифа в Remnawave для конкретного клиента.
  * Используется из: оплата балансом, вебхук Platega, админ mark-as-paid.
@@ -631,9 +633,21 @@ export async function extendSecondarySubscription(
    *  остаток дней и трафика переносится 1:1 (а не pro-rata по пустой ставке = 0). */
   legacyTrial?: boolean,
 ): Promise<ActivationResult> {
+  const target = await prisma.subscription.findUnique({ where: { id: secondaryId }, select: { ownerId: true } });
+  if (!target) return { ok: false, error: "Подписка не найдена", status: 404 };
+  return prisma.$transaction(async db => {
+    await lockDevicePurchases(db, target.ownerId);
+    return extendSecondarySubscriptionLocked(db, secondaryId, tariff, selectedOption, extraDevices, removeExtrasAfter, convertMode, hardReplace, legacyTrial);
+  }, { maxWait: 15000, timeout: 45000 });
+}
+
+async function extendSecondarySubscriptionLocked(
+  db: Prisma.TransactionClient,
+  ...[secondaryId, tariff, selectedOption, extraDevices, removeExtrasAfter, convertMode, hardReplace, legacyTrial]: Parameters<typeof extendSecondarySubscription>
+): Promise<ActivationResult> {
   if (!isRemnaConfigured()) return { ok: false, error: "Сервис временно недоступен", status: 503 };
 
-  const sec = await prisma.subscription.findUnique({
+  const sec = await db.subscription.findUnique({
     where: { id: secondaryId },
     select: { id: true, remnawaveUuid: true, tariffId: true, autoRenewTariffId: true, ownerId: true, customPrice: true, extraDevices: true, extraDevicesMonthlyPrice: true, trialId: true, promoGranted: true, currentPricePerDay: true },
   });
@@ -789,7 +803,7 @@ export async function extendSecondarySubscription(
   // фиксируем итоговое количество extraDevices.
   // В convertMode дополнительно фиксируем новую цену/ставку (для будущих продлений и автосписаний).
   const newPriceForDb = selectedOption?.price ?? tariff.price;
-  await prisma.subscription.update({
+  await db.subscription.update({
     where: { id: sec.id },
     data: {
       expireAt: new Date(expireAt),
@@ -809,7 +823,7 @@ export async function extendSecondarySubscription(
         currentPricePerDay: effectiveDays > 0 ? newPriceForDb / effectiveDays : null,
       } : {}),
     },
-  }).catch(() => {});
+  });
 
   // юзер выбрал «без устройств» — лимит уже выставлен выше (included + новые extras,
   // старые обнулены в счётчиках), остаётся кикнуть HWID-устройства сверх нового лимита.
