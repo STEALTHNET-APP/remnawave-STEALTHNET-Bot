@@ -1,3 +1,5 @@
+import { webClientRouter } from "../amnezia-web/client.routes.js";
+import { isWebPanel, WEB_PROTOCOLS } from "../amnezia-web/api.js";
 import { starsApi, starsAmount } from "../telegram-stars/stars-api.js";
 import { validateTariffDevices } from "../extra-options/device-limit.js";
 import { activateFreeDaysPromo, PromoCodeError } from "../promo-code/free-days.service.js";
@@ -2698,26 +2700,34 @@ clientRouter.get("/proxy-slots", async (req, res) => {
   });
 });
 
+clientRouter.use(webClientRouter);
+
 clientRouter.get("/singbox-slots", async (req, res) => {
   res.set("Cache-Control", "no-store");
   const client = (req as unknown as { client: { id: string } }).client;
   const now = new Date();
   const slots = await prisma.singboxSlot.findMany({
-    where: { clientId: client.id, status: "ACTIVE", expiresAt: { gt: now } },
+    where: { clientId: client.id, OR: [{ status: "ACTIVE", expiresAt: { gt: now } }, ...(req.query.includeInactive === "true" ? [{ node: { protocol: { in: [...WEB_PROTOCOLS] } }, status: { in: ["ACTIVE", "PROVISIONING"] } }] : [])] },
     select: {
       id: true,
+      status: true,
+      syncPending: true,
+      sourcePaymentId: true,
+      singboxTariff: { select: { enabled: true } },
       userIdentifier: true,
       secret: true,
       expiresAt: true,
       trafficLimitBytes: true,
       trafficUsedBytes: true,
-      node: { select: { publicHost: true, port: true, protocol: true, tlsEnabled: true, customConfigJson: true } },
+      node: { select: { status: true, publicHost: true, port: true, protocol: true, tlsEnabled: true, customConfigJson: true } },
     },
     orderBy: { expiresAt: "asc" },
   });
+  const payments = await prisma.payment.findMany({ where: { id: { in: slots.map(s => s.sourcePaymentId).filter((id): id is string => !!id) } }, select: { id: true, status: true } });
+  const paid = new Set(payments.filter(p => p.status === "PAID").map(p => p.id));
   return res.json({
-    slots: slots.map((s) => {
-      const link = buildSingboxSlotSubscriptionLink(
+    slots: slots.filter(s => !isWebPanel(s.node.protocol) || (s.sourcePaymentId && paid.has(s.sourcePaymentId))).map((s) => {
+      const link = s.status === "ACTIVE" && s.expiresAt > now ? buildSingboxSlotSubscriptionLink(
         {
           publicHost: s.node.publicHost ?? "",
           port: s.node.port ?? 443,
@@ -2727,9 +2737,12 @@ clientRouter.get("/singbox-slots", async (req, res) => {
         },
         { userIdentifier: s.userIdentifier, secret: s.secret },
         `slot-${s.id.slice(-8)}`
-      );
+      ) : "";
       return {
         id: s.id,
+        status: s.syncPending || s.status === "PROVISIONING" ? "PENDING" : s.expiresAt <= now ? "EXPIRED" : s.trafficLimitBytes && s.trafficUsedBytes >= s.trafficLimitBytes ? "TRAFFIC_LIMIT" : s.node.status === "DISABLED" ? "DISABLED" : "ACTIVE",
+        nodeOnline: s.node.status === "ONLINE",
+        canRenew: isWebPanel(s.node.protocol) && s.status === "ACTIVE" && s.node.status !== "DISABLED" && !!s.singboxTariff?.enabled && !s.syncPending,
         subscriptionLink: link,
         expiresAt: s.expiresAt.toISOString(),
         trafficLimitBytes: s.trafficLimitBytes?.toString() ?? null,
@@ -3997,14 +4010,6 @@ clientRouter.post("/payments/balance", async (req, res) => {
     const pd = await applyPersonalDiscount(tariff.price, clientRaw.id);
     const finalSingboxPrice = pd.amount;
     const singSnap = await paymentSnapshotProduct(clientRaw.id, finalSingboxPrice);
-    // Та же история, что в proxy-ветке: атомик debit вместо read+check+write.
-    const debit = await prisma.client.updateMany({
-      where: { id: clientRaw.id, balance: { gte: singSnap.amount } },
-      data: { balance: { decrement: singSnap.amount } },
-    });
-    if (debit.count === 0) {
-      return res.status(400).json({ message: `Недостаточно средств. Баланс: ${clientDb.balance.toFixed(2)}, нужно: ${singSnap.amount.toFixed(2)}` });
-    }
     const payment = await createPayment({
       data: asPaymentUncheckedCreate({
         clientId: clientRaw.id,
@@ -4019,7 +4024,7 @@ clientRouter.post("/payments/balance", async (req, res) => {
           ? JSON.stringify({ personalDiscountPercent: pd.personalDiscountPercent, originalPrice: tariff.price })
           : null,
       }),
-    });
+    }, true);
     const singboxResult = await createSingboxSlotsByPaymentId(payment.id).catch(() => ({ ok: false as const, status: 503, error: "Не удалось выдать доступ. Средства возвращены на баланс." }));
     if (!singboxResult.ok) {
       await prisma.$transaction(async tx => {

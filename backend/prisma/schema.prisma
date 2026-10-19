@@ -286,6 +286,7 @@ model Payment {
   singboxTariff     SingboxTariff?     @relation(fields: [singboxTariffId], references: [id], onDelete: SetNull)
   subscription      Subscription?      @relation("PaymentSubscription", fields: [subscriptionId], references: [id], onDelete: SetNull)
   referralCredits   ReferralCredit[]
+  singboxRenewal    SingboxRenewal?
 
   @@index([clientId])
   @@index([status])
@@ -828,6 +829,11 @@ model SingboxTariff {
 }
 
 model SingboxSlot {
+  renewalBaseExpiresAt DateTime? @map("renewal_base_expires_at")
+  renewalBaseTrafficLimitBytes BigInt? @map("renewal_base_traffic_limit_bytes")
+  renewalAdjustmentMs Float @default(0) @map("renewal_adjustment_ms")
+  syncPending Boolean @default(false) @map("sync_pending")
+  renewals SingboxRenewal[]
   sourcePaymentId    String?  @map("source_payment_id")
   id                 String   @id @default(cuid())
   nodeId             String   @map("node_id")
@@ -1666,4 +1672,17 @@ model ReferralReward {
   @@index([referrerId, appliedAt])
   @@index([kind, appliedAt, nextAttemptAt])
   @@map("referral_rewards")
+}
+
+model SingboxRenewal {
+  id String @id @default(cuid())
+  slotId String @map("slot_id")
+  paymentId String @unique @map("payment_id")
+  durationDays Int @map("duration_days")
+  trafficBytes BigInt? @map("traffic_bytes")
+  createdAt DateTime @default(now()) @map("created_at")
+  slot SingboxSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  @@index([slotId])
+  @@map("singbox_renewals")
 }

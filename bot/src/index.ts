@@ -3895,7 +3895,10 @@ composer.on("callback_query:data", async (ctx) => {
       const slotsRes = await api.getSingboxSlots(token);
       const slots = slotsRes.slots ?? [];
       if (slots.length === 0) {
-        await editMessageContent(ctx, "У вас пока нет активных доступов. Купите тариф в разделе «Доступы».", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        const keyboard = backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
+        const renewUrl = config?.publicAppUrl?.replace(/\/$/, "");
+        if (renewUrl) keyboard.inline_keyboard.unshift([{ text: "Посмотреть и продлить доступы", web_app: { url: `${renewUrl}/cabinet/singbox?tab=my` } }]);
+        await editMessageContent(ctx, "Активных доступов нет. Истёкшие доступы можно продлить в кабинете.", keyboard);
         return;
       }
       const lines = slots.map((s: { subscriptionLink: string; expiresAt: string; protocol: string }) => {
@@ -3905,6 +3908,8 @@ composer.on("callback_query:data", async (ctx) => {
       const msg = `📋 Мои доступы (${slots.length})\n\nСкопируйте ссылку в приложение. Для AmneziaWG скачайте .conf кнопкой ниже или в кабинете:\n\n${lines}`;
       const keyboard = backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
       for (const slot of slots.filter(s => ["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(s.protocol)).slice(0, 20)) keyboard.inline_keyboard.unshift([{ text: `📄 AmneziaWG · ${slot.id.slice(-8)}`, callback_data: `singbox:conf:${slot.id}` }]);
+      const renewUrl = config?.publicAppUrl?.replace(/\/$/, "");
+      if (renewUrl) keyboard.inline_keyboard.unshift([{ text: "Продлить доступ / все доступы", web_app: { url: `${renewUrl}/cabinet/singbox?tab=my` } }]);
       await editMessageContent(ctx, msg.slice(0, 4096), keyboard);
       return;
     }

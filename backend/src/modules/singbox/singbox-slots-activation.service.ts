@@ -13,6 +13,13 @@ export async function createSingboxSlotsByPaymentId(paymentId: string): Promise<
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(741962)`;
     const payment = await tx.payment.findUnique({ where: { id: paymentId } });
     if (!payment?.singboxTariffId || payment.status !== "PAID") return { ok: false, error: "Нет оплаченного тарифа", status: 400 };
+    let renewalPayment = false;
+    try { renewalPayment = JSON.parse(payment.metadata || "null")?.awpRenewal === true; } catch {}
+    if (renewalPayment) {
+      const renewal = await tx.singboxRenewal.findUnique({ where: { paymentId }, include: { slot: true } });
+      if (!renewal || renewal.slot.clientId !== payment.clientId) return { ok: false, error: "Продление не найдено", status: 400 };
+      return { ok: true, slotsCreated: 0, slotIds: [renewal.slotId] };
+    }
     const previous = await tx.singboxSlot.findMany({ where: { sourcePaymentId: paymentId }, select: { id: true } });
     if (previous.length) return { ok: true, slotsCreated: previous.length, slotIds: previous.map(s => s.id) };
     const tariff = await tx.singboxTariff.findUnique({ where: { id: payment.singboxTariffId } });

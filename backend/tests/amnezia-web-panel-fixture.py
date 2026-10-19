@@ -42,7 +42,15 @@ class Manager:
     def remove_client(self, protocol, key): peers.pop(key, None)
 
 panel.get_ssh = lambda server: SSH()
-panel.get_protocol_manager = lambda ssh, protocol: Manager()
+class WireGuardFixture(panel.WireGuardManager):
+    def __init__(self): pass
+    def add_client(self, name, server_host, public_port=None): return Manager().add_client('wireguard', name)
+    def get_clients(self): return Manager().get_clients()
+    def get_client_config(self, key, *args, **kwargs): return Manager().get_client_config('wireguard', key)
+    def toggle_client(self, key, enabled): return Manager().toggle_client('wireguard', key, enabled)
+    def remove_client(self, key): return Manager().remove_client('wireguard', key)
+
+panel.get_protocol_manager = lambda ssh, protocol: WireGuardFixture() if protocol == 'wireguard' else Manager()
 
 @panel.app.post('/qa/control')
 async def control(request: Request):

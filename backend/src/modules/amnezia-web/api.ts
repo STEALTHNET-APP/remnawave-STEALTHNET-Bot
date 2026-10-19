@@ -10,7 +10,7 @@ export const webPanelSchema = z.object({
   }, "Нужен HTTPS-адрес панели без логина, пароля и параметров"),
   apiToken: z.string().min(16).max(512).regex(/^[\w-]+$/),
   serverId: z.number().int().min(0),
-  protocol: z.string().regex(/^(awg|awg2|awg3|awg_legacy|wireguard|xray)(__\d+)?$/),
+  protocol: z.string().regex(/^(wireguard|(awg|awg2|awg3|awg_legacy|xray)(__\d+)?)$/),
   serverUid: z.string().min(1).optional(),
   owner: z.string().min(16).optional(),
 });
@@ -23,8 +23,12 @@ export const remoteUserSchema = z.object({ id: z.string().min(1), username: z.st
 export type RemoteUser = z.infer<typeof remoteUserSchema>;
 const connectionSchema = z.object({ id: z.string(), server_id: z.number().int(), protocol: z.string(), client_id: z.string().min(1), name: z.string() });
 export class WebPanelApi {
+  private readonly peers = new Map<string, unknown>();
   constructor(readonly config: WebPanelConfig, private readonly deadline = Date.now() + 240000) {}
   async request(path: string, body?: unknown): Promise<unknown> {
+    const cacheable = body === undefined && /^\/api\/servers\/\d+\/connections\?/.test(path);
+    if (cacheable && this.peers.has(path)) return this.peers.get(path);
+    if (body !== undefined) this.peers.clear();
     const remaining = this.deadline - Date.now();
     if (remaining <= 0) throw new Error("Истекло время синхронизации Amnezia Web Panel");
     let response: Response;
@@ -46,6 +50,7 @@ export class WebPanelApi {
     try {
       const data = JSON.parse(Buffer.concat(chunks).toString());
       if (data?.error) throw new Error();
+      if (cacheable) this.peers.set(path, data);
       return data;
     } catch { throw new Error("Некорректный ответ Amnezia Web Panel"); }
   }

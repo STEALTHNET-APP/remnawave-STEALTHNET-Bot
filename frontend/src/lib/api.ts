@@ -2218,10 +2218,18 @@ export const api = {
   },
 
   /** Активные Sing-box слоты клиента (с ссылкой подписки) */
-  async getSingboxSlots(token: string): Promise<{
-    slots: { id: string; subscriptionLink: string; expiresAt: string; trafficLimitBytes: string | null; trafficUsedBytes: string; protocol: string }[];
+  async getSingboxSlots(token: string, includeInactive = false): Promise<{
+    slots: { id: string; subscriptionLink: string; expiresAt: string; trafficLimitBytes: string | null; trafficUsedBytes: string; protocol: string; status?: string; canRenew?: boolean; nodeOnline?: boolean }[];
   }> {
-    return request("/client/singbox-slots", { token });
+    return request(`/client/singbox-slots${includeInactive ? "?includeInactive=true" : ""}`, { token });
+  },
+
+  async quoteWebRenewal(token: string, slotId: string): Promise<{ slotId: string; name: string; amount: number; currency: string; durationDays: number; trafficBytes: string | null; quoteHash: string; balance: number }> {
+    return request(`/client/singbox-slots/${slotId}/renewal`, { token });
+  },
+
+  async buyWebRenewal(token: string, slotId: string, data: { requestId: string; quoteHash: string }): Promise<{ message: string; paymentId: string; newBalance: number }> {
+    return request(`/client/singbox-slots/${slotId}/renewal`, { method: "POST", body: JSON.stringify(data), token });
   },
 
   async getPublicConfig(): Promise<PublicConfig> {

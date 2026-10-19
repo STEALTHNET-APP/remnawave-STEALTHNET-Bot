@@ -1,3 +1,4 @@
+import { refreshWebEntitlements } from "./renewal.js";
 import { z } from "zod";
 import { prisma } from "../../db.js";
 import { WebPanelApi, webPanelSchema, isWebPanel, WEB_PROTOCOLS } from "./api.js";
@@ -16,6 +17,7 @@ async function syncNode(nodeId: string, provision = false) {
   if (!node || !isWebPanel(node.protocol)) return;
   const settings = webPanelSchema.parse(JSON.parse(node.customConfigJson || "null"));
   if (!settings.owner || !settings.serverUid) throw new Error("Не настроена привязка Amnezia Web Panel");
+  await refreshWebEntitlements(nodeId);
   const api = new WebPanelApi(settings);
   const server = await api.server();
   const users = await api.users(prefixFor(node.id));
@@ -39,11 +41,14 @@ async function syncNode(nodeId: string, provision = false) {
     slot.trafficUsedBytes = used;
   }
   let active = 0;
+  let failures = 0;
   for (const slot of slots) {
+    try {
     const valid = !!slot.sourcePaymentId && paid.has(slot.sourcePaymentId) && slot.status !== "REVOKED" && slot.expiresAt.getTime() > Date.now() && (!slot.trafficLimitBytes || slot.trafficUsedBytes < slot.trafficLimitBytes) && !slot.client.isBlocked && node.status !== "DISABLED";
     let user = owned.find(u => u.username === remoteName(node.id, slot.id));
     if (!valid) {
-      if (user && slot.sourcePaymentId && paid.has(slot.sourcePaymentId) && slot.status !== "REVOKED") await api.toggle(user.id, false);
+      if (user && slot.sourcePaymentId && paid.has(slot.sourcePaymentId) && slot.status !== "REVOKED") await api.toggle(user.id, false, user.enabled);
+      if (slot.syncPending) await prisma.singboxSlot.update({ where: { id: slot.id }, data: { syncPending: false } });
       continue;
     }
     if (slot.status === "PROVISIONING" && !provision) continue;
@@ -53,6 +58,7 @@ async function syncNode(nodeId: string, provision = false) {
       const limit = slot.trafficLimitBytes ? Number(slot.trafficLimitBytes) : 0;
       if (user.expiration_date !== expiration || user.traffic_limit !== limit) await api.request(`/api/users/${encodeURIComponent(user.id)}/update`, { expiration_date: expiration, traffic_limit: limit / 1073741824 });
       await api.toggle(user.id, true, user.enabled);
+      if (slot.syncPending) await prisma.singboxSlot.update({ where: { id: slot.id }, data: { syncPending: false } });
       active++;
       continue;
     }
@@ -70,7 +76,8 @@ async function syncNode(nodeId: string, provision = false) {
       const existing = peers.clients.filter(p => p.userData?.clientName === remoteName(node.id, slot.id));
       if (existing.length > 1 || existing.some(p => p.assigned_user_id && p.assigned_user_id !== user!.id)) throw new Error("Конфликт подключения Amnezia Web Panel");
       await prisma.singboxSlot.update({ where: { id: slot.id }, data: { secret: JSON.stringify({ ...journal, userId: user.id, attemptAt: Date.now() }) } });
-      await api.request(`/api/users/${encodeURIComponent(user.id)}/connections/add`, { server_id: server.id, protocol: settings.protocol, name: remoteName(node.id, slot.id), ...(existing[0] ? { client_id: existing[0].clientId } : {}) });
+      if (settings.protocol === "wireguard" && !existing.length) await api.request(`/api/servers/${server.id}/connections/add`, { protocol: settings.protocol, name: remoteName(node.id, slot.id), user_id: user.id });
+      else await api.request(`/api/users/${encodeURIComponent(user.id)}/connections/add`, { server_id: server.id, protocol: settings.protocol, name: remoteName(node.id, slot.id), ...(existing[0] ? { client_id: existing[0].clientId } : {}) });
       connections = await api.connections(user.id);
     }
     if (connections.length !== 1 || connections[0]!.server_id !== server.id || connections[0]!.protocol !== settings.protocol) throw new Error("Неверная привязка подключения Amnezia Web Panel");
@@ -85,15 +92,20 @@ async function syncNode(nodeId: string, provision = false) {
     const latest = await prisma.payment.findUnique({ where: { id: slot.sourcePaymentId! }, select: { status: true } });
     const current = await prisma.client.findUnique({ where: { id: slot.clientId }, select: { isBlocked: true } });
     if (latest?.status !== "PAID" || !current || current.isBlocked) { await api.toggle(user.id, false); continue; }
-    await prisma.singboxSlot.update({ where: { id: slot.id }, data: { secret: JSON.stringify({ userId: user.id, config }), status: "ACTIVE" } });
+    await prisma.singboxSlot.update({ where: { id: slot.id }, data: { secret: JSON.stringify({ userId: user.id, config }), status: "ACTIVE", syncPending: false } });
     active++;
+    } catch {
+      failures++;
+      await prisma.singboxSlot.updateMany({ where: { id: slot.id }, data: { syncPending: true } });
+    }
   }
   let metadata: string | undefined;
   try {
     const stats = z.object({ cpu: z.number(), ram_percent: z.number(), disk_percent: z.number() }).parse(await api.request(`/api/servers/${server.id}/stats`, {}));
     metadata = JSON.stringify(stats);
   } catch {}
-  await prisma.singboxNode.update({ where: { id: nodeId }, data: { metadata, ...(node.status !== "DISABLED" ? { status: "ONLINE" } : {}), lastSeenAt: new Date(), currentConnections: active, trafficInBytes: slots.reduce((sum, s) => sum + s.trafficUsedBytes, 0n) } });
+  await prisma.singboxNode.update({ where: { id: nodeId }, data: { metadata, ...(node.status !== "DISABLED" ? { status: failures ? "OFFLINE" : "ONLINE" } : {}), lastSeenAt: new Date(), currentConnections: active, trafficInBytes: slots.reduce((sum, s) => sum + s.trafficUsedBytes, 0n) } });
+  if (failures) throw new Error("Не все доступы синхронизированы");
 }
 export async function provisionWebPayment(paymentId: string) {
   const external = await prisma.singboxSlot.findMany({ where: { sourcePaymentId: paymentId, node: { protocol: { in: [...WEB_PROTOCOLS] } } }, select: { nodeId: true } });
@@ -122,9 +134,10 @@ export async function reconcileWebPanels() {
 }
 export async function updateWebSlot(nodeId: string, slotId: string, data: { expiresAt?: string; status?: "ACTIVE" | "REVOKED" }) {
   await locked(async () => {
+    await refreshWebEntitlements(nodeId);
     const slot = await prisma.singboxSlot.findFirst({ where: { id: slotId, nodeId }, include: { node: true } });
     if (!slot || !isWebPanel(slot.node.protocol)) throw new Error("Доступ не найден");
-    await prisma.singboxSlot.update({ where: { id: slotId }, data: { ...(data.expiresAt ? { expiresAt: new Date(data.expiresAt) } : {}), ...(data.status ? { status: data.status } : {}) } });
+    await prisma.singboxSlot.update({ where: { id: slotId }, data: { ...(data.expiresAt ? { expiresAt: new Date(data.expiresAt), ...(slot.renewalBaseExpiresAt ? { renewalAdjustmentMs: slot.renewalAdjustmentMs + new Date(data.expiresAt).getTime() - slot.expiresAt.getTime() } : {}) } : {}), ...(data.status ? { status: data.status } : {}) } });
     await syncNode(nodeId, true);
   });
 }

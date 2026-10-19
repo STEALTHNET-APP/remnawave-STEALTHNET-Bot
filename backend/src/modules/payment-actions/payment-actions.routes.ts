@@ -1,3 +1,5 @@
+import { refundWebRenewal, WebRenewalError } from "../amnezia-web/renewal.js";
+import { reconcileWebPanels } from "../amnezia-web/service.js";
 import { refundStarsPayment } from "../telegram-stars/stars.service.js";
 /**
  * Payment actions для админа: refund / mark-failed / retry-activation.
@@ -101,6 +103,17 @@ paymentActionsRouter.post(
     if (!payment) return res.status(404).json({ message: "Платёж не найден" });
     if (payment.status === "REFUNDED") return res.status(400).json({ message: "Уже возвращён" });
     if (payment.status === "FAILED") return res.status(400).json({ message: "Платёж уже FAILED — refund не нужен" });
+
+    if (await prisma.singboxRenewal.findUnique({ where: { paymentId: id } })) {
+      const result = await refundWebRenewal(id, refundToBalance, reverseReferrals).catch(error => {
+        if (error instanceof WebRenewalError) { res.status(error.status).json({ message: error.message }); return null; }
+        throw error;
+      });
+      if (!result) return;
+      void reconcileWebPanels().catch(() => {});
+      await logAdmin(req, "payment.refund", { type: "payment", id }, { amount: payment.amount, reason: reason ?? null, ...result.summary });
+      return res.json(result);
+    }
 
     if (payment.provider === "telegram_stars") {
       const updated = await refundStarsPayment(id);
