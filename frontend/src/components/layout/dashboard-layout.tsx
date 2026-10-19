@@ -14,7 +14,9 @@ import {
 import { useTranslation } from "react-i18next";
 import { useRemnaCapabilities } from "@/lib/use-remna-capabilities";
 import { useAdminLanguageSync } from "@/i18n/use-language-sync";
-import { WhatsNew510 } from "@/components/admin/whats-new-510";
+import { ReleaseToast } from "@/components/admin/release-toast";
+import { ProjectLinks } from "@/components/admin/project-links";
+import { PROJECT_GITHUB_URL } from "@/lib/project-links";
 import { useAuth } from "@/contexts/auth";
 import { useTheme, ACCENT_PALETTES, type ThemeMode, type ThemeAccent } from "@/contexts/theme";
 import { Button } from "@/components/ui/button";
@@ -27,7 +29,7 @@ import appVersion from "../../../../version.json";
 const PANEL_VERSION = appVersion.version;
 const PANEL_BUILD = appVersion as { commit?: string; builtAt?: string };
 const PANEL_COMMIT = PANEL_BUILD.commit && PANEL_BUILD.commit !== "unknown" ? PANEL_BUILD.commit.slice(0, 7) : null;
-const GITHUB_URL = "https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot";
+const GITHUB_URL = PROJECT_GITHUB_URL;
 
 // пункт меню может быть защищён action'ом
 // вместо обычной секции — для гранулярных прав менеджеров (например, «Продажи через баланс»).
@@ -320,8 +322,7 @@ export function DashboardLayout() {
 
   return (
     <div className="flex min-h-svh bg-background relative">
-      {/* What's New 5.1.0 — одноразовый онбординг админа (localStorage-флаг). */}
-      <WhatsNew510 />
+      <ReleaseToast />
 
       {/*  Global Ambient Lights  */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10" aria-hidden>
@@ -370,6 +371,7 @@ export function DashboardLayout() {
             <LogOut className="h-4 w-4" />
             {t("admin.header.logout")}
           </Button>
+          <ProjectLinks />
         </div>
       </aside>
 
@@ -417,6 +419,7 @@ export function DashboardLayout() {
                 <LogOut className="h-4 w-4" />
                 {t("admin.header.logout")}
               </Button>
+              <ProjectLinks />
             </div>
           </aside>
         </>
