@@ -1072,10 +1072,11 @@ function formatSubLine(item: {
   /** T16 (12.05.2026) — название тарифа и кастомный эмодзи для главного меню. */
   tariffDisplayName?: string | null;
   tariffMenuEmoji?: string | null;
-}, template?: string): string {
+}, template: string | undefined, showNumber: boolean): string {
   const { idx, typeEmoji, statusEmojiBig, daysStr, dateStr, trafficSuffix } = parseSubInfo(item);
   const tpl = (template && template.trim()) || "{{SUB_STATUS}} {{SUB_TYPE}} Подписка #{{SUB_NUM}} — **{{SUB_DAYS}}** до {{SUB_DATE}}{{SUB_TRAFFIC}}";
-  return tpl
+  const displayTemplate = showNumber ? tpl : tpl.replace(/[ \t]*[#№]?[ \t]*\{\{SUB_NUM\}\}/g, "");
+  return displayTemplate
     .split("{{SUB_STATUS}}").join(statusEmojiBig)
     .split("{{SUB_TYPE}}").join(typeEmoji)
     .split("{{SUB_NUM}}").join(String(idx))
@@ -1167,7 +1168,7 @@ function buildMainMenuText(opts: {
         return (a.subscriptionIndex ?? 0) - (b.subscriptionIndex ?? 0);
       });
       for (const item of sorted) {
-        pushRaw(formatSubLine(item, t(menuTexts, "subLineFormat")));
+        pushRaw(formatSubLine(item, t(menuTexts, "subLineFormat"), opts.multiSubscriptionsEnabled === true));
       }
     }
   }
