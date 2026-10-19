@@ -3,9 +3,11 @@
  */
 
 import { prisma } from "../../db.js";
+import type { Prisma } from "@prisma/client";
+import { deviceOptionMetadata, lockDevicePurchases, validateDevicePurchase } from "./device-limit.js";
 import { remnaGetUser, remnaUpdateUser, isRemnaConfigured } from "../remna/remna.client.js";
 
-export type ApplyExtraOptionResult = { ok: true } | { ok: false; error: string; status: number };
+export type ApplyExtraOptionResult = { ok: true; creditedToBalance?: boolean } | { ok: false; error: string; status: number };
 
 type ExtraOptionPayload =
   | { kind: "traffic"; trafficBytes: number }
@@ -83,9 +85,34 @@ function getTargetSubscriptionId(metadata: string | null): string | null {
 }
 
 export async function applyExtraOptionByPaymentId(paymentId: string): Promise<ApplyExtraOptionResult> {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId }, select: { clientId: true, metadata: true } });
+  if (!payment || !deviceOptionMetadata(payment.metadata)) return applyExtraOption(paymentId, prisma);
+  return prisma.$transaction(async (tx) => {
+    await lockDevicePurchases(tx, payment.clientId);
+    const current = await tx.payment.findUnique({ where: { id: paymentId }, select: { status: true, metadata: true, amount: true } });
+    if (!current || current.status !== "PAID") return { ok: false, error: "Платёж не оплачен", status: 409 };
+    const meta = deviceOptionMetadata(current.metadata);
+    if (meta?.extraOptionBalanceCreditAt) return { ok: true, creditedToBalance: true };
+    try {
+      await validateDevicePurchase(tx, payment.clientId, current.metadata);
+    } catch (error) {
+      if ((error as { code?: string }).code !== "EXTRA_DEVICE_LIMIT") throw error;
+      if (meta?.extraOptionAppliedAt) return { ok: true };
+      await tx.client.update({ where: { id: payment.clientId }, data: { balance: { increment: current.amount } } });
+      await tx.payment.update({ where: { id: paymentId }, data: { metadata: JSON.stringify({ ...meta, extraOptionBalanceCreditAt: new Date().toISOString() }) } });
+      return { ok: true, creditedToBalance: true };
+    }
+    if (meta?.extraOptionAppliedAt) return { ok: true };
+    const result = await applyExtraOption(paymentId, tx);
+    if (result.ok) await tx.payment.update({ where: { id: paymentId }, data: { metadata: JSON.stringify({ ...meta, extraOptionAppliedAt: new Date().toISOString() }) } });
+    return result;
+  }, { maxWait: 15000, timeout: 45000 });
+}
+
+async function applyExtraOption(paymentId: string, db: Prisma.TransactionClient): Promise<ApplyExtraOptionResult> {
   if (!isRemnaConfigured()) return { ok: false, error: "Remna API не настроен", status: 503 };
 
-  const payment = await prisma.payment.findUnique({
+  const payment = await db.payment.findUnique({
     where: { id: paymentId },
     select: { clientId: true, metadata: true, amount: true },
   });
@@ -106,20 +133,20 @@ export async function applyExtraOptionByPaymentId(paymentId: string): Promise<Ap
   // Это исправляет кейс: юзер выбирал secondary, но extra-option применялась к primary
   // потому что бот не пробрасывал targetSubscriptionId в платёжных хэндлерах.
   const targetSecondaryId = getTargetSubscriptionId(payment.metadata);
-  let targetSub: { id: string; remnawaveUuid: string | null; ownerId: string; customPrice: number | null; subscriptionIndex: number; expireAt: Date | null } | null = null;
+  let targetSub: { id: string; remnawaveUuid: string | null; ownerId: string; customPrice: number | null; subscriptionIndex: number; expireAt: Date | null; extraDevices: number; tariff: { maxExtraDevices: number; includedDevices: number; deviceLimit: number | null } | null } | null = null;
   if (targetSecondaryId) {
-    targetSub = await prisma.subscription.findUnique({
+    targetSub = await db.subscription.findUnique({
       where: { id: targetSecondaryId },
-      select: { id: true, remnawaveUuid: true, ownerId: true, customPrice: true, subscriptionIndex: true, expireAt: true },
+      select: { id: true, remnawaveUuid: true, ownerId: true, customPrice: true, subscriptionIndex: true, expireAt: true, extraDevices: true, tariff: { select: { maxExtraDevices: true, includedDevices: true, deviceLimit: true } } },
     });
     if (!targetSub || targetSub.ownerId !== payment.clientId) {
       return { ok: false, error: "Подписка для опции не найдена / не принадлежит клиенту", status: 404 };
     }
   } else {
     // Fallback: primary подписка клиента (subscriptionIndex=0).
-    targetSub = await prisma.subscription.findUnique({
+    targetSub = await db.subscription.findUnique({
       where: { ownerId_subscriptionIndex: { ownerId: payment.clientId, subscriptionIndex: 0 } },
-      select: { id: true, remnawaveUuid: true, ownerId: true, customPrice: true, subscriptionIndex: true, expireAt: true },
+      select: { id: true, remnawaveUuid: true, ownerId: true, customPrice: true, subscriptionIndex: true, expireAt: true, extraDevices: true, tariff: { select: { maxExtraDevices: true, includedDevices: true, deviceLimit: true } } },
     });
     if (!targetSub) {
       return { ok: false, error: "У клиента нет подписки для применения опции. Сначала оформите подписку.", status: 400 };
@@ -161,7 +188,7 @@ export async function applyExtraOptionByPaymentId(paymentId: string): Promise<Ap
   const bumpCustomPrice = async () => {
     if (optionAmount <= 0) return;
     const newPrice = (secondaryDb.customPrice ?? 0) + optionAmount;
-    await prisma.subscription.update({
+    await db.subscription.update({
       where: { id: secondaryDb.id },
       data: { customPrice: newPrice },
     }).catch(() => {});
@@ -182,9 +209,12 @@ export async function applyExtraOptionByPaymentId(paymentId: string): Promise<Ap
   }
 
   if (option.kind === "devices") {
-    const limits = getRemnaLimits(userRes.data);
-    const current = limits.hwidDeviceLimit ?? 0;
-    const newDevices = current + option.deviceCount;
+    const maximum = Math.max(0, targetSub.tariff?.maxExtraDevices ?? 0);
+    if (!Number.isSafeInteger(option.deviceCount) || targetSub.extraDevices + option.deviceCount > maximum) {
+      return { ok: false, error: "Превышен лимит дополнительных устройств тарифа", status: 409 };
+    }
+    const included = targetSub.tariff?.includedDevices ?? targetSub.tariff?.deviceLimit ?? 0;
+    const newDevices = included + targetSub.extraDevices + option.deviceCount;
     const updateRes = await remnaUpdateUser({
       uuid,
       hwidDeviceLimit: newDevices,
@@ -209,13 +239,13 @@ export async function applyExtraOptionByPaymentId(paymentId: string): Promise<Ap
     // secondaryDb теперь всегда задан (primary
     // тоже Subscription). Раньше была отдельная ветка с findFirst по remnawaveUuid —
     // больше не нужна.
-    await prisma.subscription.update({
+    await db.subscription.update({
       where: { id: secondaryDb.id },
       data: {
         extraDevices: { increment: option.deviceCount },
         extraDevicesMonthlyPrice: { increment: pkgPrice },
       },
-    }).catch((e) => console.error("[extra-options] extraDevices/monthlyPrice update failed:", e));
+    });
     return { ok: true };
   }
 

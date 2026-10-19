@@ -96,6 +96,7 @@ export function generateReferralCode(): string {
 }
 
 const SYSTEM_CONFIG_KEYS = [
+  "lite_mode",
   "remna_auto_sync_enabled", "remna_auto_sync_interval_minutes",
   "maintenance_enabled", "maintenance_message",
   "active_languages", "active_currencies", "default_language", "default_currency",
@@ -579,6 +580,7 @@ async function loadSystemConfigFromDb() {
   const activeLangs = (map.active_languages || "ru,en").split(",").map((s: string) => s.trim());
   const activeCurrs = (map.active_currencies || "usd,rub").split(",").map((s: string) => s.trim());
   return {
+    liteMode: map.lite_mode === "true",
     remnaAutoSyncEnabled: map.remna_auto_sync_enabled === "true",
     remnaAutoSyncIntervalMinutes: Math.min(1440, Math.max(5, parseInt(map.remna_auto_sync_interval_minutes || "60", 10) || 60)),
     maintenanceEnabled: map.maintenance_enabled === "true",
@@ -1282,6 +1284,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     logo: full.logo,
     logoBot: full.logoBot ?? null,
     favicon: full.favicon,
+    liteMode: full.liteMode,
     cabinetDesign: full.cabinetDesign,
     cabinetDesignApplyInBrowser: (full as { cabinetDesignApplyInBrowser?: boolean }).cabinetDesignApplyInBrowser ?? false,
     remnaClientUrl: full.remnaClientUrl,

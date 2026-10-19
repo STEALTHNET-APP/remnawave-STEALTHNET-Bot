@@ -425,6 +425,9 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   if (code === "SUBSCRIPTION_INACTIVE") {
     return res.status(409).json({ message: err.message || "Подписка истекла", code: "SUBSCRIPTION_INACTIVE" });
   }
+  if (code === "EXTRA_DEVICE_LIMIT") {
+    return res.status(409).json({ message: err.message, code });
+  }
   if (code === "SUBSCRIPTION_TARGET_INVALID") {
     return res.status(400).json({ message: err.message || "Подписка для опции не найдена", code: "SUBSCRIPTION_TARGET_INVALID" });
   }

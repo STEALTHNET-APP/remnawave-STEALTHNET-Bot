@@ -1,3 +1,5 @@
+import { LiteLayout } from "./lite-layout";
+import { getPublicConfigCached } from "@/lib/public-config";
 import "./classic-cabinet.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
@@ -732,6 +734,8 @@ function CabinetShell() {
 }
 
 export function CabinetLayout() {
+  const [liteMode, setLiteMode] = useState(false);
+  useEffect(() => { let active = true; getPublicConfigCached().then(config => { if (active) setLiteMode(config.liteMode === true); }).catch(() => {}); return () => { active = false; }; }, []);
   const location = useLocation();
   const { state } = useClientAuth();
   useLanguageSync(state.client?.preferredLang);
@@ -748,6 +752,8 @@ export function CabinetLayout() {
   // chrome (network фон + bottom-tabs + header) и Outlet.
   // ВАЖНО: для auth/2fa-страниц используем classic — их Stealth-дизайн пока
   // не оформлен (Phase 2/3).
+  if (liteMode && isLoggedIn && !needs2FA && !isAuthPage) return <CabinetConfigProvider><LiteLayout /></CabinetConfigProvider>;
+
   if (design === "stealth" && isLoggedIn && !needs2FA && !isAuthPage) {
     return <StealthLayout />;
   }

@@ -1103,6 +1103,7 @@ model Trial {
   squadUuids        String?  @map("squad_uuids")
   /// лимит устройств standalone-триала.
   deviceLimit       Int?     @map("device_limit")
+  price             Float    @default(0)
   durationDays      Int      @map("duration_days") // длительность пробного периода
   /// T16 (12.05.2026, WolfVPN): отдельный лимит трафика для триала (опционально).
   /// Если null — используется trafficLimitBytes тарифа (старое поведение).

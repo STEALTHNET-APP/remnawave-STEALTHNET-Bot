@@ -106,10 +106,11 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
 
   async function handleActivate(trial: ClientTrialOption) {
     if (!token || activatingId) return;
+    if ((trial.price ?? 0) > 0 && !window.confirm(`Купить триал «${trial.name}» за ${trial.price} ₽ с баланса?`)) return;
     setActivatingId(trial.id);
     setError(null);
     try {
-      const res = await api.clientActivateTrialById(token, trial.id);
+      const res = await api.clientActivateTrialById(token, trial.id, trial.price ?? 0);
       onActivated({ message: res.message, subscriptionId: res.subscriptionId, subscriptionUrl: res.subscriptionUrl });
       onOpenChange(false);
     } catch (e) {
@@ -229,7 +230,7 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
                           ) : (
                             <>
                               <Check className="h-4 w-4 shrink-0" />
-                              <span>Активировать</span>
+                              <span>{(trial.price ?? 0) > 0 ? `Купить за ${trial.price} ₽` : "Активировать бесплатно"}</span>
                             </>
                           )}
                         </Button>

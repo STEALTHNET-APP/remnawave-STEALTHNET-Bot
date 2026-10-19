@@ -127,6 +127,7 @@ export async function getPublicConfig(): Promise<{
   botWelcomeImage?: string | null;
   botWelcomeShowOnce?: boolean;
   botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; emojiKey?: string; url?: string }[] | null;
+  liteMode?: boolean;
   botGroupCabinet?: boolean;
   botMenuMode?: "classic" | "web";
   botButtonsPerRow?: 1 | 2;
@@ -287,7 +288,7 @@ export async function getSubscriptionByUuid(
 
 /** доступные клиенту триалы */
 export async function getAvailableTrials(token: string): Promise<{
-  items: { id: string; name: string; tariffId: string; tariffName: string | null; durationDays: number; description: string | null; sortOrder: number }[];
+  items: { id: string; name: string; price?: number; tariffId: string; tariffName: string | null; durationDays: number; description: string | null; sortOrder: number }[];
   hasAnyEnabled: boolean;
 }> {
   return fetchJson("/api/client/trials/available", { token });
@@ -346,6 +347,7 @@ export async function getReferralStats(token: string): Promise<{
 export async function activateTrialById(
   token: string,
   trialId: string,
+  expectedPrice?: number,
 ): Promise<{
   message: string;
   subscriptionId: string;

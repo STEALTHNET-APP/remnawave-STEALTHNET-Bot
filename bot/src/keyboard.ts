@@ -220,6 +220,7 @@ export type InnerEmojiIds = {
 
 /** Главное меню: кнопки из конфига. Эмодзи в label (Unicode) и/или icon_custom_emoji_id (премиум). Поддержка показывается только если задана хотя бы одна ссылка. Тикеты — Web App при включённой тикет-системе. buttonsPerRow: 1 или 2. */
 export function mainMenu(opts: {
+  liteMode?: boolean;
   showTrial: boolean;
   showVpn: boolean;
   showProxy?: boolean;
@@ -267,13 +268,13 @@ export function mainMenu(opts: {
     list.push({ id: "site", visible: true, label: "🌐 Сайт", order: 10, style: "primary", onePerRow: true });
   }
   const cabinetIds = new Set(["tariffs", "my_subs", "proxy", "my_proxy", "singbox", "my_singbox", "devices", "topup", "referral", "trial", "vpn", "promocode", "extra_options", "gift", "roulette", "tg_proxy"]);
-  if (opts.groupCabinet && opts.section !== "profile") {
+  if (!opts.liteMode && opts.groupCabinet && opts.section !== "profile") {
     const profile = list.find(b => b.id === "profile");
     if (profile) profile.visible = true;
     else list.push({ ...DEFAULT_BUTTONS.find(b => b.id === "profile")! });
   }
   list = list
-    .filter(b => opts.section === "profile" ? cabinetIds.has(b.id) : !opts.groupCabinet || !cabinetIds.has(b.id))
+    .filter(b => opts.liteMode || (opts.section === "profile" ? cabinetIds.has(b.id) : !opts.groupCabinet || !cabinetIds.has(b.id)))
     .filter((b) => b.visible)
     .filter((b) => {
       if (b.id === "trial") return opts.showTrial;
@@ -288,6 +289,7 @@ export function mainMenu(opts: {
       return true;
     })
     .sort((a, b) => a.order - b.order);
+  if (opts.liteMode) list = list.filter(b => ["tariffs", "my_subs", "vpn", "cabinet", "topup", "trial", "support"].includes(b.id));
   const base = opts.appUrl?.replace(/\/$/, "") ?? "";
   const perRow = opts.buttonsPerRow === 2 ? 2 : 1;
   const items: { node: InlineButton | WebAppButton | UrlButton; onePerRow: boolean }[] = [];
@@ -306,7 +308,7 @@ export function mainMenu(opts: {
       if (iconId) node.icon_custom_emoji_id = iconId;
       if (styleForBtn) node.style = styleForBtn;
       items.push({ node, onePerRow });
-    } else if (opts.menuMode === "web" && !(opts.groupCabinet && b.id === "profile") && menuWebAppUrl(base, b.id)) {
+    } else if (opts.menuMode === "web" && !(!opts.liteMode && opts.groupCabinet && b.id === "profile") && menuWebAppUrl(base, b.id)) {
       const node: WebAppButton = { text: labelForIcon, web_app: { url: menuWebAppUrl(base, b.id)! } };
       if (iconId) node.icon_custom_emoji_id = iconId;
       if (styleForBtn) node.style = styleForBtn;

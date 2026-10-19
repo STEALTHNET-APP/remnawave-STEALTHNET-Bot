@@ -540,6 +540,7 @@ export function SettingsPage() {
       sellOptionsDevicesProducts: (data as AdminSettings).sellOptionsDevicesProducts ?? [],
       sellOptionsServersEnabled: (data as AdminSettings).sellOptionsServersEnabled ?? false,
       sellOptionsServersProducts: (data as AdminSettings).sellOptionsServersProducts ?? [],
+      liteMode: (data as AdminSettings).liteMode ?? false,
       giftSubscriptionsEnabled: (data as AdminSettings).giftSubscriptionsEnabled ?? false,
       giftCodeExpiryHours: (data as AdminSettings).giftCodeExpiryHours ?? 72,
       maxAdditionalSubscriptions: (data as AdminSettings).maxAdditionalSubscriptions ?? 5,
@@ -979,6 +980,7 @@ export function SettingsPage() {
         sellOptionsDevicesProducts: settings.sellOptionsDevicesProducts?.length ? JSON.stringify(settings.sellOptionsDevicesProducts) : null,
         sellOptionsServersEnabled: settings.sellOptionsServersEnabled ?? false,
         sellOptionsServersProducts: settings.sellOptionsServersProducts?.length ? JSON.stringify(settings.sellOptionsServersProducts) : null,
+        liteMode: settings.liteMode ?? false,
         giftSubscriptionsEnabled: settings.giftSubscriptionsEnabled ?? false,
         giftCodeExpiryHours: settings.giftCodeExpiryHours ?? 72,
         maxAdditionalSubscriptions: settings.maxAdditionalSubscriptions ?? 5,
@@ -1411,6 +1413,10 @@ export function SettingsPage() {
                       </div>
                     </div>
                   )}
+                </div>
+                <div className="rounded-xl border border-border bg-muted p-4 space-y-2">
+                  <Label className="flex items-center gap-3"><Switch checked={settings.liteMode ?? false} onCheckedChange={checked => setSettings(s => s ? { ...s, liteMode: checked === true } : s)} />Lite-режим кабинета и бота</Label>
+                  <p className="text-xs text-muted-foreground">Простой интерфейс: подписки, покупка, продление и подключение. Админка и данные сохраняются. Выключите, чтобы вернуть все разделы.</p>
                 </div>
                 {/* === Брендинг === */}
                 <div className="rounded-xl border border-purple-500/20 bg-muted p-4 space-y-4">

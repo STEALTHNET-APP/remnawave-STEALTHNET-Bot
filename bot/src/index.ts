@@ -2224,6 +2224,7 @@ async function handleStart(ctx: Context, payload: string) {
     const hasVideoInstructions = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
     const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructions);
     const markup = mainMenu({
+      liteMode: config?.liteMode === true,
       showTrial,
       // кнопка «🔌 Подключиться автоматически» показывается
       // если есть ХОТЯ БЫ ОДНА подписка (root ИЛИ secondary, включая триал). Раньше зависела
@@ -2826,6 +2827,7 @@ composer.on("callback_query:data", async (ctx) => {
       const hasVideoInstructions = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
       const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructions);
       const markup = mainMenu({
+      liteMode: config?.liteMode === true,
         showTrial,
         // T-fix (11.05.2026): кнопка vpn доступна если есть ЛЮБАЯ подписка (включая secondary/триал).
         showVpn: Boolean(vpnUrl) || (allSubsRes.items?.length ?? 0) > 0,
@@ -3470,6 +3472,7 @@ composer.on("callback_query:data", async (ctx) => {
       const hasVideoInstructionsCb = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
       const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructionsCb);
       const backMarkup = mainMenu({
+      liteMode: config?.liteMode === true,
         showTrial,
         // T-fix (11.05.2026): кнопка vpn доступна если есть ЛЮБАЯ подписка (включая secondary/триал).
         showVpn: Boolean(vpnUrl) || (allSubsRes.items?.length ?? 0) > 0,
@@ -6977,7 +6980,7 @@ if (data.startsWith("topup_paritypay:")) {
         }
         lines.push("Выберите тип подписки:");
         const rows: { text: string; callback_data: string }[][] = items.map((t) => [
-          { text: `${t.name} — ${t.durationDays} дн.`.slice(0, 64), callback_data: `trial:activate:${t.id}` },
+          { text: `${t.name} — ${(t.price ?? 0) > 0 ? `${t.price} ₽` : "бесплатно"}`.slice(0, 64), callback_data: `trial:activate:${t.id}` },
         ]);
         rows.push([{ text: "🏠 Главное меню", callback_data: "menu:main" }]);
         await editMessageContent(ctx, lines.join("\n"), { inline_keyboard: rows });
@@ -6989,10 +6992,23 @@ if (data.startsWith("topup_paritypay:")) {
     }
 
     // T15: активация конкретного триала по ID из списка.
-    if (data.startsWith("trial:activate:")) {
-      const trialId = data.slice("trial:activate:".length);
+    if (data.startsWith("trial:activate:") || data.startsWith("trial:buy:")) {
+      const buying = data.startsWith("trial:buy:");
+      const raw = data.slice(buying ? "trial:buy:".length : "trial:activate:".length);
+      const [trialId, amountRaw] = raw.split(":");
       try {
-        const result = await api.activateTrialById(token, trialId);
+        const available = await api.getAvailableTrials(token);
+        const trial = available.items.find(item => item.id === trialId);
+        if (!trial) throw new Error("Триал уже использован или недоступен");
+        if ((trial.price ?? 0) > 0 && !buying) {
+          await editMessageContent(ctx, `Пробная подписка «${trial.name}» на ${trial.durationDays} дн.\nЦена: ${trial.price} ₽. Сумма спишется с баланса.`, { inline_keyboard: [
+            [{ text: `Купить за ${trial.price} ₽`, callback_data: `trial:buy:${trialId}:${trial.price}` }],
+            [{ text: "Пополнить баланс", callback_data: "menu:topup" }],
+            [{ text: "Назад", callback_data: "menu:trial" }],
+          ] });
+          return;
+        }
+        const result = await api.activateTrialById(token, trialId, buying ? Number(amountRaw) : 0);
         // новый UX после активации триала по запросу клиента.
         // Кнопки: 📲 Инструкции по установке (URL) / 🌐 Локации / 📋 Мои подписки / 🏠 Главное меню.
         // Текст: «✅ Пробная подписка ... активирована.\n\n🔗 Ссылка подписки: ...\n\nДля подключения нажмите «📲 Подключиться»».
@@ -8726,6 +8742,7 @@ async function groupedProfileMenu(config: Awaited<ReturnType<typeof api.getPubli
     api.getPublicSingboxTariffs().catch(() => ({ items: [] })),
   ]);
   return mainMenu({
+    liteMode: config.liteMode === true,
     section: "profile", groupCabinet: true,
     showTrial: trials.hasAnyEnabled ? trials.items.length > 0 : Boolean(config.trialEnabled && !trialUsed),
     showVpn: subscriptions.items.length > 0,

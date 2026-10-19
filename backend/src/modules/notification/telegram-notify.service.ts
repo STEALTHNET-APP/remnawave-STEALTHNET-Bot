@@ -458,6 +458,13 @@ export async function notifyExtraOptionApplied(clientId: string, paymentId: stri
   if (amount > 0) lines.push(`💵 Списано: <b>${formatMoney(amount, currency)}</b>`);
   lines.push("", "Изменения вступили в силу мгновенно — можете пользоваться.");
 
+  try {
+    const metadata = payment.metadata ? JSON.parse(payment.metadata) : null;
+    if (metadata?.extraOptionBalanceCreditAt) {
+      lines.splice(0, lines.length, `Лимит дополнительных устройств достигнут или подписка больше недоступна. ${formatMoney(amount, currency)} возвращено на ваш баланс.`);
+    }
+  } catch {}
+
   const cfg = await getSystemConfig();
   const botToken = cfg.telegramBotToken?.trim();
   if (!botToken) return;

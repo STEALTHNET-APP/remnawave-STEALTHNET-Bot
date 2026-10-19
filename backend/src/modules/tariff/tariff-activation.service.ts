@@ -656,6 +656,7 @@ export async function extendSecondarySubscription(
   const newExtras = Math.min(Math.max(0, Math.floor(extraDevices ?? 0)), maxExtra);
   // существующие extras подписки: остаются или убираются по removeExtrasAfter.
   const keptExtras = removeExtrasAfter ? 0 : (sec.extraDevices ?? 0);
+  if ((extraDevices ?? 0) > Math.max(0, maxExtra - keptExtras)) return { ok: false, error: "Превышен лимит дополнительных устройств тарифа", status: 409 };
   const keptExtrasMonthly = removeExtrasAfter ? 0 : (sec.extraDevicesMonthlyPrice ?? 0);
   // месячная ставка новых extras — для будущих продлений (формула option.price + monthly × days/30).
   const newExtrasMonthly = newExtras > 0

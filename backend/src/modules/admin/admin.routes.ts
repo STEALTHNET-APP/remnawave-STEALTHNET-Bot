@@ -1107,6 +1107,7 @@ const createTrialSchema = z.object({
   squadUuids: z.array(z.string().min(1)).max(20).nullable().optional(),
   /** лимит устройств standalone-триала. */
   deviceLimit: z.number().int().min(1).max(100).nullable().optional(),
+  price: z.number().finite().min(0).max(1000000).multipleOf(0.01).optional(),
   durationDays: z.number().int().min(1).max(365),
   /** опциональный лимит трафика триала в байтах (null = из тарифа). */
   trafficLimitBytes: z.number().int().nonnegative().nullable().optional(),
@@ -1129,6 +1130,7 @@ const updateTrialSchema = z.object({
   tariffId: z.string().min(1).nullable().optional(),
   squadUuids: z.array(z.string().min(1)).max(20).nullable().optional(),
   deviceLimit: z.number().int().min(1).max(100).nullable().optional(),
+  price: z.number().finite().min(0).max(1000000).multipleOf(0.01).optional(),
   durationDays: z.number().int().min(1).max(365).optional(),
   /** опциональный лимит трафика триала в байтах (null = из тарифа). */
   trafficLimitBytes: z.number().int().nonnegative().nullable().optional(),
@@ -1147,6 +1149,7 @@ function trialToJson(t: {
   tariffId: string | null;
   squadUuids?: string | null;
   deviceLimit?: number | null;
+  price: number;
   durationDays: number;
   trafficLimitBytes?: bigint | null;
   enabled: boolean;
@@ -1172,6 +1175,7 @@ function trialToJson(t: {
     tariffId: t.tariffId,
     squadUuids: parseArr(t.squadUuids),
     deviceLimit: t.deviceLimit ?? null,
+    price: t.price,
     durationDays: t.durationDays,
     // T16 (12.05.2026) — BigInt → number для JSON; null = используется лимит тарифа.
     trafficLimitBytes: t.trafficLimitBytes != null ? Number(t.trafficLimitBytes) : null,
@@ -1322,6 +1326,7 @@ adminRouter.post("/trials", async (req, res) => {
       tariffId: body.data.tariffId ?? null,
       squadUuids: body.data.squadUuids?.length ? JSON.stringify(body.data.squadUuids) : null,
       deviceLimit: body.data.deviceLimit ?? null,
+      price: body.data.price ?? 0,
       durationDays: body.data.durationDays,
       // T16 (12.05.2026) — отдельный лимит трафика триала (null = из тарифа).
       trafficLimitBytes: body.data.trafficLimitBytes != null ? BigInt(body.data.trafficLimitBytes) : null,
@@ -1352,6 +1357,7 @@ adminRouter.patch("/trials/:id", async (req, res) => {
     tariffId?: string | null;
     squadUuids?: string | null;
     deviceLimit?: number | null;
+    price?: number;
     durationDays?: number;
     trafficLimitBytes?: bigint | null;
     enabled?: boolean;
@@ -1367,6 +1373,7 @@ adminRouter.patch("/trials/:id", async (req, res) => {
     updateData.squadUuids = body.data.squadUuids?.length ? JSON.stringify(body.data.squadUuids) : null;
   }
   if (body.data.deviceLimit !== undefined) updateData.deviceLimit = body.data.deviceLimit ?? null;
+  if (body.data.price !== undefined) updateData.price = body.data.price;
   if (body.data.durationDays !== undefined) updateData.durationDays = body.data.durationDays;
   if (body.data.trafficLimitBytes !== undefined) {
     updateData.trafficLimitBytes = body.data.trafficLimitBytes != null ? BigInt(body.data.trafficLimitBytes) : null;
@@ -3172,6 +3179,7 @@ const updateSettingsSchema = z.object({
   geoMapEnabled: z.boolean().optional(),
   geoCacheTtl: z.number().min(10).max(3600).optional(),
   maxmindDbPath: z.string().max(500).nullable().optional(),
+  liteMode: z.boolean().optional(),
   giftSubscriptionsEnabled: z.boolean().optional(),
   giftCodeExpiryHours: z.number().int().min(1).max(8760).optional(),
   maxAdditionalSubscriptions: z.number().int().min(1).max(100).optional(),
@@ -4236,6 +4244,7 @@ adminRouter.patch("/settings", async (req, res) => {
     });
   }
   const giftKeys: [keyof typeof updates, string][] = [
+    ["liteMode", "lite_mode"],
     ["giftSubscriptionsEnabled", "gift_subscriptions_enabled"],
     ["giftCodeExpiryHours", "gift_code_expiry_hours"],
     ["maxAdditionalSubscriptions", "max_additional_subscriptions"],

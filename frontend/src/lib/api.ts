@@ -2545,8 +2545,8 @@ export const api = {
   async getClientAvailableTrials(token: string): Promise<{ items: ClientTrialOption[]; hasAnyEnabled: boolean }> {
     return request("/client/trials/available", { token });
   },
-  async clientActivateTrialById(token: string, trialId: string): Promise<ClientTrialActivateResponse> {
-    return request(`/client/trials/${trialId}/activate`, { method: "POST", token });
+  async clientActivateTrialById(token: string, trialId: string, expectedPrice?: number): Promise<ClientTrialActivateResponse> {
+    return request(`/client/trials/${trialId}/activate`, { method: "POST", token, body: JSON.stringify({ expectedPrice }) });
   },
 
   async clientUpdateProfile(token: string, data: { preferredLang?: string; preferredCurrency?: string }): Promise<ClientProfile> {
@@ -3339,6 +3339,7 @@ export interface RunRuleResult {
 }
 
 export type UpdateSettingsPayload = {
+  liteMode?: boolean;
   allowUserThemeChange?: boolean;
   activeLanguages?: string;
   activeCurrencies?: string;
@@ -3850,6 +3851,7 @@ export interface RemnaUserUsageResponse {
 }
 
 export interface AdminSettings {
+  liteMode?: boolean;
   allowUserThemeChange?: boolean;
   activeLanguages: string[];
   activeCurrencies: string[];
@@ -4918,6 +4920,7 @@ export interface TariffRecord {
 
 // ─── Trial-пресеты ───
 export interface TrialRecord {
+  price?: number;
   id: string;
   name: string;
   /** null = standalone-триал из сквада (без тарифа). */
@@ -4944,6 +4947,7 @@ export interface TrialRecord {
 }
 
 export type CreateTrialPayload = {
+  price?: number;
   name: string;
   tariffId?: string | null;
   squadUuids?: string[] | null;
@@ -4978,6 +4982,7 @@ export interface ClientDeviceItem {
 }
 
 export interface ClientTrialOption {
+  price?: number;
   id: string;
   name: string;
   tariffId: string;
@@ -5448,6 +5453,7 @@ export type PublicSellOption =
   | { kind: "servers"; id: string; name: string; squadUuid: string; trafficGb?: number; price: number; currency: string };
 
 export interface PublicConfig {
+  liteMode?: boolean;
   paymentDescription?: string;
   botGroupCabinet?: boolean;
   botMenuMode?: "classic" | "web";

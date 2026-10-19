@@ -73,10 +73,11 @@ export function StealthTrialsModal({ open, onClose, onActivated }: Props) {
 
   async function activate(trial: ClientTrialOption) {
     if (!state.token || activatingId) return;
+    if ((trial.price ?? 0) > 0 && !window.confirm(`Купить триал «${trial.name}» за ${trial.price} ₽ с баланса?`)) return;
     setActivatingId(trial.id);
     setError(null);
     try {
-      await api.clientActivateTrialById(state.token, trial.id);
+      await api.clientActivateTrialById(state.token, trial.id, trial.price ?? 0);
       await refreshProfile().catch(() => {});
       onActivated?.();
       onClose();
@@ -145,6 +146,7 @@ export function StealthTrialsModal({ open, onClose, onActivated }: Props) {
                       <div className="flex-1 min-w-0">
                         <h4 className="text-sm font-bold tracking-tight leading-tight">
                           {trial.name}
+                          <span className="block text-xs mt-1">{(trial.price ?? 0) > 0 ? `${trial.price} ₽ с баланса` : "Бесплатно"}</span>
                         </h4>
                         {trial.tariffName && (
                           <p className="text-[11px] text-zinc-500 mt-0.5">

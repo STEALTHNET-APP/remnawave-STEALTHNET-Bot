@@ -1,4 +1,5 @@
 import { PrismaClient, Prisma } from "@prisma/client";
+import { deviceOptionMetadata, lockDevicePurchases, validateDevicePurchase, validateTariffDevices } from "./modules/extra-options/device-limit.js";
 import { isRenewalTargetTariffAllowed, parsePaymentIntentMetadata } from "./modules/payment/payment-intent.js";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
@@ -90,8 +91,9 @@ export async function assertRenewalTargetForPayment(params: {
  * запрещённый клиенту. Покрывает ВСЕ внешние платёжки (они создают pending-платёж здесь).
  * app.ts ловит code "TARIFF_RESTRICTED" → 403.
  */
-export async function createPayment(args: Prisma.PaymentCreateArgs) {
+export async function createPayment(args: Prisma.PaymentCreateArgs, debitBalance = false) {
   const data = args.data as Prisma.PaymentUncheckedCreateInput;
+  if (data.tariffId && typeof data.clientId === "string") await validateTariffDevices(basePrisma, data.clientId, data.tariffId, data.deviceCount, data.metadata);
   if (typeof data.clientId === "string") {
     await assertActiveExtraOptionTargetForPayment({ clientId: data.clientId, metadata: data.metadata });
     await assertRenewalTargetForPayment({
@@ -122,6 +124,22 @@ export async function createPayment(args: Prisma.PaymentCreateArgs) {
         throw err;
       }
     }
+  }
+  if (deviceOptionMetadata(data.metadata) || debitBalance) {
+    return basePrisma.$transaction(async (tx) => {
+      if (deviceOptionMetadata(data.metadata)) {
+        await lockDevicePurchases(tx, data.clientId);
+        data.metadata = await validateDevicePurchase(tx, data.clientId, data.metadata) as string;
+      }
+      if (debitBalance) {
+        const debit = await tx.client.updateMany({
+          where: { id: data.clientId, balance: { gte: data.amount } },
+          data: { balance: { decrement: data.amount } },
+        });
+        if (debit.count !== 1) throw Object.assign(new Error("Недостаточно средств на балансе."), { code: "EXTRA_DEVICE_LIMIT" });
+      }
+      return tx.payment.create({ ...args, data });
+    }, { maxWait: 10000, timeout: 30000 });
   }
   return basePrisma.payment.create(args);
 }

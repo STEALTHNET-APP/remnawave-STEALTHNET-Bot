@@ -1,3 +1,4 @@
+import { validateTariffDevices } from "../extra-options/device-limit.js";
 import { activateFreeDaysPromo, PromoCodeError } from "../promo-code/free-days.service.js";
 import { createParitypayPayment, isParitypayConfigured } from "../paritypay/paritypay.service.js";
 import { randomBytes, createHmac } from "crypto";
@@ -2394,6 +2395,7 @@ clientRouter.get("/trials/available", async (req, res) => {
       return {
         id: t.id,
         name: t.name,
+        price: t.price,
         tariffId: t.tariffId,
         tariffName: t.tariff?.name ?? null,
         durationDays: t.durationDays,
@@ -2415,135 +2417,10 @@ clientRouter.get("/trials/available", async (req, res) => {
  * Записывает в client_trial_usages для блокировки повторной активации.
  */
 clientRouter.post("/trials/:id/activate", async (req, res) => {
-  const trialId = req.params.id;
   const clientId = (req as unknown as { clientId: string }).clientId;
-  if (!isRemnaConfigured()) return res.status(503).json({ message: "Сервис временно недоступен" });
-
-  const trial = await prisma.trial.findUnique({
-    where: { id: trialId },
-    include: { tariff: true },
-  });
-  if (!trial || !trial.enabled) {
-    return res.status(404).json({ message: "Триал не найден или отключён" });
-  }
-
-  // Проверяем что клиент ещё не активировал этот триал (атомарно через UNIQUE).
-  const existingUsage = await prisma.clientTrialUsage.findUnique({
-    where: { clientId_trialId: { clientId, trialId } },
-  });
-  if (existingUsage) {
-    return res.status(409).json({ message: "Этот пробный период уже активирован" });
-  }
-
-  // single-режим (мульти-подписки ВЫКЛ): одна подписка на клиента. Если подписка
-  // (не подарок) уже есть — standalone-пробный вторым не выдаём.
-  // сбой чтения конфига → single (fail-closed): лишний триал не выдаём.
-  const cfgTrialStandalone = await getSystemConfig().catch(() => null);
-  if (!isMultiSubscriptionsEnabled(cfgTrialStandalone)) {
-    const existingSubsT = await prisma.subscription.count({ where: { ownerId: clientId, purchasedAsGift: false, giftStatus: null } });
-    if (existingSubsT > 0) {
-      return res.status(400).json({ message: "Пробный период недоступен — у вас уже есть подписка." });
-    }
-  }
-
-  // Создаём secondary subscription. Источник параметров —
-  // ЛИБО тариф триала (как раньше), ЛИБО сам standalone-триал (сквады/лимиты
-  // заданы прямо в триале, tariffId=null — такой «псевдо-тариф» в каталоге не виден).
-  const trialTrafficLimit = trial.trafficLimitBytes ?? trial.tariff?.trafficLimitBytes ?? null;
-  let trialSquads: string[] = trial.tariff?.internalSquadUuids ?? [];
-  if (!trial.tariffId) {
-    try {
-      const parsed = trial.squadUuids ? JSON.parse(trial.squadUuids) as unknown : [];
-      trialSquads = Array.isArray(parsed) ? parsed.map((x) => String(x)) : [];
-    } catch { trialSquads = []; }
-    if (trialSquads.length === 0) {
-      return res.status(503).json({ message: "Триал настроен некорректно (нет сквадов)" });
-    }
-  }
-  const { createAdditionalSubscription } = await import("../gift/gift.service.js");
-  const subResult = await createAdditionalSubscription(clientId, {
-    id: trial.tariffId ?? undefined,
-    name: trial.name,
-    price: 0,
-    durationDays: trial.durationDays, // ← длительность из триала, не тарифа
-    trafficLimitBytes: trialTrafficLimit,
-    deviceLimit: trial.deviceLimit ?? trial.tariff?.deviceLimit ?? null,
-    includedDevices: trial.tariff?.includedDevices ?? trial.deviceLimit ?? undefined,
-    internalSquadUuids: trialSquads,
-    trafficResetMode: trial.tariff?.trafficResetMode ?? undefined,
-  }, { skipConfigCheck: true, extraDevices: 0 });
-  if (!subResult.ok) {
-    return res.status(subResult.status).json({ message: subResult.error });
-  }
-
-  // Помечаем sub как «триал» (для отображения в боте + кнопки «Конвертировать»).
-  await prisma.subscription.update({
-    where: { id: subResult.data.subscriptionId },
-    data: { trialId: trial.id },
-  }).catch(() => {});
-
-  // если триал стал primary (subscriptionIndex=0) и у клиента
-  // ещё пустой Client.remnawaveUuid — синкаем туда remnawaveUuid подписки для legacy-чтения.
-  if (subResult.data.subscriptionIndex === 0) {
-    const createdSubForSync = await prisma.subscription.findUnique({
-      where: { id: subResult.data.subscriptionId },
-      select: { remnawaveUuid: true },
-    });
-    if (createdSubForSync?.remnawaveUuid) {
-      await prisma.client.update({
-        where: { id: clientId },
-        data: { remnawaveUuid: createdSubForSync.remnawaveUuid },
-      }).catch(() => {});
-    }
-  }
-
-  // Лог использования (атомарный insert через UNIQUE).
-  try {
-    await prisma.clientTrialUsage.create({
-      data: {
-        clientId,
-        trialId: trial.id,
-        subscriptionId: subResult.data.subscriptionId,
-      },
-    });
-  } catch {
-    // Гонка: одновременно 2 запроса. Один прошёл, второй получит 409 при повторе.
-  }
-
-  // подгружаем subscriptionUrl + remnawaveUuid из созданной подписки
-  // чтобы бот мог сразу показать кнопку «📲 Инструкции по установке» с прямой ссылкой.
-  const createdSub = await prisma.subscription.findUnique({
-    where: { id: subResult.data.subscriptionId },
-    select: { remnawaveUuid: true },
-  });
-  let subscriptionUrl: string | null = null;
-  if (createdSub?.remnawaveUuid) {
-    try {
-      const r = await remnaGetUser(createdSub.remnawaveUuid);
-      const inner = (r.data as { response?: Record<string, unknown>; data?: Record<string, unknown> } | null)?.response
-        ?? (r.data as { response?: Record<string, unknown>; data?: Record<string, unknown> } | null)?.data
-        ?? (r.data as Record<string, unknown> | null);
-      subscriptionUrl = (inner as { subscriptionUrl?: string } | null)?.subscriptionUrl ?? null;
-    } catch { /* ignore */ }
-  }
-
-  // уведомление админам в TG-группу: активирован триал (best-effort, не ломаем флоу).
-  import("../notification/telegram-notify.service.js")
-    .then((m) => m.notifyAdminsAboutTrialActivated(clientId, trial.name, trial.durationDays))
-    .catch((e) => console.error("[trial activate] admin notify failed:", e));
-
-  return res.json({
-    message: `🎁 Пробная подписка «${trial.name}» активирована на ${trial.durationDays} дн.!`,
-    subscriptionId: subResult.data.subscriptionId,
-    trialId: trial.id,
-    durationDays: trial.durationDays,
-    // для кнопки «🌐 Локации» на экране активации (скрин 5).
-    // Бот покажет кнопку только если у тарифа триала есть текст локаций.
-    tariffId: trial.tariffId,
-    tariffHasLocations: !!(trial.tariff?.locations?.trim()),
-    // T-unify: subscription URL для прямой URL-кнопки инструкций.
-    subscriptionUrl,
-  });
+  const { activateTrial } = await import("../trial/trial.service.js");
+  const result = await activateTrial(clientId, req.params.id, req.body?.expectedPrice);
+  return res.status(result.status).json(result.body);
 });
 
 // ——— Активация промо-ссылки ———
@@ -4213,6 +4090,7 @@ clientRouter.post("/payments/balance", async (req, res) => {
   // Параметр deviceCount/requestedExtras в API остаётся для legacy/tariff-extras flow;
   // в нашем sell-options flow он = 0 (юзер докупает устройства отдельно через extra-options).
   const requestedExtras = Math.max(0, deviceCount ?? 0);
+  await validateTariffDevices(prisma, clientRaw.id, tariff.id, requestedExtras, { extendsSecondarySubId, removeExtrasOnActivate });
 
   let extrasMonthlyPrice = 0;
   // T-extras-universal: при «убрать устройства» доплату за существующие extras не берём —
@@ -4769,17 +4647,6 @@ clientRouter.post("/payments/balance/option", async (req, res) => {
   const finalOptionPrice = pdOption.amount;
   const optSnap = await paymentSnapshotProduct(clientDb.id, finalOptionPrice);
 
-  // Та же дыра, что в остальных balance-эндпоинтах: read balance → check →
-  // applyExtraOptionByPaymentId (Remna API, сотни мс) → write decrement.
-  // Между read и write 5+ параллельных запросов проходили check одинаково и
-  // получали несколько опций за одну стоимость. Чиним атомарным debit'ом.
-  const debit = await prisma.client.updateMany({
-    where: { id: clientDb.id, balance: { gte: optSnap.amount } },
-    data: { balance: { decrement: optSnap.amount } },
-  });
-  if (debit.count === 0) {
-    return res.status(400).json({ message: `Недостаточно средств. Баланс: ${clientDb.balance.toFixed(2)}, нужно: ${optSnap.amount.toFixed(2)}` });
-  }
   if (pdOption.personalDiscountPercent > 0) {
     (metadataExtra as Record<string, unknown>).personalDiscountPercent = pdOption.personalDiscountPercent;
     (metadataExtra as Record<string, unknown>).originalPrice = price;
@@ -4797,7 +4664,7 @@ clientRouter.post("/payments/balance/option", async (req, res) => {
       paidAt: new Date(),
       metadata: JSON.stringify(metadataExtra),
     }),
-  });
+  }, true);
 
   const applyResult = await applyExtraOptionByPaymentId(payment.id);
   if (!applyResult.ok) {
@@ -4805,6 +4672,10 @@ clientRouter.post("/payments/balance/option", async (req, res) => {
     await prisma.client.update({ where: { id: clientDb.id }, data: { balance: { increment: optSnap.amount } } }).catch(() => {});
     await prisma.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });
     return res.status(applyResult.status).json({ message: (applyResult as { error?: string }).error || "Ошибка применения опции" });
+  }
+
+  if (applyResult.creditedToBalance) {
+    return res.json({ message: "Лимит дополнительных устройств достигнут. Сумма возвращена на баланс.", creditedToBalance: true });
   }
 
   // NB: списание уже сделано атомарно выше — повторного decrement тут НЕ надо.
