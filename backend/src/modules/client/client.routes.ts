@@ -1,3 +1,4 @@
+import { asyncHandler } from "../../lib/async-handler.js";
 import { webClientRouter } from "../amnezia-web/client.routes.js";
 import { isWebPanel, WEB_PROTOCOLS } from "../amnezia-web/api.js";
 import { starsApi, starsAmount } from "../telegram-stars/stars-api.js";
@@ -3583,7 +3584,7 @@ const createPlategaPaymentSchema = z.object({
   extraOption: z.object({ kind: z.enum(["traffic", "devices", "servers"]), productId: z.string().min(1), targetSubscriptionId: z.string().min(1).optional() }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/payments/platega", async (req, res) => {
+clientRouter.post("/payments/platega", asyncHandler(async (req, res) => {
   const clientId = (req as unknown as { clientId: string }).clientId;
   const parsed = createPlategaPaymentSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -3902,7 +3903,7 @@ clientRouter.post("/payments/platega", async (req, res) => {
     discountApplied: promoCodeRecord ? true : false,
     finalAmount: snap.amount,
   });
-});
+}));
 
 // ——— Оплата тарифа или прокси-тарифа балансом ———
 
@@ -3929,7 +3930,7 @@ const payByBalanceSchema = z.object({
   replaceTrialSubId: z.string().min(1).max(64).optional(),
 }).refine((d) => (d.tariffId ? 1 : 0) + (d.proxyTariffId ? 1 : 0) + (d.singboxTariffId ? 1 : 0) === 1, { message: "Укажите tariffId, proxyTariffId или singboxTariffId" });
 
-clientRouter.post("/payments/balance", async (req, res, next) => {
+clientRouter.post("/payments/balance", asyncHandler(async (req, res) => {
   const clientRaw = (req as unknown as { client: { id: string; remnawaveUuid: string | null; email: string | null; telegramId: string | null } }).client;
   const parsed = payByBalanceSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: "Проверьте введённые данные", errors: parsed.error.flatten() });
@@ -4100,11 +4101,7 @@ clientRouter.post("/payments/balance", async (req, res, next) => {
   // Параметр deviceCount/requestedExtras в API остаётся для legacy/tariff-extras flow;
   // в нашем sell-options flow он = 0 (юзер докупает устройства отдельно через extra-options).
   const requestedExtras = Math.max(0, deviceCount ?? 0);
-  try {
-    await validateTariffDevices(prisma, clientRaw.id, tariff.id, requestedExtras, { extendsSecondarySubId, removeExtrasOnActivate });
-  } catch (error) {
-    return next(error);
-  }
+  await validateTariffDevices(prisma, clientRaw.id, tariff.id, requestedExtras, { extendsSecondarySubId, removeExtrasOnActivate });
 
   let extrasMonthlyPrice = 0;
   // T-extras-universal: при «убрать устройства» доплату за существующие extras не берём —
@@ -4416,7 +4413,7 @@ clientRouter.post("/payments/balance", async (req, res, next) => {
     paymentId: payment.id,
     newBalance: clientDb.balance - tariffPaySnap.amount,
   });
-});
+}));
 
 // ——— Гибкий тариф (собери сам): расчёт и оплата балансом ———
 function getCustomBuildConfig(config: Awaited<ReturnType<typeof getSystemConfig>>) {
@@ -4451,7 +4448,7 @@ const customBuildPayByBalanceSchema = z.object({
   promoCode: z.string().max(50).optional(),
 });
 
-clientRouter.post("/custom-build/pay-balance", async (req, res) => {
+clientRouter.post("/custom-build/pay-balance", asyncHandler(async (req, res) => {
   const clientRaw = (req as unknown as { client: { id: string } }).client;
   const parsed = customBuildPayByBalanceSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: "Неверные параметры", errors: parsed.error.flatten() });
@@ -4569,7 +4566,7 @@ clientRouter.post("/custom-build/pay-balance", async (req, res) => {
     paymentId: payment.id,
     newBalance: after?.balance ?? clientDb.balance - customSnap.amount,
   });
-});
+}));
 
 // ——— Оплата опции (доп. трафик/устройства/сервер) балансом ———
 const payOptionByBalanceSchema = z.object({
@@ -4579,7 +4576,7 @@ const payOptionByBalanceSchema = z.object({
   // Если null/undefined — apply к primary (как раньше) + client.customPrimaryPrice += сумма опции.
   targetSubscriptionId: z.string().min(1).max(64).optional(),
 });
-clientRouter.post("/payments/balance/option", async (req, res) => {
+clientRouter.post("/payments/balance/option", asyncHandler(async (req, res) => {
   const clientRaw = (req as unknown as { clientId: string }).clientId;
   const parsed = payOptionByBalanceSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: "Проверьте введённые данные", errors: parsed.error.flatten() });
@@ -4713,7 +4710,7 @@ clientRouter.post("/payments/balance/option", async (req, res) => {
     paymentId: payment.id,
     newBalance: after?.balance ?? clientDb.balance - optSnap.amount,
   });
-});
+}));
 
 // ——— ЮMoney: пополнение баланса ———
 
@@ -4731,7 +4728,7 @@ clientRouter.get("/yoomoney/auth-url", async (req, res) => {
 });
 
 const yoomoneyRequestTopupSchema = z.object({ amount: z.number().positive().max(1e7) });
-clientRouter.post("/yoomoney/request-topup", async (req, res) => {
+clientRouter.post("/yoomoney/request-topup", asyncHandler(async (req, res) => {
   const client = (req as unknown as { client: { id: string; yoomoneyAccessToken?: string | null } }).client;
   const parsed = yoomoneyRequestTopupSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: "Укажите сумму", errors: parsed.error.flatten() });
@@ -4783,7 +4780,7 @@ clientRouter.post("/yoomoney/request-topup", async (req, res) => {
     money_source: result.money_source,
     contract_amount: result.contract_amount,
   });
-});
+}));
 
 const yoomoneyProcessPaymentSchema = z.object({
   paymentId: z.string().min(1),
@@ -4855,7 +4852,7 @@ const yoomoneyFormPaymentSchema = z.object({
   extraOption: z.object({ kind: z.enum(["traffic", "devices", "servers"]), productId: z.string().min(1), targetSubscriptionId: z.string().min(1).optional() }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/yoomoney/create-form-payment", async (req, res) => {
+clientRouter.post("/yoomoney/create-form-payment", asyncHandler(async (req, res) => {
   const clientId = (req as unknown as { clientId: string }).clientId;
   const parsed = yoomoneyFormPaymentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: "Укажите сумму и способ оплаты", errors: parsed.error.flatten() });
@@ -5066,7 +5063,7 @@ clientRouter.post("/yoomoney/create-form-payment", async (req, res) => {
     },
     successURL,
   });
-});
+}));
 
 clientRouter.get("/yoomoney/form-payment/:paymentId", async (req, res) => {
   const clientId = (req as unknown as { clientId: string }).clientId;
@@ -5140,7 +5137,7 @@ const yookassaCreatePaymentSchema = z.object({
   // Если client.email пустой, а тут пришёл валидный — сохраним в clients.email.
   receiptEmail: z.string().max(254).optional(),
 });
-clientRouter.post("/yookassa/create-payment", async (req, res) => {
+clientRouter.post("/yookassa/create-payment", asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = yookassaCreatePaymentSchema.safeParse(req.body);
@@ -5463,7 +5460,7 @@ clientRouter.post("/yookassa/create-payment", async (req, res) => {
     console.error("[yookassa/create-payment]", message, err);
     return res.status(500).json({ message: message || "Ошибка создания платежа" });
   }
-});
+}));
 
 // --- Отвязка сохранённого способа оплаты ЮKassa ---
 clientRouter.post("/yookassa/unlink-payment-method", async (req, res) => {
@@ -5513,7 +5510,7 @@ const cryptopayCreatePaymentSchema = z.object({
   }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post(["/cryptopay/create-payment", "/telegram-stars/create-payment"], async (req, res) => {
+clientRouter.post(["/cryptopay/create-payment", "/telegram-stars/create-payment"], asyncHandler(async (req, res) => {
   try {
     const isStars = req.path === "/telegram-stars/create-payment";
     const clientId = (req as unknown as { clientId: string }).clientId;
@@ -5817,7 +5814,7 @@ clientRouter.post(["/cryptopay/create-payment", "/telegram-stars/create-payment"
     console.error("[cryptopay/create-payment]", message, err);
     return res.status(500).json({ message: message || "Ошибка создания платежа" });
   }
-});
+}));
 
 const heleketCreatePaymentSchema = z.object({
   amount: z.number().positive().optional(),
@@ -5846,7 +5843,7 @@ const heleketCreatePaymentSchema = z.object({
   }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/heleket/create-payment", async (req, res) => {
+clientRouter.post("/heleket/create-payment", asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = heleketCreatePaymentSchema.safeParse(req.body);
@@ -6098,9 +6095,9 @@ clientRouter.post("/heleket/create-payment", async (req, res) => {
     console.error("[heleket/create-payment]", message, err);
     return res.status(500).json({ message: message || "Ошибка создания платежа" });
   }
-});
+}));
 
-clientRouter.post("/rollypay/create-payment", async (req, res) => {
+clientRouter.post("/rollypay/create-payment", asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = heleketCreatePaymentSchema.safeParse(req.body);
@@ -6356,9 +6353,9 @@ clientRouter.post("/rollypay/create-payment", async (req, res) => {
     console.error("[rollypay/create-payment]", message, err);
     return res.status(500).json({ message: message || "Ошибка создания платежа" });
   }
-});
+}));
 
-clientRouter.post("/paritypay/create-payment", async (req, res) => {
+clientRouter.post("/paritypay/create-payment", asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = heleketCreatePaymentSchema.safeParse(req.body);
@@ -6615,7 +6612,7 @@ clientRouter.post("/paritypay/create-payment", async (req, res) => {
     console.error("[paritypay/create-payment]", message, err);
     return res.status(500).json({ message: message || "Ошибка создания платежа" });
   }
-});
+}));
 
 // ═════════════════════════════════════════════════════════════════
 // LAVA Business — счета (карты / СБП / СберPay) в рублях.
@@ -6650,7 +6647,7 @@ const lavaCreatePaymentSchema = z.object({
   }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/lava/create-payment", async (req, res) => {
+clientRouter.post("/lava/create-payment", asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = lavaCreatePaymentSchema.safeParse(req.body);
@@ -6904,7 +6901,7 @@ clientRouter.post("/lava/create-payment", async (req, res) => {
     console.error("[lava/create-payment]", message, err);
     return res.status(500).json({ message: message || "Ошибка создания платежа" });
   }
-});
+}));
 
 // ═════════════════════════════════════════════════════════════════
 // Lava.top — создание инвойса через product/offer модель.
@@ -6944,7 +6941,7 @@ const lavatopCreatePaymentSchema = z.object({
   }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/lavatop/create-payment", async (req, res) => {
+clientRouter.post("/lavatop/create-payment", asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = lavatopCreatePaymentSchema.safeParse(req.body);
@@ -7226,7 +7223,7 @@ clientRouter.post("/lavatop/create-payment", async (req, res) => {
     console.error("[lavatop/create-payment]", message, err);
     return res.status(500).json({ message: message || "Ошибка создания платежа Lava.top" });
   }
-});
+}));
 
 // ═════════════════════════════════════════════════════════════════
 // Overpay — платёжная форма (карты / СБП) через композит preflight.
@@ -7254,7 +7251,7 @@ const overpayCreatePaymentSchema = z.object({
   }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/overpay/create-payment", async (req, res) => {
+clientRouter.post("/overpay/create-payment", asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = overpayCreatePaymentSchema.safeParse(req.body);
@@ -7499,7 +7496,7 @@ clientRouter.post("/overpay/create-payment", async (req, res) => {
     console.error("[overpay/create-payment]", message, err);
     return res.status(500).json({ message: message || "Ошибка создания платежа" });
   }
-});
+}));
 
 const aiChatSchema = z.object({
   messages: z.array(z.object({

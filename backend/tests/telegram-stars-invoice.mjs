@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
+import { asyncHandler } from '../dist/lib/async-handler.js';
 const source = fs.readFileSync(new URL('../dist/modules/client/client.routes.js', import.meta.url), 'utf8');
 const routes = new Map();
 const noop = () => {};
@@ -11,6 +12,7 @@ let config = { telegramStarsEnabled: true, telegramStarsRubPerStar: 2, serviceNa
 let client = { telegramId: '123456789', preferredCurrency: 'RUB' }, invoice, created, failed = false;
 const tariff = { id: 'tariff', price: 300, currency: 'RUB', durationDays: 30, priceOptions: [{ id: 'period', price: 501, durationDays: 60 }] };
 const overrides = {
+  asyncHandler,
   Router: () => router, z, randomUUID,
   env: {}, uploadTicketAttachment: { array: () => noop },
   getSystemConfig: async () => config,
