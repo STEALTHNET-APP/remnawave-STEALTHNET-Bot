@@ -1085,6 +1085,7 @@ function formatSubLine(item: {
 }
 
 function buildMainMenuText(opts: {
+  multiSubscriptionsEnabled?: boolean;
   serviceName: string;
   telegramId: number;
   balance: number;
@@ -1158,7 +1159,9 @@ function buildMainMenuText(opts: {
     };
     if (allSubs && allSubs.items.length > 0) {
       pushRaw("");
-      pushLine("subsCountLabel", t(menuTexts, "subsCountLabel") + `**${allSubs.items.length}**`);
+      if (opts.multiSubscriptionsEnabled === true) {
+        pushLine("subsCountLabel", t(menuTexts, "subsCountLabel") + `**${allSubs.items.length}**`);
+      }
       const sorted = [...allSubs.items].sort((a, b) => {
         if (a.type !== b.type) return a.type === "root" ? -1 : 1;
         return (a.subscriptionIndex ?? 0) - (b.subscriptionIndex ?? 0);
@@ -2217,6 +2220,7 @@ async function handleStart(ctx: Context, payload: string) {
       menuTextCustomEmojiIds: config?.menuTextCustomEmojiIds ?? null,
       botEmojis: config?.botEmojis ?? null,
       infoBlock: config?.botInfoBlock ?? null,
+      multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
       allSubs: allSubsRes,
     });
     const caption = text.length > TELEGRAM_CAPTION_MAX ? text.slice(0, TELEGRAM_CAPTION_MAX - 3) + "..." : text;
@@ -2822,6 +2826,7 @@ composer.on("callback_query:data", async (ctx) => {
         menuTextCustomEmojiIds: config?.menuTextCustomEmojiIds ?? null,
         botEmojis: config?.botEmojis ?? null,
         infoBlock: config?.botInfoBlock ?? null,
+        multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
         allSubs: allSubsRes,
       });
       const hasVideoInstructions = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
@@ -3467,6 +3472,7 @@ composer.on("callback_query:data", async (ctx) => {
         menuTextCustomEmojiIds: config?.menuTextCustomEmojiIds ?? null,
         botEmojis: config?.botEmojis ?? null,
         infoBlock: config?.botInfoBlock ?? null,
+        multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
         allSubs: allSubsRes,
       });
       const hasVideoInstructionsCb = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;

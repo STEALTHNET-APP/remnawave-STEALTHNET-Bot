@@ -111,6 +111,7 @@ export async function getPublicConfig(): Promise<{
   publicAppUrl?: string | null;
   defaultCurrency?: string;
   trialEnabled?: boolean;
+  multiSubscriptionsEnabled?: boolean;
   trialDays?: number;
   plategaMethods?: { id: number; label: string }[];
   paymentProviders?: { id: string; label: string; sortOrder: number }[];
