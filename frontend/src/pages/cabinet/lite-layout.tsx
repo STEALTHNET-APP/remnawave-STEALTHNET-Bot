@@ -19,7 +19,7 @@ export function LiteLayout() {
   const trials = useQuery({ queryKey: ["lite-trials", state.token], queryFn: () => api.getClientAvailableTrials(state.token!), enabled: !!state.token && home });
   if (!routes.has(pathname)) return <Navigate to="/cabinet/dashboard" replace />;
   return <div className="min-h-svh bg-background text-foreground">
-    <header className="sticky top-0 z-40 border-b border-border bg-background p-4">
+    <header className="sticky top-0 z-40 border-b border-border bg-background p-4" style={{ paddingTop: "calc(var(--app-safe-top) + 16px)", paddingLeft: "calc(var(--app-safe-left) + 16px)", paddingRight: "calc(var(--app-safe-right) + 16px)" }}>
       <div className="mx-auto max-w-3xl flex flex-wrap items-center justify-between gap-3">
         <Link className="font-semibold" to="/cabinet/dashboard">{config?.serviceName || "Кабинет"}</Link>
         <nav className="flex gap-4 text-sm"><Link to="/cabinet/dashboard">Подписки</Link><Link to="/cabinet/tariffs">Купить</Link><Link to="/cabinet/menu/topup">Баланс</Link><Link to="/cabinet/login" onClick={() => logout()}>Выйти</Link></nav>

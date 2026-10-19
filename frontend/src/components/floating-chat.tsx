@@ -126,7 +126,7 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
 
 const ChatHeader = ({ activeChat, setActiveChat, isExpanded, setIsExpanded, setIsOpen, aiUnread, supportUnread, showAiTab = true }: any) => (
   <>
-    <div className="px-4 py-3 sm:py-4 border-b border-border bg-black/5 dark:bg-card shrink-0 relative overflow-hidden pt-[max(env(safe-area-inset-top),16px)] sm:pt-4">
+    <div className="px-4 py-3 sm:py-4 border-b border-border bg-black/5 dark:bg-card shrink-0 relative overflow-hidden pt-[max(var(--app-safe-top),16px)] sm:pt-4">
       <div className="absolute inset-0 bg-transparent pointer-events-none" />
       <div className="relative flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -407,7 +407,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
 
         {/* Input area */}
         {detail?.status === "open" && (
-          <div className="p-3 sm:p-4 border-t border-black/5 dark:border-border bg-card sm:bg-card shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4">
+          <div className="p-3 sm:p-4 border-t border-black/5 dark:border-border bg-card sm:bg-card shrink-0 pb-[max(var(--app-safe-bottom),16px)] sm:pb-4">
             {replyFiles.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {replyFiles.map((f, i) => (
@@ -978,7 +978,7 @@ export function FloatingChat() {
           ref={panelRef}
           data-tour="floating-chat"
           className={cn(
-            "fixed sm:absolute z-50",
+            "cabinet-floating-chat fixed sm:absolute z-50",
             "inset-0 sm:inset-auto sm:bottom-20 sm:right-0",
             "w-full h-[100dvh]",
             isExpanded
@@ -1053,7 +1053,7 @@ export function FloatingChat() {
                   </div>
 
                   {/* AI Input Area */}
-                  <div className="p-3 sm:p-4 border-t border-black/5 dark:border-border bg-card sm:bg-card shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4">
+                  <div className="p-3 sm:p-4 border-t border-black/5 dark:border-border bg-card sm:bg-card shrink-0 pb-[max(var(--app-safe-bottom),16px)] sm:pb-4">
                     <div className="relative flex items-end gap-2 bg-black/5 dark:bg-black/20 p-1.5 rounded-xl border border-black/5 dark:border-border focus-within:border-border focus-within:ring-1 focus-within:ring-primary/50 transition-all">
                       <textarea
                         className={cn(

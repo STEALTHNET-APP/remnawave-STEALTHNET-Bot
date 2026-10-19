@@ -73,18 +73,18 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[55] flex items-end justify-center bg-black/45 transition-opacity duration-300 ease-out",
+        "app-viewport-overlay au-sheet-overlay fixed inset-0 z-[55] flex items-end justify-center bg-black/45 transition-opacity duration-300 ease-out",
         visible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
       )}
       onClick={onClose}
     >
       <div
         className={cn(
-          "flex max-h-[88vh] w-full max-w-md flex-col rounded-t-[28px] bg-[var(--au-bg)] pt-3 text-[var(--au-ink)] [backface-visibility:hidden] [isolation:isolate] transition-transform duration-300 ease-out",
+          "flex max-h-[min(88dvh,100%)] w-full max-w-md flex-col rounded-t-[28px] bg-[var(--au-bg)] pt-3 text-[var(--au-ink)] [backface-visibility:hidden] [isolation:isolate] transition-transform duration-300 ease-out",
           visible ? "translate-y-0" : "translate-y-full"
         )}
         style={{
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+          paddingBottom: "calc(var(--app-safe-bottom) + 12px)",
         }}
         onClick={(e) => e.stopPropagation()}
       >

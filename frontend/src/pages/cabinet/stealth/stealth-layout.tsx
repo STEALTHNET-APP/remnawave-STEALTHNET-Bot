@@ -46,13 +46,13 @@ export function StealthLayout() {
 
   return (
     <div
-      className="tg-fs-pad min-h-screen w-full text-white relative overflow-x-hidden"
+      className="min-h-screen w-full text-white relative overflow-x-clip"
       style={{ ["--stealth-accent" as string]: accent }}
     >
       <NetworkBg />
 
       {/* Header: бренд по центру + ambient glow */}
-      <header className="relative pt-6 pb-3 px-4 text-center">
+      <header className="sticky top-0 z-50 bg-zinc-950/95 pb-3 px-4 text-center" style={{ paddingTop: "calc(var(--app-safe-top) + 24px)", paddingLeft: "calc(var(--app-safe-left) + 16px)", paddingRight: "calc(var(--app-safe-right) + 16px)" }}>
         <div className="inline-block relative">
           <span
             className="absolute inset-0 -z-10 blur-2xl opacity-50"

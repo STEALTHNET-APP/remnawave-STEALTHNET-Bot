@@ -244,7 +244,7 @@ function ClassicTicketsPage() {
 
   if (detailId && detail) {
     return (
-      <div className="flex flex-col h-[calc(100vh-8rem)] min-h-[500px] max-h-[800px] w-full rounded-[2.5rem] border border-white/10 dark:border-white/5 bg-slate-50/60 dark:bg-slate-950/60 backdrop-blur-[32px] shadow-2xl overflow-hidden relative">
+      <div className="flex flex-col h-[max(320px,calc(var(--app-viewport-height,100dvh)-var(--app-safe-top)-10rem))] min-h-0 max-h-[800px] w-full rounded-[2.5rem] border border-white/10 dark:border-white/5 bg-slate-50/60 dark:bg-slate-950/60 backdrop-blur-[32px] shadow-2xl overflow-hidden relative">
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border/50 bg-background/30 backdrop-blur-md shrink-0 z-10 transition-colors">
           <div className="flex items-center gap-3 min-w-0">
             <Button variant="ghost" size="icon" className="shrink-0 h-9 w-9 rounded-full bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { setDetailId(null); setDetail(null); }}>

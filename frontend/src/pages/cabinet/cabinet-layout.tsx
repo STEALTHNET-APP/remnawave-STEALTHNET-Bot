@@ -456,9 +456,9 @@ function MobileCabinetShell() {
   const logo = config?.logo && !logoError ? config.logo : null;
 
   return (
-    <div className="classic-cabinet tg-fs-pad min-h-svh flex flex-col bg-transparent min-w-0 overflow-x-hidden pb-36 relative">
+    <div className="classic-cabinet min-h-svh flex flex-col bg-transparent min-w-0 overflow-x-clip pb-36 relative">
       <FloatingChat />
-      <header className="sticky top-0 z-50 border-b border-border shrink-0 transition-all duration-300" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+      <header className="sticky top-0 z-50 border-b border-border shrink-0 transition-all duration-300" style={{ paddingTop: "var(--app-safe-top)", paddingLeft: "var(--app-safe-left)", paddingRight: "var(--app-safe-right)" }}>
         <div className="absolute inset-0 bg-card/40 backdrop-blur-xl -z-10 pointer-events-none" />
         <div className="relative flex h-14 items-center justify-between gap-3 px-4 min-w-0 w-full max-w-7xl mx-auto">
           <Link to="/cabinet/dashboard" className="flex items-center gap-2.5 font-semibold text-base tracking-tight min-w-0">
@@ -491,7 +491,7 @@ function MobileCabinetShell() {
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/60 backdrop-blur-xl pb-[env(safe-area-inset-bottom)] transition-all duration-300">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/60 backdrop-blur-xl pb-[var(--app-safe-bottom)] transition-all duration-300">
         <div className="flex items-center justify-around w-full h-[4.5rem] px-2 gap-0">
           {visibleItems.map(({ to, label, icon: Icon }) => {
             const active = location.pathname === to;
@@ -614,10 +614,10 @@ function CabinetShell() {
   }
 
   return (
-    <div className="classic-cabinet tg-fs-pad min-h-svh flex flex-col bg-transparent">
+    <div className="classic-cabinet min-h-svh flex flex-col bg-transparent">
       <FloatingChat />
       {/* Navigation and page content share the same width. Theme styling is preserved. */}
-      <header className="sticky top-2 sm:top-3 z-50 px-2 sm:px-4 transition-all duration-300">
+      <header className="sticky top-0 z-50 px-2 sm:px-4 transition-all duration-300" style={{ paddingTop: "calc(var(--app-safe-top) + 12px)" }}>
         <div className="cabinet-desktop-bar relative w-full max-w-7xl mx-auto flex h-16 items-center justify-between gap-4 px-3 sm:px-5 rounded-2xl border border-border/60 bg-card/55 backdrop-blur-xl shadow-lg shadow-black/5">
           <Link to="/cabinet/dashboard" className="flex items-center gap-2.5 font-semibold text-lg tracking-tight shrink-0 hover:opacity-80 transition-opacity">
             {logo ? (

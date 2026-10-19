@@ -47,7 +47,7 @@ export function AuroraLayout() {
     {to:"/cabinet/proxy",label:"Прокси",icon:Network,show:!!config?.showProxyEnabled},
     {to:"/cabinet/singbox",label:"Sing-box",icon:Network,show:!!config?.showSingboxEnabled},
   ].filter(x=>x.show);
-  return <div className="au-client tg-fs-pad min-h-screen" data-au-theme={resolvedMode} style={{"--au-link":dark?"#79e3a4":accent,"--au-from":accent,"--au-to":gradientEnd,"--au-bg":dark?"#10131d":"#ffffff","--au-surface":dark?"#1b2030":"#f2f3f7","--au-nav":dark?"#202637":"#f2f3f7","--au-ink":dark?"#f1f3fa":"#0f1222","--au-muted":dark?"#adb6ce":"#606a80"} as React.CSSProperties}>
+  return <div className="au-client min-h-screen" data-au-theme={resolvedMode} style={{"--au-link":dark?"#79e3a4":accent,"--au-from":accent,"--au-to":gradientEnd,"--au-bg":dark?"#10131d":"#ffffff","--au-surface":dark?"#1b2030":"#f2f3f7","--au-nav":dark?"#202637":"#f2f3f7","--au-ink":dark?"#f1f3fa":"#0f1222","--au-muted":dark?"#adb6ce":"#606a80"} as React.CSSProperties}>
     <header className="au-header"><Link to="/cabinet/dashboard" className="au-wordmark">{config?.serviceName || "Aurora"}</Link><button type="button" onClick={()=>setMenu(true)} aria-label="Профиль и оформление"><Settings2 size={20}/><span>Настройки</span></button></header>
     <main className="au-content"><Outlet/></main>
     <AuroraTabs/>

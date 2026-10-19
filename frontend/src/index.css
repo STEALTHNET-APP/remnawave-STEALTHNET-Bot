@@ -263,14 +263,40 @@
   }
 }
 
-/* Полноэкранный режим Telegram (Bot API 8.0+): шапка клиента с крестиком
-   ложится ПОВЕРХ контента, поэтому сдвигаем вниз всё приложение целиком.
-   Величину считает lib/telegram-viewport.ts по safe-area от Telegram.
-   Класс вешаем на КОРЕНЬ ЛЕЙАУТА, а не на #root: в отступе должен быть фон
-   самого дизайна. На #root в освободившейся полосе просвечивал фон приложения
-   (тёмная тема) — под светлым Aurora получалась чёрная полоса сверху. */
-html[data-tg-fullscreen="1"] .tg-fs-pad {
-  padding-top: var(--app-tg-top, 0px);
+:root {
+  --app-safe-top: max(env(safe-area-inset-top, 0px), var(--app-tg-top, 0px));
+  --app-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--app-tg-bottom, 0px));
+  --app-safe-left: max(env(safe-area-inset-left, 0px), var(--app-tg-left, 0px));
+  --app-safe-right: max(env(safe-area-inset-right, 0px), var(--app-tg-right, 0px));
+}
+html[data-tg-miniapp] {
+  touch-action: pan-x pan-y;
+}
+@media (max-width: 767px) {
+  html[data-tg-miniapp] input,
+  html[data-tg-miniapp] textarea,
+  html[data-tg-miniapp] select {
+    font-size: 16px !important;
+  }
+}
+.app-viewport-overlay {
+  top: var(--app-viewport-top, 0px);
+  bottom: auto;
+  height: var(--app-viewport-height, 100dvh);
+  padding-top: calc(var(--app-safe-top) + 8px);
+  padding-left: max(16px, var(--app-safe-left));
+  padding-right: max(16px, var(--app-safe-right));
+}
+.app-viewport-overlay.au-sheet-overlay {
+  padding-left: var(--app-safe-left);
+  padding-right: var(--app-safe-right);
+}
+@media (max-width: 639px) {
+  .cabinet-floating-chat {
+    top: var(--app-viewport-top, 0px);
+    bottom: auto;
+    height: var(--app-viewport-height, 100dvh);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

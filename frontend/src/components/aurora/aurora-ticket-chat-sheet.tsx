@@ -211,7 +211,7 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose }: Props) {
                 rows={1}
                 placeholder="Сообщение"
                 // 16px — иначе iOS приближает страницу на фокусе
-                className="max-h-28 min-h-[48px] flex-1 resize-none rounded-[20px] bg-[var(--au-surface)] px-4 py-3 text-[16px] outline-none placeholder:text-[var(--au-muted)]"
+                className="max-h-28 min-h-[48px] min-w-0 flex-1 resize-none rounded-[20px] bg-[var(--au-surface)] px-4 py-3 text-[16px] outline-none placeholder:text-[var(--au-muted)]"
               />
               <button
                 type="button"
