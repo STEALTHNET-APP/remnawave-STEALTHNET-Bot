@@ -783,7 +783,7 @@ async function startParitypayPayment(tariff: SingboxTariff) {
                                 <KeyRound className="h-5 w-5" />
                               </div>
                               <div>
-                                <h3 className="font-semibold text-foreground">{slot.protocol === "AMNEZIAWG" ? "AmneziaWG" : slot.protocol} · {slot.id.slice(-8)}</h3>
+                                <h3 className="font-semibold text-foreground">{["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(slot.protocol) ? "AmneziaWG" : slot.protocol} · {slot.id.slice(-8)}</h3>
                                 {slot.trafficLimitBytes && Number(slot.trafficLimitBytes) > 0 ? (
                                   <p className="text-xs text-muted-foreground mt-0.5">
                                     Трафик: {formatBytes(slot.trafficUsedBytes)} / {formatBytes(slot.trafficLimitBytes)}
@@ -798,12 +798,12 @@ async function startParitypayPayment(tariff: SingboxTariff) {
                           </div>
 
                           <div className="space-y-3">
-                            {slot.protocol === "AMNEZIAWG" && <Button onClick={() => downloadConfig(slot)} className="w-full">Скачать конфигурацию .conf</Button>}
-                            {slot.protocol === "AMNEZIAWG" && <Button variant="outline" className="w-full" onClick={() => setQrSlot(slot)}>Показать QR-код</Button>}
+                            {["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(slot.protocol) && <Button onClick={() => downloadConfig(slot)} className="w-full">Скачать конфигурацию .conf</Button>}
+                            {["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(slot.protocol) && <Button variant="outline" className="w-full" onClick={() => setQrSlot(slot)}>Показать QR-код</Button>}
                             <div className="flex items-center gap-2 min-w-0 bg-background/50 p-2 rounded-2xl border border-border/50">
-                              <div className="pl-2 font-semibold text-xs text-muted-foreground shrink-0">{slot.protocol === "AMNEZIAWG" ? "CONF" : "URL"}</div>
+                              <div className="pl-2 font-semibold text-xs text-muted-foreground shrink-0">{["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(slot.protocol) ? "CONF" : "URL"}</div>
                               <code className="flex-1 truncate text-xs font-mono select-all text-foreground">
-                                {slot.protocol === "AMNEZIAWG" ? "Конфигурация AmneziaWG (.conf)" : slot.subscriptionLink}
+                                {["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(slot.protocol) ? "Конфигурация AmneziaWG (.conf)" : slot.subscriptionLink}
                               </code>
                               <Button
                                 variant="secondary"
@@ -815,7 +815,7 @@ async function startParitypayPayment(tariff: SingboxTariff) {
                               </Button>
                             </div>
                             <p className="text-xs text-muted-foreground px-1">
-                              {slot.protocol === "AMNEZIAWG" ? "Импортируйте файл .conf в актуальную версию AmneziaVPN: добавить подключение → из файла. Конфигурация содержит ваш приватный ключ — не передавайте её другим." : "Скопируйте ссылку в приложение (v2rayN, Nekoray, Shadowrocket и др.)."}
+                              {["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(slot.protocol) ? "Импортируйте файл .conf в актуальную версию AmneziaVPN: добавить подключение → из файла. Конфигурация содержит ваш приватный ключ — не передавайте её другим." : "Скопируйте ссылку в приложение (v2rayN, Nekoray, Shadowrocket и др.)."}
                             </p>
                           </div>
                         </CardContent>

@@ -763,8 +763,12 @@ export const api = {
     return request("/admin/singbox/nodes", { token });
   },
 
-  async createSingboxNode(token: string, data?: { name?: string; protocol?: string; port?: number; tlsEnabled?: boolean; publicHost?: string }): Promise<CreateSingboxNodeResponse> {
+  async createSingboxNode(token: string, data?: { name?: string; protocol?: string; port?: number; tlsEnabled?: boolean; publicHost?: string; webPanel?: { url: string; apiToken: string; serverId: number; protocol: string } }): Promise<CreateSingboxNodeResponse> {
     return request("/admin/singbox/nodes", { method: "POST", body: JSON.stringify(data ?? {}), token });
+  },
+
+  async updateWebPanelSlot(token: string, nodeId: string, slotId: string, data: { expiresAt?: string; status?: string }): Promise<{ ok: boolean }> {
+    return request(`/admin/singbox/nodes/${nodeId}/web-slots/${slotId}`, { method: "PATCH", body: JSON.stringify(data), token });
   },
 
   async getSingboxNode(token: string, id: string): Promise<SingboxNodeDetail> {
@@ -775,6 +779,7 @@ export const api = {
     token: string,
     id: string,
     data: {
+      webApiToken?: string;
       name?: string;
       status?: string;
       capacity?: number | null;
@@ -4811,6 +4816,7 @@ export interface CreateSingboxNodeResponse {
 }
 
 export interface SingboxNodeDetail {
+  webPanel?: { url: string; protocol: string; serverUid: string } | null;
   id: string;
   name: string;
   status: string;

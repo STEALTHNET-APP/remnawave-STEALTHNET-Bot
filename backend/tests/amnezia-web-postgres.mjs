@@ -1,0 +1,106 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import path from 'node:path';
+import * as crypto from 'node:crypto';
+import * as net from 'node:net';
+import { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
+const prisma = new PrismaClient();
+const context = vm.createContext({ console, Date, JSON, Set, Map, BigInt, Buffer, URL, AbortSignal, fetch, Response });
+const modules = new Map();
+async function synthetic(name, values) {
+  if (modules.has(name)) return modules.get(name);
+  const m = new vm.SyntheticModule(Object.keys(values), function () { for (const [k, v] of Object.entries(values)) this.setExport(k, v); }, { context });
+  modules.set(name, m); await m.link(() => {}); await m.evaluate(); return m;
+}
+async function load(file) {
+  file = path.resolve(file);
+  if (modules.has(file)) return modules.get(file);
+  const m = new vm.SourceTextModule(fs.readFileSync(file, 'utf8'), { context, identifier: file });
+  modules.set(file, m);
+  await m.link(spec => spec.endsWith('/db.js') ? synthetic('db', { prisma }) : spec === 'node:crypto' ? synthetic('crypto', crypto) : spec === 'node:net' ? synthetic('net', net) : spec === 'zod' ? synthetic('zod', { z }) : load(path.resolve(path.dirname(file), spec)));
+  await m.evaluate(); return m;
+}
+const { WebPanelApi, webPanelSchema } = (await load('dist/modules/amnezia-web/api.js')).namespace;
+const { reconcileWebPanels } = (await load('dist/modules/amnezia-web/service.js')).namespace;
+const { createSingboxSlotsByPaymentId: allocate } = (await load('dist/modules/singbox/singbox-slots-activation.service.js')).namespace;
+const base = 'http://127.0.0.1:5056';
+const control = async body => (await fetch(base + '/qa/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+const config = { url: base, apiToken: 'awp_isolated_contract_test_token_only', serverId: 0, serverUid: 'server-qa', protocol: 'awg2', owner: crypto.randomUUID() };
+const api = new WebPanelApi(config);
+let passed = 0;
+const ids = {};
+try {
+  assert.equal(webPanelSchema.safeParse({ ...config, url: 'http://example.com' }).success, false);
+  assert.equal(webPanelSchema.safeParse({ ...config, url: 'https://login:secret@example.com' }).success, false); passed++;
+  await assert.rejects(() => new WebPanelApi({ ...config, apiToken: 'invalid_token_1234567' }).servers(), /403/); passed++;
+  await control({ admin_enabled: false });
+  await assert.rejects(() => api.servers(), /403/);
+  await control({ admin_enabled: true, admin_role: 'support' });
+  await assert.rejects(() => api.servers(), /администратора/);
+  await control({ admin_role: 'user' });
+  await assert.rejects(() => api.servers(), /403/);
+  await control({ admin_role: 'admin' }); passed++;
+  ids.node = (await prisma.singboxNode.create({ data: { name: 'AWP QA', token: crypto.randomUUID(), protocol: 'AWP_AWG', status: 'ONLINE', lastSeenAt: new Date(), capacity: 4, customConfigJson: JSON.stringify(config) } })).id;
+  ids.category = (await prisma.singboxCategory.create({ data: { name: 'AWP QA' } })).id;
+  const tariff = await prisma.singboxTariff.create({ data: { categoryId: ids.category, name: 'AWP QA', protocol: 'AWP_AWG', durationDays: 30, slotCount: 1, trafficLimitBytes: 10000n } });
+  ids.client = (await prisma.client.create({ data: { email: `${crypto.randomUUID()}@example.invalid` } })).id;
+  const payment = async (status = 'PAID') => prisma.payment.create({ data: { clientId: ids.client, orderId: crypto.randomUUID(), amount: 1, currency: 'RUB', provider: 'qa', status, singboxTariffId: tariff.id } });
+  const p = await payment();
+  const results = await Promise.all([allocate(p.id), allocate(p.id), allocate(p.id)]);
+  assert(results.every(r => r.ok));
+  let state = await control({}); assert.equal(Object.keys(state.peers).length, 1);
+  const slot = await prisma.singboxSlot.findFirstOrThrow({ where: { sourcePaymentId: p.id } });
+  assert.equal(slot.status, 'ACTIVE'); assert(JSON.parse(slot.secret).config.includes('[Interface]')); passed++;
+  const user = state.data.users.find(u => u.id === JSON.parse(slot.secret).userId);
+  assert.equal(user.role, 'none'); assert.equal(user.traffic_limit, 10000); passed++;
+  const pending = await payment('PENDING'); assert.equal((await allocate(pending.id)).ok, false); passed++;
+  await control({ reorder: true }); await reconcileWebPanels();
+  state = await control({}); assert.equal(Object.keys(state.peers).length, 1); assert.equal(state.data.user_connections[0].server_id, 1); passed++;
+  const renewed = new Date(Date.now() + 50 * 86400000);
+  await prisma.singboxSlot.update({ where: { id: slot.id }, data: { expiresAt: renewed } }); await reconcileWebPanels();
+  state = await control({}); assert.equal(state.data.users.find(u => u.id === user.id).expiration_date, renewed.toISOString().replace(/Z$/, '')); passed++;
+  await prisma.client.update({ where: { id: ids.client }, data: { isBlocked: true } }); await reconcileWebPanels();
+  state = await control({}); assert.equal(Object.values(state.peers)[0].userData.enabled, false); passed++;
+  await control({ toggle_failures: 2 });
+  await prisma.client.update({ where: { id: ids.client }, data: { isBlocked: false } }); await reconcileWebPanels();
+  state = await control({}); assert.equal(Object.values(state.peers)[0].userData.enabled, false);
+  assert.equal((await prisma.singboxNode.findUniqueOrThrow({ where: { id: ids.node } })).status, 'OFFLINE'); passed++;
+  await reconcileWebPanels();
+  state = await control({}); assert.equal(Object.values(state.peers)[0].userData.enabled, true); passed++;
+  await control({ traffic: 11000 }); await reconcileWebPanels();
+  state = await control({}); assert.equal(Object.values(state.peers)[0].userData.enabled, false);
+  assert.equal((await prisma.singboxSlot.findUniqueOrThrow({ where: { id: slot.id } })).trafficUsedBytes, 11000n); passed++;
+  await control({ traffic: 0 }); await reconcileWebPanels();
+  assert.equal((await prisma.singboxSlot.findUniqueOrThrow({ where: { id: slot.id } })).trafficUsedBytes, 11000n); passed++;
+  await prisma.payment.update({ where: { id: p.id }, data: { status: 'REFUNDED' } }); await reconcileWebPanels();
+  state = await control({}); assert.equal(Object.keys(state.peers).length, 0); assert.equal(state.data.users.length, 1); passed++;
+  await control({ after_create: true });
+  const failure = await payment(); assert.equal((await allocate(failure.id)).ok, false);
+  const partial = await prisma.singboxSlot.findFirstOrThrow({ where: { sourcePaymentId: failure.id } });
+  const journal = JSON.parse(partial.secret);
+  await prisma.singboxSlot.update({ where: { id: partial.id }, data: { secret: JSON.stringify({ ...journal, attemptAt: Date.now() - 130000 }) } });
+  assert.equal((await allocate(failure.id)).ok, true);
+  state = await control({}); assert.equal(Object.keys(state.peers).length, 1); passed++;
+  await prisma.singboxSlot.update({ where: { id: partial.id }, data: { expiresAt: new Date(Date.now() - 1000) } }); await reconcileWebPanels();
+  state = await control({}); assert.equal(Object.values(state.peers)[0].userData.enabled, false); passed++;
+  await prisma.singboxSlot.delete({ where: { id: partial.id } }); await reconcileWebPanels();
+  state = await control({}); assert.equal(Object.keys(state.peers).length, 0); assert.equal(state.data.users.length, 1); passed++;
+  for (const [protocol, remoteProtocol, isConfig] of [['AWP_WIREGUARD', 'wireguard', true], ['AWP_XRAY', 'xray', false]]) {
+    await prisma.singboxNode.update({ where: { id: ids.node }, data: { protocol, customConfigJson: JSON.stringify({ ...config, protocol: remoteProtocol }) } });
+    await prisma.singboxTariff.update({ where: { id: tariff.id }, data: { protocol } });
+    const extra = await payment(); assert.equal((await allocate(extra.id)).ok, true);
+    const access = await prisma.singboxSlot.findFirstOrThrow({ where: { sourcePaymentId: extra.id } });
+    assert.equal(JSON.parse(access.secret).config.includes('[Interface]'), isConfig);
+    await prisma.payment.update({ where: { id: extra.id }, data: { status: 'REFUNDED' } }); await reconcileWebPanels(); passed++;
+  }
+  console.log(`PASS ${passed} Amnezia Web Panel API/PostgreSQL scenarios`);
+} finally {
+  await control({ admin_enabled: true, admin_role: 'admin' });
+  if (ids.client) await prisma.client.delete({ where: { id: ids.client } });
+  await reconcileWebPanels();
+  if (ids.node) await prisma.singboxNode.delete({ where: { id: ids.node } });
+  if (ids.category) await prisma.singboxCategory.delete({ where: { id: ids.category } });
+  await prisma.$disconnect();
+}

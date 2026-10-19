@@ -3882,7 +3882,7 @@ composer.on("callback_query:data", async (ctx) => {
     if (data.startsWith("singbox:conf:")) {
       const slotId = data.slice("singbox:conf:".length);
       const { slots } = await api.getSingboxSlots(token);
-      const slot = slots.find(s => s.id === slotId && s.protocol === "AMNEZIAWG");
+      const slot = slots.find(s => s.id === slotId && ["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(s.protocol));
       if (!slot) {
         await ctx.reply("Доступ не найден или истёк.");
         return;
@@ -3900,11 +3900,11 @@ composer.on("callback_query:data", async (ctx) => {
       }
       const lines = slots.map((s: { subscriptionLink: string; expiresAt: string; protocol: string }) => {
         const exp = new Date(s.expiresAt).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
-        return `${s.protocol} — до ${exp}${s.protocol === "AMNEZIAWG" ? "" : `\n${s.subscriptionLink}`}`;
+        return `${s.protocol} — до ${exp}${["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(s.protocol) ? "" : `\n${s.subscriptionLink}`}`;
       }).join("\n\n");
       const msg = `📋 Мои доступы (${slots.length})\n\nСкопируйте ссылку в приложение. Для AmneziaWG скачайте .conf кнопкой ниже или в кабинете:\n\n${lines}`;
       const keyboard = backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
-      for (const slot of slots.filter(s => s.protocol === "AMNEZIAWG").slice(0, 20)) keyboard.inline_keyboard.unshift([{ text: `📄 AmneziaWG · ${slot.id.slice(-8)}`, callback_data: `singbox:conf:${slot.id}` }]);
+      for (const slot of slots.filter(s => ["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(s.protocol)).slice(0, 20)) keyboard.inline_keyboard.unshift([{ text: `📄 AmneziaWG · ${slot.id.slice(-8)}`, callback_data: `singbox:conf:${slot.id}` }]);
       await editMessageContent(ctx, msg.slice(0, 4096), keyboard);
       return;
     }

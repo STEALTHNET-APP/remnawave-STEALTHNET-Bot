@@ -1,3 +1,4 @@
+import { reconcileWebPanels } from "./modules/amnezia-web/service.js";
 import { reconcileStarsPayments } from "./modules/telegram-stars/stars.service.js";
 import { startRemnaSyncScheduler, stopRemnaSyncScheduler } from "./modules/sync/sync.scheduler.js";
 import { startReferralRewardsScheduler, stopReferralRewardsScheduler } from "./modules/referral/referral-rewards.scheduler.js";
@@ -73,6 +74,8 @@ async function main() {
     console.error("[remna-ids] migrateRemnaIds failed:", e);
   }
 
+  void reconcileWebPanels().catch(() => console.error("[Amnezia Web Panel] Ошибка синхронизации"));
+  setInterval(() => { void reconcileWebPanels().catch(() => console.error("[Amnezia Web Panel] Ошибка синхронизации")); }, 60000).unref();
   await startAutoBroadcastScheduler();
   startContestDailyReminderScheduler(env.CONTEST_REMINDER_CRON ?? undefined);
   startAutoRenewScheduler();

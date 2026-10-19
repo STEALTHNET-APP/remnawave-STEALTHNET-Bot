@@ -264,7 +264,7 @@ function useInvalidateAdmin() {
 export function useCreateSingboxNodeMutation(token: string | null) {
   const invalidate = useInvalidateAdmin();
   return useMutation({
-    mutationFn: (data?: { name?: string; protocol?: string; port?: number; tlsEnabled?: boolean }) =>
+    mutationFn: (data?: Parameters<typeof api.createSingboxNode>[1]) =>
       api.createSingboxNode(token!, data),
     onSuccess: () => invalidate(qk.admin.singboxNodes()),
   });

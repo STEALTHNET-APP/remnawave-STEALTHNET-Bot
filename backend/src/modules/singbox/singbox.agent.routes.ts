@@ -1,3 +1,4 @@
+import { isWebPanel } from "../amnezia-web/api.js";
 /**
  * API для агента sing-box ноды: регистрация, heartbeat, получение слотов и кастомного конфига
  * Авторизация: заголовок X-Singbox-Node-Token с токеном ноды
@@ -20,7 +21,7 @@ async function requireNodeToken(req: Request, res: Response, next: express.NextF
   const node = await prisma.singboxNode.findUnique({
     where: { token: token.trim() },
   });
-  if (!node || node.protocol === "AMNEZIAWG") {
+  if (!node || (node.protocol === "AMNEZIAWG" || isWebPanel(node.protocol))) {
     return res.status(401).json({ error: "Invalid token" });
   }
   (req as Request & { singboxNode: typeof node }).singboxNode = node;
@@ -54,7 +55,7 @@ singboxAgentRouter.post("/register", asyncRoute(async (req, res) => {
   const node = await prisma.singboxNode.findUnique({
     where: { token },
   });
-  if (!node || node.protocol === "AMNEZIAWG") {
+  if (!node || (node.protocol === "AMNEZIAWG" || isWebPanel(node.protocol))) {
     return res.status(404).json({ error: "Token not found. Create the node in the admin panel first." });
   }
   const publicHost = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()

@@ -1,3 +1,5 @@
+import { WebPanelApi, webPanelSchema, webProtocol, isWebPanel, WEB_PROTOCOLS } from "../amnezia-web/api.js";
+import { removeWebNode, updateWebSlot } from "../amnezia-web/service.js";
 /**
  * Админские эндпоинты для sing-box нод: CRUD, генерация токена, docker-compose, customConfigJson
  */
@@ -11,7 +13,7 @@ import { getSystemConfig } from "../client/client.service.js";
 
 import { awgHost, awgCompose, newAwgConfig } from "./amneziawg.js";
 
-const PROTOCOLS = ["VLESS", "SHADOWSOCKS", "TROJAN", "HYSTERIA2", "AMNEZIAWG"] as const;
+const PROTOCOLS = ["VLESS", "SHADOWSOCKS", "TROJAN", "HYSTERIA2", "AMNEZIAWG", ...WEB_PROTOCOLS] as const;
 
 export const singboxAdminRouter = Router();
 singboxAdminRouter.use(requireAuth);
@@ -39,6 +41,7 @@ async function markStaleNodesOffline() {
 }
 
 const createNodeSchema = z.object({
+  webPanel: webPanelSchema.optional(),
   publicHost: awgHost.optional(),
   name: z.string().max(200).transform((s) => (s || "").trim()),
   protocol: z.enum(PROTOCOLS).optional(),
@@ -79,6 +82,19 @@ singboxAdminRouter.post("/nodes", asyncRoute(async (req, res) => {
   const body = createNodeSchema.safeParse(req.body);
   if (!body.success) {
     return res.status(400).json({ message: "Invalid input", errors: body.error.flatten() });
+  }
+  if (body.data.protocol && isWebPanel(body.data.protocol)) {
+    if (!body.data.webPanel || webProtocol(body.data.webPanel.protocol) !== body.data.protocol) return res.status(400).json({ message: "Укажите настройки Amnezia Web Panel и подходящий протокол" });
+    const config = body.data.webPanel;
+    const api = new WebPanelApi(config);
+    const server = await api.server();
+    await api.users("stealthnet_");
+    try { await api.connections("stealthnet-api-compatibility-check"); }
+    catch { return res.status(400).json({ message: "Amnezia Web Panel не поддерживает нужные операции по API-токену. Установите патч совместимости из docs/amnezia-web-panel.md и используйте токен администратора." }); }
+    const ping = z.object({ alive: z.boolean() }).parse(await api.request(`/api/servers/${server.id}/ping`));
+    if (!ping.alive) return res.status(503).json({ message: "Сервер недоступен из Amnezia Web Panel" });
+    const node = await prisma.singboxNode.create({ data: { name: body.data.name || server.name || "Amnezia Web Panel", protocol: body.data.protocol, token: generateNodeToken(), status: "ONLINE", lastSeenAt: new Date(), publicHost: server.host, tlsEnabled: true, customConfigJson: JSON.stringify({ ...config, serverUid: server.uid, owner: generateNodeToken() }) } });
+    return res.status(201).json({ node: { id: node.id, name: node.name, status: node.status, protocol: node.protocol }, dockerCompose: "", instructions: "Amnezia Web Panel подключена. Создайте тариф с выбранным протоколом Web Panel. Установка агента не нужна." });
   }
   const isAwg = body.data.protocol === "AMNEZIAWG";
   if (isAwg && !body.data.publicHost) return res.status(400).json({ message: "Укажите публичный IP или домен AmneziaWG-ноды" });
@@ -170,7 +186,8 @@ singboxAdminRouter.get("/nodes/:id", asyncRoute(async (req, res) => {
     trafficInBytes: node.trafficInBytes.toString(),
     trafficOutBytes: node.trafficOutBytes.toString(),
     metadata: node.metadata,
-    customConfigJson: node.customConfigJson,
+    customConfigJson: isWebPanel(node.protocol) ? null : node.customConfigJson,
+    webPanel: isWebPanel(node.protocol) ? (() => { const c = webPanelSchema.parse(JSON.parse(node.customConfigJson!)); return { url: c.url, protocol: c.protocol, serverUid: c.serverUid }; })() : null,
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),
     slots: node.slots.map((s) => ({
@@ -188,6 +205,7 @@ singboxAdminRouter.get("/nodes/:id", asyncRoute(async (req, res) => {
 }));
 
 const updateNodeSchema = z.object({
+  webApiToken: webPanelSchema.shape.apiToken.optional(),
   publicHost: awgHost.optional(),
   name: z.string().max(200).optional(),
   status: z.enum(["ONLINE", "OFFLINE", "DISABLED"]).optional(),
@@ -207,6 +225,7 @@ singboxAdminRouter.patch("/nodes/:id", asyncRoute(async (req, res) => {
   }
   const node = await prisma.singboxNode.findUnique({ where: { id } });
   if (!node) return res.status(404).json({ message: "Node not found" });
+  if ((isWebPanel(node.protocol) || (body.data.protocol && isWebPanel(body.data.protocol))) && (body.data.customConfigJson !== undefined || (body.data.protocol && body.data.protocol !== node.protocol) || body.data.publicHost !== undefined)) return res.status(400).json({ message: "Подключение Web Panel нельзя заменить у существующей ноды" });
   if ((node.protocol === "AMNEZIAWG" || body.data.protocol === "AMNEZIAWG") && ((body.data.protocol && body.data.protocol !== node.protocol) || body.data.customConfigJson !== undefined || (body.data.port !== undefined && body.data.port !== node.port))) {
     return res.status(400).json({ message: "Протокол, порт и параметры AmneziaWG фиксируются при создании ноды. Для их замены создайте новую ноду." });
   }
@@ -220,6 +239,14 @@ singboxAdminRouter.patch("/nodes/:id", asyncRoute(async (req, res) => {
       }
     }
   }
+  let rotatedConfig: string | undefined;
+  if (body.data.webApiToken) {
+    if (!isWebPanel(node.protocol)) return res.status(400).json({ message: "Это не Web Panel" });
+    const config = webPanelSchema.parse(JSON.parse(node.customConfigJson!));
+    config.apiToken = body.data.webApiToken;
+    await new WebPanelApi(config).server();
+    rotatedConfig = JSON.stringify(config);
+  }
   const updated = await prisma.singboxNode.update({
     where: { id },
     data: {
@@ -231,6 +258,7 @@ singboxAdminRouter.patch("/nodes/:id", asyncRoute(async (req, res) => {
       ...(body.data.protocol !== undefined && { protocol: body.data.protocol }),
       ...(body.data.tlsEnabled !== undefined && { tlsEnabled: body.data.tlsEnabled }),
       ...(body.data.customConfigJson !== undefined && { customConfigJson: body.data.customConfigJson }),
+      ...(rotatedConfig ? { customConfigJson: rotatedConfig } : {}),
     },
   });
   return res.json({
@@ -239,7 +267,7 @@ singboxAdminRouter.patch("/nodes/:id", asyncRoute(async (req, res) => {
     status: updated.status,
     port: updated.port,
     protocol: updated.protocol,
-    customConfigJson: updated.customConfigJson,
+    customConfigJson: isWebPanel(updated.protocol) ? null : updated.customConfigJson,
     updatedAt: updated.updatedAt.toISOString(),
   });
 }));
@@ -249,11 +277,21 @@ singboxAdminRouter.delete("/nodes/:id", asyncRoute(async (req, res) => {
   const id = req.params.id;
   const node = await prisma.singboxNode.findUnique({ where: { id } });
   if (!node) return res.status(404).json({ message: "Node not found" });
+  if (isWebPanel(node.protocol)) { await removeWebNode(id); return res.status(204).send(); }
   await prisma.singboxNode.delete({ where: { id } });
   return res.status(204).send();
 }));
 
 // ——— Категории (минимальный CRUD для фазы 1) ———
+singboxAdminRouter.patch("/nodes/:id/web-slots/:slotId", asyncRoute(async (req, res) => {
+  const parsed = z.object({ expiresAt: z.string().datetime().optional(), status: z.enum(["ACTIVE", "REVOKED"]).optional() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: "Некорректные параметры доступа" });
+  const slot = await prisma.singboxSlot.findFirst({ where: { id: req.params.slotId, nodeId: req.params.id }, include: { node: true } });
+  if (!slot || !isWebPanel(slot.node.protocol)) return res.sendStatus(404);
+  await updateWebSlot(slot.nodeId, slot.id, parsed.data);
+  return res.json({ ok: true });
+}));
+
 const categoryIdSchema = z.object({ id: z.string().min(1) });
 const createCategorySchema = z.object({
   name: z.string().min(1).max(200),

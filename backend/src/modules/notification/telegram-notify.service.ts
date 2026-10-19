@@ -907,7 +907,7 @@ export async function notifySingboxSlotsCreated(clientId: string, slotIds: strin
   });
 
   const { buildSingboxSlotSubscriptionLink } = await import("../singbox/singbox-link.js");
-  if (slots.some(s => s.node.protocol === "AMNEZIAWG")) {
+  if (slots.some(s => ["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(s.node.protocol))) {
     const cfg = await getSystemConfig();
     await sendTelegramToUser(client.telegramId, "✅ Доступ AmneziaWG оплачен. Скачайте .conf в личном кабинете → Sing-box / AmneziaWG → Мои доступы и импортируйте в приложение AmneziaVPN.", null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
     return;
