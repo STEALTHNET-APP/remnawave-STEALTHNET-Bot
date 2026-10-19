@@ -117,6 +117,8 @@ export async function getPublicConfig(): Promise<{
   paymentProviders?: { id: string; label: string; sortOrder: number }[];
   yoomoneyEnabled?: boolean;
   yookassaEnabled?: boolean;
+  telegramStarsEnabled?: boolean;
+  telegramStarsRubPerStar?: number;
   cryptopayEnabled?: boolean;
   heleketEnabled?: boolean;
   rollypayEnabled?: boolean;
@@ -210,11 +212,13 @@ export async function getPublicConfig(): Promise<{
 
   const cfg = await fetchJson<{
     paymentProviders?: { id: string; label: string; sortOrder: number }[];
+    telegramStarsEnabled?: boolean;
   } | null>("/api/public/config");
 
   try {
-    const { setProviderLabels } = await import("./keyboard.js");
+    const { setProviderLabels, setStarsPaymentsEnabled } = await import("./keyboard.js");
     setProviderLabels(cfg?.paymentProviders ?? null);
+    setStarsPaymentsEnabled(cfg?.telegramStarsEnabled === true);
   } catch {}
 
   cachedConfig = cfg;
@@ -1204,4 +1208,21 @@ export async function acceptBotTerms(telegramId: number, version: string): Promi
   if (response.status === 409) return getBotTerms(telegramId);
   if (!response.ok) throw new Error("Не удалось сохранить согласие");
   return response.json() as Promise<BotTermsStatus>;
+}
+
+export function createStarsPayment(token: string, body: Parameters<typeof createCryptopayPayment>[1]): Promise<{ paymentId: string; payUrl: string; starsAmount: number }> {
+  return fetchJson("/api/client/telegram-stars/create-payment", { method: "POST", token, body });
+}
+export type StarsReceipt = { paymentId: string; telegramId: string; currency: string; totalAmount: number; chargeId?: string; checkoutId?: string };
+export async function starsCheckout(body: StarsReceipt): Promise<{ ok: boolean }> {
+  const response = await fetch(`${API_URL}/api/bot/stars/checkout`, { method: "POST", headers: getHeaders(), body: JSON.stringify(body), signal: AbortSignal.timeout(6500) });
+  if (!response.ok) throw new Error("Платёж не подтверждён");
+  return response.json();
+}
+export function starsPaid(body: StarsReceipt): Promise<{ ok: boolean; delivery: string }> {
+  return fetchJson("/api/bot/stars/paid", { method: "POST", body });
+}
+
+export function starsRefunded(body: StarsReceipt): Promise<{ ok: boolean }> {
+  return fetchJson("/api/bot/stars/refunded", { method: "POST", body });
 }

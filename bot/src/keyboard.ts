@@ -733,6 +733,7 @@ export function tariffPaymentMethodButtons(
   const backSty = undefined;
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
+  if (starsPaymentsEnabled && tariffCurrency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_tariff_stars:${tariffId}`)]);
   // Кнопка оплаты балансом (первая)
   if (balanceLabel) {
     rows.push([btn(balanceLabel, `pay_tariff_balance:${tariffId}`, undefined, cardId)]);
@@ -885,6 +886,7 @@ export function proxyPaymentMethodButtons(
   const backSty = undefined;
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
+  if (starsPaymentsEnabled && currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_proxy_stars:${proxyTariffId}`)]);
   if (balanceLabel) rows.push([btn(balanceLabel, `pay_proxy_balance:${proxyTariffId}`, undefined, cardId)]);
   if (yoomoneyEnabled && (!currency || currency.toUpperCase() === "RUB")) {
     rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_proxy_yoomoney:${proxyTariffId}`, undefined, cardId)]);
@@ -972,6 +974,7 @@ export function singboxPaymentMethodButtons(
   const backSty = undefined;
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
+  if (starsPaymentsEnabled && currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_singbox_stars:${singboxTariffId}`)]);
   if (balanceLabel) rows.push([btn(balanceLabel, `pay_singbox_balance:${singboxTariffId}`, undefined, cardId)]);
   if (yoomoneyEnabled && (!currency || currency.toUpperCase() === "RUB")) {
     rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_singbox_yoomoney:${singboxTariffId}`, undefined, cardId)]);
@@ -995,6 +998,7 @@ export function topupPaymentMethodButtons(
   backStyle?: string,
   emojiIds?: InnerEmojiIds,
   providers: {
+    currency?: string;
     yoomoneyEnabled?: boolean;
     yookassaEnabled?: boolean;
     cryptopayEnabled?: boolean;
@@ -1009,6 +1013,7 @@ export function topupPaymentMethodButtons(
   const backSty = resolveStyle(toStyle(backStyle), "danger");
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
+  if (starsPaymentsEnabled && providers.currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `topup_stars:${amount}`)]);
   if (yoomoneyEnabled) {
     rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — оплата картой"), `topup_yoomoney:${amount}`, "primary", cardId)]);
   }
@@ -1089,6 +1094,7 @@ export function optionPaymentMethodButtons(
   const backSty = undefined;
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
+  if (starsPaymentsEnabled && option.currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_option_stars:${option.kind}:${option.id}`)]);
   if (balance >= option.price) {
     rows.push([btn(`💰 Оплатить балансом (${option.price} ₽)`, `pay_option_balance:${option.kind}:${option.id}`, undefined, cardId)]);
   }
@@ -1476,6 +1482,7 @@ export function giftPaymentButtons(
   const cardId = emojiIds?.card;
   const isRub = !tariffCurrency || tariffCurrency.toUpperCase() === "RUB";
   const rows: InlineButton[][] = [];
+  if (starsPaymentsEnabled && tariffCurrency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `gift_pay_stars:${tariffId}`)]);
   if (balanceLabel) {
     rows.push([btn(balanceLabel, `gift_pay_balance:${tariffId}`, undefined, cardId)]);
   }
@@ -1500,3 +1507,6 @@ export function giftPaymentButtons(
   rows.push([btn(back, "gift:buy", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }
+
+let starsPaymentsEnabled = false;
+export function setStarsPaymentsEnabled(enabled: boolean) { starsPaymentsEnabled = enabled; }

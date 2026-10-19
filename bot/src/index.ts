@@ -1,3 +1,4 @@
+import { registerStarsPayments } from "./stars.js";
 import { referralRewardLines } from "./referral-rewards.js";
 import { createTermsGate } from "./terms.js";
 import { DeviceFlow, formatDeviceCount, subscriptionDeviceLimit } from "./device-flow.js";
@@ -142,6 +143,7 @@ async function createBotWithProxy(token: string): Promise<Bot> {
 
 /** Общая логика для основного (единственного) бота. */
 const composer = new Composer<Context>();
+registerStarsPayments(composer);
 composer.use(async (ctx, next) => {
   if (ctx.message?.successful_payment || ctx.preCheckoutQuery || (!ctx.message && !ctx.callbackQuery)) return next();
   const config = await api.getPublicConfig();
@@ -3991,8 +3993,8 @@ composer.on("callback_query:data", async (ctx) => {
       return;
     }
 
-    if (data.startsWith("pay_proxy_cryptopay:")) {
-      const proxyTariffId = data.slice("pay_proxy_cryptopay:".length);
+    if (data.startsWith("pay_proxy_cryptopay:") || data.startsWith("pay_proxy_stars:")) {
+      const proxyTariffId = data.slice(data.indexOf(":") + 1);
       const { items } = await api.getPublicProxyTariffs();
       const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === proxyTariffId);
       if (!tariff) {
@@ -4000,7 +4002,7 @@ composer.on("callback_query:data", async (ctx) => {
         return;
       }
       try {
-        const payment = await api.createCryptopayPayment(token, { amount: tariff.price, currency: tariff.currency, proxyTariffId });
+        const payment = await (data.startsWith("pay_proxy_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, { amount: tariff.price, currency: tariff.currency, proxyTariffId });
         const msg = buildPaymentMessage(config, { name: tariff.name, price: formatMoney(tariff.price, tariff.currency), amount: String(tariff.price), currency: tariff.currency, action: "Нажмите для оплаты:" });
         await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
       } catch (e: unknown) {
@@ -4159,8 +4161,8 @@ composer.on("callback_query:data", async (ctx) => {
       return;
     }
 
-    if (data.startsWith("pay_singbox_cryptopay:")) {
-      const singboxTariffId = data.slice("pay_singbox_cryptopay:".length);
+    if (data.startsWith("pay_singbox_cryptopay:") || data.startsWith("pay_singbox_stars:")) {
+      const singboxTariffId = data.slice(data.indexOf(":") + 1);
       const { items } = await api.getPublicSingboxTariffs();
       const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === singboxTariffId);
       if (!tariff) {
@@ -4168,7 +4170,7 @@ composer.on("callback_query:data", async (ctx) => {
         return;
       }
       try {
-        const payment = await api.createCryptopayPayment(token, { amount: tariff.price, currency: tariff.currency, singboxTariffId });
+        const payment = await (data.startsWith("pay_singbox_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, { amount: tariff.price, currency: tariff.currency, singboxTariffId });
         const msg = buildPaymentMessage(config, { name: tariff.name, price: formatMoney(tariff.price, tariff.currency), amount: String(tariff.price), currency: tariff.currency, action: "Нажмите для оплаты:" });
         await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
       } catch (e: unknown) {
@@ -4534,8 +4536,8 @@ composer.on("callback_query:data", async (ctx) => {
       return;
     }
 
-    if (data.startsWith("pay_tariff_cryptopay:")) {
-      const tariffId = data.slice("pay_tariff_cryptopay:".length);
+    if (data.startsWith("pay_tariff_cryptopay:") || data.startsWith("pay_tariff_stars:")) {
+      const tariffId = data.slice(data.indexOf(":") + 1);
       const { items } = await api.getPublicTariffs();
       const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
       if (!tariff) {
@@ -4578,7 +4580,7 @@ composer.on("callback_query:data", async (ctx) => {
         const meCp = await api.getMe(token);
         const pdCp = meCp?.personalDiscountPercent ?? 0;
         const { discountArg: discountArgCp, finalPrice: priceWithDiscountCp } = buildTariffDiscountArg(totalPrice, pdCp, discountInfoCp, tariff.currency);
-        const payment = await api.createCryptopayPayment(token, {
+        const payment = await (data.startsWith("pay_tariff_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, {
           amount: totalPrice,
           currency: tariff.currency,
           tariffId: tariff.id,
@@ -5333,7 +5335,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       return;
     }
 
-    if (data.startsWith("pay_option_cryptopay:")) {
+    if (data.startsWith("pay_option_cryptopay:") || data.startsWith("pay_option_stars:")) {
       const parts = data.split(":");
       const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
       const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
@@ -5371,7 +5373,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       }
 
       try {
-        const payment = await api.createCryptopayPayment(token, { extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId } });
+        const payment = await (data.startsWith("pay_option_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, { extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId } });
         const optName = option.name || (option.kind === "traffic" ? `+${option.trafficGb} ГБ` : option.kind === "devices" ? `+${option.deviceCount} устр.` : "Сервер");
         const msg = buildPaymentMessage(config, { name: optName, price: formatMoney(displayPrice, option.currency), amount: String(displayPrice), currency: option.currency, action: "Нажмите кнопку ниже для оплаты:" });
         await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
@@ -6483,7 +6485,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       const methods = config?.plategaMethods ?? [];
       const yooEnabled = !!config?.yoomoneyEnabled;
       const yookassaEnabledTopup = !!config?.yookassaEnabled;
-      if (!methods.length && !yooEnabled && !yookassaEnabledTopup) {
+      if (!methods.length && !yooEnabled && !yookassaEnabledTopup && !config?.telegramStarsEnabled) {
         await editMessageContent(ctx, _t("topup.unavailable", lang), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
@@ -6549,8 +6551,8 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       return;
     }
 
-    if (data.startsWith("topup_cryptopay:")) {
-      const amountStr = data.slice("topup_cryptopay:".length);
+    if (data.startsWith("topup_cryptopay:") || data.startsWith("topup_stars:")) {
+      const amountStr = data.slice(data.indexOf(":") + 1);
       const amount = Number(amountStr);
       if (!Number.isFinite(amount) || amount <= 0) {
         await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
@@ -6558,7 +6560,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       }
       const client = await api.getMe(token);
       try {
-        const payment = await api.createCryptopayPayment(token, { amount, currency: client.preferredCurrency ?? "RUB" });
+        const payment = await (data.startsWith("topup_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, { amount, currency: client.preferredCurrency ?? "RUB" });
         const cpTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
         await editMessageContent(ctx, cpTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), cpTopup.entities);
       } catch (e: unknown) {
@@ -6703,10 +6705,10 @@ if (data.startsWith("topup_paritypay:")) {
       const paritypayEnabled = !!config?.paritypayEnabled;
       const lavaEnabled = !!config?.lavaEnabled;
       // Если есть >1 способа любого типа — показываем выбор
-      const anyOnline = yooEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled;
+      const anyOnline = config?.telegramStarsEnabled || yooEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled;
       if (methods.length > 1 || anyOnline) {
         const topupPay2 = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency)}\n\nВыберите способ оплаты:`, config?.botEmojis);
-        await editMessageContent(ctx, topupPay2.text, topupPaymentMethodButtons(amountStr, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, { yoomoneyEnabled: yooEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, rollypayEnabled, paritypayEnabled, lavaEnabled }), topupPay2.entities);
+        await editMessageContent(ctx, topupPay2.text, topupPaymentMethodButtons(amountStr, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, { currency: client.preferredCurrency, yoomoneyEnabled: yooEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, rollypayEnabled, paritypayEnabled, lavaEnabled }), topupPay2.entities);
         return;
       }
       if (methods.length === 0 && !anyOnline) {
@@ -7858,8 +7860,8 @@ if (data.startsWith("topup_paritypay:")) {
     // покупка подарочной через внешние платёжки.
     // Создаём обычный pay_tariff* платёж с флагом asGift=true. Webhook при оплате
     // создаст Subscription с purchasedAsGift=true (попадёт в «🎁 Мои подарки» юзера).
-    if (data.startsWith("gift_pay_yookassa:") || data.startsWith("gift_pay_yoomoney:") || data.startsWith("gift_pay_cryptopay:") || data.startsWith("gift_pay_heleket:") || data.startsWith("gift_pay_lava:") || data.startsWith("gift_pay_paritypay:")) {
-      const provider = data.startsWith("gift_pay_yookassa:") ? "yookassa"
+    if (data.startsWith("gift_pay_stars:") || data.startsWith("gift_pay_yookassa:") || data.startsWith("gift_pay_yoomoney:") || data.startsWith("gift_pay_cryptopay:") || data.startsWith("gift_pay_heleket:") || data.startsWith("gift_pay_lava:") || data.startsWith("gift_pay_paritypay:")) {
+      const provider = data.startsWith("gift_pay_stars:") ? "telegram_stars" : data.startsWith("gift_pay_yookassa:") ? "yookassa"
         : data.startsWith("gift_pay_yoomoney:") ? "yoomoney"
         : data.startsWith("gift_pay_cryptopay:") ? "cryptopay"
         : data.startsWith("gift_pay_heleket:") ? "heleket"
@@ -7923,8 +7925,8 @@ if (data.startsWith("topup_paritypay:")) {
         if (provider === "yoomoney") {
           const p = await api.createYoomoneyPayment(token, { amount: effectivePrice, paymentType: "AC", tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
           payUrl = p.paymentUrl;
-        } else if (provider === "cryptopay") {
-          const p = await api.createCryptopayPayment(token, { amount: effectivePrice, currency: tariff.currency, tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
+        } else if (provider === "cryptopay" || provider === "telegram_stars") {
+          const p = await (provider === "telegram_stars" ? api.createStarsPayment : api.createCryptopayPayment)(token, { amount: effectivePrice, currency: tariff.currency, tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
           payUrl = p.payUrl;
         } else if (provider === "heleket") {
           const p = await api.createHeleketPayment(token, { amount: effectivePrice, currency: tariff.currency, tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
@@ -8495,6 +8497,7 @@ composer.on("message:text", async (ctx) => {
         undefined,
         undefined,
         {
+          currency: client.preferredCurrency,
           yoomoneyEnabled: !!cfgT?.yoomoneyEnabled,
           yookassaEnabled: !!cfgT?.yookassaEnabled,
           cryptopayEnabled: !!cfgT?.cryptopayEnabled,
@@ -8617,7 +8620,7 @@ composer.on("message:text", async (ctx) => {
     const rollypayEnabledMsg = !!config?.rollypayEnabled;
     const paritypayEnabledMsg = !!config?.paritypayEnabled;
     const lavaEnabledMsg = !!config?.lavaEnabled;
-    if (!methods.length && !yooEnabled && !yookassaEnabledMsg && !cryptopayEnabledMsg && !heleketEnabledMsg && !rollypayEnabledMsg && !paritypayEnabledMsg && !lavaEnabledMsg) {
+    if (!methods.length && !yooEnabled && !yookassaEnabledMsg && !cryptopayEnabledMsg && !heleketEnabledMsg && !rollypayEnabledMsg && !paritypayEnabledMsg && !lavaEnabledMsg && !config?.telegramStarsEnabled) {
       await ctx.reply("Пополнение временно недоступно.");
       return;
     }
@@ -8635,13 +8638,13 @@ composer.on("message:text", async (ctx) => {
           connect: botEmojis.SERVERS?.tgEmojiId || botEmojis.CONNECT?.tgEmojiId,
         }
       : undefined;
-    const enabledOnlineMsg = [yooEnabled, yookassaEnabledMsg, cryptopayEnabledMsg, heleketEnabledMsg, rollypayEnabledMsg, paritypayEnabledMsg, lavaEnabledMsg].filter(Boolean).length;
+    const enabledOnlineMsg = [config?.telegramStarsEnabled, yooEnabled, yookassaEnabledMsg, cryptopayEnabledMsg, heleketEnabledMsg, rollypayEnabledMsg, paritypayEnabledMsg, lavaEnabledMsg].filter(Boolean).length;
     const anyOnlineMsg = enabledOnlineMsg > 0;
     if (methods.length > 1 || anyOnlineMsg) {
       const topupMsg1 = titleWithEmoji("CARD", `Пополнение на ${formatMoney(num, client.preferredCurrency)}\n\nВыберите способ оплаты:`, config?.botEmojis);
       await ctx.reply(topupMsg1.text, {
         entities: topupMsg1.entities.length ? topupMsg1.entities : undefined,
-        reply_markup: topupPaymentMethodButtons(String(num), methods, config?.botBackLabel ?? null, backStyle, msgEmojiIds, { yoomoneyEnabled: yooEnabled, yookassaEnabled: yookassaEnabledMsg, cryptopayEnabled: cryptopayEnabledMsg, heleketEnabled: heleketEnabledMsg, rollypayEnabled: rollypayEnabledMsg, paritypayEnabled: paritypayEnabledMsg, lavaEnabled: lavaEnabledMsg }),
+        reply_markup: topupPaymentMethodButtons(String(num), methods, config?.botBackLabel ?? null, backStyle, msgEmojiIds, { currency: client.preferredCurrency, yoomoneyEnabled: yooEnabled, yookassaEnabled: yookassaEnabledMsg, cryptopayEnabled: cryptopayEnabledMsg, heleketEnabled: heleketEnabledMsg, rollypayEnabled: rollypayEnabledMsg, paritypayEnabled: paritypayEnabledMsg, lavaEnabled: lavaEnabledMsg }),
       });
       return;
     }
@@ -8732,6 +8735,7 @@ for (const b of botInstances) {
           { command: "subscriptions", description: "Моя подписка / инструкции" },
           { command: "referral", description: "Реферальная программа" },
           { command: "support", description: "Поддержка" },
+          { command: "paysupport", description: "Помощь с оплатой Stars" },
         ]);
       } catch (e) {
         console.error(`[Bot @${info.username}] setMyCommands failed:`, e);

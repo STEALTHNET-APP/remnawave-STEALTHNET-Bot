@@ -2344,6 +2344,10 @@ export const api = {
   },
 
   /** Crypto Pay (Crypto Bot) — создание инвойса, возвращает ссылку на оплату */
+  async starsCreatePayment(token: string, data: Record<string, unknown>): Promise<{ paymentId: string; payUrl: string; starsAmount: number }> {
+    return request("/client/telegram-stars/create-payment", { method: "POST", body: JSON.stringify(data), token });
+  },
+
   async cryptopayCreatePayment(
     token: string,
     data: {
@@ -3410,6 +3414,8 @@ export type UpdateSettingsPayload = {
   yookassaSecretKey?: string | null;
   yookassaWebhookBasicUser?: string | null;
   yookassaWebhookBasicPassword?: string | null;
+  telegramStarsEnabled?: boolean;
+  telegramStarsRubPerStar?: number;
   cryptopayApiToken?: string | null;
   cryptopayTestnet?: boolean;
   heleketMerchantId?: string | null;
@@ -3925,6 +3931,8 @@ export interface AdminSettings {
   yoomoneyNotificationSecret?: string | null;
   yookassaShopId?: string | null;
   yookassaSecretKey?: string | null;
+  telegramStarsEnabled?: boolean;
+  telegramStarsRubPerStar?: number;
   cryptopayApiToken?: string | null;
   cryptopayTestnet?: boolean;
   heleketMerchantId?: string | null;
@@ -5481,6 +5489,8 @@ export interface PublicConfig {
   plategaMethods?: { id: number; label: string }[];
   yoomoneyEnabled?: boolean;
   yookassaEnabled?: boolean;
+  telegramStarsEnabled?: boolean;
+  telegramStarsRubPerStar?: number;
   cryptopayEnabled?: boolean;
   heleketEnabled?: boolean;
   rollypayEnabled?: boolean;

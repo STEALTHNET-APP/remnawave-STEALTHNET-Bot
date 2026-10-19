@@ -61,6 +61,7 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false }: { auro
   const [plategaMethods, setPlategaMethods] = useState<{ id: number; label: string }[]>([]);
   const [yoomoneyEnabled, setYoomoneyEnabled] = useState(false);
   const [yookassaEnabled, setYookassaEnabled] = useState(false);
+  const [telegramStarsEnabled, setTelegramStarsEnabled] = useState(false);
   const [cryptopayEnabled, setCryptopayEnabled] = useState(false);
   const [heleketEnabled, setHeleketEnabled] = useState(false);
   const [rollypayEnabled, setRollypayEnabled] = useState(false);
@@ -316,6 +317,7 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false }: { auro
       setYoomoneyEnabled(Boolean(c.yoomoneyEnabled));
       setYookassaEnabled(Boolean(c.yookassaEnabled));
       setCryptopayEnabled(Boolean(c.cryptopayEnabled));
+      setTelegramStarsEnabled(Boolean(c.telegramStarsEnabled));
       setHeleketEnabled(Boolean(c.heleketEnabled));
       setRollypayEnabled(Boolean(c.rollypayEnabled));
       setParitypayEnabled(Boolean(c.paritypayEnabled));
@@ -404,7 +406,7 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false }: { auro
     }
   }
 
-  async function startTopUpCryptopay() {
+  async function startTopUpCryptopay(stars = false) {
     if (!token || !client) return;
     const amount = Number(topUpAmount?.replace(",", "."));
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -414,8 +416,8 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false }: { auro
     setTopUpError(null);
     setTopUpLoading(true);
     try {
-      const res = await api.cryptopayCreatePayment(token, { amount, currency });
-      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "Crypto Bot", paymentId: res.paymentId });
+      const res = await (stars ? api.starsCreatePayment : api.cryptopayCreatePayment)(token, { amount, currency });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: stars ? "Telegram Stars" : "Crypto Bot", paymentId: res.paymentId });
     } catch (e) {
       setTopUpError(e instanceof Error ? e.message : t("cabinet.profile.top_up_error"));
     } finally {
@@ -610,7 +612,7 @@ async function startTopUpParitypay() {
   const isTgMiniapp = isMiniapp && Boolean((window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData?.trim());
   const cardClass = isMiniapp ? "min-w-0 overflow-hidden" : "";
 
-  const topupCard = (plategaMethods.length > 0 || yoomoneyEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled) && (
+  const topupCard = (plategaMethods.length > 0 || yoomoneyEnabled || yookassaEnabled || telegramStarsEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled) && (
           <div id="topup" className="relative flex flex-col rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)]">
             <div className="absolute inset-0 overflow-hidden rounded-[2rem] border border-white/10 dark:border-white/5 bg-background/40 backdrop-blur-2xl">
               <div className="absolute -top-32 -left-32 h-64 w-64 rounded-full bg-primary/20 blur-[80px] pointer-events-none" />
@@ -759,6 +761,7 @@ async function startTopUpParitypay() {
 
               type ProviderEntry = { id: string; enabled: boolean; onClick: () => void; label: string; icon: "crypto" | "card" };
               const providers: ProviderEntry[] = [
+                { id: "telegram_stars", enabled: Boolean(telegramStarsEnabled) && currency.toUpperCase() === "RUB", onClick: () => startTopUpCryptopay(true), label: "⭐ Telegram Stars", icon: "crypto" },
                 { id: "cryptopay", enabled: cryptopayEnabled, onClick: () => startTopUpCryptopay(), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
                 { id: "heleket", enabled: heleketEnabled, onClick: () => startTopUpHeleket(), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
                 { id: "rollypay", enabled: rollypayEnabled, onClick: () => startTopUpRollypay(), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
@@ -843,9 +846,9 @@ async function startTopUpParitypay() {
           <label className="au-amount-label" htmlFor="au-topup">Сумма пополнения, {currency.toUpperCase()}</label>
           <input id="au-topup" type="number" inputMode="decimal" min="1" step="0.01" placeholder="Введите сумму" value={topUpAmount} onChange={e=>setTopUpAmount(e.target.value)}/>
           <div className="au-amount-presets">{[100,300,500,1000].map(n=><button key={n} aria-pressed={topUpAmount===String(n)} onClick={()=>setTopUpAmount(String(n))}>{n}</button>)}</div>
-          <button className="au-balance-pay" onClick={()=>{const amount=Number(topUpAmount.replace(",","."));if(!Number.isFinite(amount)||amount<1){setTopUpError(t("cabinet.profile.top_up_min"));return;}setTopUpError(null);setTopUpModalOpen(true);}} disabled={!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled)}><CreditCard size={18}/>Пополнить баланс</button>
+          <button className="au-balance-pay" onClick={()=>{const amount=Number(topUpAmount.replace(",","."));if(!Number.isFinite(amount)||amount<1){setTopUpError(t("cabinet.profile.top_up_min"));return;}setTopUpError(null);setTopUpModalOpen(true);}} disabled={!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || telegramStarsEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled)}><CreditCard size={18}/>Пополнить баланс</button>
           {topUpError&&<p role="alert">{topUpError}</p>}
-          {!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled)&&<p>Пополнение сейчас недоступно</p>}
+          {!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || telegramStarsEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled)&&<p>Пополнение сейчас недоступно</p>}
         </section>
         <button className="au-profile-action" onClick={()=>setPaymentsHistoryOpen(true)}><Wallet size={20}/><span>История операций<small>{payments.length ? `${payments.length} операций` : "Платежей пока нет"}</small></span><span aria-hidden="true">→</span></button>
         <section className="au-profile-section"><h2>Мои устройства <span>{devices.length}</span></h2>

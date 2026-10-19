@@ -1,3 +1,4 @@
+import { refundStarsPayment } from "../telegram-stars/stars.service.js";
 /**
  * Payment actions для админа: refund / mark-failed / retry-activation.
  *
@@ -59,6 +60,7 @@ paymentActionsRouter.post(
 
     const payment = await prisma.payment.findUnique({ where: { id } });
     if (!payment) return res.status(404).json({ message: "Платёж не найден" });
+    if (payment.provider === "telegram_stars" && payment.externalId) return res.status(400).json({ message: "Подтверждённую оплату Stars можно только вернуть через Telegram" });
     if (payment.status === "FAILED") return res.status(400).json({ message: "Платёж уже в FAILED" });
     if (payment.status === "REFUNDED") return res.status(400).json({ message: "Платёж уже возвращён" });
 
@@ -99,6 +101,12 @@ paymentActionsRouter.post(
     if (!payment) return res.status(404).json({ message: "Платёж не найден" });
     if (payment.status === "REFUNDED") return res.status(400).json({ message: "Уже возвращён" });
     if (payment.status === "FAILED") return res.status(400).json({ message: "Платёж уже FAILED — refund не нужен" });
+
+    if (payment.provider === "telegram_stars") {
+      const updated = await refundStarsPayment(id);
+      await logAdmin(req, "payment.refund", { type: "payment", id }, { provider: "telegram_stars", amount: payment.amount, reason: reason ?? null });
+      return res.json({ ok: true, payment: updated, summary: { creditedToBalance: 0, reversedReferralAmount: 0, reversedReferralCount: 0 } });
+    }
 
     let creditedToBalance = 0;
     let reversedReferralAmount = 0;
@@ -191,6 +199,8 @@ paymentActionsRouter.post(
     const payment = await prisma.payment.findUnique({ where: { id } });
     if (!payment) return res.status(404).json({ message: "Платёж не найден" });
     if (payment.status !== "PAID") return res.status(400).json({ message: `Активацию можно повторить только для PAID платежей. Текущий статус: ${payment.status}` });
+
+    if (payment.provider === "telegram_stars") return res.status(409).json({ message: "Проверьте результат выдачи Stars перед повторной активацией. Если покупка не выдана, верните звёзды и создайте новый счёт." });
 
     let activationResult: unknown = null;
     let activationError: string | null = null;

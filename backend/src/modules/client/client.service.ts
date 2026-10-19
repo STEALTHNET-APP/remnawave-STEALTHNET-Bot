@@ -131,6 +131,7 @@ const SYSTEM_CONFIG_KEYS = [
   // Basic-auth credentials для webhook YooKassa (security fix против форджинга платежей).
   "yookassa_webhook_basic_user", "yookassa_webhook_basic_password",
   "cryptopay_api_token", "cryptopay_testnet",
+  "telegram_stars_enabled", "telegram_stars_rub_per_star",
   "heleket_merchant_id", "heleket_api_key",
   "paritypay_shop_id", "paritypay_api_key", "paritypay_signing_secret", "paritypay_enabled",
   "rollypay_api_key", "rollypay_signing_secret", "rollypay_test_mode",
@@ -660,6 +661,8 @@ async function loadSystemConfigFromDb() {
     yookassaSecretKey: map.yookassa_secret_key || null,
     yookassaWebhookBasicUser: map.yookassa_webhook_basic_user || null,
     yookassaWebhookBasicPassword: map.yookassa_webhook_basic_password || null,
+    telegramStarsEnabled: map.telegram_stars_enabled === "true",
+    telegramStarsRubPerStar: Number(map.telegram_stars_rub_per_star || 0),
     cryptopayApiToken: (map.cryptopay_api_token ?? "").trim() || null,
     cryptopayTestnet: map.cryptopay_testnet === "true" || map.cryptopay_testnet === "1",
     heleketMerchantId: (map.heleket_merchant_id ?? "").trim() || null,
@@ -1005,6 +1008,7 @@ const DEFAULT_PLATEGA_METHODS: PlategaMethodConfig[] = [
 
 export type PaymentProviderConfig = { id: string; label: string; sortOrder: number };
 const DEFAULT_PAYMENT_PROVIDERS: PaymentProviderConfig[] = [
+  { id: "telegram_stars", label: "Telegram Stars", sortOrder: 0 },
   { id: "cryptopay", label: "Crypto Bot", sortOrder: 0 },
   { id: "heleket", label: "Heleket", sortOrder: 1 },
   { id: "paritypay", label: "ParityPay", sortOrder: 10 },
@@ -1296,6 +1300,8 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     yoomoneyEnabled: Boolean(full.yoomoneyReceiverWallet?.trim()),
     yookassaEnabled: Boolean(full.yookassaShopId?.trim() && full.yookassaSecretKey?.trim()),
     yookassaRecurringEnabled: full.yookassaRecurringEnabled ?? false,
+    telegramStarsEnabled: full.telegramStarsEnabled && full.telegramStarsRubPerStar > 0 && Boolean(process.env.BOT_TOKEN?.trim()),
+    telegramStarsRubPerStar: full.telegramStarsRubPerStar,
     cryptopayEnabled: Boolean((full as { cryptopayApiToken?: string | null }).cryptopayApiToken?.trim()),
     heleketEnabled: Boolean((full as { heleketMerchantId?: string | null }).heleketMerchantId?.trim() && (full as { heleketApiKey?: string | null }).heleketApiKey?.trim()),
     // RollyPay считаем настроенным, когда есть и ключ кассы, и секрет подписи:

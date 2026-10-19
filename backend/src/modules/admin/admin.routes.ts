@@ -2940,6 +2940,8 @@ const updateSettingsSchema = z.object({
   yookassaWebhookBasicUser: z.string().max(200).nullable().optional(),
   /** Basic-auth password для webhook ЮKassa — security fix против форджинга платежей. */
   yookassaWebhookBasicPassword: z.string().max(500).nullable().optional(),
+  telegramStarsEnabled: z.boolean().optional(),
+  telegramStarsRubPerStar: z.number().finite().min(0).max(1000000).optional(),
   cryptopayApiToken: z.string().max(500).nullable().optional(),
   cryptopayTestnet: z.boolean().optional(),
   heleketMerchantId: z.string().max(500).nullable().optional(),
@@ -3546,6 +3548,12 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.yookassaWebhookBasicPassword !== undefined) {
     const val = updates.yookassaWebhookBasicPassword ?? "";
     await prisma.systemSetting.upsert({ where: { key: "yookassa_webhook_basic_password" }, create: { key: "yookassa_webhook_basic_password", value: val }, update: { value: val } });
+  }
+  for (const [field, key] of [["telegramStarsEnabled", "telegram_stars_enabled"], ["telegramStarsRubPerStar", "telegram_stars_rub_per_star"]] as const) {
+    if (updates[field] !== undefined) {
+      const value = String(updates[field]);
+      await prisma.systemSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
+    }
   }
   if (updates.cryptopayApiToken !== undefined) {
     const val = updates.cryptopayApiToken ?? "";

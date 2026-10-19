@@ -187,6 +187,9 @@ export function ExtendSubscriptionDialog({
       } else if (providerId === "yoomoney") {
         const r = await api.yoomoneyCreateFormPayment(token, { ...payBase, paymentType: "AC" });
         url = r.paymentUrl; paymentId = r.paymentId; providerLabel = "ЮMoney";
+      } else if (providerId === "telegram_stars") {
+        const r = await api.starsCreatePayment(token, payBase);
+        url = r.payUrl; paymentId = r.paymentId; providerLabel = "Telegram Stars";
       } else if (providerId === "cryptopay") {
         const r = await api.cryptopayCreatePayment(token, payBase);
         url = r.miniAppPayUrl ?? r.webAppPayUrl ?? r.payUrl; paymentId = r.paymentId; providerLabel = "Crypto Bot";
@@ -225,6 +228,7 @@ export function ExtendSubscriptionDialog({
     (config.plategaMethods ?? []).forEach((m) => list.push({ id: `platega:${m.id}`, label: m.label }));
     const label = (id: string, fb: string) => config.paymentProviders?.find((p) => p.id === id)?.label || fb;
     const flags: { id: string; enabled: boolean; fb: string }[] = [
+      { id: "telegram_stars", enabled: Boolean(config.telegramStarsEnabled) && isRub, fb: "⭐ Telegram Stars" },
       { id: "cryptopay", enabled: Boolean(config.cryptopayEnabled), fb: "Crypto Bot" },
       { id: "heleket", enabled: Boolean(config.heleketEnabled), fb: "Heleket" },
       { id: "rollypay", enabled: Boolean(config.rollypayEnabled), fb: "RollyPay" },

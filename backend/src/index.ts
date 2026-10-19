@@ -1,3 +1,4 @@
+import { reconcileStarsPayments } from "./modules/telegram-stars/stars.service.js";
 import { startRemnaSyncScheduler, stopRemnaSyncScheduler } from "./modules/sync/sync.scheduler.js";
 import { startReferralRewardsScheduler, stopReferralRewardsScheduler } from "./modules/referral/referral-rewards.scheduler.js";
 // Установить захват логов в кольцевой буфер ДО первого console.log в импортах.
@@ -75,6 +76,7 @@ async function main() {
   await startAutoBroadcastScheduler();
   startContestDailyReminderScheduler(env.CONTEST_REMINDER_CRON ?? undefined);
   startAutoRenewScheduler();
+  setInterval(() => { void reconcileStarsPayments().catch(() => console.error("[Stars] Не удалось сверить оплаты Telegram")); }, 60000).unref();
   startReferralRewardsScheduler();
   startRemnaSyncScheduler();
   startGiftExpiryCron();

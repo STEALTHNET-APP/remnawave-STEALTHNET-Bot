@@ -1,3 +1,4 @@
+import { starsApi, starsAmount } from "../telegram-stars/stars-api.js";
 import { validateTariffDevices } from "../extra-options/device-limit.js";
 import { activateFreeDaysPromo, PromoCodeError } from "../promo-code/free-days.service.js";
 import { createParitypayPayment, isParitypayConfigured } from "../paritypay/paritypay.service.js";
@@ -5499,8 +5500,9 @@ const cryptopayCreatePaymentSchema = z.object({
   }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/cryptopay/create-payment", async (req, res) => {
+clientRouter.post(["/cryptopay/create-payment", "/telegram-stars/create-payment"], async (req, res) => {
   try {
+    const isStars = req.path === "/telegram-stars/create-payment";
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = cryptopayCreatePaymentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Неверные параметры", errors: parsed.error.flatten() });
@@ -5509,7 +5511,15 @@ clientRouter.post("/cryptopay/create-payment", async (req, res) => {
       apiToken: (config as { cryptopayApiToken?: string | null }).cryptopayApiToken ?? "",
       testnet: (config as { cryptopayTestnet?: boolean }).cryptopayTestnet ?? false,
     };
-    if (!isCryptopayConfigured(cryptopayConfig)) return res.status(503).json({ message: "Crypto Pay не настроен" });
+    if (!isStars && !isCryptopayConfigured(cryptopayConfig)) return res.status(503).json({ message: "Crypto Pay не настроен" });
+
+    const starsClient = isStars ? await prisma.client.findUnique({ where: { id: clientId }, select: { telegramId: true, preferredCurrency: true } }) : null;
+    if (isStars) {
+      if (!config.telegramStarsEnabled || !(config.telegramStarsRubPerStar > 0) || !process.env.BOT_TOKEN?.trim()) return res.status(503).json({ message: "Оплата Stars не настроена" });
+      if (!starsClient?.telegramId) return res.status(400).json({ message: "Привяжите Telegram к аккаунту для оплаты Stars" });
+      const targets = [parsed.data.tariffId, parsed.data.proxyTariffId, parsed.data.singboxTariffId, parsed.data.extraOption, parsed.data.customBuild].filter(Boolean);
+      if (targets.length > 1) return res.status(400).json({ message: "Выберите одну покупку" });
+    }
 
     const { amount: amountBody, currency: currencyBody, tariffId: tariffIdBody, proxyTariffId: proxyTariffIdBody, singboxTariffId: singboxTariffIdBody, promoCode: promoCodeStr, extraOption, customBuild: customBuildBody, extendsSecondarySubId, removeExtrasOnActivate, asGift, asAdditional } = parsed.data;
     let amountRounded: number;
@@ -5577,6 +5587,7 @@ clientRouter.post("/cryptopay/create-payment", async (req, res) => {
           include: { priceOptions: true },
         });
         if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
+        if (isStars) currencyUpper = tariff.currency.toUpperCase();
         // кулдаун ПРОДЛЕНИЯ существующей подписки.
         // Применяется только при продлении (extendsSecondarySubId) — новые покупки этого
         // же тарифа как доп. подписок не блокируются.
@@ -5593,6 +5604,7 @@ clientRouter.post("/cryptopay/create-payment", async (req, res) => {
         let effectiveDaysCalc = tariff.durationDays;
         if (parsed.data.tariffPriceOptionId) {
           const opt = (tariff.priceOptions ?? []).find((p) => p.id === parsed.data.tariffPriceOptionId);
+          if (isStars && !opt) return res.status(400).json({ message: "Период тарифа не найден" });
           if (opt) {
             unitPriceCalc = opt.price;
             effectiveDaysCalc = opt.durationDays;
@@ -5631,24 +5643,29 @@ clientRouter.post("/cryptopay/create-payment", async (req, res) => {
         const proxyTariff = await prisma.proxyTariff.findUnique({ where: { id: proxyTariffIdBody } });
         if (!proxyTariff || !proxyTariff.enabled) return res.status(400).json({ message: "Прокси-тариф не найден" });
         proxyTariffIdToStore = proxyTariffIdBody;
-        amountRounded = Math.round((amountBody ?? proxyTariff.price) * 100) / 100;
+        amountRounded = Math.round((isStars ? proxyTariff.price : amountBody ?? proxyTariff.price) * 100) / 100;
+        if (isStars) currencyUpper = proxyTariff.currency.toUpperCase();
       } else if (singboxTariffIdBody) {
         const singboxTariff = await prisma.singboxTariff.findUnique({ where: { id: singboxTariffIdBody } });
         if (!singboxTariff || !singboxTariff.enabled) return res.status(400).json({ message: "Тариф Sing-box не найден" });
         singboxTariffIdToStore = singboxTariffIdBody;
-        amountRounded = Math.round((amountBody ?? singboxTariff.price) * 100) / 100;
+        amountRounded = Math.round((isStars ? singboxTariff.price : amountBody ?? singboxTariff.price) * 100) / 100;
+        if (isStars) currencyUpper = singboxTariff.currency.toUpperCase();
       } else {
         if (amountBody == null) return res.status(400).json({ message: "Укажите сумму" });
         amountRounded = Math.round(amountBody * 100) / 100;
       }
     }
 
+    if (isStars && currencyUpper !== "RUB") return res.status(400).json({ message: "Оплата Stars доступна для цен в рублях" });
     const fiatSupported = ["USD", "RUB", "EUR", "UAH", "KZT", "BYN", "UZS", "GEL", "TRY", "AMD", "THB", "INR", "CNY", "GBP", "BRL", "IDR", "AZN", "AED", "PLN", "ILS"];
     if (!fiatSupported.includes(currencyUpper)) return res.status(400).json({ message: "Crypto Pay: поддерживаются USD, RUB, EUR и др. Укажите валюту из списка." });
     if (amountRounded < 0.5) return res.status(400).json({ message: "Минимальная сумма — 0.5" });
 
     // Персональная скидка админа — на продуктовые оплаты, не на чистое пополнение.
     const cryptoIsTopup = !tariffIdToStore && !proxyTariffIdToStore && !singboxTariffIdToStore && !customBuildBody && !extraOption;
+    if (isStars && cryptoIsTopup && starsClient?.preferredCurrency?.toUpperCase() !== "RUB") return res.status(400).json({ message: "Для пополнения Stars выберите рублёвый баланс" });
+    if (isStars && cryptoIsTopup && promoCodeStr) return res.status(400).json({ message: "Промокод применяется к покупке тарифа" });
     if (!cryptoIsTopup) {
       const originalBeforePersonal = amountRounded;
       const pd = await applyPersonalDiscount(amountRounded, clientId);
@@ -5681,6 +5698,8 @@ clientRouter.post("/cryptopay/create-payment", async (req, res) => {
     const cpSnap = cryptoIsTopup ? await paymentSnapshotTopup(clientId, amountRounded) : await paymentSnapshotProduct(clientId, amountRounded);
     const cpCharge = cpSnap.amount;
 
+    const totalStars = isStars ? starsAmount(cpCharge, config.telegramStarsRubPerStar) : 0;
+    if (isStars) metadataObj.stars = { total: totalStars, telegramId: starsClient!.telegramId, botId: process.env.BOT_TOKEN!.split(":")[0], expiresAt: Date.now() + 3600000 };
     const orderId = randomUUID();
     const payment = await createPayment({
       data: asPaymentUncheckedCreate({
@@ -5689,7 +5708,7 @@ clientRouter.post("/cryptopay/create-payment", async (req, res) => {
         amount: cpSnap.amount,
         currency: currencyUpper,
         status: "PENDING",
-        provider: "cryptopay",
+        provider: isStars ? "telegram_stars" : "cryptopay",
         tariffId: tariffIdToStore,
         tariffPriceOptionId: parsed.data.tariffPriceOptionId ?? null,
         deviceCount: parsed.data.deviceCount ?? null,
@@ -5704,6 +5723,7 @@ clientRouter.post("/cryptopay/create-payment", async (req, res) => {
           if (asGift) {
             meta.purchasedAsGift = true;
           }
+          if (isStars && parsed.data.replaceTrialSubId) meta.replaceTrialSubId = parsed.data.replaceTrialSubId;
           if (extendsSecondarySubId) {
             meta.extendsSecondarySubId = extendsSecondarySubId;
             // флаг удаления доп. устройств при активации.
@@ -5739,6 +5759,23 @@ clientRouter.post("/cryptopay/create-payment", async (req, res) => {
             : extraOption
               ? `Опция ${serviceName} #${orderId}`
               : `Пополнение баланса ${serviceName} #${orderId}`) + tgIdSuffix;
+
+    if (isStars) {
+      try {
+        const payUrl = await starsApi<string>("createInvoiceLink", {
+          title: serviceName.slice(0, 32),
+          description: description.slice(0, 255),
+          payload: `snstars:${payment.id}`,
+          provider_token: "",
+          currency: "XTR",
+          prices: [{ label: "Покупка", amount: totalStars }],
+        });
+        return res.status(201).json({ paymentId: payment.id, payUrl, starsAmount: totalStars });
+      } catch {
+        await prisma.payment.updateMany({ where: { id: payment.id, status: "PENDING" }, data: { status: "FAILED" } });
+        return res.status(502).json({ message: "Не удалось создать счёт Telegram Stars. Попробуйте ещё раз." });
+      }
+    }
 
     const result = await createCryptopayInvoice({
       config: cryptopayConfig,

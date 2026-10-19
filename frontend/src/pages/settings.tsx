@@ -894,6 +894,8 @@ export function SettingsPage() {
         yookassaSecretKey: settings.yookassaSecretKey && settings.yookassaSecretKey !== "********" ? settings.yookassaSecretKey : undefined,
         yookassaWebhookBasicUser: (settings as { yookassaWebhookBasicUser?: string | null }).yookassaWebhookBasicUser ?? null,
         yookassaWebhookBasicPassword: (settings as { yookassaWebhookBasicPassword?: string | null }).yookassaWebhookBasicPassword && (settings as { yookassaWebhookBasicPassword?: string | null }).yookassaWebhookBasicPassword !== "********" ? (settings as { yookassaWebhookBasicPassword?: string | null }).yookassaWebhookBasicPassword : undefined,
+        telegramStarsEnabled: settings.telegramStarsEnabled ?? false,
+        telegramStarsRubPerStar: settings.telegramStarsRubPerStar ?? 0,
         cryptopayApiToken: settings.cryptopayApiToken ?? null,
         cryptopayTestnet: settings.cryptopayTestnet ?? false,
         heleketMerchantId: settings.heleketMerchantId ?? null,
@@ -3392,6 +3394,23 @@ export function SettingsPage() {
                 </CollapsibleContent>
               </Collapsible>
 
+              <Card>
+                <CardHeader><CardTitle>Telegram Stars</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <input id="telegramStarsEnabled" type="checkbox" checked={settings.telegramStarsEnabled ?? false} onChange={(e) => setSettings(s => s ? { ...s, telegramStarsEnabled: e.target.checked } : s)} />
+                    <Label htmlFor="telegramStarsEnabled">Принимать оплату звёздами</Label>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="telegramStarsRubPerStar">Стоимость одной звезды в рублях</Label>
+                    <Input id="telegramStarsRubPerStar" type="number" min="0" step="0.01" value={settings.telegramStarsRubPerStar ?? 0} onChange={(e) => setSettings(s => s ? { ...s, telegramStarsRubPerStar: Number(e.target.value) } : s)} />
+                    <p className="text-sm text-muted-foreground">Вы задаёте стоимость звезды для своего сервиса. Цена тарифа в рублях делится на это значение и округляется вверх до целого количества Stars. При нуле оплата недоступна.</p>
+                    {(settings.telegramStarsRubPerStar ?? 0) > 0 && <p className="text-sm">Например, 300 ₽ = {Math.ceil(300 / settings.telegramStarsRubPerStar!)} ⭐</p>}
+                    <p className="text-sm text-muted-foreground">Используется основной Telegram-бот. Оплата доступна для цен в рублях и аккаунтов с привязанным Telegram.</p>
+                  </div>
+                  <Button type="submit" disabled={saving}>{saving ? t("admin.settings.saving") : t("admin.settings.save")}</Button>
+                </CardContent>
+              </Card>
               <Collapsible defaultOpen={false} className="group mt-4">
                 <CollapsibleTrigger asChild>
                   <button
