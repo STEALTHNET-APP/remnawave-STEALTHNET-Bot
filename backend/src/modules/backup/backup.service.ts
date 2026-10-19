@@ -4,7 +4,8 @@
  */
 
 import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { writeSqlArchive } from "./backup-archive.js";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -60,7 +61,7 @@ export async function saveBackupToFile(db: DbConnection): Promise<{ relativePath
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
   const time = now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const filename = `stealthnet-backup-${time}.sql`;
+  const filename = `stealthnet-backup-${time}-${randomUUID()}.sql`;
   const dirPath = path.join(BACKUPS_DIR, String(y), m, d);
   const fullPath = path.join(dirPath, filename);
   const relativePath = path.join(String(y), m, d, filename);
@@ -68,23 +69,12 @@ export async function saveBackupToFile(db: DbConnection): Promise<{ relativePath
   const { mkdir } = await import("node:fs/promises");
   await mkdir(dirPath, { recursive: true });
 
-  await new Promise<void>((resolve, reject) => {
-    const env = { ...process.env, PGPASSWORD: db.password };
-    const proc = spawn(
-      "pg_dump",
-      ["-h", db.host, "-p", String(db.port), "-U", db.user, "-d", db.database, "-F", "p", "--no-owner", "--no-acl", "--clean", "--if-exists"],
-      { env }
-    );
-    const out = createWriteStream(fullPath);
-    proc.stdout?.pipe(out);
-    proc.stderr?.on("data", (chunk) => console.error("[pg_dump]", chunk.toString()));
-    proc.on("error", reject);
-    out.on("finish", () => resolve());
-    out.on("error", reject);
-    proc.on("close", (code) => {
-      if (code !== 0) reject(new Error(`pg_dump exited with code ${code}`));
-    });
-  });
+  const proc = spawn(
+    "pg_dump",
+    ["-h", db.host, "-p", String(db.port), "-U", db.user, "-d", db.database, "-F", "p", "--no-owner", "--no-acl", "--clean", "--if-exists"],
+    { env: { ...process.env, PGPASSWORD: db.password }, stdio: ["ignore", "pipe", "pipe"] }
+  );
+  await writeSqlArchive(proc, fullPath);
 
   return { relativePath, filename, fullPath };
 }

@@ -36,7 +36,15 @@ export function compatibleDumpHeader(): Transform {
 }
 
 /** A closed stdout is insufficient: pg_dump can still exit unsuccessfully afterwards. */
-export async function writeGzipArchive(proc: ChildProcess, fullPath: string): Promise<void> {
+export function writeGzipArchive(proc: ChildProcess, fullPath: string): Promise<void> {
+  return writeArchive(proc, fullPath, true);
+}
+
+export function writeSqlArchive(proc: ChildProcess, fullPath: string): Promise<void> {
+  return writeArchive(proc, fullPath, false);
+}
+
+async function writeArchive(proc: ChildProcess, fullPath: string, gzip: boolean): Promise<void> {
   const partial = `${fullPath}.partial`;
   const exited = new Promise<void>((resolve, reject) => {
     proc.once("error", reject);
@@ -46,9 +54,12 @@ export async function writeGzipArchive(proc: ChildProcess, fullPath: string): Pr
   let compressed: Promise<void> | undefined;
   try {
     if (!proc.stdout) throw new Error("pg_dump stdout unavailable");
-    compressed = pipeline(proc.stdout, compatibleDumpHeader(), createGzip({ level: 6 }), createWriteStream(partial, { flags: "wx", mode: 0o600 }));
+    const output = createWriteStream(partial, { flags: "wx", mode: 0o600 });
+    compressed = gzip
+      ? pipeline(proc.stdout, compatibleDumpHeader(), createGzip({ level: 6 }), output)
+      : pipeline(proc.stdout, compatibleDumpHeader(), output);
     await Promise.all([exited, compressed]);
-    if ((await stat(partial)).size <= 20) throw new Error("pg_dump produced an empty archive");
+    if ((await stat(partial)).size <= (gzip ? 20 : 0)) throw new Error("pg_dump produced an empty archive");
     await rename(partial, fullPath);
   } catch (error) {
     proc.kill();

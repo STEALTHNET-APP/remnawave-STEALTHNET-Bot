@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { test } from 'node:test';
-import { writeGzipArchive, readFileParts, pruneDeliveredBackups, compatibleDumpHeader } from '../dist/modules/backup/backup-archive.js';
+import { writeSqlArchive, writeGzipArchive, readFileParts, pruneDeliveredBackups, compatibleDumpHeader } from '../dist/modules/backup/backup-archive.js';
 import { Readable } from 'node:stream';
 
 async function workspace(t) {
@@ -100,4 +100,23 @@ test('actual gzip multipart reassembly passes integrity validation', async t => 
   for await (const part of readFileParts(file, 50)) { assert.ok(part.length <= 50); parts.push(part); }
   assert.ok(parts.length > 1);
   assert.equal(gunzipSync(Buffer.concat(parts)).toString(), sql);
+});
+
+
+test('manual SQL backup waits for process exit and strips incompatible header', async t => {
+  const dir = await workspace(t);
+  const file = path.join(dir, 'manual.sql');
+  const sql = '-- PostgreSQL database dump\nSET transaction_timeout = 0;\n--\n-- Name: test\nSELECT 1;\n';
+  const child = spawn(process.execPath, ['-e', `process.stdout.write(${JSON.stringify(sql)})`]);
+  await writeSqlArchive(child, file);
+  assert.equal(await readFile(file, 'utf8'), sql.replace('SET transaction_timeout = 0;\n', ''));
+});
+
+test('failed and empty manual dumps are never published', async t => {
+  const dir = await workspace(t);
+  const file = path.join(dir, 'failed.sql');
+  for (const script of ['process.stdout.end("partial SQL"); setTimeout(() => process.exit(2), 50)', 'process.exit(0)']) {
+    await assert.rejects(writeSqlArchive(spawn(process.execPath, ['-e', script]), file));
+    assert.deepEqual(await readdir(dir), []);
+  }
 });
