@@ -10,11 +10,9 @@ import {
   saveBackupToFile,
   cleanupOldBackups,
   listBackups,
-  createBackupReadStream,
   resolveBackupPath,
 } from "./backup.service.js";
 import { getSystemConfig } from "../client/client.service.js";
-import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 
 const upload = multer({
@@ -46,7 +44,11 @@ export function registerBackupRoutes(
       res.setHeader("Content-Type", "application/sql");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader("Content-Length", String(st.size));
-      createReadStream(fullPath).pipe(res);
+      res.download(fullPath, filename, (error) => {
+        if (!error) return;
+        if (res.headersSent) { res.destroy(error); return; }
+        res.status(500).json({ message: "Не удалось скачать бэкап." });
+      });
     } catch (e) {
       console.error("Backup create error:", e);
       const msg = e instanceof Error ? e.message : String(e);
@@ -71,12 +73,18 @@ export function registerBackupRoutes(
     if (!pathParam || typeof pathParam !== "string") {
       return res.status(400).json({ message: "Укажите параметр path (относительный путь к бэкапу)" });
     }
-    const stream = createBackupReadStream(pathParam);
-    if (!stream) return res.status(404).json({ message: "Бэкап не найден" });
+    const fullPath = resolveBackupPath(pathParam);
+    const fileStat = fullPath ? await stat(fullPath).catch(() => null) : null;
+    if (!fullPath || !fileStat?.isFile()) return res.status(404).json({ message: "Бэкап не найден" });
     const filename = pathParam.split("/").pop() || "backup.sql";
     res.setHeader("Content-Type", filename.endsWith(".gz") ? "application/gzip" : "application/sql");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    stream.pipe(res);
+    res.download(fullPath, filename, (error) => {
+      if (!error) return;
+      if (res.headersSent) { res.destroy(error); return; }
+      const status = (error as NodeJS.ErrnoException).code === "ENOENT" ? 404 : 500;
+      res.status(status).json({ message: status === 404 ? "Бэкап не найден" : "Не удалось скачать бэкап." });
+    });
   }));
 
   /**

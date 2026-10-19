@@ -6,7 +6,6 @@
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
-import { createReadStream } from "node:fs";
 import path from "node:path";
 
 const BACKUPS_DIR = process.env.BACKUPS_DIR || path.join(process.cwd(), "backups");
@@ -129,22 +128,12 @@ export async function listBackups(): Promise<BackupItem[]> {
 
 /** Безопасно разрешает относительный путь к файлу бэкапа; возвращает полный путь или null */
 export function resolveBackupPath(relativePath: string): string | null {
-  const normalized = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, "");
-  const full = path.join(BACKUPS_DIR, normalized);
+  if (!relativePath || path.isAbsolute(relativePath) || relativePath.includes("\\") || relativePath.split("/").some((part) => part === "..") || !/\.sql(?:\.gz)?$/i.test(relativePath)) return null;
   const base = path.resolve(BACKUPS_DIR);
-  if (!full.startsWith(base) || path.relative(base, full).startsWith("..")) return null;
+  const full = path.resolve(base, relativePath);
+  const relative = path.relative(base, full);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return null;
   return full;
-}
-
-/** Стрим файла бэкапа для скачивания */
-export function createBackupReadStream(relativePath: string): NodeJS.ReadableStream | null {
-  const full = resolveBackupPath(relativePath);
-  if (!full) return null;
-  try {
-    return createReadStream(full);
-  } catch {
-    return null;
-  }
 }
 
 /** Читает файл бэкапа в буфер (для восстановления с сервера) */
