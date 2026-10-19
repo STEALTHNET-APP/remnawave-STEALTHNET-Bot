@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import io
 import json
@@ -12,7 +13,7 @@ from pathlib import Path
 from functools import wraps
 
 from flask import Flask, abort, g, jsonify, request, send_file
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 from werkzeug.exceptions import HTTPException
 
 Image.MAX_IMAGE_PIXELS = 16000000
@@ -22,7 +23,7 @@ AREAS = ["Панель", "Telegram-бот", "Подписки", "Оплата", 
 
 def create_app(config=None):
     app = Flask(__name__, static_url_path="/static")
-    app.config.update(DATA_DIR=os.environ.get("DATA_DIR", "/data"), PUBLIC_URL=os.environ.get("PUBLIC_URL", "http://127.0.0.1:8091").rstrip("/"), PANEL_URL=os.environ.get("PANEL_URL", "http://api:5000").rstrip("/"), MAX_CONTENT_LENGTH=12 * 1024 * 1024, MAX_FORM_MEMORY_SIZE=65536, MAX_FORM_PARTS=20)
+    app.config.update(DATA_DIR=os.environ.get("DATA_DIR", "/data"), PUBLIC_URL=os.environ.get("PUBLIC_URL", "http://127.0.0.1:8091").rstrip("/"), PANEL_URL=os.environ.get("PANEL_URL", "http://api:5000").rstrip("/"), MAX_CONTENT_LENGTH=12 * 1024 * 1024, MAX_FORM_MEMORY_SIZE=262144, MAX_FORM_PARTS=20)
     if config:
         app.config.update(config)
     root = Path(app.config["DATA_DIR"])
@@ -36,8 +37,12 @@ def create_app(config=None):
           CREATE TABLE IF NOT EXISTS attachments(id TEXT PRIMARY KEY, report_id INTEGER NOT NULL REFERENCES reports(id), mime TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, email TEXT NOT NULL, pending TEXT NOT NULL DEFAULT '', expires INTEGER NOT NULL);
           CREATE TABLE IF NOT EXISTS rates(key TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL);
+          CREATE TABLE IF NOT EXISTS owners(report_id INTEGER PRIMARY KEY REFERENCES reports(id), owner TEXT NOT NULL);
+          CREATE INDEX IF NOT EXISTS owners_owner ON owners(owner);
+          CREATE TABLE IF NOT EXISTS challenges(id TEXT PRIMARY KEY, answer TEXT NOT NULL, owner TEXT NOT NULL, expires INTEGER NOT NULL);
           CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, actor TEXT NOT NULL, report_id INTEGER NOT NULL, changes TEXT NOT NULL, created INTEGER NOT NULL);
         ''')
+    conn.close()
     database.chmod(0o600)
 
     def db():
@@ -75,7 +80,7 @@ def create_app(config=None):
 
     @app.after_request
     def headers(response):
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
@@ -84,6 +89,49 @@ def create_app(config=None):
     @app.errorhandler(HTTPException)
     def http_error(error):
         return jsonify(message=error.description if error.code != 413 else "Файлы слишком большие. Максимум 3 изображения по 3 МБ."), error.code
+
+    def visitor():
+        value = request.cookies.get("reports_owner", "")
+        return value if len(value) == 43 else ""
+
+    @app.get("/api/captcha")
+    def captcha():
+        limit("captcha", 30, 600)
+        limit("captcha-global", 1000, 3600, True)
+        owner = visitor() or secrets.token_urlsafe(32)
+        token = secrets.token_urlsafe(32)
+        answer = "".join(secrets.choice("23456789") for _ in range(6))
+        canvas = Image.new("RGB", (260, 80), "#f3f4ee")
+        draw = ImageDraw.Draw(canvas)
+        for _ in range(12):
+            draw.line([(secrets.randbelow(260), secrets.randbelow(80)), (secrets.randbelow(260), secrets.randbelow(80))], fill="#c3c8bb", width=1)
+        font = ImageFont.load_default(size=36)
+        for i, char in enumerate(answer):
+            tile = Image.new("RGBA", (44, 60))
+            ImageDraw.Draw(tile).text((6, 6), char, font=font, fill="#243326", stroke_width=1)
+            tile = tile.rotate(secrets.randbelow(31) - 15, resample=Image.Resampling.BICUBIC)
+            canvas.paste(tile, (i * 39 + 10, secrets.randbelow(12) + 5), tile)
+        output = io.BytesIO()
+        canvas.save(output, format="PNG")
+        now = int(time.time())
+        with db() as conn:
+            conn.execute("DELETE FROM challenges WHERE expires < ?", (now,))
+            conn.execute("INSERT INTO challenges VALUES (?,?,?,?)", (digest(token), digest(token + answer), digest(owner), now + 300))
+        response = jsonify(token=token, image="data:image/png;base64," + base64.b64encode(output.getvalue()).decode())
+        response.set_cookie("reports_owner", owner, max_age=365 * 86400, httponly=True, secure=app.config["PUBLIC_URL"].startswith("https://"), samesite="Strict")
+        return response
+
+    def verify_captcha():
+        token = request.form.get("captcha_token", "")
+        answer = request.form.get("captcha_answer", "").strip()
+        conn = db()
+        with conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT * FROM challenges WHERE id=? AND owner=?", (digest(token), digest(visitor()))).fetchone()
+            if row:
+                conn.execute("DELETE FROM challenges WHERE id=?", (row["id"],))
+        if not row or row["expires"] <= int(time.time()) or not secrets.compare_digest(row["answer"], digest(token + answer)):
+            abort(400, "Код неверный или устарел. Введите код с новой картинки.")
 
     def session():
         token = request.cookies.get("reports_session", "")
@@ -173,7 +221,7 @@ def create_app(config=None):
             value["attachments"] = [a["id"] for a in db().execute("SELECT id FROM attachments WHERE report_id=?", (row["id"],))]
         return value
 
-    def listing(private=False):
+    def listing(private=False, mine=False):
         query = request.args.get("q", "").strip()[:120]
         status = request.args.get("status", "")
         try:
@@ -181,6 +229,10 @@ def create_app(config=None):
         except ValueError:
             abort(400, "Некорректная страница.")
         clauses, params = (["1=1"] if private else ["published=1"]), []
+        if mine:
+            clauses, params = ["id IN (SELECT report_id FROM owners WHERE owner=?)"], [digest(visitor())]
+        if private and request.args.get("publication") == "pending":
+            clauses.append("published=0")
         if query:
             clauses.append("(title LIKE ? ESCAPE '\\' OR CAST(id AS TEXT)=?)")
             params += ["%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%", query.lstrip("#")]
@@ -195,6 +247,17 @@ def create_app(config=None):
     @app.get("/api/reports")
     def reports():
         return listing()
+
+    @app.get("/api/my-reports")
+    def my_reports():
+        return listing(mine=True)
+
+    @app.get("/api/my-reports/<int:report_id>")
+    def my_report(report_id):
+        row = db().execute("SELECT * FROM reports WHERE id=? AND id IN (SELECT report_id FROM owners WHERE owner=?)", (report_id, digest(visitor()))).fetchone()
+        if not row:
+            abort(404, "Заявка не найдена в этом браузере.")
+        return jsonify(serialize(row))
 
     @app.get("/api/admin/reports")
     @admin_only
@@ -212,10 +275,10 @@ def create_app(config=None):
     def submit():
         if shutil.disk_usage(root).free < 2 * 1024 ** 3:
             abort(503, "Приём заявок временно недоступен. Попробуйте позже.")
-        limit("submit", 5, 3600)
-        limit("submit-global", 200, 86400, True)
+        limit("submit-attempt", 30, 3600)
         if request.form.get("website"):
             abort(400, "Не удалось отправить заявку.")
+        verify_captcha()
         fields = {}
         for key, minimum, maximum in [("title", 5, 160), ("area", 1, 40), ("version", 0, 80), ("steps", 10, 6000), ("expected", 0, 3000), ("actual", 0, 3000), ("contact", 0, 254)]:
             value = request.form.get(key, "").strip()
@@ -243,12 +306,15 @@ def create_app(config=None):
                     pictures.append((secrets.token_hex(20), out.getvalue()))
             except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
                 abort(400, "Не удалось прочитать изображение.")
+        limit("submit", 5, 3600)
+        limit("submit-global", 200, 86400, True)
         now = int(time.time())
         created_files = []
         try:
             with db() as conn:
                 cursor = conn.execute("INSERT INTO reports(title,area,version,steps,expected,actual,contact,created,updated) VALUES (?,?,?,?,?,?,?,?,?)", (*fields.values(), now, now))
                 report_id = cursor.lastrowid
+                conn.execute("INSERT INTO owners VALUES (?,?)", (report_id, digest(visitor())))
                 for name, content in pictures:
                     path = root / "uploads" / name
                     path.write_bytes(content)
@@ -291,6 +357,8 @@ def create_app(config=None):
 
     @app.get("/")
     @app.get("/new")
+    @app.get("/mine")
+    @app.get("/mine/<int:report_id>")
     @app.get("/admin")
     @app.get("/r/<int:report_id>")
     def index(report_id=None):
