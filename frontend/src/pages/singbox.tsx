@@ -74,13 +74,14 @@ function statusBadge(status: string) {
   );
 }
 
-const PROTOCOLS = ["VLESS", "SHADOWSOCKS", "TROJAN", "HYSTERIA2"] as const;
+const PROTOCOLS = ["VLESS", "SHADOWSOCKS", "TROJAN", "HYSTERIA2", "AMNEZIAWG"] as const;
 
 export function SingboxPage() {
   const { state } = useAuth();
   const token = state.accessToken ?? null;
 
   const [addOpen, setAddOpen] = useState(false);
+  const [newNodeHost, setNewNodeHost] = useState("");
   const [newNodeName, setNewNodeName] = useState("");
   const [newNodeProtocol, setNewNodeProtocol] = useState<string>("VLESS");
   const [newNodePort, setNewNodePort] = useState("443");
@@ -101,7 +102,7 @@ export function SingboxPage() {
   const [categoryForm, setCategoryForm] = useState({ name: "", sortOrder: "0" });
   const [tariffModal, setTariffModal] = useState<{ kind: "add"; categoryId: string } | { kind: "edit"; tariff: SingboxTariffListItem } | null>(null);
   const [tariffForm, setTariffForm] = useState({
-    name: "", categoryId: "", slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true,
+    protocol: "SINGBOX", name: "", categoryId: "", slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true,
   });
 
   const nodesQuery = useSingboxNodes(token);
@@ -184,10 +185,11 @@ export function SingboxPage() {
       currency: tariffForm.currency.toUpperCase(),
       sortOrder: parseInt(tariffForm.sortOrder, 10) || 0,
       enabled: tariffForm.enabled,
+      protocol: tariffForm.protocol,
     };
     const resetForm = () => {
       setTariffModal(null);
-      setTariffForm({ name: "", categoryId: "", slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true });
+      setTariffForm({ protocol: "SINGBOX", name: "", categoryId: "", slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true });
     };
     if (tariffModal?.kind === "add") {
       if (!payload.categoryId) return;
@@ -216,7 +218,7 @@ export function SingboxPage() {
     setAddResult(null);
     const port = parseInt(newNodePort, 10) || 443;
     createNode.mutate(
-      { name: newNodeName.trim() || "Sing-box node", protocol: newNodeProtocol, port, tlsEnabled: true },
+      { name: newNodeName.trim() || "Sing-box node", protocol: newNodeProtocol, port, tlsEnabled: newNodeProtocol !== "AMNEZIAWG", ...(newNodeProtocol === "AMNEZIAWG" && { publicHost: newNodeHost.trim() }) },
       {
         onSuccess: (res) => setAddResult(res),
         onError: (e) => alert(e instanceof Error ? e.message : "Ошибка создания"),
@@ -339,10 +341,10 @@ export function SingboxPage() {
         <div className="flex items-start gap-3">
           <div>
             <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
-              Sing-box
+              Sing-box / AmneziaWG
             </h1>
             <p className="text-[12.5px] text-muted-foreground mt-[3px]">
-              Ноды VLESS / Shadowsocks / Trojan / Hysteria2. Категории и тарифы для продажи доступов.
+              Ноды VLESS / Shadowsocks / Trojan / Hysteria2 / AmneziaWG. Категории и тарифы для продажи доступов.
             </p>
           </div>
         </div>
@@ -456,7 +458,7 @@ export function SingboxPage() {
                   <div className="flex justify-between"><span className="text-muted-foreground">Слотов</span><span className="font-semibold">{detailNode.slots.length}</span></div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={openConfigEditor} className="gap-1.5 rounded-xl">
+                  <Button variant="outline" size="sm" disabled={detailNode.protocol === "AMNEZIAWG"} onClick={openConfigEditor} className="gap-1.5 rounded-xl">
                     <FileJson className="h-4 w-4" />
                     Конфиг JSON
                   </Button>
@@ -556,7 +558,7 @@ export function SingboxPage() {
                 onClick={() => {
                   if (categories.length === 0) { alert("Сначала добавьте категорию"); return; }
                   setTariffModal({ kind: "add", categoryId: categories[0]!.id });
-                  setTariffForm({ name: "", categoryId: categories[0]!.id, slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true });
+                  setTariffForm({ protocol: "SINGBOX", name: "", categoryId: categories[0]!.id, slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true });
                 }}
               >
                 <Plus className="h-4 w-4" />
@@ -591,7 +593,7 @@ export function SingboxPage() {
                               <div className="min-w-0">
                                 <p className="font-medium truncate">{t.name}</p>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                  {t.slotCount} сл. · {t.durationDays} дн. · <span className="font-semibold text-emerald-500 dark:text-emerald-400">{formatPrice(t.price, t.currency)}</span>
+                                  {t.protocol === "AMNEZIAWG" ? "AmneziaWG · " : ""}{t.slotCount} сл. · {t.durationDays} дн. · <span className="font-semibold text-emerald-500 dark:text-emerald-400">{formatPrice(t.price, t.currency)}</span>
                                   {t.trafficLimitBytes ? ` · ${formatBytes(t.trafficLimitBytes)}` : ""}
                                 </p>
                               </div>
@@ -605,7 +607,7 @@ export function SingboxPage() {
                               <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => {
                                 setTariffModal({ kind: "edit", tariff: { ...t, categoryId: cat.id, categoryName: cat.name, sortOrder: 0 } as SingboxTariffListItem });
                                 setTariffForm({
-                                  name: t.name, categoryId: cat.id, slotCount: String(t.slotCount), durationDays: String(t.durationDays),
+                                  protocol: t.protocol ?? "SINGBOX", name: t.name, categoryId: cat.id, slotCount: String(t.slotCount), durationDays: String(t.durationDays),
                                   trafficLimitBytes: t.trafficLimitBytes ? String(Math.round(Number(t.trafficLimitBytes) / (1024 ** 3))) : "", price: String(t.price), currency: t.currency.toLowerCase(), sortOrder: "0", enabled: t.enabled,
                                 });
                               }}>
@@ -649,7 +651,7 @@ export function SingboxPage() {
                 <select
                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
                   value={newNodeProtocol}
-                  onChange={(e) => setNewNodeProtocol(e.target.value)}
+                  onChange={(e) => { setNewNodeProtocol(e.target.value); setNewNodePort(e.target.value === "AMNEZIAWG" ? "51820" : "443"); }}
                 >
                   {PROTOCOLS.map((p) => (
                     <option key={p} value={p}>{p}</option>
@@ -666,6 +668,7 @@ export function SingboxPage() {
                   onChange={(e) => setNewNodePort(e.target.value)}
                 />
               </div>
+              {newNodeProtocol === "AMNEZIAWG" && <div className="grid gap-2"><Label>Публичный IP или домен ноды</Label><Input value={newNodeHost} onChange={e => setNewNodeHost(e.target.value)} placeholder="vpn.example.com" /><p className="text-xs text-muted-foreground">UDP-порт должен быть открыт. Клиенты получают .conf для AmneziaVPN. Нода работает отдельно от Remnawave.</p></div>}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setAddOpen(false)}>Отмена</Button>
                 <Button onClick={handleAddNode} disabled={creating}>
@@ -710,7 +713,7 @@ export function SingboxPage() {
                 <Label>Протокол</Label>
                 <select
                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
-                  value={editProtocol}
+                  disabled={editingNode?.protocol === "AMNEZIAWG"} value={editProtocol}
                   onChange={(e) => setEditProtocol(e.target.value)}
                 >
                   {PROTOCOLS.map((p) => (
@@ -720,7 +723,7 @@ export function SingboxPage() {
               </div>
               <div className="grid gap-2">
                 <Label>Порт</Label>
-                <Input type="number" min={1} max={65535} value={editPort} onChange={(e) => setEditPort(e.target.value)} />
+                <Input type="number" min={1} max={65535} disabled={editingNode?.protocol === "AMNEZIAWG"} value={editPort} onChange={(e) => setEditPort(e.target.value)} />
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setEditOpen(false)}>Отмена</Button>
@@ -789,6 +792,7 @@ export function SingboxPage() {
               <Label>Название</Label>
               <Input value={tariffForm.name} onChange={(e) => setTariffForm((f) => ({ ...f, name: e.target.value }))} placeholder="Тариф 1" />
             </div>
+            <div className="grid gap-2"><Label>Протокол тарифа</Label><select aria-label="Протокол тарифа" className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={tariffForm.protocol} onChange={e => setTariffForm(f => ({ ...f, protocol: e.target.value }))}><option value="SINGBOX">Sing-box — любой доступный протокол</option>{PROTOCOLS.map(p => <option key={p} value={p}>{p === "AMNEZIAWG" ? "AmneziaWG" : p}</option>)}</select></div>
             <div className="grid grid-cols-2 gap-2">
               <div className="grid gap-2">
                 <Label>Слотов</Label>

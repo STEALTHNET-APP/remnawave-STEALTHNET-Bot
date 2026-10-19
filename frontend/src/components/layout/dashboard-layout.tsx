@@ -447,7 +447,7 @@ export function DashboardLayout() {
                       "remna-nodes": "Ноды", "remna-squads": "Сквады", "remna-hosts": "Хосты", "remna-profiles": "Config-профили",
                       "remna-sub-templates": "Шаблоны подписки",
                       "traffic-abuse": "Аномалии трафика", "geo-map": "Карта", clients: "Клиенты",
-                      proxy: "Прокси", singbox: "Sing-box", backup: "Бэкапы", tickets: "Тикеты",
+                      proxy: "Прокси", singbox: "Sing-box / AmneziaWG", backup: "Бэкапы", tickets: "Тикеты",
                       withdrawals: "Заявки на вывод", trials: "Триалы", "auto-renew": "Автосписание",
                       tariffs: "Тарифы", promo: "Промо-ссылки", "promo-codes": "Промокоды",
                       marketing: "Маркетинг", "referral-network": "Реф. сеть", referrals: "Рефералка",

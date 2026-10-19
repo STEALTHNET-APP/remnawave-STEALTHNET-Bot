@@ -45,7 +45,7 @@ export function AuroraLayout() {
     {to:"/cabinet/custom-build",label:"Собрать свой тариф",icon:SlidersHorizontal,show:!!config?.customBuildConfig},
     {to:"/cabinet/extra-options",label:"Дополнительные услуги",icon:Settings2,show:!!config?.sellOptionsEnabled},
     {to:"/cabinet/proxy",label:"Прокси",icon:Network,show:!!config?.showProxyEnabled},
-    {to:"/cabinet/singbox",label:"Sing-box",icon:Network,show:!!config?.showSingboxEnabled},
+    {to:"/cabinet/singbox",label:"Sing-box / AmneziaWG",icon:Network,show:!!config?.showSingboxEnabled},
   ].filter(x=>x.show);
   return <div className="au-client min-h-screen" data-au-theme={resolvedMode} style={{"--au-link":dark?"#79e3a4":accent,"--au-from":accent,"--au-to":gradientEnd,"--au-bg":dark?"#10131d":"#ffffff","--au-surface":dark?"#1b2030":"#f2f3f7","--au-nav":dark?"#202637":"#f2f3f7","--au-ink":dark?"#f1f3fa":"#0f1222","--au-muted":dark?"#adb6ce":"#606a80"} as React.CSSProperties}>
     <header className="au-header"><Link to="/cabinet/dashboard" className="au-wordmark">{config?.serviceName || "Aurora"}</Link><button type="button" onClick={()=>setMenu(true)} aria-label="Профиль и оформление"><Settings2 size={20}/><span>Настройки</span></button></header>

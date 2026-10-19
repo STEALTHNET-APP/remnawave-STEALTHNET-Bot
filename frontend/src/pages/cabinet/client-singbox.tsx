@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import { KeyRound, Calendar, CreditCard, Loader2, Copy, Check, ChevronDown, Wallet, Shield, Zap, ArrowLeft, Wifi } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
@@ -20,7 +21,7 @@ import { PayNowPanel } from "@/components/payment/pay-now-panel";
 import { cn } from "@/lib/utils";
 import { getPublicConfigCached } from "@/lib/public-config";
 
-type SingboxTariff = { id: string; name: string; description?: string; slotCount: number; durationDays: number; trafficLimitBytes: string | null; price: number; currency: string };
+type SingboxTariff = { protocol?: string; id: string; name: string; description?: string; slotCount: number; durationDays: number; trafficLimitBytes: string | null; price: number; currency: string };
 type SingboxCategory = { id: string; name: string; sortOrder: number; tariffs: SingboxTariff[] };
 type SingboxSlot = {
   id: string;
@@ -87,6 +88,7 @@ export function ClientSingboxPage() {
   const [payError, setPayError] = useState<string | null>(null);
   const [readyUrl, setReadyUrl] = useState<{ url: string; provider: string } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [qrSlot, setQrSlot] = useState<SingboxSlot | null>(null);
   const [activeTab, setActiveTab] = useState("tariffs");
 
   const isMobileOrMiniapp = useCabinetMiniapp();
@@ -131,6 +133,15 @@ export function ClientSingboxPage() {
       setExpandedCategoryId((prev) => (prev === null ? categories[0]!.id : prev));
     }
   }, [isMobileOrMiniapp, categories]);
+
+  function downloadConfig(slot: SingboxSlot) {
+    const url = URL.createObjectURL(new Blob([slot.subscriptionLink], { type: "text/plain;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `amnezia-${slot.id.slice(-8)}.conf`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
 
   function copyToClipboard(text: string, id: string) {
     navigator.clipboard?.writeText(text).then(() => {
@@ -565,7 +576,7 @@ async function startParitypayPayment(tariff: SingboxTariff) {
                     Доступы
                   </h1>
                   <p className="mt-3 text-[16px] text-muted-foreground max-w-xl leading-relaxed">
-                    VLESS, Trojan, Hysteria2 и Shadowsocks. Купите тариф и получите мгновенный доступ к высокоскоростной сети. Надежное шифрование и отсутствие логирования.
+                    AmneziaWG, VLESS, Trojan, Hysteria2 и Shadowsocks. Выберите тариф, а после оплаты получите конфигурацию в разделе «Мои доступы».
                   </p>
                 </div>
               </div>
@@ -632,7 +643,7 @@ async function startParitypayPayment(tariff: SingboxTariff) {
                                 <Card key={t.id} className="rounded-2xl border border-border/50 bg-background/50 backdrop-blur-md shadow-sm hover:shadow-md transition-all duration-300">
                                   <CardContent className="flex flex-row items-center gap-4 py-4 px-4 min-h-0 min-w-0">
                                     <div className="flex-1 min-w-0 space-y-1.5">
-                                      <p className="text-[15px] font-bold leading-tight truncate text-foreground">{t.name}</p>
+                                      <p className="text-[15px] font-bold leading-tight truncate text-foreground">{t.name}{t.protocol === "AMNEZIAWG" && <span className="ml-2 text-xs font-normal text-muted-foreground">AmneziaWG</span>}</p>
                                       {t.description?.trim() ? (
                                         <p className="text-xs text-muted-foreground font-medium line-clamp-2">{t.description}</p>
                                       ) : null}
@@ -693,7 +704,7 @@ async function startParitypayPayment(tariff: SingboxTariff) {
                             <Card key={t.id} className="rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col group hover:-translate-y-1">
                               <CardContent className="flex-1 flex flex-col p-5 min-h-0 min-w-0">
                                 <div className="mb-4">
-                                  <p className="text-lg font-bold leading-tight line-clamp-2 text-foreground group-hover:text-primary transition-colors">{t.name}</p>
+                                  <p className="text-lg font-bold leading-tight line-clamp-2 text-foreground group-hover:text-primary transition-colors">{t.name}{t.protocol === "AMNEZIAWG" && <span className="ml-2 text-xs font-normal text-muted-foreground">AmneziaWG</span>}</p>
                                   {t.description?.trim() ? (
                                     <p className="text-sm text-muted-foreground font-medium mt-1.5 line-clamp-2">{t.description}</p>
                                   ) : null}
@@ -772,7 +783,7 @@ async function startParitypayPayment(tariff: SingboxTariff) {
                                 <KeyRound className="h-5 w-5" />
                               </div>
                               <div>
-                                <h3 className="font-semibold text-foreground">{slot.protocol} · {slot.id.slice(-8)}</h3>
+                                <h3 className="font-semibold text-foreground">{slot.protocol === "AMNEZIAWG" ? "AmneziaWG" : slot.protocol} · {slot.id.slice(-8)}</h3>
                                 {slot.trafficLimitBytes && Number(slot.trafficLimitBytes) > 0 ? (
                                   <p className="text-xs text-muted-foreground mt-0.5">
                                     Трафик: {formatBytes(slot.trafficUsedBytes)} / {formatBytes(slot.trafficLimitBytes)}
@@ -787,10 +798,12 @@ async function startParitypayPayment(tariff: SingboxTariff) {
                           </div>
 
                           <div className="space-y-3">
+                            {slot.protocol === "AMNEZIAWG" && <Button onClick={() => downloadConfig(slot)} className="w-full">Скачать конфигурацию .conf</Button>}
+                            {slot.protocol === "AMNEZIAWG" && <Button variant="outline" className="w-full" onClick={() => setQrSlot(slot)}>Показать QR-код</Button>}
                             <div className="flex items-center gap-2 min-w-0 bg-background/50 p-2 rounded-2xl border border-border/50">
-                              <div className="pl-2 font-semibold text-xs text-muted-foreground shrink-0">URL</div>
+                              <div className="pl-2 font-semibold text-xs text-muted-foreground shrink-0">{slot.protocol === "AMNEZIAWG" ? "CONF" : "URL"}</div>
                               <code className="flex-1 truncate text-xs font-mono select-all text-foreground">
-                                {slot.subscriptionLink}
+                                {slot.protocol === "AMNEZIAWG" ? "Конфигурация AmneziaWG (.conf)" : slot.subscriptionLink}
                               </code>
                               <Button
                                 variant="secondary"
@@ -802,7 +815,7 @@ async function startParitypayPayment(tariff: SingboxTariff) {
                               </Button>
                             </div>
                             <p className="text-xs text-muted-foreground px-1">
-                              Скопируйте ссылку в приложение (v2rayN, Nekoray, Shadowrocket и др.).
+                              {slot.protocol === "AMNEZIAWG" ? "Импортируйте файл .conf в актуальную версию AmneziaVPN: добавить подключение → из файла. Конфигурация содержит ваш приватный ключ — не передавайте её другим." : "Скопируйте ссылку в приложение (v2rayN, Nekoray, Shadowrocket и др.)."}
                             </p>
                           </div>
                         </CardContent>
@@ -815,6 +828,16 @@ async function startParitypayPayment(tariff: SingboxTariff) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <Dialog open={Boolean(qrSlot)} onOpenChange={open => { if (!open) setQrSlot(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>AmneziaWG</DialogTitle>
+            <DialogDescription>Отсканируйте в приложении AmneziaVPN. QR-код содержит ключ доступа — не передавайте его другим.</DialogDescription>
+          </DialogHeader>
+          {qrSlot && <QRCodeSVG value={qrSlot.subscriptionLink} size={300} marginSize={4} className="mx-auto h-auto max-w-full" />}
+        </DialogContent>
+      </Dialog>
 
       {!isMobileOrMiniapp && (
         <Dialog open={!!payModal} onOpenChange={(open) => { if (!open && !payLoading) closePayment(); }}>

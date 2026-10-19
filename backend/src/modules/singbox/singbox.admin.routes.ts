@@ -9,7 +9,9 @@ import { prisma } from "../../db.js";
 import { requireAuth, requireAdminSection } from "../auth/middleware.js";
 import { getSystemConfig } from "../client/client.service.js";
 
-const PROTOCOLS = ["VLESS", "SHADOWSOCKS", "TROJAN", "HYSTERIA2"] as const;
+import { awgHost, awgCompose, newAwgConfig } from "./amneziawg.js";
+
+const PROTOCOLS = ["VLESS", "SHADOWSOCKS", "TROJAN", "HYSTERIA2", "AMNEZIAWG"] as const;
 
 export const singboxAdminRouter = Router();
 singboxAdminRouter.use(requireAuth);
@@ -37,6 +39,7 @@ async function markStaleNodesOffline() {
 }
 
 const createNodeSchema = z.object({
+  publicHost: awgHost.optional(),
   name: z.string().max(200).transform((s) => (s || "").trim()),
   protocol: z.enum(PROTOCOLS).optional(),
   port: z.number().int().min(1).max(65535).optional(),
@@ -77,8 +80,12 @@ singboxAdminRouter.post("/nodes", asyncRoute(async (req, res) => {
   if (!body.success) {
     return res.status(400).json({ message: "Invalid input", errors: body.error.flatten() });
   }
+  const isAwg = body.data.protocol === "AMNEZIAWG";
+  if (isAwg && !body.data.publicHost) return res.status(400).json({ message: "Укажите публичный IP или домен AmneziaWG-ноды" });
+  const systemConfig = await getSystemConfig();
+  if (isAwg && !systemConfig.publicAppUrl?.startsWith("https://")) return res.status(400).json({ message: "Укажите публичный HTTPS URL панели в настройках" });
   const protocol = body.data.protocol ?? "VLESS";
-  const port = body.data.port ?? 443;
+  const port = body.data.port ?? (isAwg ? 51820 : 443);
   const tlsEnabled = body.data.tlsEnabled ?? true;
   const token = generateNodeToken();
   const node = await prisma.singboxNode.create({
@@ -88,9 +95,12 @@ singboxAdminRouter.post("/nodes", asyncRoute(async (req, res) => {
       status: "OFFLINE",
       port,
       protocol,
-      tlsEnabled,
+      tlsEnabled: isAwg ? false : tlsEnabled,
+      publicHost: body.data.publicHost,
+      customConfigJson: isAwg ? JSON.stringify(newAwgConfig()) : null,
     },
   });
+  if (isAwg) return res.status(201).json({ node: { id: node.id, name: node.name, status: node.status, protocol: node.protocol, port: node.port, tlsEnabled: false }, token, dockerCompose: awgCompose(systemConfig.publicAppUrl!, token, port), instructions: "Сохраните docker-compose.yml на Linux-сервере с Docker, откройте UDP-порт и выполните docker compose up -d --build. AmneziaWG работает отдельно от Remnawave; ключ сервера хранится в томе awg-data. Создайте тариф с протоколом AMNEZIAWG." });
   const config = await getSystemConfig();
   const apiUrl = (config.publicAppUrl || "").trim().replace(/\/$/, "") || "{{STEALTHNET_API_URL}}";
   const dockerCompose = `# STEALTHNET — sing-box нода (агент + heartbeat)
@@ -178,6 +188,7 @@ singboxAdminRouter.get("/nodes/:id", asyncRoute(async (req, res) => {
 }));
 
 const updateNodeSchema = z.object({
+  publicHost: awgHost.optional(),
   name: z.string().max(200).optional(),
   status: z.enum(["ONLINE", "OFFLINE", "DISABLED"]).optional(),
   capacity: z.number().int().min(0).nullable().optional(),
@@ -196,6 +207,9 @@ singboxAdminRouter.patch("/nodes/:id", asyncRoute(async (req, res) => {
   }
   const node = await prisma.singboxNode.findUnique({ where: { id } });
   if (!node) return res.status(404).json({ message: "Node not found" });
+  if ((node.protocol === "AMNEZIAWG" || body.data.protocol === "AMNEZIAWG") && ((body.data.protocol && body.data.protocol !== node.protocol) || body.data.customConfigJson !== undefined || (body.data.port !== undefined && body.data.port !== node.port))) {
+    return res.status(400).json({ message: "Протокол, порт и параметры AmneziaWG фиксируются при создании ноды. Для их замены создайте новую ноду." });
+  }
   if (body.data.customConfigJson !== undefined) {
     const raw = body.data.customConfigJson;
     if (raw !== null && raw !== "") {
@@ -211,6 +225,7 @@ singboxAdminRouter.patch("/nodes/:id", asyncRoute(async (req, res) => {
     data: {
       ...(body.data.name !== undefined && { name: body.data.name }),
       ...(body.data.status !== undefined && { status: body.data.status }),
+      ...(body.data.publicHost !== undefined && { publicHost: body.data.publicHost }),
       ...(body.data.capacity !== undefined && { capacity: body.data.capacity }),
       ...(body.data.port !== undefined && { port: body.data.port }),
       ...(body.data.protocol !== undefined && { protocol: body.data.protocol }),
@@ -260,6 +275,7 @@ singboxAdminRouter.get("/categories", asyncRoute(async (_req, res) => {
       tariffs: c.tariffs.map((t) => ({
         id: t.id,
         name: t.name,
+        protocol: t.protocol,
         slotCount: t.slotCount,
         durationDays: t.durationDays,
         trafficLimitBytes: t.trafficLimitBytes?.toString() ?? null,
@@ -304,6 +320,7 @@ singboxAdminRouter.delete("/categories/:id", asyncRoute(async (req, res) => {
 
 // ——— Тарифы (минимальный CRUD) ———
 const createTariffSchema = z.object({
+  protocol: z.enum(["SINGBOX", ...PROTOCOLS]).optional(),
   categoryId: z.string().min(1),
   name: z.string().min(1).max(200),
   slotCount: z.number().int().min(1),
@@ -328,6 +345,7 @@ singboxAdminRouter.get("/tariffs", asyncRoute(async (req, res) => {
       categoryId: t.categoryId,
       categoryName: t.category.name,
       name: t.name,
+      protocol: t.protocol,
       slotCount: t.slotCount,
       durationDays: t.durationDays,
       trafficLimitBytes: t.trafficLimitBytes?.toString() ?? null,
@@ -351,6 +369,7 @@ singboxAdminRouter.post("/tariffs", asyncRoute(async (req, res) => {
     data: {
       categoryId: body.data.categoryId,
       name: body.data.name.trim(),
+      protocol: body.data.protocol ?? "SINGBOX",
       slotCount: body.data.slotCount,
       durationDays: body.data.durationDays,
       trafficLimitBytes: trafficBytes,
@@ -364,6 +383,7 @@ singboxAdminRouter.post("/tariffs", asyncRoute(async (req, res) => {
     id: created.id,
     categoryId: created.categoryId,
     name: created.name,
+    protocol: created.protocol,
     slotCount: created.slotCount,
     durationDays: created.durationDays,
     trafficLimitBytes: created.trafficLimitBytes?.toString() ?? null,
@@ -376,6 +396,7 @@ singboxAdminRouter.post("/tariffs", asyncRoute(async (req, res) => {
 
 const tariffIdParamSchema = z.object({ id: z.string().min(1) });
 const updateTariffSchema = z.object({
+  protocol: z.enum(["SINGBOX", ...PROTOCOLS]).optional(),
   categoryId: z.string().min(1).optional(),
   name: z.string().min(1).max(200).optional(),
   slotCount: z.number().int().min(1).optional(),
@@ -408,6 +429,7 @@ singboxAdminRouter.patch("/tariffs/:id", asyncRoute(async (req, res) => {
     data: {
       ...(body.data.categoryId !== undefined && { categoryId: body.data.categoryId }),
       ...(body.data.name !== undefined && { name: body.data.name.trim() }),
+      ...(body.data.protocol !== undefined && { protocol: body.data.protocol }),
       ...(body.data.slotCount !== undefined && { slotCount: body.data.slotCount }),
       ...(body.data.durationDays !== undefined && { durationDays: body.data.durationDays }),
       ...(trafficBytes !== undefined && { trafficLimitBytes: trafficBytes }),
@@ -421,6 +443,7 @@ singboxAdminRouter.patch("/tariffs/:id", asyncRoute(async (req, res) => {
     id: updated.id,
     categoryId: updated.categoryId,
     name: updated.name,
+    protocol: updated.protocol,
     slotCount: updated.slotCount,
     durationDays: updated.durationDays,
     trafficLimitBytes: updated.trafficLimitBytes?.toString() ?? null,

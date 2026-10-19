@@ -42,7 +42,7 @@
       "geo_map": "Node Map",
       "clients": "Clients",
       "proxy": "Proxy",
-      "singbox": "Sing-box",
+      "singbox": "Sing-box / AmneziaWG",
       "backups": "Backups",
       "tickets": "Tickets",
       "tariffs": "Tariffs",
@@ -1569,7 +1569,7 @@
       "disabled_short": "Off"
     },
     "singbox": {
-      "title": "Sing-box",
+      "title": "Sing-box / AmneziaWG",
       "subtitle": "VLESS / Shadowsocks / Trojan / Hysteria2 nodes. Categories and tariffs for selling access.",
       "add_node": "Add node",
       "tab_nodes": "Nodes",

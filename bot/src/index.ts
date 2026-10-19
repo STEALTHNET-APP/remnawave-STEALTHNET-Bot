@@ -3879,6 +3879,18 @@ composer.on("callback_query:data", async (ctx) => {
       return;
     }
 
+    if (data.startsWith("singbox:conf:")) {
+      const slotId = data.slice("singbox:conf:".length);
+      const { slots } = await api.getSingboxSlots(token);
+      const slot = slots.find(s => s.id === slotId && s.protocol === "AMNEZIAWG");
+      if (!slot) {
+        await ctx.reply("Доступ не найден или истёк.");
+        return;
+      }
+      await ctx.replyWithDocument(new InputFile(Buffer.from(slot.subscriptionLink), `amnezia-${slot.id.slice(-8)}.conf`), { caption: "Импортируйте файл в AmneziaVPN. Конфигурация содержит ваш приватный ключ — не передавайте её другим." });
+      return;
+    }
+
     if (data === "menu:my_singbox") {
       const slotsRes = await api.getSingboxSlots(token);
       const slots = slotsRes.slots ?? [];
@@ -3888,10 +3900,12 @@ composer.on("callback_query:data", async (ctx) => {
       }
       const lines = slots.map((s: { subscriptionLink: string; expiresAt: string; protocol: string }) => {
         const exp = new Date(s.expiresAt).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
-        return `${s.protocol} — до ${exp}\n${s.subscriptionLink}`;
+        return `${s.protocol} — до ${exp}${s.protocol === "AMNEZIAWG" ? "" : `\n${s.subscriptionLink}`}`;
       }).join("\n\n");
-      const msg = `📋 Мои доступы (${slots.length})\n\nСкопируйте ссылку в приложение (v2rayN, Nekoray и др.):\n\n${lines}`;
-      await editMessageContent(ctx, msg.slice(0, 4096), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      const msg = `📋 Мои доступы (${slots.length})\n\nСкопируйте ссылку в приложение. Для AmneziaWG скачайте .conf кнопкой ниже или в кабинете:\n\n${lines}`;
+      const keyboard = backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
+      for (const slot of slots.filter(s => s.protocol === "AMNEZIAWG").slice(0, 20)) keyboard.inline_keyboard.unshift([{ text: `📄 AmneziaWG · ${slot.id.slice(-8)}`, callback_data: `singbox:conf:${slot.id}` }]);
+      await editMessageContent(ctx, msg.slice(0, 4096), keyboard);
       return;
     }
 

@@ -907,6 +907,11 @@ export async function notifySingboxSlotsCreated(clientId: string, slotIds: strin
   });
 
   const { buildSingboxSlotSubscriptionLink } = await import("../singbox/singbox-link.js");
+  if (slots.some(s => s.node.protocol === "AMNEZIAWG")) {
+    const cfg = await getSystemConfig();
+    await sendTelegramToUser(client.telegramId, "✅ Доступ AmneziaWG оплачен. Скачайте .conf в личном кабинете → Sing-box / AmneziaWG → Мои доступы и импортируйте в приложение AmneziaVPN.", null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
+    return;
+  }
   const name = tariffName?.trim() || "Sing-box";
   let text = `✅ <b>Доступы «${escapeHtml(name)}»</b> оплачены.\n\n`;
   for (let i = 0; i < slots.length; i++) {

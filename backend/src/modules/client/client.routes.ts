@@ -2699,6 +2699,7 @@ clientRouter.get("/proxy-slots", async (req, res) => {
 });
 
 clientRouter.get("/singbox-slots", async (req, res) => {
+  res.set("Cache-Control", "no-store");
   const client = (req as unknown as { client: { id: string } }).client;
   const now = new Date();
   const slots = await prisma.singboxSlot.findMany({
@@ -2710,7 +2711,7 @@ clientRouter.get("/singbox-slots", async (req, res) => {
       expiresAt: true,
       trafficLimitBytes: true,
       trafficUsedBytes: true,
-      node: { select: { publicHost: true, port: true, protocol: true, tlsEnabled: true } },
+      node: { select: { publicHost: true, port: true, protocol: true, tlsEnabled: true, customConfigJson: true } },
     },
     orderBy: { expiresAt: "asc" },
   });
@@ -2722,6 +2723,7 @@ clientRouter.get("/singbox-slots", async (req, res) => {
           port: s.node.port ?? 443,
           protocol: s.node.protocol ?? "VLESS",
           tlsEnabled: s.node.tlsEnabled,
+          customConfigJson: s.node.customConfigJson,
         },
         { userIdentifier: s.userIdentifier, secret: s.secret },
         `slot-${s.id.slice(-8)}`
@@ -4018,10 +4020,12 @@ clientRouter.post("/payments/balance", async (req, res) => {
           : null,
       }),
     });
-    const singboxResult = await createSingboxSlotsByPaymentId(payment.id);
+    const singboxResult = await createSingboxSlotsByPaymentId(payment.id).catch(() => ({ ok: false as const, status: 503, error: "Не удалось выдать доступ. Средства возвращены на баланс." }));
     if (!singboxResult.ok) {
-      // Слоты Sing-box не вылетели — деньги обратно на баланс.
-      await prisma.client.update({ where: { id: clientRaw.id }, data: { balance: { increment: singSnap.amount } } }).catch(() => {});
+      await prisma.$transaction(async tx => {
+        const cancelled = await tx.payment.updateMany({ where: { id: payment.id, status: "PAID" }, data: { status: "FAILED" } });
+        if (cancelled.count) await tx.client.update({ where: { id: clientRaw.id }, data: { balance: { increment: singSnap.amount } } });
+      });
       return res.status(singboxResult.status).json({ message: singboxResult.error });
     }
     const { distributeReferralRewards } = await import("../referral/referral.service.js");
@@ -8243,6 +8247,7 @@ publicConfigRouter.get("/singbox-tariffs", async (req, res) => {
         tariffs: c.tariffs.map((t) => ({
           id: t.id,
           name: t.name,
+          protocol: t.protocol,
           slotCount: t.slotCount,
           durationDays: t.durationDays,
           trafficLimitBytes: t.trafficLimitBytes?.toString() ?? null,

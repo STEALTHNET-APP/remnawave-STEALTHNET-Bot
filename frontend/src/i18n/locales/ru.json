@@ -42,7 +42,7 @@
       "geo_map": "Карта нод",
       "clients": "Клиенты",
       "proxy": "Прокси",
-      "singbox": "Sing-box",
+      "singbox": "Sing-box / AmneziaWG",
       "backups": "Бэкапы",
       "tickets": "Тикеты",
       "tariffs": "Тарифы",
@@ -1569,7 +1569,7 @@
       "disabled_short": "Выкл"
     },
     "singbox": {
-      "title": "Sing-box",
+      "title": "Sing-box / AmneziaWG",
       "subtitle": "Ноды VLESS / Shadowsocks / Trojan / Hysteria2. Категории и тарифы для продажи доступов.",
       "add_node": "Добавить ноду",
       "tab_nodes": "Ноды",

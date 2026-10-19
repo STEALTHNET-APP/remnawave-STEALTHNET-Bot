@@ -20,7 +20,7 @@ async function requireNodeToken(req: Request, res: Response, next: express.NextF
   const node = await prisma.singboxNode.findUnique({
     where: { token: token.trim() },
   });
-  if (!node) {
+  if (!node || node.protocol === "AMNEZIAWG") {
     return res.status(401).json({ error: "Invalid token" });
   }
   (req as Request & { singboxNode: typeof node }).singboxNode = node;
@@ -54,7 +54,7 @@ singboxAgentRouter.post("/register", asyncRoute(async (req, res) => {
   const node = await prisma.singboxNode.findUnique({
     where: { token },
   });
-  if (!node) {
+  if (!node || node.protocol === "AMNEZIAWG") {
     return res.status(404).json({ error: "Token not found. Create the node in the admin panel first." });
   }
   const publicHost = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()

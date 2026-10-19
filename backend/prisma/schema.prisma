@@ -805,6 +805,7 @@ model SingboxCategory {
 }
 
 model SingboxTariff {
+  protocol          String   @default("SINGBOX")
   id                String   @id @default(cuid())
   categoryId        String   @map("category_id")
   name              String
@@ -827,6 +828,7 @@ model SingboxTariff {
 }
 
 model SingboxSlot {
+  sourcePaymentId    String?  @map("source_payment_id")
   id                 String   @id @default(cuid())
   nodeId             String   @map("node_id")
   clientId           String   @map("client_id")
@@ -850,6 +852,7 @@ model SingboxSlot {
   @@index([clientId])
   @@index([singboxTariffId])
   @@index([status])
+  @@index([sourcePaymentId])
   @@map("singbox_slots")
 }
 

@@ -81,7 +81,7 @@ export const MANAGER_SECTIONS: { key: string; label: string; category: ManagerSe
   { key: "clients", label: "Клиенты", category: "management" },
   { key: "anti-abuse", label: "Анти-абьюз трафика", category: "management" },
   { key: "proxy", label: "Прокси", category: "management" },
-  { key: "singbox", label: "Sing-box", category: "management" },
+  { key: "singbox", label: "Sing-box / AmneziaWG", category: "management" },
   { key: "backup", label: "Бэкапы", category: "management" },
   { key: "tickets", label: "Тикеты", category: "management" },
   { key: "withdrawals", label: "Заявки на вывод", category: "management" },
@@ -763,7 +763,7 @@ export const api = {
     return request("/admin/singbox/nodes", { token });
   },
 
-  async createSingboxNode(token: string, data?: { name?: string; protocol?: string; port?: number; tlsEnabled?: boolean }): Promise<CreateSingboxNodeResponse> {
+  async createSingboxNode(token: string, data?: { name?: string; protocol?: string; port?: number; tlsEnabled?: boolean; publicHost?: string }): Promise<CreateSingboxNodeResponse> {
     return request("/admin/singbox/nodes", { method: "POST", body: JSON.stringify(data ?? {}), token });
   },
 
@@ -814,7 +814,7 @@ export const api = {
 
   async createSingboxTariff(
     token: string,
-    data: { categoryId: string; name: string; slotCount: number; durationDays: number; trafficLimitBytes?: string | number | null; price: number; currency: string; sortOrder?: number; enabled?: boolean }
+    data: { protocol?: string; categoryId: string; name: string; slotCount: number; durationDays: number; trafficLimitBytes?: string | number | null; price: number; currency: string; sortOrder?: number; enabled?: boolean }
   ): Promise<unknown> {
     return request("/admin/singbox/tariffs", { method: "POST", body: JSON.stringify(data), token });
   },
@@ -822,7 +822,7 @@ export const api = {
   async updateSingboxTariff(
     token: string,
     id: string,
-    data: { categoryId?: string; name?: string; slotCount?: number; durationDays?: number; trafficLimitBytes?: string | number | null; price?: number; currency?: string; sortOrder?: number; enabled?: boolean }
+    data: { protocol?: string; categoryId?: string; name?: string; slotCount?: number; durationDays?: number; trafficLimitBytes?: string | number | null; price?: number; currency?: string; sortOrder?: number; enabled?: boolean }
   ): Promise<unknown> {
     return request(`/admin/singbox/tariffs/${id}`, { method: "PATCH", body: JSON.stringify(data), token });
   },
@@ -2200,7 +2200,7 @@ export const api = {
 
   /** Публичный список тарифов Sing-box по категориям */
   async getPublicSingboxTariffs(): Promise<{
-    items: { id: string; name: string; sortOrder: number; tariffs: { id: string; name: string; slotCount: number; durationDays: number; trafficLimitBytes: string | null; price: number; currency: string }[] }[];
+    items: { id: string; name: string; sortOrder: number; tariffs: { protocol?: string; id: string; name: string; slotCount: number; durationDays: number; trafficLimitBytes: string | null; price: number; currency: string }[] }[];
   }> {
     return request("/public/singbox-tariffs");
   },
@@ -4844,10 +4844,11 @@ export interface SingboxCategoryItem {
   id: string;
   name: string;
   sortOrder: number;
-  tariffs: { id: string; name: string; slotCount: number; durationDays: number; trafficLimitBytes: string | null; price: number; currency: string; enabled: boolean }[];
+  tariffs: { protocol?: string; id: string; name: string; slotCount: number; durationDays: number; trafficLimitBytes: string | null; price: number; currency: string; enabled: boolean }[];
 }
 
 export interface SingboxTariffListItem {
+  protocol?: string;
   id: string;
   categoryId: string;
   categoryName: string;
