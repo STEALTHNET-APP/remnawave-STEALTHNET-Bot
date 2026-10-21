@@ -6,7 +6,7 @@
  *   • карточка «Пополнить баланс» — сумма + кнопка (открывает нативную шторку AuroraTopUpSheet);
  *   • меню-список в карточках au-surface:
  *       «Приложение»: Подключить VPN / История платежей (AuroraPaymentsSheet) / Поддержка;
- *       «Аккаунт»: Язык / Пароль и безопасность (AuroraSecuritySheet);
+ *       «Аккаунт»: Язык (AuroraLanguageSheet) / Пароль и безопасность (AuroraSecuritySheet);
  *       «Документы»: Соглашение / Оферта / Инструкции (если заданы в админке);
  *   • Выйти — акцентная кнопка с мягким фоном в конце;
  *   • Полная гармоничная поддержка тёмной темы.
@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { AuroraTopUpSheet } from "@/components/aurora/aurora-topup-sheet";
 import { AuroraPaymentsSheet } from "@/components/aurora/aurora-payments-sheet";
 import { AuroraSecuritySheet } from "@/components/aurora/aurora-security-sheet";
+import { AuroraLanguageSheet } from "@/components/aurora/aurora-language-sheet";
 
 interface MenuRow {
   id: string;
@@ -49,6 +50,20 @@ function avatarLetter(s?: string | null): string {
   return ch || "?";
 }
 
+const KNOWN_LANG_NAMES: Record<string, string> = {
+  ru: "Русский",
+  en: "English",
+  uz: "Oʻzbekcha",
+  kk: "Қазақша",
+  uk: "Українська",
+  de: "Deutsch",
+  es: "Español",
+  fr: "Français",
+  tr: "Türkçe",
+  zh: "中文",
+  fa: "فارسی",
+};
+
 export function AuroraProfile() {
   const { state, logout } = useClientAuth();
   const navigate = useNavigate();
@@ -58,6 +73,7 @@ export function AuroraProfile() {
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [paymentsOpen, setPaymentsOpen] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
+  const [languageOpen, setLanguageOpen] = useState(false);
 
   useEffect(() => {
     getPublicConfigCached()
@@ -75,6 +91,7 @@ export function AuroraProfile() {
     const tab = params.get("tab");
     if (tab === "payments") setPaymentsOpen(true);
     else if (tab === "security") setSecurityOpen(true);
+    else if (tab === "language") setLanguageOpen(true);
   }, []);
 
   const client = state.client;
@@ -85,6 +102,9 @@ export function AuroraProfile() {
     currency: currency.toUpperCase() === "USD" ? "USD" : "RUB",
     minimumFractionDigits: 0,
   }).format(client?.balance ?? 0);
+
+  const langCode = (client?.preferredLang ?? "ru").toLowerCase();
+  const langLabel = KNOWN_LANG_NAMES[langCode] || langCode.toUpperCase();
 
   const serviceName = (config?.serviceName as string | null)?.trim() || "STEALTHNET";
   const agreementUrl = (config?.agreementLink as string | null)?.trim() || null;
@@ -103,7 +123,7 @@ export function AuroraProfile() {
     {
       title: "Аккаунт",
       rows: [
-        { id: "language", label: "Язык", icon: Globe, right: (client?.preferredLang ?? "ru") === "ru" ? "Русский" : (client?.preferredLang ?? "ru").toUpperCase(), to: "/cabinet/profile?tab=language" },
+        { id: "language", label: "Язык", icon: Globe, right: langLabel, onClick: () => setLanguageOpen(true) },
         { id: "security", label: "Пароль и безопасность", icon: Lock, onClick: () => setSecurityOpen(true) },
       ],
     },
@@ -228,6 +248,7 @@ export function AuroraProfile() {
       <AuroraTopUpSheet open={topUpOpen} onClose={() => setTopUpOpen(false)} />
       <AuroraPaymentsSheet open={paymentsOpen} onClose={() => setPaymentsOpen(false)} />
       <AuroraSecuritySheet open={securityOpen} onClose={() => setSecurityOpen(false)} />
+      <AuroraLanguageSheet open={languageOpen} onClose={() => setLanguageOpen(false)} />
     </div>
   );
 }
