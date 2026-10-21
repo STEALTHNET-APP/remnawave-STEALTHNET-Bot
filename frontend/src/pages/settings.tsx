@@ -380,6 +380,50 @@ function LavatopOffersBrowser() {
   );
 }
 
+function isPaymentProviderActive(id: string, s: AdminSettings | null): boolean {
+  if (!s) return false;
+  switch (id) {
+    case "telegram_stars":
+      return Boolean(s.telegramStarsEnabled && (s.telegramStarsRubPerStar ?? 0) > 0);
+    case "cryptopay":
+      return Boolean(s.cryptopayApiToken?.trim());
+    case "heleket":
+      return Boolean(s.heleketMerchantId?.trim() && s.heleketApiKey?.trim() && s.heleketApiKey !== "********");
+    case "paritypay":
+      return Boolean(
+        s.paritypayEnabled &&
+        s.paritypayShopId?.trim() &&
+        s.paritypayApiKey?.trim() &&
+        s.paritypaySigningSecret?.trim()
+      );
+    case "rollypay":
+      return Boolean(
+        s.rollypayEnabled !== false &&
+        s.rollypayApiKey?.trim() &&
+        s.rollypaySigningSecret?.trim()
+      );
+    case "yookassa":
+      return Boolean(s.yookassaShopId?.trim() && s.yookassaSecretKey?.trim());
+    case "yoomoney":
+      return Boolean(s.yoomoneyReceiverWallet?.trim());
+    case "lava":
+      return Boolean(s.lavaShopId?.trim() && s.lavaSecretKey?.trim());
+    case "lavatop":
+      return Boolean(s.lavatopApiKey?.trim());
+    case "overpay":
+      return Boolean(
+        s.overpayApiUrl?.trim() &&
+        s.overpayProjectId?.trim() &&
+        s.overpayLogin?.trim() &&
+        s.overpayPassword?.trim()
+      );
+    case "platega":
+      return Boolean(s.plategaMerchantId?.trim() && s.plategaSecret?.trim());
+    default:
+      return false;
+  }
+}
+
 export function SettingsPage() {
   const { t } = useTranslation();
   const { state, updateAdmin } = useAuth();
@@ -838,7 +882,7 @@ export function SettingsPage() {
         smtpPort: settings.smtpPort ?? undefined,
         smtpSecure: settings.smtpSecure ?? undefined,
         smtpUser: settings.smtpUser ?? null,
-        smtpPassword: settings.smtpPassword && settings.smtpPassword !== "********" ? settings.smtpPassword : undefined,
+        smtpPassword: settings.smtpPassword === "********" ? undefined : (settings.smtpPassword || null),
         smtpFromEmail: settings.smtpFromEmail ?? null,
         smtpFromName: settings.smtpFromName ?? null,
         mailProvider: settings.mailProvider ?? undefined,
@@ -882,35 +926,36 @@ export function SettingsPage() {
         notificationTopicGifts: settings.notificationTopicGifts ?? null,
         notificationTopicAutoRenew: settings.notificationTopicAutoRenew ?? null,
         plategaMerchantId: settings.plategaMerchantId ?? null,
-        plategaSecret: settings.plategaSecret && settings.plategaSecret !== "********" ? settings.plategaSecret : undefined,
+        plategaSecret: settings.plategaSecret === "********" ? undefined : (settings.plategaSecret || null),
         plategaMethods: settings.plategaMethods != null ? JSON.stringify(settings.plategaMethods) : undefined,
-        plategaWebhookSecret: (settings as { plategaWebhookSecret?: string | null }).plategaWebhookSecret && (settings as { plategaWebhookSecret?: string | null }).plategaWebhookSecret !== "********" ? (settings as { plategaWebhookSecret?: string | null }).plategaWebhookSecret : undefined,
+        plategaWebhookSecret: (settings as { plategaWebhookSecret?: string | null }).plategaWebhookSecret === "********" ? undefined : ((settings as { plategaWebhookSecret?: string | null }).plategaWebhookSecret || null),
         paymentProvidersConfig: settings.paymentProviders != null ? JSON.stringify(settings.paymentProviders) : undefined,
         yoomoneyClientId: settings.yoomoneyClientId ?? null,
-        yoomoneyClientSecret: settings.yoomoneyClientSecret && settings.yoomoneyClientSecret !== "********" ? settings.yoomoneyClientSecret : undefined,
+        yoomoneyClientSecret: settings.yoomoneyClientSecret === "********" ? undefined : (settings.yoomoneyClientSecret || null),
         yoomoneyReceiverWallet: settings.yoomoneyReceiverWallet ?? null,
-        yoomoneyNotificationSecret: settings.yoomoneyNotificationSecret && settings.yoomoneyNotificationSecret !== "********" ? settings.yoomoneyNotificationSecret : undefined,
+        yoomoneyNotificationSecret: settings.yoomoneyNotificationSecret === "********" ? undefined : (settings.yoomoneyNotificationSecret || null),
         yookassaShopId: settings.yookassaShopId ?? null,
-        yookassaSecretKey: settings.yookassaSecretKey && settings.yookassaSecretKey !== "********" ? settings.yookassaSecretKey : undefined,
+        yookassaSecretKey: settings.yookassaSecretKey === "********" ? undefined : (settings.yookassaSecretKey || null),
         yookassaWebhookBasicUser: (settings as { yookassaWebhookBasicUser?: string | null }).yookassaWebhookBasicUser ?? null,
-        yookassaWebhookBasicPassword: (settings as { yookassaWebhookBasicPassword?: string | null }).yookassaWebhookBasicPassword && (settings as { yookassaWebhookBasicPassword?: string | null }).yookassaWebhookBasicPassword !== "********" ? (settings as { yookassaWebhookBasicPassword?: string | null }).yookassaWebhookBasicPassword : undefined,
+        yookassaWebhookBasicPassword: (settings as { yookassaWebhookBasicPassword?: string | null }).yookassaWebhookBasicPassword === "********" ? undefined : ((settings as { yookassaWebhookBasicPassword?: string | null }).yookassaWebhookBasicPassword || null),
         telegramStarsEnabled: settings.telegramStarsEnabled ?? false,
         telegramStarsRubPerStar: settings.telegramStarsRubPerStar ?? 0,
         cryptopayApiToken: settings.cryptopayApiToken ?? null,
         cryptopayTestnet: settings.cryptopayTestnet ?? false,
         heleketMerchantId: settings.heleketMerchantId ?? null,
-        heleketApiKey: settings.heleketApiKey && settings.heleketApiKey !== "********" ? settings.heleketApiKey : undefined,
+        heleketApiKey: settings.heleketApiKey === "********" ? undefined : (settings.heleketApiKey || null),
         paritypayShopId: settings.paritypayShopId ?? null,
-        paritypayApiKey: settings.paritypayApiKey === "********" ? undefined : settings.paritypayApiKey,
-        paritypaySigningSecret: settings.paritypaySigningSecret === "********" ? undefined : settings.paritypaySigningSecret,
+        paritypayApiKey: settings.paritypayApiKey === "********" ? undefined : (settings.paritypayApiKey || null),
+        paritypaySigningSecret: settings.paritypaySigningSecret === "********" ? undefined : (settings.paritypaySigningSecret || null),
         paritypayEnabled: settings.paritypayEnabled === true,
-        rollypayApiKey: settings.rollypayApiKey && settings.rollypayApiKey !== "********" ? settings.rollypayApiKey : undefined,
-        rollypaySigningSecret: settings.rollypaySigningSecret && settings.rollypaySigningSecret !== "********" ? settings.rollypaySigningSecret : undefined,
+        rollypayApiKey: settings.rollypayApiKey === "********" ? undefined : (settings.rollypayApiKey || null),
+        rollypaySigningSecret: settings.rollypaySigningSecret === "********" ? undefined : (settings.rollypaySigningSecret || null),
+        rollypayEnabled: settings.rollypayEnabled !== false,
         rollypayTestMode: settings.rollypayTestMode === true,
         lavaShopId: settings.lavaShopId ?? null,
-        lavaSecretKey: settings.lavaSecretKey && settings.lavaSecretKey !== "********" ? settings.lavaSecretKey : undefined,
-        lavaAdditionalKey: settings.lavaAdditionalKey && settings.lavaAdditionalKey !== "********" ? settings.lavaAdditionalKey : undefined,
-        lavatopApiKey: settings.lavatopApiKey && settings.lavatopApiKey !== "********" ? settings.lavatopApiKey : undefined,
+        lavaSecretKey: settings.lavaSecretKey === "********" ? undefined : (settings.lavaSecretKey || null),
+        lavaAdditionalKey: settings.lavaAdditionalKey === "********" ? undefined : (settings.lavaAdditionalKey || null),
+        lavatopApiKey: settings.lavatopApiKey === "********" ? undefined : (settings.lavatopApiKey || null),
         lavatopDefaultOfferId: settings.lavatopDefaultOfferId ?? null,
         botWelcomeEnabled: settings.botWelcomeEnabled ?? false,
         botWelcomeText: settings.botWelcomeText ?? null,
@@ -920,8 +965,8 @@ export function SettingsPage() {
         overpayApiUrl: settings.overpayApiUrl ?? null,
         overpayProjectId: settings.overpayProjectId ?? null,
         overpayLogin: settings.overpayLogin ?? null,
-        overpayPassword: settings.overpayPassword && settings.overpayPassword !== "********" ? settings.overpayPassword : undefined,
-        groqApiKey: settings.groqApiKey && settings.groqApiKey !== "********" ? settings.groqApiKey : undefined,
+        overpayPassword: settings.overpayPassword === "********" ? undefined : (settings.overpayPassword || null),
+        groqApiKey: settings.groqApiKey === "********" ? undefined : (settings.groqApiKey || null),
         groqModel: settings.groqModel ?? undefined,
         groqFallback1: settings.groqFallback1 ?? undefined,
         groqFallback2: settings.groqFallback2 ?? undefined,
@@ -1003,12 +1048,12 @@ export function SettingsPage() {
         customBuildMaxDevices: settings.customBuildMaxDevices ?? 10,
         googleLoginEnabled: settings.googleLoginEnabled ?? false,
         googleClientId: settings.googleClientId ?? null,
-        googleClientSecret: settings.googleClientSecret && settings.googleClientSecret !== "********" ? settings.googleClientSecret : undefined,
+        googleClientSecret: settings.googleClientSecret === "********" ? undefined : (settings.googleClientSecret || null),
         appleLoginEnabled: settings.appleLoginEnabled ?? false,
         appleClientId: settings.appleClientId ?? null,
         appleTeamId: settings.appleTeamId ?? null,
         appleKeyId: settings.appleKeyId ?? null,
-        applePrivateKey: settings.applePrivateKey && settings.applePrivateKey !== "********" ? settings.applePrivateKey : undefined,
+        applePrivateKey: settings.applePrivateKey === "********" ? undefined : (settings.applePrivateKey || null),
         landingEnabled: settings.landingEnabled ?? false,
         landingHeroTitle: settings.landingHeroTitle ?? null,
         landingHeroSubtitle: settings.landingHeroSubtitle ?? null,
@@ -3011,6 +3056,17 @@ export function SettingsPage() {
                       className="flex-1 h-9"
                     />
                     <span className="text-xs text-muted-foreground font-mono shrink-0">{prov.id}</span>
+                    {isPaymentProviderActive(prov.id, settings) ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Активен
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-muted text-muted-foreground border border-border shrink-0">
+                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                        Не настроен
+                      </span>
+                    )}
                     <div className="flex flex-col gap-0.5">
                       <button
                         type="button"
@@ -3710,6 +3766,20 @@ export function SettingsPage() {
                         </p>
                       </div>
                     </div>
+                    <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.rollypayEnabled !== false}
+                        onChange={(e) => setSettings((s) => (s ? { ...s, rollypayEnabled: e.target.checked } : s))}
+                        className="rounded border w-4 h-4"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium">Включить RollyPay</span>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Показывать RollyPay клиентам при наличии ключей кассы.
+                        </p>
+                      </div>
+                    </label>
                     <label className="flex items-center gap-3 p-3.5 rounded-xl bg-card/40 border border-border cursor-pointer">
                       <input
                         type="checkbox"
