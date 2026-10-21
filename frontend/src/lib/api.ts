@@ -76,7 +76,6 @@ export const MANAGER_SECTIONS: { key: string; label: string; category: ManagerSe
   { key: "analytics", label: "Аналитика", category: "overview" },
   { key: "sales-report", label: "Отчёты продаж", category: "overview" },
   { key: "traffic-abuse", label: "Анализ трафика", category: "overview" },
-  { key: "geo-map", label: "Карта нод", category: "overview" },
   // Управление
   { key: "clients", label: "Клиенты", category: "management" },
   { key: "anti-abuse", label: "Анти-абьюз трафика", category: "management" },
@@ -2833,14 +2832,6 @@ export const api = {
     return request("/client/promo-code/activate", { method: "POST", body: JSON.stringify({ code }), token });
   },
 
-  // ——— Geo Map ———
-  async getGeoMapData(token: string): Promise<GeoMapResponse> {
-    return request("/admin/geo-map/data", { token });
-  },
-  async refreshGeoMap(token: string): Promise<GeoMapResponse> {
-    return request("/admin/geo-map/refresh", { method: "POST", token });
-  },
-
   async getLanguages(token: string): Promise<{ ok: boolean; languages: LanguageInfo[]; totalKeys: number }> {
     return request("/admin/languages", { token });
   },
@@ -3674,9 +3665,6 @@ export type UpdateSettingsPayload = {
   nalogPassword?: string | null;
   nalogDeviceId?: string | null;
   nalogServiceName?: string | null;
-  geoMapEnabled?: boolean;
-  geoCacheTtl?: number;
-  maxmindDbPath?: string | null;
   giftSubscriptionsEnabled?: boolean;
   giftCodeExpiryHours?: number;
   maxAdditionalSubscriptions?: number;
@@ -4223,9 +4211,6 @@ export interface AdminSettings {
   nalogPassword?: string | null;
   nalogDeviceId?: string | null;
   nalogServiceName?: string | null;
-  geoMapEnabled?: boolean;
-  geoCacheTtl?: number;
-  maxmindDbPath?: string | null;
   giftSubscriptionsEnabled?: boolean;
   giftCodeExpiryHours?: number;
   maxAdditionalSubscriptions?: number;
@@ -5431,42 +5416,6 @@ export interface ClientTourStep {
   mood: string;
   sortOrder: number;
   mascot: TourMascotRecord | null;
-}
-
-export interface GeoMapNode {
-  uuid: string;
-  name: string;
-  countryCode: string;
-  lat: number;
-  lng: number;
-  isConnected: boolean;
-  usersOnline: number;
-  rxBytesPerSec: number;
-  txBytesPerSec: number;
-  trafficUsedBytes: number;
-  trafficLimitBytes: number | null;
-}
-
-export interface GeoMapConnection {
-  userId: string;
-  username: string;
-  lat: number;
-  lng: number;
-  ip: string;
-  lastSeen: string;
-  nodeUuid: string;
-  trafficBytes: number;
-  device: {
-    platform: string;
-    osVersion: string;
-    deviceModel: string;
-  } | null;
-}
-
-export interface GeoMapResponse {
-  nodes: GeoMapNode[];
-  connections: GeoMapConnection[];
-  updatedAt: string;
 }
 
 export interface LanguageInfo {

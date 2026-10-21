@@ -31,7 +31,6 @@
     "jose": "^6.2.0",
     "jsonwebtoken": "^9.0.2",
     "lru-cache": "^11.2.7",
-    "maxmind": "^5.0.5",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.1",
