@@ -60,7 +60,6 @@ import { AntiAbusePage } from "@/pages/anti-abuse";
 import { ApiKeysPage } from "@/pages/api-keys";
 import { AntibotPage } from "@/pages/antibot";
 import { ApiDocsPage } from "@/pages/api-docs";
-import { GeoMapPage } from "@/pages/geo-map";
 import { AdminSecondarySubscriptionsPage } from "@/pages/admin-secondary-subscriptions";
 import { ProxyPage } from "@/pages/proxy";
 import { SingboxPage } from "@/pages/singbox";
@@ -298,7 +297,6 @@ function AppRoutes() {
         <Route path="antibot" element={<ForceChangePassword><AntibotPage /></ForceChangePassword>} />
         <Route path="languages" element={<ForceChangePassword><LanguagesPage /></ForceChangePassword>} />
         <Route path="api-docs" element={<ForceChangePassword><ApiDocsPage /></ForceChangePassword>} />
-        <Route path="geo-map" element={<ForceChangePassword><GeoMapPage /></ForceChangePassword>} />
         <Route path="secondary-subscriptions" element={<ForceChangePassword><AdminSecondarySubscriptionsPage /></ForceChangePassword>} />
         <Route path="tour-constructor" element={<ForceChangePassword><TourConstructorPage /></ForceChangePassword>} />
         <Route path="promo-vpn" element={<ForceChangePassword><GramadsPromoPage /></ForceChangePassword>} />

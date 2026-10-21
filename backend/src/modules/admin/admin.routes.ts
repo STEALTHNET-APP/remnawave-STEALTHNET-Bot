@@ -3179,9 +3179,6 @@ const updateSettingsSchema = z.object({
   nalogPassword: z.string().max(200).nullable().optional(),
   nalogDeviceId: z.string().max(100).nullable().optional(),
   nalogServiceName: z.string().max(300).nullable().optional(),
-  geoMapEnabled: z.boolean().optional(),
-  geoCacheTtl: z.number().min(10).max(3600).optional(),
-  maxmindDbPath: z.string().max(500).nullable().optional(),
   liteMode: z.boolean().optional(),
   giftSubscriptionsEnabled: z.boolean().optional(),
   giftCodeExpiryHours: z.number().int().min(1).max(8760).optional(),
@@ -4233,21 +4230,6 @@ adminRouter.patch("/settings", async (req, res) => {
     ["nalogServiceName", "nalog_service_name"],
   ];
   for (const [key, dbKey] of nalogKeys) {
-    const v = updates[key];
-    if (v === undefined) continue;
-    const val = typeof v === "boolean" ? (v ? "true" : "false") : (v === null ? "" : String(v));
-    await prisma.systemSetting.upsert({
-      where: { key: dbKey },
-      create: { key: dbKey, value: val },
-      update: { value: val },
-    });
-  }
-  const geoMapKeys: [keyof typeof updates, string][] = [
-    ["geoMapEnabled", "geo_map_enabled"],
-    ["geoCacheTtl", "geo_cache_ttl"],
-    ["maxmindDbPath", "maxmind_db_path"],
-  ];
-  for (const [key, dbKey] of geoMapKeys) {
     const v = updates[key];
     if (v === undefined) continue;
     const val = typeof v === "boolean" ? (v ? "true" : "false") : (v === null ? "" : String(v));
@@ -5863,7 +5845,6 @@ export const ADMIN_ALLOWED_SECTIONS = [
   "analytics",
   "sales-report",
   "traffic-abuse",
-  "geo-map",
   // Management
   "clients",
   "proxy",
