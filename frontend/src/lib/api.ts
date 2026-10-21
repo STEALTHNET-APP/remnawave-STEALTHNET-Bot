@@ -3447,6 +3447,7 @@ export type UpdateSettingsPayload = {
   rollypaySigningSecret?: string | null;
   paritypaySigningSecret?: string | null;
   rollypayTestMode?: boolean;
+  rollypayEnabled?: boolean;
   lavaShopId?: string | null;
   lavaSecretKey?: string | null;
   lavaAdditionalKey?: string | null;
@@ -3964,6 +3965,7 @@ export interface AdminSettings {
   rollypaySigningSecret?: string | null;
   paritypaySigningSecret?: string | null;
   rollypayTestMode?: boolean;
+  rollypayEnabled?: boolean;
   lavaShopId?: string | null;
   lavaSecretKey?: string | null;
   lavaAdditionalKey?: string | null;
