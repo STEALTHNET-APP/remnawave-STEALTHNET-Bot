@@ -63,6 +63,13 @@ export function StealthTickets() {
 
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [state.token]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const targetId = params.get("id");
+    if (targetId) setChatTicketId(targetId);
+  }, []);
+
   const goNew = () => setShowNew(true);
   const goTicket = (id: string) => setChatTicketId(id);
 
