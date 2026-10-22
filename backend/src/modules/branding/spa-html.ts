@@ -1,11 +1,11 @@
 /**
- * SSR-подстановка имени сервиса в `index.html` на лету.
+ * SSR-подстановка имени сервиса, описания и OG-тегов в `index.html` на лету.
  *
- * Зачем: meta-теги (`<title>`, `og:title`, description, application-name)
- * захардкожены при сборке фронтенда как «STEALTHNET». Telegram, Twitter и
+ * Зачем: meta-теги (<title>, og:title, og:description, og:image, description)
+ * захардкожены при сборке фронтенда как «STEALTHNET». Telegram, Twitter, VK и
  * прочие крауллеры читают их статически — JS не выполняют. Поэтому мы
- * рендерим index.html на стороне api и подставляем актуальное имя из
- * `service_name` (Настройки → Брендинг).
+ * рендерим index.html на стороне api и подставляем актуальные данные из
+ * `service_name`, `service_description`, `og_image` / `favicon` (Настройки → Брендинг).
  *
  * Frontend dist лежит в общем docker-volume `frontend_dist`, который
  * примонтирован в api как `/var/www/stealthnet:ro`.
@@ -38,7 +38,7 @@ async function loadTemplate(): Promise<string> {
   return raw;
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -47,20 +47,25 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function escapeAttr(s: string): string {
-  return s.replace(/"/g, "&quot;").replace(/</g, "&lt;");
+export function escapeAttr(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
-interface BrandValues {
+export interface BrandValues {
   brand: string;
   description: string;
   ogImage: string | null;
+  publicAppUrl: string | null;
 }
 
 let brandCache: { at: number; value: BrandValues } | null = null;
 const BRAND_TTL_MS = 30_000;
 
-async function resolveBrand(): Promise<BrandValues> {
+export async function resolveBrand(): Promise<BrandValues> {
   if (brandCache && Date.now() - brandCache.at < BRAND_TTL_MS) return brandCache.value;
   const cfg = await getSystemConfig().catch(() => null);
   const brand = (cfg?.serviceName ?? "").trim() || DEFAULT_BRAND;
@@ -68,11 +73,26 @@ async function resolveBrand(): Promise<BrandValues> {
   const description = customDescription ? customDescription :
     brand === DEFAULT_BRAND
       ? DEFAULT_DESC
-      : `${brand} — личный кабинет и админка VPN на базе Remnawave`;
-  const logo = (cfg?.logo ?? "").trim() || null;
+      : `${brand} — сервис для быстрого и безопасного доступа к интернету`;
+
+  const publicAppUrl = (cfg?.publicAppUrl || "").trim().replace(/\/+$/, "") || null;
+
+  // Приоритет картинки для превью:
+  // 1. Кастомный ogImage
+  // 2. Фавикон сайта (как просил пользователь: fallback на фавикон)
+  // 3. Логотип панели
+  // 4. Логотип бота
+  const rawImage = ((cfg as { ogImage?: string | null })?.ogImage || cfg?.favicon || cfg?.logo || cfg?.logoBot || "").trim();
+  let ogImage: string | null = null;
+  if (/^https?:\/\//i.test(rawImage)) {
+    ogImage = rawImage;
+  } else if (rawImage || publicAppUrl) {
+    ogImage = publicAppUrl ? `${publicAppUrl}/api/public/brand/og-image.png` : `/api/public/brand/og-image.png`;
+  }
+
   brandCache = {
     at: Date.now(),
-    value: { brand, description, ogImage: logo },
+    value: { brand, description, ogImage, publicAppUrl },
   };
   return brandCache.value;
 }
@@ -87,33 +107,53 @@ export function invalidateTemplateCache() {
   templateCache = null;
 }
 
-function renderHtml(tpl: string, b: BrandValues): string {
-  // Заменяем бренд-плейсхолдеры в meta/title/manifest-name на имя из БД.
+export function replaceOrInsertMeta(html: string, attrName: string, attrVal: string, content: string): string {
+  const regex = new RegExp(`<meta\\s+[^>]*?${attrName}=["']${attrVal}["'][^>]*?>`, "gi");
+  const newTag = `<meta ${attrName}="${escapeAttr(attrVal)}" content="${escapeAttr(content)}" />`;
+  if (regex.test(html)) {
+    return html.replace(regex, newTag);
+  }
+  return html.replace(/<\/head>/i, `    ${newTag}\n  </head>`);
+}
+
+export function renderHtml(tpl: string, b: BrandValues): string {
   let out = tpl;
+
+  // 1. Заменяем бренд-плейсхолдеры в тексте
   for (const placeholder of BRAND_PLACEHOLDERS) {
     out = out.replaceAll(placeholder, escapeHtml(b.brand));
   }
 
-  // Прицельно правим description-тег (он всегда генерируется при сборке).
-  out = out.replace(
-    /<meta\s+name="description"\s+content="[^"]*"\s*\/?>/i,
-    `<meta name="description" content="${escapeAttr(b.description)}" />`
-  );
+  // 2. Замена или вставка <title>
+  if (/<title>.*?<\/title>/i.test(out)) {
+    out = out.replace(/<title>.*?<\/title>/i, `<title>${escapeHtml(b.brand)}</title>`);
+  } else {
+    out = out.replace(/<\/head>/i, `    <title>${escapeHtml(b.brand)}</title>\n  </head>`);
+  }
 
-  // Дополняем head OG/Twitter тегами, если их ещё нет — для красивого превью
-  // в мессенджерах. Делаем идемпотентно: если og:title уже есть, не дублируем.
-  if (!/<meta\s+property=["']og:title["']/i.test(out)) {
-    const ogBlock = [
-      `<meta property="og:title" content="${escapeAttr(b.brand)}" />`,
-      `<meta property="og:description" content="${escapeAttr(b.description)}" />`,
-      `<meta property="og:type" content="website" />`,
-      ...(b.ogImage ? [`<meta property="og:image" content="${escapeAttr(b.ogImage)}" />`] : []),
-      `<meta name="twitter:card" content="summary${b.ogImage ? "_large_image" : ""}" />`,
-      `<meta name="twitter:title" content="${escapeAttr(b.brand)}" />`,
-      `<meta name="twitter:description" content="${escapeAttr(b.description)}" />`,
-      ...(b.ogImage ? [`<meta name="twitter:image" content="${escapeAttr(b.ogImage)}" />`] : []),
-    ].join("\n    ");
-    out = out.replace(/<\/head>/i, `    ${ogBlock}\n  </head>`);
+  // 3. Стандартные теги описания и PWA имени
+  out = replaceOrInsertMeta(out, "name", "description", b.description);
+  out = replaceOrInsertMeta(out, "name", "application-name", b.brand);
+  out = replaceOrInsertMeta(out, "name", "apple-mobile-web-app-title", b.brand);
+
+  // 4. OpenGraph теги (Telegram, WhatsApp, VK, Facebook, Discord)
+  out = replaceOrInsertMeta(out, "property", "og:title", b.brand);
+  out = replaceOrInsertMeta(out, "property", "og:description", b.description);
+  out = replaceOrInsertMeta(out, "property", "og:type", "website");
+  out = replaceOrInsertMeta(out, "property", "og:site_name", b.brand);
+  if (b.publicAppUrl) {
+    out = replaceOrInsertMeta(out, "property", "og:url", `${b.publicAppUrl}/`);
+  }
+  if (b.ogImage) {
+    out = replaceOrInsertMeta(out, "property", "og:image", b.ogImage);
+  }
+
+  // 5. Twitter Card теги
+  out = replaceOrInsertMeta(out, "name", "twitter:title", b.brand);
+  out = replaceOrInsertMeta(out, "name", "twitter:description", b.description);
+  out = replaceOrInsertMeta(out, "name", "twitter:card", b.ogImage ? "summary_large_image" : "summary");
+  if (b.ogImage) {
+    out = replaceOrInsertMeta(out, "name", "twitter:image", b.ogImage);
   }
 
   return out;

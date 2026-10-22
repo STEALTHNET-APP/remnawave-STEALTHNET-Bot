@@ -2891,6 +2891,7 @@ const updateSettingsSchema = z.object({
   logo: z.string().max(5_500_000).nullable().optional(),
   logoBot: z.string().max(5_500_000).nullable().optional(),
   favicon: z.string().max(5_500_000).nullable().optional(),
+  ogImage: z.string().max(5_500_000).nullable().optional(),
   cabinetDesign: z.enum(["classic", "stealth", "aurora"]).optional(),
   cabinetDesignApplyInBrowser: z.boolean().optional(),
   remnaClientUrl: z.string().max(2000).nullable().optional(),
@@ -3364,6 +3365,18 @@ adminRouter.patch("/settings", async (req, res) => {
       create: { key: "favicon", value: val },
       update: { value: val },
     });
+    invalidateBrandCache();
+    invalidateSystemConfigCache();
+  }
+  if (updates.ogImage !== undefined) {
+    const val = updates.ogImage ?? "";
+    await prisma.systemSetting.upsert({
+      where: { key: "og_image" },
+      create: { key: "og_image", value: val },
+      update: { value: val },
+    });
+    invalidateBrandCache();
+    invalidateSystemConfigCache();
   }
   if (updates.cabinetDesign !== undefined) {
     await prisma.systemSetting.upsert({
