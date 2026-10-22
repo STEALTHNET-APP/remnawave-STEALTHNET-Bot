@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  Pencil, Trash2, Ban, ShieldCheck, Wifi, Ticket, KeyRound, Search,
+  Pencil, Trash2, Ban, ShieldCheck, ShieldAlert, ShieldOff, Wifi, Ticket, KeyRound, Search,
   Copy, Check, Smartphone, Activity, User, Users, HardDrive, Link,
   RefreshCw, Loader2, Package, Gift, Coins, MailX, MailCheck, RotateCw, Plus, Zap,
 } from "lucide-react";
@@ -624,6 +624,11 @@ export function ClientsPage() {
                               <span className="font-semibold text-foreground text-[12.7px]">
                                 {c.telegramUsername ? `@${c.telegramUsername}` : c.email || `ID: ${c.telegramId ?? c.id.slice(0, 8)}`}
                               </span>
+                              {c.totpEnabled && (
+                                <span title={t("admin.clients.two_fa_enabled", "2FA активна")} className="inline-flex items-center text-emerald-500 dark:text-emerald-400">
+                                  <ShieldCheck className="h-3.5 w-3.5" />
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className={cn("inline-flex h-[6px] w-[6px] rounded-full", status.isOnline ? "bg-emerald-500" : "bg-muted-foreground/40")} />
@@ -717,6 +722,7 @@ export function ClientsPage() {
           }}
           onSave={saveClient}
           onSetPassword={saveClientPassword}
+          onReset2FaSuccess={() => setEditing((prev) => prev ? { ...prev, totpEnabled: false } : null)}
           passwordForm={passwordForm}
           setPasswordForm={setPasswordForm}
           passwordMessage={passwordMessage}
@@ -737,6 +743,7 @@ function ClientEditModal({
   onClose,
   onSave,
   onSetPassword,
+  onReset2FaSuccess,
   passwordForm,
   setPasswordForm,
   passwordMessage,
@@ -755,6 +762,7 @@ function ClientEditModal({
   activeCurrencies: string[];
   onSave: () => void;
   onSetPassword: () => void;
+  onReset2FaSuccess?: () => void;
   passwordForm: { newPassword: string; confirm: string };
   setPasswordForm: React.Dispatch<React.SetStateAction<{ newPassword: string; confirm: string }>>;
   passwordMessage: string | null;
@@ -765,7 +773,37 @@ function ClientEditModal({
   const { state } = useAuth();
   // T-admin-services (портировано из WolfVPN): доступ к вкладке «Услуги» — ADMIN или action manage_services.
   const canManageServices = state.admin?.role === "ADMIN" || (Array.isArray(state.admin?.allowedSections) && state.admin.allowedSections.includes("action:manage_services"));
+  const canReset2Fa = state.admin?.role === "ADMIN" || (Array.isArray(state.admin?.allowedSections) && state.admin.allowedSections.includes("action:reset_client_2fa"));
   const [tab, setTab] = useState("profile");
+  const queryClient = useQueryClient();
+  const [reset2FaOpen, setReset2FaOpen] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [reset2FaLoading, setReset2FaLoading] = useState(false);
+  const [reset2FaError, setReset2FaError] = useState<string | null>(null);
+  const [reset2FaSuccessMessage, setReset2FaSuccessMessage] = useState<string | null>(null);
+
+  const handleReset2Fa = async () => {
+    if (!adminPassword.trim()) {
+      setReset2FaError("Введите пароль администратора");
+      return;
+    }
+    setReset2FaLoading(true);
+    setReset2FaError(null);
+    try {
+      const res = await api.resetClient2FA(token, editing.id, adminPassword.trim());
+      setReset2FaOpen(false);
+      setAdminPassword("");
+      if (onReset2FaSuccess) onReset2FaSuccess();
+      setReset2FaSuccessMessage(res.message || t("admin.clients.reset_2fa_success", "2FA пользователя успешно сброшена"));
+      setTimeout(() => setReset2FaSuccessMessage(null), 5000);
+      void queryClient.invalidateQueries({ queryKey: ["admin", "clients"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "client-detail", editing.id] });
+    } catch (err) {
+      setReset2FaError(err instanceof Error ? err.message : "Не удалось сбросить 2FA");
+    } finally {
+      setReset2FaLoading(false);
+    }
+  };
   // TQ-миграция (W1): Remna-юзер, устройства, usage, подписки, реферер, тарифы —
   // useQuery с ключами qk.admin.client*; инвалидируются после мутаций.
   const hasRemna = !!editing.remnawaveUuid;
@@ -931,6 +969,17 @@ function ClientEditModal({
                   {editing.remnawaveUuid && (
                     <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium", statusInfo.color)}>
                       {statusInfo.label}
+                    </span>
+                  )}
+                  {editing.totpEnabled ? (
+                    <span className="inline-flex items-center rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 px-2 py-0.5 text-[11px] font-medium">
+                      <ShieldCheck className="h-3 w-3 mr-1" />
+                      {t("admin.clients.two_fa_enabled", "2FA активна")}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground border border-border px-2 py-0.5 text-[11px] font-medium">
+                      <ShieldOff className="h-3 w-3 mr-1" />
+                      {t("admin.clients.two_fa_disabled", "2FA отключена")}
                     </span>
                   )}
                   {editing.isBlocked && (
@@ -1634,6 +1683,43 @@ function ClientEditModal({
                 </div>
 
                 <hr />
+                <div className="rounded-xl bg-card border border-border px-[17px] py-[15px] space-y-3">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                      <h3 className="font-semibold flex items-center gap-2 text-sm">
+                        <ShieldAlert className="h-4 w-4 text-primary" /> {t("admin.clients.two_fa", "Двухфакторная аутентификация (2FA)")}
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {editing.totpEnabled
+                          ? "У пользователя включена двухфакторная аутентификация (TOTP). При утере доступа к приложению можно сбросить 2FA."
+                          : "Двухфакторная аутентификация не настроена пользователем или была отключена."}
+                      </p>
+                    </div>
+                    {editing.totpEnabled && canReset2Fa && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="rounded-xl gap-1.5"
+                        onClick={() => {
+                          setReset2FaError(null);
+                          setAdminPassword("");
+                          setReset2FaOpen(true);
+                        }}
+                      >
+                        <ShieldOff className="h-3.5 w-3.5" />
+                        {t("admin.clients.reset_2fa", "Сбросить 2FA")}
+                      </Button>
+                    )}
+                  </div>
+                  {reset2FaSuccessMessage && (
+                    <div className="text-xs rounded-lg px-3 py-2 border bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                      {reset2FaSuccessMessage}
+                    </div>
+                  )}
+                </div>
+
+                <hr />
                 <TariffRestrictionsSection clientId={editing.id} editing={editing} token={token} />
               </div>
             </TabsContent>
@@ -1716,6 +1802,98 @@ function ClientEditModal({
             )}
           </Tabs>
         </div>
+
+        {/* Модальное окно подтверждения сброса 2FA */}
+        <Dialog open={reset2FaOpen} onOpenChange={(open) => !reset2FaLoading && setReset2FaOpen(open)}>
+          <DialogContent className="max-w-md bg-card border border-border sm:rounded-2xl p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-[17px] font-bold text-destructive">
+                <ShieldAlert className="h-5 w-5" />
+                {t("admin.clients.reset_2fa_title", "Сброс 2FA пользователя")}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                {t("admin.clients.reset_2fa_desc", "Вы собираетесь сбросить двухфакторную аутентификацию для клиента. Старый ключ и коды в приложении перестанут действовать. Клиент сможет войти по обычному паролю и настроить 2FA заново.")}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 my-2">
+              <div className="rounded-xl border border-border bg-muted/50 p-3 space-y-1.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Клиент:</span>
+                  <span className="font-semibold text-foreground">{editing.email || (editing.telegramUsername ? `@${editing.telegramUsername}` : editing.id.slice(0, 8))}</span>
+                </div>
+                {editing.telegramId && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Telegram ID:</span>
+                    <span className="font-mono">{editing.telegramId}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">ID в базе:</span>
+                  <span className="font-mono">{editing.id}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="admin-password-reset-2fa" className="text-xs font-semibold">
+                  {t("admin.clients.admin_password_label", "Пароль администратора для подтверждения")}
+                </Label>
+                <Input
+                  id="admin-password-reset-2fa"
+                  type="password"
+                  placeholder={t("admin.clients.admin_password_placeholder", "Введите ваш пароль администратора")}
+                  value={adminPassword}
+                  onChange={(e) => {
+                    setAdminPassword(e.target.value);
+                    setReset2FaError(null);
+                  }}
+                  disabled={reset2FaLoading}
+                  autoComplete="current-password"
+                  className="rounded-xl"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && adminPassword.trim() && !reset2FaLoading) {
+                      e.preventDefault();
+                      handleReset2Fa();
+                    }
+                  }}
+                />
+              </div>
+
+              {reset2FaError && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+                  <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{reset2FaError}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2.5 mt-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={reset2FaLoading}
+                onClick={() => {
+                  setReset2FaOpen(false);
+                  setAdminPassword("");
+                  setReset2FaError(null);
+                }}
+                className="rounded-xl"
+              >
+                Отмена
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={reset2FaLoading || !adminPassword.trim()}
+                onClick={handleReset2Fa}
+                className="rounded-xl gap-1.5"
+              >
+                {reset2FaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />}
+                {t("admin.clients.reset_2fa_confirm_btn", "Сбросить 2FA")}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

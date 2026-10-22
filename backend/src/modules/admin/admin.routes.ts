@@ -18,7 +18,8 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma, createPayment } from "../../db.js";
 import { requireAuth, requireAdminSection, requireAction } from "../auth/middleware.js";
-import { hashPassword } from "../auth/auth.service.js";
+import { hashPassword, verifyPassword } from "../auth/auth.service.js";
+import { notifyClientAbout2FAReset } from "../client/client-security-notify.service.js";
 import { hashPassword as hashClientPassword } from "../client/client.service.js";
 import {
   remnaGetUsers,
@@ -1467,6 +1468,7 @@ adminRouter.get("/clients", async (req, res) => {
           referralPercent: true,
           personalDiscountPercent: true,
           personalDiscountIsOneTime: true,
+          totpEnabled: true,
           createdAt: true,
           _count: { select: { referrals: true } },
         },
@@ -1597,6 +1599,7 @@ adminRouter.get("/clients/:id", async (req, res) => {
       personalDiscountIsOneTime: true,
       restrictedTariffIds: true,
       tariffRestrictionReason: true,
+      totpEnabled: true,
       createdAt: true,
       _count: { select: { referrals: true } },
       // текущий реферер для inline-редактора в карточке клиента.
@@ -1722,6 +1725,71 @@ adminRouter.patch("/clients/:id/password", async (req, res) => {
   });
   return res.json({ success: true, message: "Пароль установлен" });
 });
+
+const resetClient2FASchema = z.object({
+  adminPassword: z.string().min(1, "Введите пароль администратора"),
+});
+
+adminRouter.post(
+  "/clients/:id/reset-2fa",
+  requireAction("reset_client_2fa"),
+  asyncRoute(async (req, res) => {
+    const parsed = clientIdParam.safeParse(req.params);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid client id" });
+    const body = resetClient2FASchema.safeParse(req.body);
+    if (!body.success) {
+      return res.status(400).json({ message: body.error.issues[0]?.message ?? "Invalid input", errors: body.error.flatten() });
+    }
+
+    // Sudo-mode: повторное подтверждение личности администратора
+    const adminId = (req as express.Request & { adminId?: string }).adminId;
+    if (!adminId) return res.status(401).json({ message: "Unauthorized" });
+
+    const admin = await prisma.admin.findUnique({
+      where: { id: adminId },
+      select: { id: true, email: true, passwordHash: true },
+    });
+    if (!admin) return res.status(401).json({ message: "Администратор не найден" });
+
+    const isPasswordValid = await verifyPassword(body.data.adminPassword, admin.passwordHash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: "Неверный пароль администратора" });
+    }
+
+    const client = await prisma.client.findUnique({
+      where: { id: parsed.data.id },
+      select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, totpEnabled: true },
+    });
+    if (!client) return res.status(404).json({ message: "Клиент не найден" });
+    if (!client.totpEnabled) {
+      return res.status(400).json({ message: "Двухфакторная аутентификация у клиента не включена" });
+    }
+
+    // Сброс 2FA: удаляем секрет и выключаем флаг
+    await prisma.client.update({
+      where: { id: client.id },
+      data: {
+        totpEnabled: false,
+        totpSecret: null,
+      },
+    });
+
+    // Аудит: кто, кому, когда
+    await logAdmin(req, "client.reset_2fa", { type: "client", id: client.id }, {
+      email: client.email,
+      telegramUsername: client.telegramUsername,
+      telegramId: client.telegramId,
+      adminEmail: admin.email,
+    });
+
+    // Уведомление клиента
+    notifyClientAbout2FAReset(client).catch((err) => {
+      console.warn("[admin] failed to dispatch 2FA reset notification:", err);
+    });
+
+    return res.json({ ok: true, message: "Двухфакторная аутентификация пользователя успешно сброшена" });
+  }),
+);
 
 adminRouter.delete("/clients/:id", async (req, res) => {
   const parsed = clientIdParam.safeParse(req.params);

@@ -60,6 +60,7 @@ export const ACTION_CATALOG: ActionDef[] = [
   { key: "view_balance_sales", label: "Видеть отчёт продаж через баланс", description: "GET /admin/balance-sales — список платежей с provider=balance (продажи через начисление баланса вручную). Доступ к странице «Продажи через баланс» в админке.", group: "payments", severity: "info" },
 
   // Security
+  { key: "reset_client_2fa", label: "Сброс 2FA клиента", description: "POST /admin/clients/:id/reset-2fa — сброс двухфакторной аутентификации клиента при потере доступа", group: "security", severity: "critical" },
   { key: "logout_all_admins", label: "Logout всех админов", description: "POST /admin/security/logout-all — инвалидация всех токенов", group: "security", severity: "critical" },
   { key: "logout_specific_admin", label: "Logout конкретного админа", description: "POST /admin/security/logout-admin/:id", group: "security", severity: "warn" },
 
