@@ -37,6 +37,7 @@ import { requireClientAuth } from "./client.middleware.js";
 import { remnaCreateUser, remnaUpdateUser, isRemnaConfigured, remnaGetUser, remnaGetUserByUsername, remnaGetUserByEmail, remnaGetUserByTelegramId, remnaGetUserByShortUuid, extractRemnaUuid, remnaUsernameFromClient, remnaGetUserHwidDevices, remnaDeleteUserHwidDevice, encryptSubscriptionUrlInPlace, remnaRevokeUserSubscription } from "../remna/remna.client.js";
 import { isSmtpConfigured, isMailConfigured, mailConfigFromSystem, sendEmail } from "../mail/mail.service.js";
 import { renderEmailTemplate } from "../email-templates/email-templates.service.js";
+import { notifyClientPasswordReset } from "./client-security-notify.service.js";
 import { signClientPasswordResetToken, verifyClientPasswordResetToken } from "../auth/auth.service.js";
 import { NO_PASSWORD_HASH, resolveRegisterRoute, clientPasswordHashFromPending, decideVerifyEmail, consumedPendingExpiry, passwordResetFingerprint, canSetPasswordWithoutCurrent, canResetPassword, isEmailUniqueViolation } from "./email-registration.js";
 import { createPlategaTransaction, isPlategaConfigured } from "../platega/platega.service.js";
@@ -676,7 +677,8 @@ function parseTelegramUser(initData: string): { id: number; username?: string } 
   }
 }
 
-// T-pwd-reset (портировано из WolfVPN): запрос сброса пароля. respondOk всегда (защита от перебора email).
+// T-pwd-reset (портировано из WolfVPN + Issue #200 + Hybrid Telegram/Email): запрос сброса пароля.
+// respondOk всегда (защита от перебора email).
 const forgotPasswordSchema = z.object({ email: z.string().email() });
 clientAuthRouter.post("/forgot-password", async (req, res) => {
   const cfg = await getSystemConfig();
@@ -691,32 +693,78 @@ clientAuthRouter.post("/forgot-password", async (req, res) => {
     // в БД не находился, и письмо сброса молча не отправлялось (при ok:true в ответе).
     const client = await prisma.client.findFirst({
       where: { email: { equals: email, mode: "insensitive" } },
-      select: { id: true, email: true, passwordHash: true, isBlocked: true, registrationSource: true },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        isBlocked: true,
+        registrationSource: true,
+        telegramId: true,
+        preferredLang: true,
+      },
     });
-    // #200: аккаунт без пароля может задать его через письмо, только если email подтверждён
-    // (canResetPassword). Ответ одинаковый — без перечисления аккаунтов.
-    if (!client || client.isBlocked || !canResetPassword(client)) return respondOk();
+
+    if (!client || client.isBlocked) {
+      console.info(`[forgot-password] Request for "${email}": client not found or blocked (silent ok)`);
+      return respondOk();
+    }
+
+    const canEmailReset = canResetPassword(client);
+    const hasTelegram = Boolean(client.telegramId?.trim());
+    const isFirstPassword = !client.passwordHash?.trim();
+
+    // Если у аккаунта нет пароля, он не верифицирован через web и нет привязки к Telegram —
+    // в целях безопасности (защита от перехвата аккаунта через произвольный email) отклоняем.
+    if (!canEmailReset && !hasTelegram) {
+      console.info(`[forgot-password] Request for "${email}" (client ${client.id}): skipped — no password and no Telegram link`);
+      return respondOk();
+    }
+
     const config = await getSystemConfig();
-    const smtpConfig = mailConfigFromSystem(config);
     const appUrl = (config.publicAppUrl || "").replace(/\/$/, "");
-    if (!isMailConfigured(smtpConfig) || !appUrl) return respondOk();
+    if (!appUrl) {
+      console.warn(`[forgot-password] Cannot generate reset link: publicAppUrl is not set`);
+      return respondOk();
+    }
+
     const token = signClientPasswordResetToken({ clientId: client.id, pv: passwordResetFingerprint(client.passwordHash) }, env.JWT_SECRET);
     const resetLink = `${appUrl}/cabinet/reset-password?token=${encodeURIComponent(token)}`;
-    const resetTpl = await renderEmailTemplate("password_reset", {
-      resetUrl: resetLink,
-      minutes: "60",
-      serviceName: config.serviceName ?? "STEALTHNET",
-    });
-    if (resetTpl) {
-      await sendEmail(smtpConfig, client.email ?? email, resetTpl.subject, resetTpl.body).catch(() => {});
+
+    // 1. Канал Telegram: если клиент привязан к Telegram-боту, отправляем кнопку прямо в бот
+    // (для Telegram-аккаунтов без пароля также отправляется поясняющее письмо на email).
+    if (hasTelegram) {
+      console.info(`[forgot-password] Dispatching Telegram reset button to user ${client.telegramId} (client ${client.id})`);
+      await notifyClientPasswordReset(client, resetLink, isFirstPassword).catch((err) => {
+        console.warn(`[forgot-password] Telegram notification error:`, err);
+      });
     }
+
+    // 2. Канал Email: если аккаунт имеет пароль или зарегистрирован через web — отправляем стандартное письмо со ссылкой
+    if (canEmailReset) {
+      const smtpConfig = mailConfigFromSystem(config);
+      if (isMailConfigured(smtpConfig)) {
+        const resetTpl = await renderEmailTemplate("password_reset", {
+          resetUrl: resetLink,
+          minutes: "60",
+          serviceName: config.serviceName ?? "STEALTHNET",
+        });
+        if (resetTpl) {
+          const mailRes = await sendEmail(smtpConfig, client.email ?? email, resetTpl.subject, resetTpl.body).catch((err) => ({ ok: false, error: String(err) }));
+          console.info(`[forgot-password] Sent reset email to "${client.email ?? email}":`, mailRes.ok ? "OK" : `FAILED (${mailRes.error})`);
+        }
+      } else {
+        console.warn(`[forgot-password] Mail provider not configured, skipped email dispatch`);
+      }
+    }
+
     return respondOk();
-  } catch {
+  } catch (err) {
+    console.error(`[forgot-password] Unexpected error for "${email}":`, err);
     return respondOk();
   }
 });
 
-// T-pwd-reset: установка нового пароля по токену из письма (одноразовый — pv инвалидируется после смены).
+// T-pwd-reset: установка нового пароля по токену из письма или Telegram (одноразовый — pv инвалидируется после смены).
 const resetPasswordSchema = z.object({ token: z.string().min(10), password: z.string().min(8, "Минимум 8 символов") });
 clientAuthRouter.post("/reset-password", async (req, res) => {
   const cfg = await getSystemConfig();
@@ -725,11 +773,19 @@ clientAuthRouter.post("/reset-password", async (req, res) => {
   if (!body.success) return res.status(400).json({ message: body.error.issues[0]?.message ?? "Проверьте данные" });
   const payload = verifyClientPasswordResetToken(body.data.token, env.JWT_SECRET);
   if (!payload) return res.status(400).json({ message: "Ссылка недействительна или устарела" });
-  const client = await prisma.client.findUnique({ where: { id: payload.clientId }, select: { id: true, passwordHash: true, isBlocked: true, registrationSource: true } });
-  if (!client || client.isBlocked || !canResetPassword(client)) return res.status(400).json({ message: "Ссылка недействительна" });
+  const client = await prisma.client.findUnique({
+    where: { id: payload.clientId },
+    select: { id: true, passwordHash: true, isBlocked: true, registrationSource: true, telegramId: true },
+  });
+  const canEmailReset = canResetPassword(client ?? { passwordHash: null, registrationSource: null });
+  const hasTelegram = Boolean(client?.telegramId?.trim());
+  if (!client || client.isBlocked || (!canEmailReset && !hasTelegram)) {
+    return res.status(400).json({ message: "Ссылка недействительна" });
+  }
   if (passwordResetFingerprint(client.passwordHash) !== payload.pv) return res.status(400).json({ message: "Ссылка уже использована — запросите сброс заново" });
   const newHash = await hashPassword(body.data.password);
   await prisma.client.update({ where: { id: client.id }, data: { passwordHash: newHash } });
+  console.info(`[reset-password] Successfully updated password for client ${client.id}`);
   return res.json({ ok: true });
 });
 
