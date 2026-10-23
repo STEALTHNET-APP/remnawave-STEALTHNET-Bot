@@ -1,18 +1,27 @@
 /**
+ * backend/src/modules/webhooks/yoomoney.webhooks.routes.ts
  * HTTP-уведомления ЮMoney о входящих переводах (оплата картой).
  * Пополнение баланса (без tariffId) → зачисляем на баланс клиента.
  * Покупка тарифа (есть tariffId) → активируем тариф в Remnawave, баланс не трогаем.
- * Проверка подлинности: SHA1(notification_type&operation_id&amount&currency&datetime&sender&codepro&notification_secret&label)
+ * Проверка подлинности:
+ *  - Новый формат ЮMoney: HMAC-SHA256(отсортированные параметры key=encodeURIComponent(value), secret) через поле sign
+ *  - Легаси-формат: SHA1(notification_type&operation_id&amount&currency&datetime&sender&codepro&notification_secret&label) через sha1_hash
  */
 
 import { Router } from "express";
-import { createHash } from "crypto";
 import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { activateTariffByPaymentId } from "../tariff/tariff-activation.service.js";
 import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.service.js";
 import { createSingboxSlotsByPaymentId } from "../singbox/singbox-slots-activation.service.js";
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
+import {
+  pickFirst,
+  verifyYooMoneyHmacSign,
+  computeYooMoneySha1,
+} from "./yoomoney.signature.js";
+
+export { pickFirst, verifyYooMoneyHmacSign, computeYooMoneySha1 };
 
 function hasExtraOptionInMetadata(metadata: string | null): boolean {
   if (!metadata?.trim()) return false;
@@ -35,37 +44,6 @@ yoomoneyWebhooksRouter.get("/yoomoney", (_req, res) => {
   res.status(200).json({ status: "ok", message: "YooMoney webhook is available" });
 });
 
-function pickFirst(val: unknown): string {
-  if (val == null) return "";
-  if (Array.isArray(val)) return String(val[0] ?? "").trim();
-  return String(val).trim();
-}
-
-function computeSha1(
-  notificationType: string,
-  operationId: string,
-  amount: string,
-  currency: string,
-  datetime: string,
-  sender: string,
-  codepro: string,
-  notificationSecret: string,
-  label: string
-): string {
-  const str = [
-    notificationType,
-    operationId,
-    amount,
-    currency,
-    datetime,
-    sender,
-    codepro,
-    notificationSecret,
-    label,
-  ].join("&");
-  return createHash("sha1").update(str, "utf8").digest("hex");
-}
-
 yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
   const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
   if (Object.keys(body).length === 0) {
@@ -84,6 +62,7 @@ yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
   const codeproStr = Array.isArray(codeproRaw) ? String(codeproRaw[0] ?? "false") : codeproRaw === true || codeproRaw === "true" ? "true" : "false";
   let label = pickFirst(body.label);
   if (!label) label = pickFirst(body.order_id) || pickFirst(body.orderId) || pickFirst(body.custom);
+  const receivedSign = pickFirst(body.sign);
   const sha1Hash = pickFirst(body.sha1_hash);
   const unaccepted = pickFirst(body.unaccepted).toLowerCase();
 
@@ -95,9 +74,11 @@ yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
     label: label ? `${label.slice(0, 12)}…` : "(empty)",
     codepro: codeproStr,
     unaccepted: unaccepted || "(empty)",
+    has_sign: Boolean(receivedSign),
+    has_sha1: Boolean(sha1Hash),
   });
 
-  if (!notificationType || !operationId || !amount || !sha1Hash) {
+  if (!notificationType || !operationId || !amount || (!receivedSign && !sha1Hash)) {
     console.warn("[YooMoney Webhook] Missing required fields", { keys: Object.keys(body) });
     return res.status(400).send("Bad request");
   }
@@ -118,21 +99,46 @@ yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
     return res.status(500).send("Server configuration error");
   }
 
-  const expectedHash = computeSha1(
-    notificationType,
-    operationId,
-    amount,
-    currency,
-    datetime,
-    sender,
-    codeproStr,
-    secret,
-    label
-  );
-  if (expectedHash.toLowerCase() !== sha1Hash.toLowerCase()) {
-    console.warn("[YooMoney Webhook] Invalid sha1_hash", { expected: expectedHash.slice(0, 8) + "…", received: sha1Hash.slice(0, 8) + "…" });
+  let signatureValid = false;
+  let signatureMethod = "";
+
+  if (receivedSign) {
+    if (verifyYooMoneyHmacSign(body, secret)) {
+      signatureValid = true;
+      signatureMethod = "HMAC-SHA256 (sign)";
+    }
+  }
+
+  if (!signatureValid && sha1Hash) {
+    const expectedHash = computeYooMoneySha1(
+      notificationType,
+      operationId,
+      amount,
+      currency,
+      datetime,
+      sender,
+      codeproStr,
+      secret,
+      label
+    );
+    if (expectedHash.toLowerCase() === sha1Hash.toLowerCase()) {
+      signatureValid = true;
+      signatureMethod = "SHA-1 (sha1_hash)";
+    }
+  }
+
+  if (!signatureValid) {
+    console.warn("[YooMoney Webhook] Invalid signature", {
+      hasSign: Boolean(receivedSign),
+      hasSha1: Boolean(sha1Hash),
+    });
     return res.status(403).send("Invalid signature");
   }
+
+  console.log(`[YooMoney Webhook] Signature verified via ${signatureMethod}`, {
+    operationId,
+    label: label ? `${label.slice(0, 12)}…` : "(empty)",
+  });
 
   if (!label.trim()) {
     console.warn("[YooMoney Webhook] Empty label, cannot match payment");
