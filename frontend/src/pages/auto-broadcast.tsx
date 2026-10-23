@@ -432,7 +432,9 @@ export function AutoBroadcastPage() {
                       ? " ·  event-driven"
                       : rule.triggerType === "subscription_ending_soon"
                         ? ` · за ${rule.delayDays} дн. до окончания`
-                        : ` · через ${rule.delayDays} дн.`}{" "}
+                        : rule.triggerType === "trial_used_never_paid"
+                          ? ` · через ${rule.delayDays} дн. после окончания триала`
+                          : ` · через ${rule.delayDays} дн.`}{" "}
                     · <span className="text-cyan-500 dark:text-cyan-400">{CHANNEL_LABELS[rule.channel]}</span>
                   </p>
                   <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
@@ -578,7 +580,9 @@ export function AutoBroadcastPage() {
                   <Label className="text-xs text-muted-foreground">
                     {form.triggerType === "subscription_ending_soon"
                       ? "За сколько дней до окончания (1–30)"
-                      : "Через сколько дней (0–365)"}
+                      : form.triggerType === "trial_used_never_paid"
+                        ? "Через сколько дней после окончания триала (0–365)"
+                        : "Через сколько дней (0–365)"}
                   </Label>
                   <Input
                     type="number"
@@ -596,6 +600,11 @@ export function AutoBroadcastPage() {
                   {form.triggerType === "subscription_ending_soon" && (
                     <p className="text-[11px] text-muted-foreground">
                       Создайте несколько правил (например, за 7, за 3, за 1 день) — рассылка будет с нужным текстом.
+                    </p>
+                  )}
+                  {form.triggerType === "trial_used_never_paid" && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Отсчёт ведётся от даты окончания пробного периода. Рассылка сработает только для тех, кто не совершил платных покупок и не имеет активной подписки.
                     </p>
                   )}
                 </div>

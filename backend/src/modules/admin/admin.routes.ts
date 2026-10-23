@@ -4951,6 +4951,17 @@ adminRouter.post("/auto-broadcast/run/:ruleId", asyncRoute(async (req, res) => {
   return res.json(result);
 }));
 
+adminRouter.post("/auto-broadcast/rules/:ruleId/catchup", asyncRoute(async (req, res) => {
+  const { sinceDays, dryRun, limit } = req.body ?? {};
+  const { catchupTrialBroadcastRule } = await import("../auto-broadcast/auto-broadcast.service.js");
+  const result = await catchupTrialBroadcastRule(req.params.ruleId, {
+    sinceDays: sinceDays !== undefined ? Number(sinceDays) : 14,
+    dryRun: dryRun !== false,
+    limit: limit !== undefined ? Number(limit) : 100,
+  });
+  return res.json(result);
+}));
+
 // ——————————————— Промо-группы ———————————————
 
 function generatePromoCode(length = 8): string {

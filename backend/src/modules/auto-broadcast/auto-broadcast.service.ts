@@ -331,6 +331,103 @@ export async function getEligibleClientIds(ruleId: string): Promise<string[]> {
  * `fireRegistrationRulesForClient(clientId)` ниже. Передавая `opts.onlyClientId`,
  * мы фильтруем target'ы только до этого клиента (без поиска по окну createdAt).
  */
+
+export interface TrialCandidateClient {
+  id: string;
+  createdAt: Date;
+  trialUsed: boolean;
+  trialUsages?: Array<{
+    activatedAt: Date;
+    subscriptionId?: string | null;
+    trial?: { durationDays: number } | null;
+  }>;
+  ownedSubscriptions?: Array<{
+    id: string;
+    trialId?: string | null;
+    createdAt: Date;
+    expireAt?: Date | null;
+  }>;
+}
+
+/**
+ * Вычисляет дату фактического окончания пробного периода клиента (trialEndedAt).
+ *
+ * Приоритет:
+ * 1. Записи `client_trial_usages` (мульти-триалы):
+ *    - Если есть связанная подписка с `expireAt` — берём её `expireAt`.
+ *    - Иначе `activatedAt + durationDays` (или defaultTrialDays).
+ * 2. Подписки с пометкой `trialId` (если не были связаны через usages).
+ * 3. Legacy-триал (`trialUsed = true` без записей в client_trial_usages):
+ *    - `expireAt` первой подписки или `createdAt + defaultTrialDays`.
+ *    - Fallback: `client.createdAt + defaultTrialDays`.
+ *
+ * Если клиент брал несколько триалов, берётся НАИБОЛЬШАЯ дата (пока длится хотя бы один триал,
+ * клиент считается активным пользователем триала).
+ */
+export function computeClientTrialEndedAt(
+  client: TrialCandidateClient,
+  defaultTrialDays = 3,
+): Date | null {
+  const endDates: number[] = [];
+
+  // 1. Мульти-триалы из client_trial_usages
+  if (client.trialUsages && client.trialUsages.length > 0) {
+    const subMap = new Map((client.ownedSubscriptions || []).map((s) => [s.id, s]));
+    for (const u of client.trialUsages) {
+      const sub = u.subscriptionId ? subMap.get(u.subscriptionId) : null;
+      if (sub?.expireAt) {
+        endDates.push(new Date(sub.expireAt).getTime());
+      } else {
+        const duration = u.trial?.durationDays && u.trial.durationDays > 0 ? u.trial.durationDays : defaultTrialDays;
+        endDates.push(new Date(u.activatedAt).getTime() + duration * 86400 * 1000);
+      }
+    }
+  }
+
+  // 2. Подписки с trialId
+  if (client.ownedSubscriptions && client.ownedSubscriptions.length > 0) {
+    for (const s of client.ownedSubscriptions) {
+      if (s.trialId && s.expireAt) {
+        endDates.push(new Date(s.expireAt).getTime());
+      }
+    }
+  }
+
+  // 3. Legacy-триал (флаг trialUsed=true без client_trial_usages)
+  if (endDates.length === 0 && client.trialUsed) {
+    const sub = client.ownedSubscriptions?.[0];
+    if (sub?.expireAt) {
+      endDates.push(new Date(sub.expireAt).getTime());
+    } else if (sub?.createdAt) {
+      endDates.push(new Date(sub.createdAt).getTime() + defaultTrialDays * 86400 * 1000);
+    } else if (client.createdAt) {
+      endDates.push(new Date(client.createdAt).getTime() + defaultTrialDays * 86400 * 1000);
+    }
+  }
+
+  if (endDates.length === 0) return null;
+  return new Date(Math.max(...endDates));
+}
+
+/**
+ * Проверяет попадание даты окончания триала в скользящее окно задержки.
+ */
+export function isTrialEligibleInWindow(opts: {
+  trialEndedAt: Date | null;
+  now: Date;
+  delayDays: number;
+  windowDays?: number;
+}): boolean {
+  if (!opts.trialEndedAt) return false;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const windowDays = opts.windowDays ?? ONE_TIME_WINDOW_DAYS;
+  const windowEnd = new Date(opts.now.getTime() - Math.max(0, opts.delayDays) * dayMs);
+  const windowStart = new Date(windowEnd.getTime() - windowDays * dayMs);
+
+  const t = opts.trialEndedAt.getTime();
+  return t >= windowStart.getTime() && t <= windowEnd.getTime();
+}
+
 export async function getEligibleTargets(
   ruleId: string,
   opts?: { onlyClientId?: string },
@@ -461,6 +558,7 @@ export async function getEligibleTargets(
           ...baseWhere,
           createdAt: { gte: windowStart, lte: windowEnd },
           trialUsed: false,
+          trialUsages: { none: {} },
           // после T-unify клиент может
           // иметь подписки даже если client.remnawaveUuid=null (это legacy primary
           // поле). Корректно проверять «не привязан к Remna» через отсутствие
@@ -474,18 +572,55 @@ export async function getEligibleTargets(
     }
 
     case "trial_used_never_paid": {
-      const windowEnd = new Date(now.getTime() - delayDays * dayMs);
-      const windowStart = new Date(windowEnd.getTime() - ONE_TIME_WINDOW_DAYS * dayMs);
-      const cs = await prisma.client.findMany({
+      const cfg = await getSystemConfig().catch(() => null);
+      const defaultTrialDays = cfg?.trialDays && cfg.trialDays > 0 ? cfg.trialDays : 3;
+
+      const candidates = await prisma.client.findMany({
         where: {
           ...baseWhere,
-          createdAt: { gte: windowStart, lte: windowEnd },
-          trialUsed: true,
+          ...(opts?.onlyClientId ? { id: opts.onlyClientId } : {}),
+          OR: [
+            { trialUsages: { some: {} } },
+            { trialUsed: true },
+          ],
           payments: { none: { status: "PAID", amount: { gt: 0 } } },
+          ownedSubscriptions: { none: { expireAt: { gt: now } } },
         },
-        select: { id: true },
+        select: {
+          id: true,
+          createdAt: true,
+          trialUsed: true,
+          trialUsages: {
+            select: {
+              activatedAt: true,
+              subscriptionId: true,
+              trial: { select: { durationDays: true } },
+            },
+          },
+          ownedSubscriptions: {
+            select: {
+              id: true,
+              trialId: true,
+              createdAt: true,
+              expireAt: true,
+            },
+          },
+        },
       });
-      targets = cs.map((c) => ({ clientId: c.id }));
+
+      const matched = candidates.filter((cand) => {
+        const trialEndedAt = computeClientTrialEndedAt(cand, defaultTrialDays);
+        if (!trialEndedAt) return false;
+        if (opts?.onlyClientId) return true;
+        return isTrialEligibleInWindow({
+          trialEndedAt,
+          now,
+          delayDays,
+          windowDays: ONE_TIME_WINDOW_DAYS,
+        });
+      });
+
+      targets = matched.map((cand) => ({ clientId: cand.id }));
       break;
     }
 
@@ -943,4 +1078,149 @@ export async function fireRegistrationRulesForClient(clientId: string): Promise<
     }
   }
   return results;
+}
+
+export type CatchupOptions = {
+  sinceDays?: number;
+  dryRun?: boolean;
+  limit?: number;
+};
+
+export type CatchupResult = {
+  ruleId: string;
+  ruleName: string;
+  dryRun: boolean;
+  sinceDays: number;
+  totalCandidates: number;
+  alreadySent: number;
+  eligibleCount: number;
+  sentCount: number;
+  errors: string[];
+  sampleRecipients: Array<{ clientId: string; trialEndedAt: string }>;
+};
+
+/**
+ * Безопасное восстановление (догон) пропущенных уведомлений триала.
+ * Вычисляет клиентов, чей триал завершился в расширенном окне за последние `sinceDays`,
+ * и кто ещё ни разу не получал уведомление по этому правилу.
+ */
+export async function catchupTrialBroadcastRule(
+  ruleId: string,
+  opts?: CatchupOptions,
+): Promise<CatchupResult> {
+  const rule = await prisma.autoBroadcastRule.findUnique({
+    where: { id: ruleId },
+    include: { promoCode: true },
+  });
+  if (!rule) throw new Error("Rule not found");
+  if (rule.triggerType !== "trial_used_never_paid") {
+    throw new Error("Catch-up is only supported for trial_used_never_paid rules");
+  }
+
+  const dryRun = opts?.dryRun !== false;
+  const sinceDays = Math.min(90, Math.max(1, opts?.sinceDays ?? 14));
+  const limit = Math.min(500, Math.max(1, opts?.limit ?? 100));
+
+  const now = new Date();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const delayDays = Math.max(0, rule.delayDays);
+
+  // Расширенное окно: от (delayDays + sinceDays) назад до delayDays назад
+  const windowEnd = new Date(now.getTime() - delayDays * dayMs);
+  const windowStart = new Date(now.getTime() - (delayDays + sinceDays) * dayMs);
+
+  const sentClientSet = await getSentClientKeys(ruleId, null);
+  const baseWhere = { isBlocked: false, ...await channelFilter(rule.channel) };
+  const cfg = await getSystemConfig().catch(() => null);
+  const defaultTrialDays = cfg?.trialDays && cfg.trialDays > 0 ? cfg.trialDays : 3;
+
+  const candidates = await prisma.client.findMany({
+    where: {
+      ...baseWhere,
+      OR: [
+        { trialUsages: { some: {} } },
+        { trialUsed: true },
+      ],
+      payments: { none: { status: "PAID", amount: { gt: 0 } } },
+      ownedSubscriptions: { none: { expireAt: { gt: now } } },
+    },
+    select: {
+      id: true,
+      createdAt: true,
+      trialUsed: true,
+      trialUsages: {
+        select: {
+          activatedAt: true,
+          subscriptionId: true,
+          trial: { select: { durationDays: true } },
+        },
+      },
+      ownedSubscriptions: {
+        select: {
+          id: true,
+          trialId: true,
+          createdAt: true,
+          expireAt: true,
+        },
+      },
+    },
+  });
+
+  const matched: Array<{ clientId: string; trialEndedAt: Date }> = [];
+  for (const c of candidates) {
+    const trialEndedAt = computeClientTrialEndedAt(c, defaultTrialDays);
+    if (!trialEndedAt) continue;
+    if (trialEndedAt.getTime() >= windowStart.getTime() && trialEndedAt.getTime() <= windowEnd.getTime()) {
+      matched.push({ clientId: c.id, trialEndedAt });
+    }
+  }
+
+  const eligible = matched.filter((m) => !sentClientSet.has(m.clientId));
+  const sampleRecipients = eligible.slice(0, 10).map((e) => ({
+    clientId: e.clientId,
+    trialEndedAt: e.trialEndedAt.toISOString(),
+  }));
+
+  if (dryRun) {
+    return {
+      ruleId: rule.id,
+      ruleName: rule.name,
+      dryRun: true,
+      sinceDays,
+      totalCandidates: matched.length,
+      alreadySent: matched.length - eligible.length,
+      eligibleCount: eligible.length,
+      sentCount: 0,
+      errors: [],
+      sampleRecipients,
+    };
+  }
+
+  // При dryRun = false выполняем отправку с лимитом
+  const toSend = eligible.slice(0, limit);
+  let sentCount = 0;
+  const errors: string[] = [];
+
+  for (const item of toSend) {
+    try {
+      const res = await runRule(rule.id, { onlyClientId: item.clientId });
+      sentCount += res.sent;
+      if (res.errors.length > 0) errors.push(...res.errors);
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  return {
+    ruleId: rule.id,
+    ruleName: rule.name,
+    dryRun: false,
+    sinceDays,
+    totalCandidates: matched.length,
+    alreadySent: matched.length - eligible.length,
+    eligibleCount: eligible.length,
+    sentCount,
+    errors,
+    sampleRecipients,
+  };
 }

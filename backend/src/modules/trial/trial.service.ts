@@ -109,6 +109,7 @@ export async function activateTrial(clientId: string, trialId: string, expectedP
     await prisma.$transaction(async tx => {
         await tx.subscription.update({ where: { id: subResult.data.subscriptionId }, data: { trialId: trial.id, autoRenewEnabled: false, autoRenewTariffId: null } });
         await tx.clientTrialUsage.update({ where: { clientId_trialId: { clientId, trialId } }, data: { subscriptionId: subResult.data.subscriptionId } });
+        await tx.client.update({ where: { id: clientId }, data: { trialUsed: true } });
         if (paymentId) await tx.payment.update({ where: { id: paymentId }, data: { status: "PAID", paidAt: new Date(), subscriptionId: subResult.data.subscriptionId } });
     });
     if (subResult.data.subscriptionIndex === 0) {
@@ -158,4 +159,16 @@ export async function activateTrial(clientId: string, trialId: string, expectedP
         tariffHasLocations: !!(trial.tariff?.locations?.trim()),
         subscriptionUrl,
     });
+}
+
+export async function syncExistingTrialUsagesFlag(): Promise<number> {
+  try {
+    const res = await prisma.$executeRawUnsafe(
+      "UPDATE clients SET trial_used = true WHERE id IN (SELECT DISTINCT client_id FROM client_trial_usages) AND trial_used = false;"
+    );
+    return typeof res === "number" ? res : 0;
+  } catch (err) {
+    console.warn("[trial] syncExistingTrialUsagesFlag error:", err);
+    return 0;
+  }
 }
