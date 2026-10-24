@@ -1,6 +1,6 @@
 import { isBotButtonUrl } from "@/lib/bot-button-url";
 import { MailTest } from "@/components/admin/mail-test";
-import { useLocation } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { PanelUpdates } from "@/components/admin/panel-updates";
 import { useEffect, useState } from "react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -57,6 +57,7 @@ const LANG_NAMES: Record<string, string> = {
   fa: "فارسی",
 };
 const ALLOWED_CURRENCIES = ["usd", "rub"];
+const SETTINGS_TABS = new Set(["general", "referral", "payments", "bot", "ai", "mail-telegram", "subpage", "theme", "options", "custom-build", "oauth", "landing", "server-ssh", "proxy-settings", "nalog-settings", "gifts", "roulette", "sync", "updates"]);
 
 const DEFAULT_PLATEGA_METHODS: { id: number; enabled: boolean; label: string }[] = [
   { id: 2, enabled: true, label: "СБП" },
@@ -447,9 +448,17 @@ export function SettingsPage() {
   const [message, setMessage] = useState("");
   const [sshMessage, setSshMessage] = useState("");
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const updateLocation = useLocation();
-  useEffect(() => { if (new URLSearchParams(updateLocation.search).get("tab") === "updates") setActiveTab("updates"); }, [updateLocation.search]);
-  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get("tab") === "updates" ? "updates" : "general");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab") ?? "general";
+  const activeTab = SETTINGS_TABS.has(requestedTab) ? requestedTab : "general";
+  const setActiveTab = (tab: string) => {
+    if (!SETTINGS_TABS.has(tab)) return;
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("tab", tab);
+      return next;
+    });
+  };
   const defaultJourneySteps = [
     { title: "Выбираешь сценарий", desc: "Доступны гибкие тарифы: выбери то, что подходит именно тебе, без переплат." },
     { title: "Оплачиваешь как удобно", desc: "Карта, СБП, крипта — выбирай любой удобный и безопасный метод оплаты." },
