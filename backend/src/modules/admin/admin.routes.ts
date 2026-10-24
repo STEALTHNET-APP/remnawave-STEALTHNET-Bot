@@ -5033,6 +5033,18 @@ adminRouter.post("/auto-broadcast/run/:ruleId", asyncRoute(async (req, res) => {
   return res.json(result);
 }));
 
+adminRouter.post("/auto-broadcast/rules/:ruleId/catchup", asyncRoute(async (req, res) => {
+  const parsed = z.object({
+    sinceDays: z.number().int().min(1).max(90).default(14),
+    dryRun: z.boolean().default(true),
+    limit: z.number().int().min(1).max(500).default(100),
+  }).safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ message: "Неверные параметры", errors: parsed.error.flatten() });
+  const { catchupTrialBroadcastRule } = await import("../auto-broadcast/auto-broadcast.service.js");
+  const result = await catchupTrialBroadcastRule(req.params.ruleId, parsed.data);
+  return res.json(result);
+}));
+
 // ——————————————— Промо-группы ———————————————
 
 function generatePromoCode(length = 8): string {

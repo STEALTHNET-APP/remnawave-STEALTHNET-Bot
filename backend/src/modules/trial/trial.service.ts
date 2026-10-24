@@ -109,6 +109,7 @@ export async function activateTrial(clientId: string, trialId: string, expectedP
     await prisma.$transaction(async tx => {
         await tx.subscription.update({ where: { id: subResult.data.subscriptionId }, data: { trialId: trial.id, autoRenewEnabled: false, autoRenewTariffId: null } });
         await tx.clientTrialUsage.update({ where: { clientId_trialId: { clientId, trialId } }, data: { subscriptionId: subResult.data.subscriptionId } });
+        await tx.client.update({ where: { id: clientId }, data: { trialUsed: true } });
         if (paymentId) await tx.payment.update({ where: { id: paymentId }, data: { status: "PAID", paidAt: new Date(), subscriptionId: subResult.data.subscriptionId } });
     });
     if (subResult.data.subscriptionIndex === 0) {
@@ -158,4 +159,12 @@ export async function activateTrial(clientId: string, trialId: string, expectedP
         tariffHasLocations: !!(trial.tariff?.locations?.trim()),
         subscriptionUrl,
     });
+}
+
+export async function syncExistingTrialUsagesFlag(): Promise<number> {
+  const result = await prisma.client.updateMany({
+    where: { trialUsed: false, trialUsages: { some: { subscriptionId: { not: null } } } },
+    data: { trialUsed: true },
+  });
+  return result.count;
 }

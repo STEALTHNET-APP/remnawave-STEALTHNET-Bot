@@ -46,6 +46,15 @@ async function main() {
   await ensureConsoleAccess();
   await ensureTheme();
   try {
+    const { syncExistingTrialUsagesFlag } = await import("./modules/trial/trial.service.js");
+    const fixed = await syncExistingTrialUsagesFlag();
+    if (fixed > 0) {
+      console.log(`[trial-sync] Synchronized trial_used=true for ${fixed} clients with trial usages`);
+    }
+  } catch (e) {
+    console.error("[trial-sync] syncExistingTrialUsagesFlag failed:", e);
+  }
+  try {
     const result = await migrateLandingToBlocks();
     if (result.migrated) {
       console.log(`[landing-editor] seeded ${result.created} blocks from legacy settings`);
