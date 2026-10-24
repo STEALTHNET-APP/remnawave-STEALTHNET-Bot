@@ -903,6 +903,14 @@ export const api = {
     });
   },
 
+  async resetClient2FA(token: string, clientId: string, adminPassword: string): Promise<{ ok: boolean; message?: string }> {
+    return request(`/admin/clients/${clientId}/reset-2fa`, {
+      method: "POST",
+      body: JSON.stringify({ adminPassword }),
+      token,
+    });
+  },
+
   // T-tariff-restriction (портировано из WolfVPN): задать/снять запрет тарифов клиенту.
   async setClientTariffRestrictions(token: string, clientId: string, tariffIds: string[], reason: string | null): Promise<{ ok: boolean; restrictedTariffIds: string[]; tariffRestrictionReason: string | null }> {
     return request(`/admin/clients/${clientId}/tariff-restrictions`, {
@@ -3709,6 +3717,7 @@ export interface ClientRecord {
   /** T-tariff-restriction: JSON-массив запрещённых клиенту tariffId + текст причины. */
   restrictedTariffIds?: string | null;
   tariffRestrictionReason?: string | null;
+  totpEnabled?: boolean;
   createdAt: string;
   /** Количество приглашённых рефералов (приходит с бэкенда) */
   _count?: { referrals: number };

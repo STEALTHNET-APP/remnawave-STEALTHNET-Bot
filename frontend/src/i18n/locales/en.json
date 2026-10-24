@@ -457,7 +457,18 @@
       "grant_tariff_note": "Note (optional)",
       "grant_tariff_note_ph": "E.g.: compensation for downtime",
       "grant_tariff_success": "Tariff \"{{name}}\"granted ({{days}} days)",
-      "grant_tariff_error": "Failed to grant tariff"
+      "grant_tariff_error": "Failed to grant tariff",
+      "two_fa": "Two-factor authentication (2FA)",
+      "two_fa_enabled": "2FA active",
+      "two_fa_disabled": "2FA disabled",
+      "reset_2fa": "Reset 2FA",
+      "reset_2fa_title": "Reset user 2FA",
+      "reset_2fa_desc": "You are about to reset two-factor authentication for this client. The old key and authenticator codes will no longer be valid. The client will be able to log in using their password and configure 2FA again.",
+      "reset_2fa_confirm_btn": "Reset 2FA",
+      "admin_password_label": "Admin password to confirm",
+      "admin_password_placeholder": "Enter your admin password",
+      "reset_2fa_success": "User 2FA has been successfully reset",
+      "reset_2fa_warning": "Warning: confirm action with your admin password."
     },
     "tariffs": {
       "title": "Tariffs",
