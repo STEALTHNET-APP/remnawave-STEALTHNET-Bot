@@ -1,14 +1,15 @@
 export STEALTHNET_BUILD_COMMIT := $(shell git rev-parse HEAD)
 export STEALTHNET_BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-.PHONY: menu update watch rebuild docker frontend logs start stop restart \
-        ps status clean alias
+.PHONY: menu upgrade update rebuild watch docker frontend logs start stop restart \
+        ps status clean alias backup
 
-DOCKER_COMPOSE := docker compose
+COMPOSE_PROFILE := $(shell grep -qE '^USE_BUILTIN_NGINX=true' .env 2>/dev/null && echo "--profile builtin-nginx")
+DOCKER_COMPOSE := docker compose $(COMPOSE_PROFILE)
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
-SCRIPT_VERSION := v1.0.5
+SCRIPT_VERSION := v1.0.6
 PANEL_VERSION := $(shell awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' version.json 2>/dev/null)
 PANEL_VERSION_DISPLAY := $(if $(PANEL_VERSION),v$(PANEL_VERSION),unknown)
-MENU_TARGETS := update rebuild watch docker frontend logs start stop restart ps status clean alias
+MENU_TARGETS := upgrade update rebuild watch docker frontend logs start stop restart ps status clean alias backup
 
 .DEFAULT_GOAL := menu
 
@@ -55,14 +56,28 @@ menu: ## 🧭 Interactive command menu
 ## Development
 ##
 
-rebuild: docker frontend ## 🔄 Rebuild containers and frontend
+upgrade: ## 🚀 Back up, pull current branch and rebuild all services
+	$(MAKE) --no-print-directory backup
+	$(MAKE) --no-print-directory update
+	$(MAKE) --no-print-directory rebuild
+	@printf '\nUpgrade complete!\n'
+	$(DOCKER_COMPOSE) ps
+
+backup: ## 💾 Backup database before upgrade
+	bash ./scripts/backup-db.sh $(DOCKER_COMPOSE)
+
+rebuild: docker ## 🔄 Rebuild containers and frontend
+	@if ! grep -q "^USE_BUILTIN_NGINX=true" .env 2>/dev/null; then \
+		$(MAKE) --no-print-directory frontend; \
+	fi
 
 watch: rebuild ## 👀 Rebuild project and follow logs
 	@bash -c 'trap "" INT; $(MAKE) --no-print-directory logs; code=$$?; trap - INT; [ "$$code" -eq 130 ] && exit 0; exit "$$code"'
 
 docker: ## 🐳 Rebuild Docker containers only
-	$(DOCKER_COMPOSE) down
-	$(DOCKER_COMPOSE) up -d --build
+	$(DOCKER_COMPOSE) build
+	$(DOCKER_COMPOSE) up -d --no-build
+	$(DOCKER_COMPOSE) up -d --no-deps --no-build --force-recreate broadcast-worker
 
 frontend: ## ⚛️  Rebuild frontend only
 	bash $(FRONT_SCRIPT)
@@ -110,23 +125,11 @@ clean: ## 🧹 Remove unused Docker resources
 		wait "$$pid"; \
 	'
 
-update: ## 🌿 Pull current branch or replace it with origin/current
-	@bash -c '\
-		branch="$$(git branch --show-current)"; \
-		[ -n "$$branch" ] || { printf "Not on a branch\n"; exit 1; }; \
-		git pull && exit 0; \
-		printf "\nDelete local %s and switch to origin/%s? [y/N] " "$$branch" "$$branch"; \
-		read -r answer; \
-		case "$$answer" in y|Y|yes|YES) ;; *) printf "Skipped\n"; exit 1 ;; esac; \
-		git merge --abort 2>/dev/null || true; \
-		git rebase --abort 2>/dev/null || true; \
-		git fetch origin "$$branch"; \
-		git show-ref --verify --quiet "refs/remotes/origin/$$branch" || { printf "origin/%s not found\n" "$$branch"; exit 1; }; \
-		git reset --hard; \
-		git switch --detach; \
-		git branch -D "$$branch"; \
-		git switch --track -c "$$branch" "origin/$$branch"; \
-	'
+update: ## 🌿 Fast-forward current branch from its upstream
+	git diff --quiet
+	git diff --cached --quiet
+	git pull --ff-only
+
 
 alias: ## ⚡ Add/remove 'st' command for 'make'
 	@bash -c '\

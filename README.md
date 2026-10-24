@@ -396,14 +396,28 @@ docker compose --profile builtin-nginx up -d
 # Shutdown (with built-in nginx + SSL)
 docker compose --profile builtin-nginx down
 
-# Rebuild after code update
-docker compose build api bot
-docker compose up frontend        # rebuild frontend
-docker compose restart api bot
+# Rebuild and recreate containers after code update
+# 1) Backup database before updating (recommended)
+make backup
 
-# Rebuild after code update (with external nginx)
+# 2) Export build version metadata
+export STEALTHNET_BUILD_COMMIT="$(git rev-parse HEAD)"
+export STEALTHNET_BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# 3a) With built-in nginx (USE_BUILTIN_NGINX=true)
+docker compose --profile builtin-nginx up -d --build
+docker compose --profile builtin-nginx up -d --no-deps --force-recreate broadcast-worker
+docker compose --profile builtin-nginx ps
+
+# 3b) With external nginx (USE_BUILTIN_NGINX=false)
+docker compose up -d --build
+docker compose up -d --no-deps --force-recreate broadcast-worker
 chmod +x ./scripts/update-front-with-external-nginx.sh
 ./scripts/update-front-with-external-nginx.sh
+docker compose ps
+
+# Or one-click upgrade via Makefile:
+make upgrade
 
 # For cleaning old images (if disk space too small)
 docker compose down
@@ -412,6 +426,8 @@ docker compose up -d --build && docker compose logs -f -t
 ```
 
 Built-in nginx: [SSL renewal upgrade and verification](docs/SSL-RENEWAL.md) (Russian).
+
+> ⚠️ **Note on updates:** `docker compose restart` only restarts existing containers without applying newly built images. Always use `docker compose up -d --build` to apply code updates.
 
 ### 🔄 Updating from Git (git pull)
 

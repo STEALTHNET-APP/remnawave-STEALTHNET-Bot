@@ -391,15 +391,35 @@ docker compose --profile builtin-nginx up -d
 # Остановка (со встроенным nginx + SSL)
 docker compose --profile builtin-nginx down
 
-# Пересборка после обновления кода
-docker compose build api bot
-docker compose up frontend        # пересобрать фронтенд
-docker compose restart api bot
+# Пересборка и применение новой версии после обновления кода
+# 1) Резервная копия базы данных перед обновлением (рекомендуется)
+docker compose exec postgres pg_dump -U stealthnet stealthnet > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# 2) Экспорт переменных сборки для фиксации хэша коммита в панели
+export STEALTHNET_BUILD_COMMIT="$(git rev-parse HEAD)"
+export STEALTHNET_BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# 3а) Вариант со встроенным Nginx (USE_BUILTIN_NGINX=true)
+docker compose --profile builtin-nginx up -d --build
+docker compose --profile builtin-nginx up -d --no-deps --force-recreate broadcast-worker
+docker compose --profile builtin-nginx ps
+
+# 3б) Вариант с внешним Nginx (USE_BUILTIN_NGINX=false)
+docker compose up -d --build
+docker compose up -d --no-deps --force-recreate broadcast-worker
+chmod +x ./scripts/update-front-with-external-nginx.sh
+./scripts/update-front-with-external-nginx.sh
+docker compose ps
+
+# Либо обновление в одну команду через Makefile:
+make upgrade
 ```
 
 ### 🔄 Обновление из Git (git pull)
 
 Для встроенного nginx см. [обновление и проверку автопродления SSL](../SSL-RENEWAL.md).
+
+> ⚠️ **Внимание:** команда `docker compose restart` не применяет новые образы после обновления кода, так как лишь перезапускает старые контейнеры без их пересоздания. Для применения новой версии всегда используйте `docker compose up -d --build`.
 
 - **`nginx/nginx.conf`** — в `.gitignore` (файл генерируется install.sh под домен). Если Git всё ещё его обновляет при pull, один раз выполните:  
   `git rm --cached nginx/nginx.conf && git commit -m "Stop tracking nginx.conf"`

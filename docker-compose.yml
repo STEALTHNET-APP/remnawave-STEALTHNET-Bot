@@ -35,6 +35,7 @@ services:
   # хост-nginx проксирует на 127.0.0.1:5000. Бинд только на localhost — чтобы
   # API не был доступен с внешних интерфейсов.
   api:
+    image: stealthnet-api:latest
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -112,6 +113,12 @@ services:
   # API стек освобождается полностью — bot/UI не лагают во время рассылки.
   broadcast-worker:
     image: stealthnet-api:latest    # тот же image что и api (build выше)
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        BUILD_COMMIT: ${STEALTHNET_BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${STEALTHNET_BUILD_DATE:-}
     container_name: stealthnet-broadcast-worker
     restart: unless-stopped
     # 25.05.2026, WolfVPN — env_file тот же что у api: import цепочка
