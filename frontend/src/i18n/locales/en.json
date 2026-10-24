@@ -1515,7 +1515,14 @@
       "sync_created": "Created in Remna",
       "sync_linked": "Linked",
       "sync_unlinked": "Unlinked (missing in Remna)",
-      "sync_updated": "Updated"
+      "sync_updated": "Updated",
+      "og_image": "Preview Image (OG Image)",
+      "og_image_hint": "Used for link preview card when sharing links in Telegram, WhatsApp, VK, etc. If not uploaded, site favicon is automatically used.",
+      "og_image_alt": "Preview image",
+      "upload_og_image": "Upload preview image",
+      "reset_to_favicon": "Reset to favicon",
+      "telegram_preview_title": "Telegram Link Preview",
+      "telegram_cache_hint": "Telegram caches link previews. To immediately update the cache, send the link to @WebpageBot."
     },
     "proxy": {
       "title": "Proxy",

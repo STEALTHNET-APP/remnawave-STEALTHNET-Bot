@@ -3388,6 +3388,7 @@ export type UpdateSettingsPayload = {
   logo?: string | null;
   logoBot?: string | null;
   favicon?: string | null;
+  ogImage?: string | null;
   cabinetDesign?: "classic" | "stealth" | "aurora";
   rouletteEnabled?: boolean;
   remnaClientUrl?: string | null;
@@ -3898,6 +3899,7 @@ export interface AdminSettings {
   logo?: string | null;
   logoBot?: string | null;
   favicon?: string | null;
+  ogImage?: string | null;
   cabinetDesign?: "classic" | "stealth" | "aurora";
   remnaClientUrl?: string | null;
   smtpHost?: string | null;
@@ -5463,6 +5465,7 @@ export interface PublicConfig {
   serviceDescription?: string | null;
   logo?: string | null;
   favicon?: string | null;
+  ogImage?: string | null;
   cabinetDesign?: "classic" | "stealth" | "aurora";
   remnaClientUrl?: string | null;
   publicAppUrl?: string | null;

@@ -876,6 +876,7 @@ export function SettingsPage() {
         logo: settings.logo ?? null,
         logoBot: settings.logoBot ?? null,
         favicon: settings.favicon ?? null,
+        ogImage: settings.ogImage ?? null,
         cabinetDesign: settings.cabinetDesign ?? undefined,
         remnaClientUrl: settings.remnaClientUrl ?? null,
         smtpHost: settings.smtpHost ?? null,
@@ -1667,6 +1668,159 @@ export function SettingsPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Баннер для превью ссылки (OG Image) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>{t("admin.settings.og_image")}</Label>
+                    {!settings.ogImage && (settings.favicon || settings.logo) && (
+                      <span className="text-[11px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full border border-border/50">
+                        {settings.favicon ? "Используется фавикон" : "Используется логотип"}
+                      </span>
+                    )}
+                  </div>
+                  {settings.ogImage ? (
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={settings.ogImage}
+                        alt={t("admin.settings.og_image_alt")}
+                        className="h-16 w-28 object-cover rounded-lg border bg-black/20"
+                      />
+                      <div className="flex gap-2 flex-wrap">
+                        <Label className="cursor-pointer">
+                          <span className="inline-flex items-center justify-center rounded-md text-sm font-medium bg-primary text-primary-foreground h-9 px-4 hover:bg-primary/90 transition-colors">
+                            {t("admin.settings.upload_another")}
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (!f) return;
+                              const r = new FileReader();
+                              r.onload = () => setSettings((s) => (s ? { ...s, ogImage: r.result as string } : s));
+                              r.readAsDataURL(f);
+                            }}
+                          />
+                        </Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSettings((s) => (s ? { ...s, ogImage: null } : s))}
+                        >
+                          {t("admin.settings.reset_to_favicon")}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3">
+                        {(settings.favicon || settings.logo) && (
+                          <img
+                            src={settings.favicon || settings.logo || ""}
+                            alt="Current fallback"
+                            className="h-10 w-10 object-contain rounded border bg-black/10 p-1 opacity-70"
+                            title="Текущее изображение по умолчанию"
+                          />
+                        )}
+                        <Label className="cursor-pointer">
+                          <span className="inline-flex items-center justify-center rounded-md text-sm font-medium border border-input bg-background h-9 px-4 hover:bg-accent transition-colors">
+                            {t("admin.settings.upload_og_image")}
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (!f) return;
+                              const r = new FileReader();
+                              r.onload = () => setSettings((s) => (s ? { ...s, ogImage: r.result as string } : s));
+                              r.readAsDataURL(f);
+                            }}
+                          />
+                        </Label>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{t("admin.settings.og_image_hint")}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Интерактивное превью ссылки в Telegram */}
+                <div className="space-y-2 rounded-xl border border-sky-500/20 bg-sky-500/5 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Eye className="h-4 w-4 text-sky-400" />
+                      <Label className="text-xs font-semibold uppercase tracking-wider text-sky-300">
+                        {t("admin.settings.telegram_preview_title")}
+                      </Label>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      Telegram Web / Desktop
+                    </span>
+                  </div>
+
+                  {/* Карточка-сообщение Telegram */}
+                  <div className="rounded-lg bg-card/80 border border-border/80 p-3 max-w-md shadow-sm">
+                    <div className="flex gap-3 border-l-2 border-sky-500 pl-3">
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="text-[11px] font-medium text-sky-400 truncate">
+                          {(() => {
+                            try {
+                              if (settings.publicAppUrl) {
+                                return new URL(settings.publicAppUrl).host;
+                              }
+                            } catch {
+                              /* ignore */
+                            }
+                            return typeof window !== "undefined" ? window.location.host : "example.com";
+                          })()}
+                        </div>
+                        <div className="text-sm font-semibold text-foreground leading-tight line-clamp-1">
+                          {settings.serviceName?.trim() || "STEALTHNET"}
+                        </div>
+                        <div className="text-xs text-muted-foreground leading-snug line-clamp-2">
+                          {settings.serviceDescription?.trim() ||
+                            (settings.serviceName?.trim()
+                              ? `${settings.serviceName.trim()} — сервис для быстрого и безопасного доступа к интернету`
+                              : "Личный кабинет и админка VPN на базе Remnawave")}
+                        </div>
+                      </div>
+                      {/* Миниатюра превью */}
+                      <div className="shrink-0">
+                        {settings.ogImage || settings.favicon || settings.logo ? (
+                          <img
+                            src={settings.ogImage || settings.favicon || settings.logo || ""}
+                            alt="Preview thumbnail"
+                            className="h-14 w-14 rounded object-cover border bg-black/20"
+                          />
+                        ) : (
+                          <div className="h-14 w-14 rounded border border-dashed border-muted-foreground/30 flex items-center justify-center bg-muted/40 text-[10px] text-muted-foreground text-center p-1">
+                            PNG 512×512
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-1">
+                    <span>💡</span>
+                    <span>
+                      {t("admin.settings.telegram_cache_hint")}{" "}
+                      <a
+                        href="https://t.me/WebpageBot"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+                      >
+                        @WebpageBot
+                      </a>
+                    </span>
+                  </p>
+                </div>
+
                 <div className="space-y-2">
                   <Label>{t("admin.settings.app_url")}</Label>
                   <Input

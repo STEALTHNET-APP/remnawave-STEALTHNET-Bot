@@ -1515,7 +1515,14 @@
       "sync_created": "Создано в Remna",
       "sync_linked": "Привязано",
       "sync_unlinked": "Отвязано (нет в Remna)",
-      "sync_updated": "Обновлено"
+      "sync_updated": "Обновлено",
+      "og_image": "Баннер для превью ссылки (OG Image)",
+      "og_image_hint": "Используется для карточки предпросмотра при отправке ссылки в Telegram, WhatsApp, VK и др. Если не загружено, автоматически используется фавикон сайта.",
+      "og_image_alt": "Баннер превью",
+      "upload_og_image": "Загрузить баннер превью",
+      "reset_to_favicon": "Сбросить на фавикон",
+      "telegram_preview_title": "Предпросмотр ссылки в Telegram",
+      "telegram_cache_hint": "Telegram кэширует предпросмотр ссылок. Для моментального обновления кэша отправьте ссылку боту @WebpageBot."
     },
     "proxy": {
       "title": "Прокси",
