@@ -2953,6 +2953,7 @@ const updateSettingsSchema = z.object({
   rollypayApiKey: z.string().max(500).nullable().optional(),
   rollypaySigningSecret: z.string().max(500).nullable().optional(),
   rollypayTestMode: z.boolean().optional(),
+  rollypayEnabled: z.boolean().optional(),
   lavaShopId: z.string().max(200).nullable().optional(),
   lavaSecretKey: z.string().max(500).nullable().optional(),
   lavaAdditionalKey: z.string().max(500).nullable().optional(),
@@ -3402,8 +3403,9 @@ adminRouter.patch("/settings", async (req, res) => {
     const val = updates.smtpUser ?? "";
     await prisma.systemSetting.upsert({ where: { key: "smtp_user" }, create: { key: "smtp_user", value: val }, update: { value: val } });
   }
-  if (updates.smtpPassword !== undefined && updates.smtpPassword !== "") {
-    await prisma.systemSetting.upsert({ where: { key: "smtp_password" }, create: { key: "smtp_password", value: updates.smtpPassword! }, update: { value: updates.smtpPassword! } });
+  if (updates.smtpPassword !== undefined) {
+    const val = updates.smtpPassword ?? "";
+    await prisma.systemSetting.upsert({ where: { key: "smtp_password" }, create: { key: "smtp_password", value: val }, update: { value: val } });
   }
   if (updates.smtpFromEmail !== undefined) {
     const val = updates.smtpFromEmail ?? "";
@@ -3594,6 +3596,10 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.rollypayTestMode !== undefined) {
     const val = updates.rollypayTestMode ? "true" : "false";
     await prisma.systemSetting.upsert({ where: { key: "rollypay_test_mode" }, create: { key: "rollypay_test_mode", value: val }, update: { value: val } });
+  }
+  if (updates.rollypayEnabled !== undefined) {
+    const val = updates.rollypayEnabled ? "true" : "false";
+    await prisma.systemSetting.upsert({ where: { key: "rollypay_enabled" }, create: { key: "rollypay_enabled", value: val }, update: { value: val } });
   }
   if (updates.heleketApiKey !== undefined) {
     const val = updates.heleketApiKey ?? "";

@@ -6103,6 +6103,7 @@ clientRouter.post("/rollypay/create-payment", asyncHandler(async (req, res) => {
     const parsed = heleketCreatePaymentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Неверные параметры", errors: parsed.error.flatten() });
     const config = await getSystemConfig();
+    if (!config.rollypayEnabled) return res.status(503).json({ message: "RollyPay отключён" });
     const rollypayConfig = {
       apiKey: (config as { rollypayApiKey?: string | null }).rollypayApiKey ?? "",
       signingSecret: (config as { rollypaySigningSecret?: string | null }).rollypaySigningSecret ?? "",

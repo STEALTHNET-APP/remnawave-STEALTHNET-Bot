@@ -134,7 +134,7 @@ const SYSTEM_CONFIG_KEYS = [
   "telegram_stars_enabled", "telegram_stars_rub_per_star",
   "heleket_merchant_id", "heleket_api_key",
   "paritypay_shop_id", "paritypay_api_key", "paritypay_signing_secret", "paritypay_enabled",
-  "rollypay_api_key", "rollypay_signing_secret", "rollypay_test_mode",
+  "rollypay_api_key", "rollypay_signing_secret", "rollypay_test_mode", "rollypay_enabled",
   "lava_shop_id", "lava_secret_key", "lava_additional_key",
   "lavatop_api_key", "lavatop_default_offer_id",
   "overpay_api_url", "overpay_project_id", "overpay_login", "overpay_password",
@@ -674,6 +674,7 @@ async function loadSystemConfigFromDb() {
     rollypayApiKey: (map.rollypay_api_key ?? "").trim() || null,
     rollypaySigningSecret: (map.rollypay_signing_secret ?? "").trim() || null,
     rollypayTestMode: (map.rollypay_test_mode ?? "false") === "true",
+    rollypayEnabled: (map.rollypay_enabled ?? "true") !== "false",
     lavaShopId: (map.lava_shop_id ?? "").trim() || null,
     lavaSecretKey: (map.lava_secret_key ?? "").trim() || null,
     lavaAdditionalKey: (map.lava_additional_key ?? "").trim() || null,
@@ -1307,7 +1308,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     // RollyPay считаем настроенным, когда есть и ключ кассы, и секрет подписи:
     // без секрета вебхук всё равно будет отвергнут, кнопка была бы обманом.
     paritypayEnabled: Boolean(full.paritypayEnabled && full.paritypayShopId && full.paritypayApiKey && full.paritypaySigningSecret),
-    rollypayEnabled: Boolean((full as { rollypayApiKey?: string | null }).rollypayApiKey?.trim() && (full as { rollypaySigningSecret?: string | null }).rollypaySigningSecret?.trim()),
+    rollypayEnabled: Boolean((full as { rollypayEnabled?: boolean }).rollypayEnabled !== false && (full as { rollypayApiKey?: string | null }).rollypayApiKey?.trim() && (full as { rollypaySigningSecret?: string | null }).rollypaySigningSecret?.trim()),
     lavaEnabled: Boolean((full as { lavaShopId?: string | null }).lavaShopId?.trim() && (full as { lavaSecretKey?: string | null }).lavaSecretKey?.trim()),
     lavatopEnabled: Boolean((full as { lavatopApiKey?: string | null }).lavatopApiKey?.trim()),
     overpayEnabled: Boolean(
