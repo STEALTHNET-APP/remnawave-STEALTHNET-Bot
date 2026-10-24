@@ -1,14 +1,15 @@
 export STEALTHNET_BUILD_COMMIT := $(shell git rev-parse HEAD)
 export STEALTHNET_BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-.PHONY: menu update watch rebuild docker frontend logs start stop restart \
-        ps status clean alias
+.PHONY: menu upgrade update rebuild watch docker frontend logs start stop restart \
+        ps status clean alias backup
 
-DOCKER_COMPOSE := docker compose
+COMPOSE_PROFILE := $(shell grep -qE '^USE_BUILTIN_NGINX=true' .env 2>/dev/null && echo "--profile builtin-nginx")
+DOCKER_COMPOSE := docker compose $(COMPOSE_PROFILE)
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
-SCRIPT_VERSION := v1.0.5
+SCRIPT_VERSION := v1.0.6
 PANEL_VERSION := $(shell awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' version.json 2>/dev/null)
 PANEL_VERSION_DISPLAY := $(if $(PANEL_VERSION),v$(PANEL_VERSION),unknown)
-MENU_TARGETS := update rebuild watch docker frontend logs start stop restart ps status clean alias
+MENU_TARGETS := upgrade update rebuild watch docker frontend logs start stop restart ps status clean alias backup
 
 .DEFAULT_GOAL := menu
 
@@ -55,14 +56,36 @@ menu: ## 🧭 Interactive command menu
 ## Development
 ##
 
-rebuild: docker frontend ## 🔄 Rebuild containers and frontend
+upgrade: update ## 🚀 Pull latest code and upgrade all containers to the new version
+	@bash -c '\
+		export STEALTHNET_BUILD_COMMIT="$$(git rev-parse HEAD 2>/dev/null || echo unknown)"; \
+		export STEALTHNET_BUILD_DATE="$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
+		printf "\n\033[1;36m==> Rebuilding and upgrading containers...\033[0m\n"; \
+		$(DOCKER_COMPOSE) up -d --build && \
+		$(DOCKER_COMPOSE) up -d --no-deps --force-recreate broadcast-worker && \
+		if ! grep -q "^USE_BUILTIN_NGINX=true" .env 2>/dev/null; then \
+			printf "\n\033[1;36m==> Syncing frontend for external nginx...\033[0m\n"; \
+			chmod +x $(FRONT_SCRIPT) 2>/dev/null || true; \
+			bash $(FRONT_SCRIPT) || true; \
+		fi && \
+		printf "\n\033[1;32m==> Upgrade complete! Container status:\033[0m\n"; \
+		$(DOCKER_COMPOSE) ps; \
+	'
+
+backup: ## 💾 Backup database before upgrade
+	@bash -c 'mkdir -p backups && file="backups/stealthnet_$$(date +%Y%m%d_%H%M%S).sql" && $(DOCKER_COMPOSE) exec postgres pg_dump -U $${POSTGRES_USER:-stealthnet} $${POSTGRES_DB:-stealthnet} > "$$file" && printf "Backup created: %s\n" "$$file"'
+
+rebuild: docker ## 🔄 Rebuild containers and frontend
+	@if ! grep -q "^USE_BUILTIN_NGINX=true" .env 2>/dev/null; then \
+		$(MAKE) --no-print-directory frontend; \
+	fi
 
 watch: rebuild ## 👀 Rebuild project and follow logs
 	@bash -c 'trap "" INT; $(MAKE) --no-print-directory logs; code=$$?; trap - INT; [ "$$code" -eq 130 ] && exit 0; exit "$$code"'
 
 docker: ## 🐳 Rebuild Docker containers only
-	$(DOCKER_COMPOSE) down
 	$(DOCKER_COMPOSE) up -d --build
+	$(DOCKER_COMPOSE) up -d --no-deps --force-recreate broadcast-worker
 
 frontend: ## ⚛️  Rebuild frontend only
 	bash $(FRONT_SCRIPT)

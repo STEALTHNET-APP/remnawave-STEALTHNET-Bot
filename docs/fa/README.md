@@ -317,7 +317,32 @@ docker compose down
 
 # روشن کردن (با Nginx داخلی و SSL)
 docker compose --profile builtin-nginx up -d
+
+# بازسازی و ارتقا پس از به‌روزرسانی کد
+# ۱) بکاپ دیتابیس (پیشنهاد می‌شود)
+docker compose exec postgres pg_dump -U stealthnet stealthnet > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# ۲) متغیرهای نسخه بیلد
+export STEALTHNET_BUILD_COMMIT="$(git rev-parse HEAD)"
+export STEALTHNET_BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# ۳-الف) با Nginx داخلی (USE_BUILTIN_NGINX=true)
+docker compose --profile builtin-nginx up -d --build
+docker compose --profile builtin-nginx up -d --no-deps --force-recreate broadcast-worker
+docker compose --profile builtin-nginx ps
+
+# ۳-ب) با Nginx خارجی (USE_BUILTIN_NGINX=false)
+docker compose up -d --build
+docker compose up -d --no-deps --force-recreate broadcast-worker
+chmod +x ./scripts/update-front-with-external-nginx.sh
+./scripts/update-front-with-external-nginx.sh
+docker compose ps
+
+# یا ارتقا با یک دستور از طریق Makefile:
+make upgrade
 ```
+
+> ⚠️ **توجه:** دستور `docker compose restart` کانتینرهای جدید با ایمیج به‌روزشده ایجاد نمی‌کند. برای اعمال آپدیت‌ها همیشه از `docker compose up -d --build` استفاده کنید.
 
 ### 🔄 راهنمای آپدیت (git pull)
 

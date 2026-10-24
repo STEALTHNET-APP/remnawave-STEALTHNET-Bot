@@ -387,11 +387,31 @@ docker compose --profile builtin-nginx up -d
 # 停止（带内置 nginx + SSL）
 docker compose --profile builtin-nginx down
 
-# 代码更新后重新构建
-docker compose build api bot
-docker compose up frontend        # 重新编译前端
-docker compose restart api bot
+# 代码更新后重新构建与容器重建
+# 1) 更新前备份数据库（推荐）
+docker compose exec postgres pg_dump -U stealthnet stealthnet > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# 2) 导出版本元数据变量
+export STEALTHNET_BUILD_COMMIT="$(git rev-parse HEAD)"
+export STEALTHNET_BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# 3a) 方案 A：使用内置 Nginx（USE_BUILTIN_NGINX=true）
+docker compose --profile builtin-nginx up -d --build
+docker compose --profile builtin-nginx up -d --no-deps --force-recreate broadcast-worker
+docker compose --profile builtin-nginx ps
+
+# 3b) 方案 B：使用外部 Nginx（USE_BUILTIN_NGINX=false）
+docker compose up -d --build
+docker compose up -d --no-deps --force-recreate broadcast-worker
+chmod +x ./scripts/update-front-with-external-nginx.sh
+./scripts/update-front-with-external-nginx.sh
+docker compose ps
+
+# 或通过 Makefile 一键升级：
+make upgrade
 ```
+
+> ⚠️ **注意：** `docker compose restart` 命令仅重启现有容器，不会应用新构建的镜像或执行数据库迁移。请务必使用 `docker compose up -d --build` 来应用新版本。
 
 ### 🔄 从 Git 更新 (git pull)
 
