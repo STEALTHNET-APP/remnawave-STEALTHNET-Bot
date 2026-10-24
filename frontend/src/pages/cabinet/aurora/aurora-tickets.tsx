@@ -73,6 +73,15 @@ export function AuroraTickets() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.token]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const targetId = params.get("id");
+    if (targetId) {
+      setChatTicketId(targetId);
+    }
+  }, []);
+
   async function handleDeleteTicket(id: string, subject?: string) {
     if (!state.token) return;
     const msg = subject ? `Удалить обращение «${subject}»? Все сообщения будут удалены.` : "Удалить обращение?";

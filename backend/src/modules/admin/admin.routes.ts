@@ -131,6 +131,7 @@ import {
   pickField as pickTicketField,
   deleteTicketAttachments,
 } from "../ticket/attachments.js";
+import { notifyClientAboutSupportReply } from "../ticket/ticket-client-notify.service.js";
 import {
   notifyAdminsAboutSupportReply,
   notifyAdminsAboutTicketStatusChange,
@@ -4495,6 +4496,14 @@ adminRouter.post("/tickets/:id/messages", uploadTicketAttachment.array("files", 
     content: trimmed,
     attachmentsCount: attachments.length,
   }).catch(() => {});
+  notifyClientAboutSupportReply({
+    ticketId: ticket.id,
+    clientId: ticket.clientId,
+    replyContent: trimmed,
+    attachmentsCount: attachments.length,
+  }).catch((err) => {
+    console.warn("[admin-ticket] failed to notify client about reply:", err);
+  });
   return res.status(201).json({
     id: msg.id,
     authorType: msg.authorType,

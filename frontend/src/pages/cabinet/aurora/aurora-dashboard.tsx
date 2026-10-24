@@ -19,6 +19,7 @@ import { useClientAuth } from "@/contexts/client-auth";
 import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { AuroraDevicesSheet } from "@/components/aurora/aurora-devices-sheet";
 
 /** Достаёт объект Remnawave-подписки из разных форм ответа бэка. */
 function unwrapRemna(sub: unknown): Record<string, unknown> | null {
@@ -91,6 +92,13 @@ export function AuroraDashboard() {
   const [devices, setDevices] = useState<{ total: number }>({ total: 0 });
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [devicesSheetOpen, setDevicesSheetOpen] = useState(false);
+
+  async function reloadDevices() {
+    if (!token) return;
+    const devs = await api.getMyAllDevices(token).catch(() => ({ total: 0, items: [] }));
+    setDevices({ total: devs.total ?? 0 });
+  }
 
   useEffect(() => {
     if (!token) return;
@@ -214,19 +222,26 @@ export function AuroraDashboard() {
 
       {/* ── Плитки-метрики ── */}
       <section className="grid grid-cols-3 gap-3">
-        {[
-          {
-            v: deviceLimit != null ? `${devices.total}/${deviceLimit}` : String(devices.total),
-            l: "Устройства",
-          },
-          { v: fmtBytes(used), l: "Израсходовано" },
-          { v: fmtDateShort(expireAt), l: "Обновится" },
-        ].map((t) => (
-          <div key={t.l} className="rounded-[20px] bg-[var(--au-surface)] px-3 py-4 text-center">
-            <div className="text-[19px] font-extrabold tracking-tight">{t.v}</div>
-            <div className="mt-0.5 text-[12.5px] text-[var(--au-muted)]">{t.l}</div>
+        <button
+          type="button"
+          onClick={() => setDevicesSheetOpen(true)}
+          className="rounded-[20px] bg-[var(--au-surface)] px-3 py-4 text-center cursor-pointer transition-all active:scale-95 hover:bg-[var(--au-surface)]/80 focus:outline-none"
+        >
+          <div className="text-[19px] font-extrabold tracking-tight">
+            {deviceLimit != null ? `${devices.total}/${deviceLimit}` : String(devices.total)}
           </div>
-        ))}
+          <div className="mt-0.5 text-[12.5px] text-[var(--au-muted)]">Устройства</div>
+        </button>
+
+        <div className="rounded-[20px] bg-[var(--au-surface)] px-3 py-4 text-center">
+          <div className="text-[19px] font-extrabold tracking-tight">{fmtBytes(used)}</div>
+          <div className="mt-0.5 text-[12.5px] text-[var(--au-muted)]">Израсходовано</div>
+        </div>
+
+        <div className="rounded-[20px] bg-[var(--au-surface)] px-3 py-4 text-center">
+          <div className="text-[19px] font-extrabold tracking-tight">{fmtDateShort(expireAt)}</div>
+          <div className="mt-0.5 text-[12.5px] text-[var(--au-muted)]">Обновится</div>
+        </div>
       </section>
 
       {/* ── Действия ── */}
@@ -272,6 +287,13 @@ export function AuroraDashboard() {
         Ссылку вставляют в приложение VPN. Кнопка «Подключиться» откроет страницу, где приложение
         подберётся под ваше устройство.
       </p>
+
+      {/* ── Шторка управления устройствами ── */}
+      <AuroraDevicesSheet
+        open={devicesSheetOpen}
+        onClose={() => setDevicesSheetOpen(false)}
+        onChanged={reloadDevices}
+      />
     </div>
   );
 }

@@ -16,7 +16,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Globe, HelpCircle, CreditCard, FileText, Wallet, ChevronRight,
-  Shield, LogOut, Lock, Wifi, type LucideIcon,
+  Shield, LogOut, Lock, Wifi, Smartphone, type LucideIcon,
 } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { getPublicConfigCached } from "@/lib/public-config";
@@ -25,6 +25,8 @@ import { AuroraTopUpSheet } from "@/components/aurora/aurora-topup-sheet";
 import { AuroraPaymentsSheet } from "@/components/aurora/aurora-payments-sheet";
 import { AuroraSecuritySheet } from "@/components/aurora/aurora-security-sheet";
 import { AuroraLanguageSheet } from "@/components/aurora/aurora-language-sheet";
+import { AuroraDevicesSheet } from "@/components/aurora/aurora-devices-sheet";
+import { api } from "@/lib/api";
 
 interface MenuRow {
   id: string;
@@ -94,6 +96,24 @@ export function AuroraProfile() {
     else if (tab === "language") setLanguageOpen(true);
   }, []);
 
+  const [devicesOpen, setDevicesOpen] = useState(false);
+  const [devicesTotal, setDevicesTotal] = useState<number | null>(null);
+  const token = state.token;
+
+  useEffect(() => {
+    if (!token) return;
+    api.getMyAllDevices(token)
+      .then((r) => setDevicesTotal(r.total ?? (r.items ?? []).length))
+      .catch(() => {});
+  }, [token]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("tab") === "devices" || window.location.hash === "#devices") {
+      setDevicesOpen(true);
+    }
+  }, []);
+
   const client = state.client;
   const display = client?.email?.trim() || (client?.telegramUsername ? `@${client.telegramUsername}` : "Профиль");
   const currency = (client?.preferredCurrency ?? "rub").toLowerCase();
@@ -116,6 +136,13 @@ export function AuroraProfile() {
       title: "Приложение",
       rows: [
         { id: "connect", label: "Подключить VPN", icon: Wifi, to: "/cabinet/subscribe" },
+        {
+          id: "devices",
+          label: "Подключённые устройства",
+          icon: Smartphone,
+          right: devicesTotal != null ? String(devicesTotal) : undefined,
+          onClick: () => setDevicesOpen(true),
+        },
         { id: "payments", label: "История платежей", icon: CreditCard, onClick: () => setPaymentsOpen(true) },
         { id: "support", label: "Поддержка", icon: HelpCircle, to: "/cabinet/tickets" },
       ],
@@ -237,6 +264,18 @@ export function AuroraProfile() {
         <LogOut className="h-[18px] w-[18px]" />
         Выйти из аккаунта
       </button>
+
+      <AuroraDevicesSheet
+        open={devicesOpen}
+        onClose={() => setDevicesOpen(false)}
+        onChanged={() => {
+          if (token) {
+            api.getMyAllDevices(token)
+              .then((r) => setDevicesTotal(r.total ?? (r.items ?? []).length))
+              .catch(() => {});
+          }
+        }}
+      />
 
       {/* ── Сервисная подпись ── */}
       <div className="pb-2 pt-1 text-center text-[11px] text-[var(--au-muted)]">
