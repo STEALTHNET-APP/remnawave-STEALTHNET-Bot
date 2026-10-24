@@ -19,7 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Download, Upload, Link2, Settings2, Gift, Users, ArrowLeftRight, Mail, MessageCircle, CreditCard, ChevronDown, ChevronUp, Copy, Check, Bot, FileJson, Palette, Wallet, Package, Plus, Trash2, KeyRound, Loader2, Sparkles, Layers, Globe, BarChart3, RotateCw, Shield, Terminal, FileText, MapPin, GripVertical, Smile, Sliders, MessageSquare, Eye } from "lucide-react";
+import { Download, Upload, Link2, Settings2, Gift, Users, ArrowLeftRight, Mail, MessageCircle, CreditCard, ChevronDown, ChevronUp, Copy, Check, Bot, FileJson, Palette, Wallet, Package, Plus, Trash2, KeyRound, Loader2, Sparkles, Layers, Globe, BarChart3, RotateCw, Shield, Terminal, FileText, GripVertical, Smile, Sliders, MessageSquare, Eye } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ACCENT_PALETTES } from "@/contexts/theme";
@@ -1164,9 +1164,6 @@ export function SettingsPage() {
         nalogPassword: settings.nalogPassword ?? null,
         nalogDeviceId: settings.nalogDeviceId ?? null,
         nalogServiceName: settings.nalogServiceName ?? null,
-        geoMapEnabled: settings.geoMapEnabled ?? false,
-        geoCacheTtl: settings.geoCacheTtl ?? 60,
-        maxmindDbPath: settings.maxmindDbPath ?? null,
     };
     saveSettingsMut.mutate(payloadBase);
   }
@@ -1243,9 +1240,6 @@ export function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="nalog-settings" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <FileText className="h-4 w-4 shrink-0" />{t("admin.settings.tab_nalog")}
-          </TabsTrigger>
-          <TabsTrigger value="geo-map" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <MapPin className="h-4 w-4 shrink-0" />{t("admin.settings.tab_map")}
           </TabsTrigger>
           <TabsTrigger value="gifts" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Gift className="h-4 w-4 shrink-0" />Подарки
@@ -5409,82 +5403,6 @@ export function SettingsPage() {
                   <li>{t("admin.settings.nalog_how_4")}</li>
                 </ul>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="geo-map">
-          <Card className="overflow-hidden border-border">
-            <div className="relative bg-muted p-4 border-b border-border">
-              <div className="absolute inset-0 bg-transparent pointer-events-none" />
-              <div className="relative flex items-start gap-5">
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-xl font-bold tracking-tight text-foreground">
-                    {t("admin.settings.map_title")}
-                  </h2>
-                  <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.map_subtitle")}</p>
-                </div>
-              </div>
-            </div>
-            <CardContent className="space-y-6 p-4 sm:p-4">
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                  <Label className="text-base font-medium">{t("admin.settings.map_enabled")}</Label>
-                  <p className="text-sm text-muted-foreground">{t("admin.settings.map_enabled_hint")}</p>
-                </div>
-                <Switch
-                  checked={settings.geoMapEnabled ?? false}
-                  onCheckedChange={(v) => setSettings({ ...settings, geoMapEnabled: v })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>{t("admin.settings.map_cache_ttl")}</Label>
-                <Input
-                  type="number"
-                  min={10}
-                  max={3600}
-                  placeholder="60"
-                  value={settings.geoCacheTtl ?? 60}
-                  onChange={(e) => setSettings({ ...settings, geoCacheTtl: parseInt(e.target.value) || 60 })}
-                  disabled={!settings.geoMapEnabled}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t("admin.settings.map_cache_ttl_hint")}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>{t("admin.settings.map_maxmind_path")}</Label>
-                <Input
-                  placeholder="./data/GeoLite2-City.mmdb"
-                  value={settings.maxmindDbPath ?? ""}
-                  onChange={(e) => setSettings({ ...settings, maxmindDbPath: e.target.value || null })}
-                  disabled={!settings.geoMapEnabled}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t("admin.settings.map_maxmind_hint")}
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 text-sm text-blue-700 dark:text-blue-200 space-y-2">
-                <p><strong>{t("admin.settings.map_maxmind_title")}</strong></p>
-                <ul className="list-disc list-inside space-y-1 text-xs">
-                  <li>{t("admin.settings.map_maxmind_1")}</li>
-                  <li>{t("admin.settings.map_maxmind_2")}</li>
-                  <li>{t("admin.settings.map_maxmind_3")}</li>
-                  <li>{t("admin.settings.map_maxmind_4")}</li>
-                </ul>
-              </div>
-
-              <Button
-                onClick={(e) => {
-                  handleSubmit(e as unknown as React.FormEvent);
-                }}
-                disabled={saving}
-              >
-                {saving ? t("admin.settings.saving") : t("admin.settings.save")}
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>

@@ -6,13 +6,12 @@ import {
   Shield, LayoutDashboard, Users, CreditCard, Settings, LogOut, KeyRound,
   Search, Megaphone, Tag, BarChart3, FileText, ExternalLink, Sun, Moon, Monitor,
   Palette, Menu, X, Database, Target, UserCog, Send, CalendarClock, Globe, Server, MessageSquare, Trophy,
-  Network, ShieldAlert, ShieldBan, Key, Map, Video, Languages, Gift, Sparkles, Rocket, Bot,
+  Network, ShieldAlert, ShieldBan, Key, Video, Languages, Gift, Sparkles, Rocket, Bot,
   ChevronRight, Check, ShoppingBag,
   Activity, Inbox, ClipboardList, TrendingUp, Mail,
   RefreshCw, Layers, FileCode2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useRemnaCapabilities } from "@/lib/use-remna-capabilities";
 import { useAdminLanguageSync } from "@/i18n/use-language-sync";
 import { ReleaseToast } from "@/components/admin/release-toast";
 import { ProjectLinks } from "@/components/admin/project-links";
@@ -59,7 +58,6 @@ function useNavSections(): NavItem[] {
     { to: "/admin/balance-sales", label: "Продажи через баланс", icon: FileText, section: "balance-sales-virtual", category: "overview", requiredAction: "view_balance_sales" },
     { to: "/admin/traffic-abuse", label: t("admin.nav.traffic_abuse"), icon: ShieldAlert, section: "traffic-abuse", category: "overview" },
     { to: "/admin/anti-abuse", label: "Анти-абьюз трафика", icon: ShieldBan, section: "anti-abuse", category: "management" },
-    { to: "/admin/geo-map", label: t("admin.nav.geo_map"), icon: Map, section: "geo-map", category: "overview" },
     { to: "/admin/clients", label: t("admin.nav.clients"), icon: Users, section: "clients", category: "management" },
     { to: "/admin/proxy", label: t("admin.nav.proxy"), icon: Globe, section: "proxy", category: "management" },
     { to: "/admin/singbox", label: t("admin.nav.singbox"), icon: Server, section: "singbox", category: "management" },
@@ -130,13 +128,10 @@ function NavItems({ onClick }: { onClick?: () => void }) {
   const location = useLocation();
   const admin = useAuth().state.admin;
   const allNav = useNavSections();
-  // Гео-карта живёт на /api/ip-control, а этот раздел вырезан в Remnawave 3.x —
-  // на таких панелях пункт меню только вводит в заблуждение.
-  const caps = useRemnaCapabilities();
   const navBySection = admin
     ? allNav.filter((item) => canAccessSection(admin.role, admin.allowedSections, item.section, item.requiredAction))
     : allNav;
-  const nav = caps.ipControl ? navBySection : navBySection.filter((item) => item.to !== "/admin/geo-map");
+  const nav = navBySection;
 
   const groupedNav = nav.reduce((acc, item) => {
     if (!acc[item.category]) acc[item.category] = [];
@@ -449,7 +444,7 @@ export function DashboardLayout() {
                       "balance-sales": "Продажи через баланс", "bot-conversations": "Активность клиентов",
                       "remna-nodes": "Ноды", "remna-squads": "Сквады", "remna-hosts": "Хосты", "remna-profiles": "Config-профили",
                       "remna-sub-templates": "Шаблоны подписки",
-                      "traffic-abuse": "Аномалии трафика", "geo-map": "Карта", clients: "Клиенты",
+                      "traffic-abuse": "Аномалии трафика", clients: "Клиенты",
                       proxy: "Прокси", singbox: "Sing-box / AmneziaWG", backup: "Бэкапы", tickets: "Тикеты",
                       withdrawals: "Заявки на вывод", trials: "Триалы", "auto-renew": "Автосписание",
                       tariffs: "Тарифы", promo: "Промо-ссылки", "promo-codes": "Промокоды",
