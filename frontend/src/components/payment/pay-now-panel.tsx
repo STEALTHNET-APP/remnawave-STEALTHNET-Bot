@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 type TelegramWebAppMinimal = {
   initData?: string;
+  openInvoice?: (url: string) => void;
   openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
 };
 
@@ -54,7 +55,8 @@ export function PayNowPanel({ url, provider, onBack, onPaid, compact }: PayNowPa
     if (miniApp) {
       e.preventDefault();
       try {
-        miniApp.openLink!(url);
+        if (/^https:\/\/t\.me\/\$[A-Za-z0-9_-]+$/.test(url) && miniApp.openInvoice) miniApp.openInvoice(url);
+        else miniApp.openLink!(url);
       } catch {
         window.location.assign(url);
       }
