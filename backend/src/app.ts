@@ -274,6 +274,15 @@ const clientAuthLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => isInternalIp(req.ip),
 });
+app.use("/api/client/auth/forgot-password", rateLimit({
+  windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false,
+  message: { message: "Слишком много запросов. Повторите через 15 минут." },
+}));
+app.use("/api/client/auth/forgot-password", rateLimit({
+  windowMs: 15 * 60 * 1000, limit: 3, standardHeaders: true, legacyHeaders: false,
+  keyGenerator: req => typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "invalid",
+  message: { message: "Слишком много запросов. Повторите через 15 минут." },
+}));
 app.use("/api/client/auth", clientAuthLimiter);
 
 // Общий лимит на весь API (по IP: каждый клиент/NAT имеет свой счётчик).
