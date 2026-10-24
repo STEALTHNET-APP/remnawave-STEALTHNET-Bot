@@ -12,6 +12,8 @@
  * этим модулем — НЕ передавайте их в createPayment.
  */
 
+import { getSystemConfig } from "../client/client.service.js";
+
 export type StubBot = {
   id: string;
   token: string;
@@ -23,25 +25,33 @@ export type StubBot = {
 
 const PRIMARY_ID = "primary";
 
-function envToken(): string {
-  return (process.env.BOT_TOKEN ?? "").trim();
+async function activeBotToken(): Promise<string> {
+  try {
+    const cfg = await getSystemConfig();
+    return (cfg.telegramBotToken || process.env.BOT_TOKEN || "").trim();
+  } catch {
+    return (process.env.BOT_TOKEN ?? "").trim();
+  }
 }
 
-export function getPrimaryBot(): Promise<StubBot> {
-  return Promise.resolve({
+export async function getPrimaryBot(): Promise<StubBot> {
+  const token = await activeBotToken();
+  return {
     id: PRIMARY_ID,
-    token: envToken(),
+    token,
     username: null,
     isActive: true,
     isPrimary: true,
     markupPercent: 0,
-  });
+  };
 }
 
-export function getBotByToken(token: string): Promise<StubBot | null> {
+export async function getBotByToken(token: string): Promise<StubBot | null> {
   const t = (token ?? "").trim();
-  const expected = envToken();
-  if (!t || !expected || t !== expected) return Promise.resolve(null);
+  const expected = await activeBotToken();
+  const envVal = (process.env.BOT_TOKEN ?? "").trim();
+  if (!t || (!expected && !envVal)) return null;
+  if (t !== expected && t !== envVal) return null;
   return getPrimaryBot();
 }
 

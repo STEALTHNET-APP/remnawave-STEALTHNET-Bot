@@ -1083,6 +1083,7 @@
       "tab_ssh": "SSH",
       "tab_proxy": "Прокси",
       "tab_nalog": "Мой Налог",
+      "tab_api": "API (.env)",
       "tab_sync": "Синхронизация",
       "general_title": "Общие",
       "general_subtitle": "Название, логотип, тикет-система, языки и валюты",

@@ -1457,6 +1457,26 @@ export const api = {
     return request(`/admin/default-subscription-page-config${fresh ? "?fresh=1" : ""}`, { token });
   },
 
+  async testRemnaConnection(token: string, body?: { apiUrl?: string; adminToken?: string; secretKey?: string }): Promise<{ ok: boolean; status?: number; latencyMs?: number; message?: string; error?: string }> {
+    return request("/admin/remna/test-connection", { method: "POST", body: JSON.stringify(body ?? {}), token });
+  },
+
+  async testTelegramBot(token: string, body?: { token?: string }): Promise<{ ok: boolean; latencyMs?: number; bot?: { id?: number; firstName?: string; username?: string }; message?: string; error?: string }> {
+    return request("/admin/bot/test-token", { method: "POST", body: JSON.stringify(body ?? {}), token });
+  },
+
+  async resetRemnaConfig(token: string): Promise<{ ok: boolean; config: AdminSettings }> {
+    return request("/admin/remna/reset-config", { method: "POST", token });
+  },
+
+  async resetBotToken(token: string): Promise<{ ok: boolean; config: AdminSettings }> {
+    return request("/admin/bot/reset-token", { method: "POST", token });
+  },
+
+  async relinkRemnaUsers(token: string): Promise<{ ok: boolean; reset: boolean; created: number; linked: number; errors: string[] }> {
+    return request("/admin/remna/reset-uuids-and-sync", { method: "POST", token });
+  },
+
   async updateSettings(token: string, data: UpdateSettingsPayload): Promise<AdminSettings> {
     return request("/admin/settings", { method: "PATCH", body: JSON.stringify(data), token });
   },
@@ -3403,6 +3423,9 @@ export type UpdateSettingsPayload = {
   resendApiKey?: string | null;
   resendFromEmail?: string | null;
   passwordResetEnabled?: boolean;
+  remnaApiUrl?: string | null;
+  remnaAdminToken?: string | null;
+  remnaSecretKey?: string | null;
   publicAppUrl?: string | null;
   telegramBotToken?: string | null;
   telegramBotUsername?: string | null;
@@ -3913,6 +3936,12 @@ export interface AdminSettings {
   resendApiKey?: string | null;
   resendFromEmail?: string | null;
   passwordResetEnabled?: boolean;
+  remnaApiUrl?: string | null;
+  remnaAdminToken?: string | null;
+  remnaSecretKey?: string | null;
+  remnaConfigSource?: "database" | "env" | "none";
+  botTokenSource?: "database" | "env" | "none";
+  publicUrlSource?: "database" | "env" | "none";
   publicAppUrl?: string | null;
   telegramBotToken?: string | null;
   remnaAutoSyncEnabled?: boolean;
