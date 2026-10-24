@@ -1,3 +1,4 @@
+import { setRemnaRuntimeConfig } from "../remna/remna.client.js";
 import { parseConfiguredBotButtons } from "../bot/menu-buttons.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -98,6 +99,7 @@ export function generateReferralCode(): string {
 const SYSTEM_CONFIG_KEYS = [
   "lite_mode",
   "remna_auto_sync_enabled", "remna_auto_sync_interval_minutes",
+  "remna_api_url", "remna_admin_token", "remna_secret_key",
   "maintenance_enabled", "maintenance_message",
   "active_languages", "active_currencies", "default_language", "default_currency",
   "default_referral_percent", "referral_percent_level_2", "referral_percent_level_3",
@@ -578,6 +580,33 @@ async function loadSystemConfigFromDb() {
   const map = Object.fromEntries(settings.map((s: { key: string; value: string }) => [s.key, s.value]));
   const activeLangs = (map.active_languages || "ru,en").split(",").map((s: string) => s.trim());
   const activeCurrs = (map.active_currencies || "usd,rub").split(",").map((s: string) => s.trim());
+
+  const remnaApiUrl = (map.remna_api_url ?? "").trim() || (env.REMNA_API_URL?.replace(/\/$/, "") ?? "") || null;
+  const remnaAdminToken = (map.remna_admin_token ?? "").trim() || (env.REMNA_ADMIN_TOKEN ?? "") || null;
+  const remnaSecretKey = (map.remna_secret_key ?? "").trim() || (env.REMNA_SECRET_KEY?.trim() ?? "") || null;
+  const remnaConfigSource: "database" | "env" | "none" =
+    ((map.remna_api_url ?? "").trim() || (map.remna_admin_token ?? "").trim())
+      ? "database"
+      : (env.REMNA_API_URL && env.REMNA_ADMIN_TOKEN ? "env" : "none");
+
+  const telegramBotToken = (map.telegram_bot_token ?? "").trim() || (process.env.BOT_TOKEN ?? "").trim() || null;
+  const botTokenSource: "database" | "env" | "none" =
+    (map.telegram_bot_token ?? "").trim()
+      ? "database"
+      : ((process.env.BOT_TOKEN ?? "").trim() ? "env" : "none");
+
+  const publicAppUrl = (map.public_app_url ?? "").trim() || (process.env.DOMAIN ? `https://${process.env.DOMAIN.trim()}` : null);
+  const publicUrlSource: "database" | "env" | "none" =
+    (map.public_app_url ?? "").trim()
+      ? "database"
+      : ((process.env.DOMAIN ?? "").trim() ? "env" : "none");
+
+  setRemnaRuntimeConfig({
+    apiUrl: remnaApiUrl || "",
+    adminToken: remnaAdminToken || "",
+    secretKey: remnaSecretKey || "",
+    source: remnaConfigSource,
+  });
   return {
     liteMode: map.lite_mode === "true",
     remnaAutoSyncEnabled: map.remna_auto_sync_enabled === "true",
@@ -617,8 +646,14 @@ async function loadSystemConfigFromDb() {
     mailProvider: (map.mail_provider === "resend" ? "resend" : "smtp") as "smtp" | "resend",
     resendApiKey: map.resend_api_key || null,
     resendFromEmail: map.resend_from_email || null,
-    publicAppUrl: map.public_app_url || null,
-    telegramBotToken: map.telegram_bot_token || null,
+    remnaApiUrl,
+    remnaAdminToken,
+    remnaSecretKey,
+    remnaConfigSource,
+    publicAppUrl,
+    publicUrlSource,
+    telegramBotToken,
+    botTokenSource,
     telegramBotUsername: map.telegram_bot_username || null,
     botAdminTelegramIds: parseBotAdminTelegramIds(map.bot_admin_telegram_ids),
     notificationTelegramGroupId: (map.notification_telegram_group_id ?? "").trim() || null,

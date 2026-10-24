@@ -16,7 +16,7 @@ import os from "node:os";
 import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { env } from "../../config/index.js";
-import { remnaSecretCookieHeader } from "../remna/remna.client.js";
+import { remnaSecretCookieHeader, getRemnaRuntimeConfig } from "../remna/remna.client.js";
 
 const exec = promisify(execCb);
 
@@ -45,10 +45,10 @@ async function checkPostgres(): Promise<HealthCheck> {
 }
 
 async function checkRemna(): Promise<HealthCheck> {
-  // Remnawave-конфиг живёт в .env (REMNA_API_URL/REMNA_ADMIN_TOKEN), а не в system_settings.
-  const url = env.REMNA_API_URL?.trim().replace(/\/$/, "") ?? "";
-  const token = env.REMNA_ADMIN_TOKEN?.trim() ?? "";
-  if (!url || !token) return { name: "remna", status: "skip", detail: "REMNA_API_URL/REMNA_ADMIN_TOKEN не заданы в .env" };
+  const remnaCfg = getRemnaRuntimeConfig();
+  const url = remnaCfg.apiUrl;
+  const token = remnaCfg.adminToken;
+  if (!url || !token) return { name: "remna", status: "skip", detail: "Remna API не настроен" };
 
   const t = await timed(async () => {
     // /api/system/stats — лёгкий и стабильный эндпоинт, проверяющий и URL, и токен.
