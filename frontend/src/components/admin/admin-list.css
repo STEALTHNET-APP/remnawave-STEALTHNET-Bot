@@ -1,0 +1,11 @@
+@media (max-width: 1023px) {
+  .admin-card-table, .admin-card-table tbody { display: block; width: 100%; }
+  .admin-card-table thead { display: none; }
+  .admin-card-table tbody > tr { display: block; margin: 0.75rem; padding: 0.5rem; border: 1px solid hsl(var(--border)); border-radius: 0.75rem; }
+  .admin-card-table tbody > tr > td { display: block; width: auto; padding: 0.5rem; white-space: normal; text-align: left; overflow-wrap: anywhere; }
+  .admin-card-table tbody > tr > td[data-label] { display: grid; grid-template-columns: 6rem minmax(0, 1fr); align-items: center; gap: 0.5rem; }
+  .admin-card-table td[data-label]::before { content: attr(data-label); font-size: 0.75rem; font-weight: 500; color: hsl(var(--muted-foreground)); }
+  .admin-card-table td > * { min-width: 0; }
+  .admin-card-table td[data-label] > * { grid-column: 2; }
+  .admin-card-table td[data-label] > :first-child { grid-row: 1; }
+}

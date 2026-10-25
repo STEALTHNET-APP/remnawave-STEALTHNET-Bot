@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { useAdminListParams } from "@/lib/use-admin-list-params";
+import { clientListUrl } from "@/lib/admin-list-utils";
+import "@/components/admin/admin-list.css";
 import { useAuth } from "@/contexts/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-client";
@@ -91,14 +94,12 @@ const EVENT_LABELS: Record<string, { icon: React.ReactNode; label: string }> = {
 export function AdminSecondarySubscriptionsPage() {
   const { state } = useAuth();
   const token = state.accessToken!;
-  const [searchParams, setSearchParams] = useSearchParams();
-  const initialSearch = searchParams.get("search")?.trim() ?? "";
-  
-  const [filters, setFilters] = useState<AdminSecondarySubscriptionFilters>({
-    page: 1,
-    limit: 20,
-    search: initialSearch || undefined,
-  });
+  const { params, update: updateList, page } = useAdminListParams();
+  const appliedSearch = params.get("search") ?? "";
+  const filters: AdminSecondarySubscriptionFilters = {
+    page, limit: 20, search: appliedSearch || undefined,
+    giftStatus: params.get("giftStatus") || undefined,
+  };
 
   const queryClient = useQueryClient();
   const listQuery = useQuery({
@@ -113,31 +114,20 @@ export function AdminSecondarySubscriptionsPage() {
     void queryClient.invalidateQueries({ queryKey: ["admin", "secondary-subscriptions"], exact: false });
   };
 
-  const [searchInput, setSearchInput] = useState(initialSearch);
-
-  // live-search с debounce 300мс. Раньше фильтрация шла только
-  // по Enter / клику «Найти», и пользователи думали что поиск не работает (вводили
-  // username, видели полный список 51k subs, считали что поиск сломан).
+  const [searchDraft, setSearchDraft] = useState({ base: appliedSearch, value: appliedSearch });
+  useEffect(() => setSearchDraft({ base: appliedSearch, value: appliedSearch }), [appliedSearch]);
+  const searchInput = searchDraft.base === appliedSearch ? searchDraft.value : appliedSearch;
+  const setSearchInput = (value: string) => setSearchDraft({ base: appliedSearch, value });
   useEffect(() => {
-    const handle = setTimeout(() => {
-      const next = searchInput.trim();
-      setFilters((prev) => {
-        if ((prev.search ?? "") === next) return prev;
-        return { ...prev, search: next || undefined, page: 1 };
-      });
-      setSearchParams((prev) => {
-        const p = new URLSearchParams(prev);
-        if (next) p.set("search", next);
-        else p.delete("search");
-        return p;
-      });
-    }, 300);
+    if (searchInput.trim() === appliedSearch) return;
+    const handle = setTimeout(() => updateList({ search: searchInput.trim(), page: 1 }, true), 300);
     return () => clearTimeout(handle);
-    // setSearchParams identity is stable; не включаем в deps чтобы не дёргать лишний раз.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchInput]);
-  
+  }, [searchInput, appliedSearch, updateList]);
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const filterKey = JSON.stringify(filters);
+  useEffect(() => setSelectedIds(new Set()), [filterKey]);
+  const allSelected = !!data?.items.length && data.items.every((item) => selectedIds.has(item.id));
   const [detailId, setDetailId] = useState<string | null>(null);
   const detailQuery = useQuery({
     queryKey: qk.admin.secondarySubscription(detailId ?? ""),
@@ -177,38 +167,24 @@ export function AdminSecondarySubscriptionsPage() {
   const [createGiftUrl, setCreateGiftUrl] = useState<string | null>(null);
 
 
-  const handleSearch = () => {
-    const nextSearch = searchInput.trim();
-    setFilters((prev) => ({ ...prev, search: nextSearch || undefined, page: 1 }));
-    setSearchParams((prev) => {
-      const p = new URLSearchParams(prev);
-      if (nextSearch) p.set("search", nextSearch);
-      else p.delete("search");
-      return p;
-    });
-  };
+  const handleSearch = () => updateList({ search: searchInput.trim(), page: 1 });
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") handleSearch();
   };
 
-  const handleFilterChange = <K extends keyof AdminSecondarySubscriptionFilters>(key: K, value: AdminSecondarySubscriptionFilters[K]) => {
-    setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
+  const handleFilterChange = (key: string, value: string | undefined) => {
+    updateList({ [key]: value, page: 1 });
   };
 
   const handleResetFilters = () => {
     setSearchInput("");
-    setFilters({ page: 1, limit: 20 });
-    setSearchParams((prev) => {
-      const p = new URLSearchParams(prev);
-      p.delete("search");
-      return p;
-    });
+    updateList({ page: 1, search: undefined, giftStatus: undefined });
   };
 
   const toggleSelectAll = () => {
-    if (!data) return;
-    if (selectedIds.size === data.items.length) {
+    if (!data || listQuery.isPlaceholderData) return;
+    if (allSelected) {
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(data.items.map((item) => item.id)));
@@ -216,6 +192,7 @@ export function AdminSecondarySubscriptionsPage() {
   };
 
   const toggleSelect = (id: string) => {
+    if (listQuery.isPlaceholderData) return;
     const newSet = new Set(selectedIds);
     if (newSet.has(id)) {
       newSet.delete(id);
@@ -231,6 +208,7 @@ export function AdminSecondarySubscriptionsPage() {
     
     try {
       await api.deleteSecondarySubscriptionsBulk(token, Array.from(selectedIds));
+      setSelectedIds(new Set());
       fetchItems();
     } catch (err) {
       console.error("Failed to bulk delete", err);
@@ -243,6 +221,7 @@ export function AdminSecondarySubscriptionsPage() {
     if (!confirm("Удалить эту подписку?")) return;
     try {
       await api.deleteSecondarySubscription(token, id);
+      setSelectedIds((previous) => new Set([...previous].filter((value) => value !== id)));
       fetchItems();
     } catch (err) {
       console.error("Failed to delete", err);
@@ -427,8 +406,8 @@ export function AdminSecondarySubscriptionsPage() {
         transition={{ delay: 0.15 }}
         className="bg-card border border-border rounded-2xl overflow-hidden relative"
       >
-        <div className="flex items-center justify-between p-4 border-b border-border bg-card relative z-10">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap gap-3 items-center justify-between p-4 border-b border-border bg-card relative z-10">
+          <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-[11px] font-bold uppercase tracking-[0.25em] text-foreground/80 flex items-center gap-2">
               <Gift className="w-4 h-4 text-primary" />
               Список подписок
@@ -440,19 +419,30 @@ export function AdminSecondarySubscriptionsPage() {
               </Button>
             )}
           </div>
-          <Button variant="ghost" size="icon" onClick={fetchItems} disabled={loading} className="h-8 w-8 rounded-full hover:bg-foreground/[0.06] dark:hover:bg-card">
+          <Button variant="ghost" size="icon" onClick={fetchItems} aria-label="Обновить подписки" disabled={listQuery.isFetching} className="h-8 w-8 rounded-full hover:bg-foreground/[0.06] dark:hover:bg-card">
             <RefreshCw className={cn("h-4 w-4 text-muted-foreground transition-transform", loading && "animate-[spin_1.5s_linear_infinite] text-primary")} />
           </Button>
         </div>
 
         <div className="overflow-x-auto relative z-10 min-h-[200px]">
-          <table className="w-full text-sm text-left">
+          {listQuery.isError ? (
+            <div role="alert" className="py-12 text-center space-y-3">
+              <p>Не удалось загрузить подписки</p>
+              <Button variant="outline" onClick={() => void listQuery.refetch()}>Повторить</Button>
+            </div>
+          ) : <>
+          {!!data?.items.length && <label className="lg:hidden flex items-center gap-2 px-4 pt-3 text-sm">
+            <Checkbox checked={allSelected} disabled={listQuery.isPlaceholderData} onCheckedChange={toggleSelectAll} /> Выбрать страницу
+          </label>}
+          <table className="admin-card-table w-full text-sm text-left" aria-busy={listQuery.isFetching}>
             <thead className="bg-foreground/[0.04] dark:bg-white/[0.04] border-b border-border">
               <tr>
                 <th className="px-5 py-4 w-12 text-center">
                   <Checkbox
                     className="border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                    checked={data?.items.length ? selectedIds.size === data.items.length : false}
+                    checked={allSelected}
+                    aria-label="Выбрать страницу"
+                    disabled={listQuery.isPlaceholderData}
                     onCheckedChange={toggleSelectAll}
                   />
                 </th>
@@ -515,11 +505,11 @@ export function AdminSecondarySubscriptionsPage() {
                       )}
                       onClick={(e) => {
                         const target = e.target as HTMLElement;
-                        if (target.closest('button') || target.closest('[data-row-checkbox-zone]')) return;
+                        if (target.closest('a') || target.closest('button') || target.closest('[data-row-checkbox-zone]')) return;
                         openDetail(item.id);
                       }}
                     >
-                      <td
+                      <td data-label="Выбрать"
                         data-row-checkbox-zone
                         className="px-5 py-4 text-center relative z-10 cursor-pointer"
                         onClick={(e) => {
@@ -531,43 +521,46 @@ export function AdminSecondarySubscriptionsPage() {
                         <Checkbox
                           className={cn("border-border transition-all", isSelected && "border-primary bg-primary text-primary-foreground")}
                           checked={isSelected}
+                          aria-label={`Выбрать подписку ${item.id}`}
+                          disabled={listQuery.isPlaceholderData}
                           onCheckedChange={() => toggleSelect(item.id)}
                         />
                       </td>
-                      <td className="px-5 py-4 font-mono text-[11px] text-muted-foreground/70 group-hover:text-primary/70 transition-colors">
+                      <td data-label="ID" className="px-5 py-4 font-mono text-[11px] text-muted-foreground/70 group-hover:text-primary/70 transition-colors">
                         {item.id.substring(0, 8)}
                       </td>
-                      <td className="px-5 py-4">
+                      <td data-label="Владелец" className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div>
-                            <div className="text-sm font-medium text-foreground/90">{ownerName}</div>
+                            <Link to={clientListUrl(item.ownerId)} className="text-sm font-medium text-primary hover:underline" onClick={(e) => e.stopPropagation()}>{ownerName || item.ownerId}</Link>
                             <div className="text-[10px] text-muted-foreground mt-0.5">#{item.subscriptionIndex}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-4">
+                      <td data-label="Тариф" className="px-5 py-4">
                         <div className="text-sm font-medium text-foreground/80">{item.tariff?.name || "—"}</div>
                         <div className="text-[10px] text-muted-foreground mt-0.5">{fmtMskDate(item.createdAt)}</div>
                       </td>
-                      <td className="px-5 py-4">
+                      <td data-label="Статус" className="px-5 py-4">
                         <span className={cn("px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase", badge.className)}>
                           {badge.label}
                         </span>
                       </td>
-                      <td className="px-5 py-4">
+                      <td data-label="Отправитель" className="px-5 py-4">
                         <span className={cn("text-sm transition-colors", giftedName !== "—" ? "text-foreground/80" : "text-muted-foreground/50")}>
                           {giftedName}
                         </span>
                       </td>
-                      <td className="px-5 py-4">
+                      <td data-label="Код" className="px-5 py-4">
                         {item.latestGiftCode ? (
                           <div className="flex items-center gap-2 group/code">
                             <span className="font-mono text-xs bg-black/30 text-primary/90 px-2 py-1 rounded-md border border-border tracking-wider">
                               {item.latestGiftCode.code}
                             </span>
                             <button
+                              aria-label="Скопировать код"
                               onClick={(e) => { e.stopPropagation(); copyToClipboard(item.latestGiftCode!.code); }}
-                              className="w-7 h-7 rounded-md bg-foreground/[0.04] dark:bg-card hover:bg-primary/15 hover:text-primary border border-border hover:border-border flex items-center justify-center transition-all opacity-0 group-hover/code:opacity-100 shadow-sm"
+                              className="w-7 h-7 rounded-md bg-foreground/[0.04] dark:bg-card hover:bg-primary/15 hover:text-primary border border-border hover:border-border flex items-center justify-center transition-all shadow-sm"
                             >
                               {copiedCode === item.latestGiftCode.code ? (
                                 <Check className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
@@ -578,15 +571,15 @@ export function AdminSecondarySubscriptionsPage() {
                           </div>
                         ) : <span className="text-muted-foreground/40">—</span>}
                       </td>
-                      <td className="px-5 py-4 text-right relative z-10">
+                      <td data-label="Действия" className="px-5 py-4 text-right relative z-10">
                         {/* кнопки «глаз» и «удалить» теперь видны
                             всегда, а не только при hover. Раньше пользователи думали что
                             кнопки удаления нет. */}
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl bg-foreground/[0.04] dark:bg-card hover:bg-blue-500/15 hover:text-blue-400 border border-border hover:border-blue-500/30 transition-all shadow-sm" onClick={(e) => { e.stopPropagation(); openDetail(item.id); }}>
+                          <Button variant="ghost" size="icon" aria-label="Открыть подписку" className="h-8 w-8 rounded-xl bg-foreground/[0.04] dark:bg-card hover:bg-blue-500/15 hover:text-blue-400 border border-border hover:border-blue-500/30 transition-all shadow-sm" onClick={(e) => { e.stopPropagation(); openDetail(item.id); }}>
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl bg-foreground/[0.04] dark:bg-card hover:bg-destructive/15 text-muted-foreground hover:text-destructive border border-border hover:border-destructive/30 transition-all shadow-sm" onClick={(e) => { e.stopPropagation(); handleDeleteSingle(item.id); }}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xl bg-foreground/[0.04] dark:bg-card hover:bg-destructive/15 text-muted-foreground hover:text-destructive border border-border hover:border-destructive/30 transition-all shadow-sm" aria-label="Удалить подписку" onClick={(e) => { e.stopPropagation(); handleDeleteSingle(item.id); }}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -597,10 +590,11 @@ export function AdminSecondarySubscriptionsPage() {
               )}
             </tbody>
           </table>
+          </>}
         </div>
 
         {data && data.totalPages > 1 && (
-          <div className="flex items-center justify-between p-4 border-t border-border bg-card relative z-10">
+          <div className="flex flex-wrap gap-3 items-center justify-between p-4 border-t border-border bg-card relative z-10">
             <span className="text-sm font-medium text-muted-foreground">
               Страница {data.page} из {data.totalPages}
             </span>
@@ -609,8 +603,8 @@ export function AdminSecondarySubscriptionsPage() {
                 variant="outline"
                 size="sm"
                 className="rounded-xl border-border bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] shadow-sm transition-colors"
-                disabled={data.page <= 1}
-                onClick={() => setFilters((p) => ({ ...p, page: p.page! - 1 }))}
+                disabled={listQuery.isFetching || page <= 1}
+                onClick={() => updateList({ page: page - 1 })}
               >
                 Назад
               </Button>
@@ -618,8 +612,8 @@ export function AdminSecondarySubscriptionsPage() {
                 variant="outline"
                 size="sm"
                 className="rounded-xl border-border bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] shadow-sm transition-colors"
-                disabled={data.page >= data.totalPages}
-                onClick={() => setFilters((p) => ({ ...p, page: p.page! + 1 }))}
+                disabled={listQuery.isFetching || page >= data.totalPages}
+                onClick={() => updateList({ page: page + 1 })}
               >
                 Вперед
               </Button>
@@ -637,7 +631,7 @@ export function AdminSecondarySubscriptionsPage() {
             <DialogHeader>
               <div className="flex items-center gap-3">
                 <div>
-                  <DialogTitle className="text-xl font-bold tracking-tight">Подписка #{detailData?.subscriptionIndex}</DialogTitle>
+                  <DialogTitle className="text-xl font-bold tracking-tight">{detailData ? `Подписка #${detailData.subscriptionIndex}` : "Подписка"}</DialogTitle>
                   <DialogDescription className="font-mono text-xs opacity-60 mt-1 flex items-center gap-2">
                     ID: {detailId}
                   </DialogDescription>
@@ -647,7 +641,12 @@ export function AdminSecondarySubscriptionsPage() {
           </div>
 
           <div className="p-4 relative z-10">
-            {detailLoading || !detailData ? (
+            {detailQuery.isError ? (
+              <div role="alert" className="py-8 text-center space-y-3">
+                <p>Не удалось загрузить подписку</p>
+                <Button variant="outline" onClick={() => void detailQuery.refetch()}>Повторить</Button>
+              </div>
+            ) : detailLoading || !detailData ? (
               <div className="py-16 flex flex-col items-center justify-center space-y-4">
                 <div className="relative w-16 h-16 flex items-center justify-center">
                   <div className="absolute inset-0 border-2 border-dashed border-border rounded-full animate-[spin_3s_linear_infinite]" />

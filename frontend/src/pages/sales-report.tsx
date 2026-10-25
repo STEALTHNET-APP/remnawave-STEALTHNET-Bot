@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { useAdminListParams } from "@/lib/use-admin-list-params";
+import { clientListUrl, csvCell } from "@/lib/admin-list-utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
@@ -59,6 +62,7 @@ interface SalesData {
 
 const PROVIDERS: { value: string; label: string; color: string }[] = [
   { value: "", label: "Все", color: "" },
+  { value: "telegram_stars", label: "Telegram Stars", color: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20" },
   { value: "balance", label: "Баланс", color: "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20" },
   { value: "platega", label: "Platega", color: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
   { value: "yoomoney_form", label: "ЮMoney", color: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20" },
@@ -90,13 +94,14 @@ const DATE_PRESETS = [
 export function SalesReportPage() {
   const { state } = useAuth();
   const token = state.accessToken;
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [provider, setProvider] = useState("");
-  const [search, setSearch] = useState("");
-  const [searchApplied, setSearchApplied] = useState("");
-  const [page, setPage] = useState(1);
-  const [activePreset, setActivePreset] = useState<number | null>(null);
+  const { params, update: updateList, page } = useAdminListParams();
+  const dateFrom = params.get("from") ?? "";
+  const dateTo = params.get("to") ?? "";
+  const provider = params.get("provider") ?? "";
+  const searchApplied = params.get("search") ?? "";
+  const [search, setSearch] = useState(searchApplied);
+  useEffect(() => setSearch(searchApplied), [searchApplied]);
+  const activePreset = params.has("preset") ? Number(params.get("preset")) : null;
   const [actionsPaymentId, setActionsPaymentId] = useState<string | null>(null);
   const limit = 50;
 
@@ -127,35 +132,26 @@ export function SalesReportPage() {
   }
 
   function applySearch() {
-    setSearchApplied(search);
-    setPage(1);
+    updateList({ search: search.trim(), page: 1 });
   }
 
   function clearFilters() {
-    setDateFrom("");
-    setDateTo("");
-    setProvider("");
     setSearch("");
-    setSearchApplied("");
-    setActivePreset(null);
-    setPage(1);
+    updateList({ from: undefined, to: undefined, provider: undefined, search: undefined, preset: undefined, page: 1 });
   }
 
   function applyPreset(days: number) {
     const to = new Date();
     const from = new Date();
-    if (days > 0) from.setDate(from.getDate() - days);
-    setDateFrom(from.toISOString().slice(0, 10));
-    setDateTo(to.toISOString().slice(0, 10));
-    setActivePreset(days);
-    setPage(1);
+    if (days > 0) from.setUTCDate(from.getUTCDate() - (days - 1));
+    updateList({ from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10), preset: days, page: 1 });
   }
 
   function exportCSV() {
     if (!data?.items.length) return;
     const header = "Дата;Заказ;Клиент;Telegram;Тариф;Сумма;Валюта;Провайдер";
     const rows = data.items.map((r) =>
-      [fmtDate(r.paidAt), r.orderId, r.clientEmail ?? "", r.clientTelegramUsername ?? r.clientTelegramId ?? "", r.tariffName ?? "", r.amount.toFixed(2), r.currency, r.provider].join(";"),
+      [fmtDate(r.paidAt), r.orderId, r.clientEmail ?? "", r.clientTelegramUsername ?? r.clientTelegramId ?? "", r.tariffName ?? "", r.amount.toFixed(2), r.currency, r.provider].map(csvCell).join(";"),
     );
     const csv = "\uFEFF" + header + "\n" + rows.join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -169,7 +165,12 @@ export function SalesReportPage() {
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / limit)) : 1;
   const hasFilters = dateFrom || dateTo || provider || searchApplied;
-  const avgAmount = data && data.totalCount > 0 ? data.totalAmount / data.totalCount : 0;
+  const providerOptions = [...PROVIDERS, ...Object.keys(data?.byProvider ?? {}).filter((key) => !PROVIDERS.some((item) => item.value === key)).map((value) => ({ value, label: providerLabel(value), color: providerColor(value) }))];
+  if (provider && !providerOptions.some((item) => item.value === provider)) providerOptions.push({ value: provider, label: providerLabel(provider), color: providerColor(provider) });
+  const currencyTotals = Object.entries(data?.byCurrency ?? {});
+  const moneySummary = (average = false) => currencyTotals.length
+    ? currencyTotals.map(([currency, value]) => <span key={currency} className="block">{fmtMoney(average ? value.sum / Math.max(1, value.count) : value.sum)} {currency}</span>)
+    : "—";
 
   return (
     <div className="flex flex-col gap-3.5 relative">
@@ -191,11 +192,11 @@ export function SalesReportPage() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void reportQuery.refetch()} disabled={loading} className="gap-1.5 rounded-xl">
             <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-            <span className="hidden sm:inline">Обновить</span>
+            <span>Обновить</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={exportCSV} disabled={!data?.items.length} className="gap-1.5 rounded-xl">
+          <Button variant="outline" size="sm" onClick={exportCSV} disabled={loading || reportQuery.isError || !data?.items.length} className="gap-1.5 rounded-xl">
             <Download className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">CSV</span>
+            <span>CSV этой страницы</span>
           </Button>
         </div>
       </motion.div>
@@ -206,16 +207,10 @@ export function SalesReportPage() {
           {[
             {
               icon: DollarSign,
-              label: "Выручка",
-              value: fmtMoney(data.totalAmount),
+              label: "Выручка на странице",
+              value: moneySummary(),
               color: "primary",
-              extra: Object.keys(data.byCurrency).length > 1 ? (
-                <div className="flex flex-wrap gap-x-2 mt-0.5">
-                  {Object.entries(data.byCurrency).map(([cur, v]) => (
-                    <span key={cur} className="text-[10px] text-muted-foreground">{fmtMoney(v.sum)} {cur}</span>
-                  ))}
-                </div>
-              ) : null,
+              extra: null,
               gradient: "bg-muted",
               iconColor: "text-primary",
             },
@@ -230,8 +225,8 @@ export function SalesReportPage() {
             },
             {
               icon: TrendingUp,
-              label: "Средний чек",
-              value: fmtMoney(avgAmount),
+              label: "Средний чек на странице",
+              value: moneySummary(true),
               color: "amber",
               extra: null,
               gradient: "bg-muted",
@@ -252,7 +247,7 @@ export function SalesReportPage() {
                 <div className="flex items-center gap-3">
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">{c.label}</p>
-                    <p className="text-[23px] font-extrabold tabular-nums tracking-[-0.4px] truncate mt-[5px]">{c.value}</p>
+                    <div className="text-lg sm:text-[23px] font-extrabold tabular-nums tracking-[-0.4px] break-words mt-[5px]">{c.value}</div>
                     {c.extra}
                   </div>
                 </div>
@@ -267,7 +262,7 @@ export function SalesReportPage() {
             whileHover={{ y: -2 }}
           >
             <Card className="relative overflow-hidden bg-muted border border-border rounded-xl p-4 h-full">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground mb-2">По способу</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground mb-2">По способу на странице</p>
               <div className="flex flex-wrap gap-1.5">
                 {Object.entries(data.byProvider).sort((a, b) => b[1] - a[1]).map(([prov, cnt]) => (
                   <span key={prov} className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border", providerColor(prov))}>
@@ -319,10 +314,10 @@ export function SalesReportPage() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 flex-wrap bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-border">
             <CreditCard className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
-            {PROVIDERS.map((p) => (
+            {providerOptions.map((p) => (
               <button
                 key={p.value}
-                onClick={() => { setProvider(p.value); setPage(1); }}
+                onClick={() => { updateList({ provider: p.value, page: 1 }); }}
                 className={cn(
                   "rounded-lg px-3 py-1 text-xs font-medium transition-all",
                   provider === p.value
@@ -335,10 +330,10 @@ export function SalesReportPage() {
             ))}
           </div>
 
-          <div className="flex items-center gap-1.5 ml-auto">
-            <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setActivePreset(null); setPage(1); }} className="h-8 w-[130px] text-xs rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-border" />
+          <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+            <Input type="date" aria-label="С даты (UTC)" value={dateFrom} onChange={(e) => { updateList({ from: e.target.value, preset: undefined, page: 1 }); }} className="h-8 w-[130px] text-xs rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-border" />
             <span className="text-muted-foreground text-xs">—</span>
-            <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setActivePreset(null); setPage(1); }} className="h-8 w-[130px] text-xs rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-border" />
+            <Input type="date" aria-label="По дату (UTC)" value={dateTo} onChange={(e) => { updateList({ to: e.target.value, preset: undefined, page: 1 }); }} className="h-8 w-[130px] text-xs rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border-border" />
           </div>
 
           {hasFilters && (
@@ -354,6 +349,11 @@ export function SalesReportPage() {
         {loading && !data ? (
           <Card className="bg-card border-border rounded-2xl py-16 flex items-center justify-center">
             <RefreshCw className="h-8 w-8 animate-spin text-primary/60" />
+          </Card>
+        ) : reportQuery.isError ? (
+          <Card role="alert" className="py-16 text-center space-y-3">
+            <p>Не удалось загрузить платежи</p>
+            <Button variant="outline" onClick={() => void reportQuery.refetch()}>Повторить</Button>
           </Card>
         ) : !data?.items.length ? (
           <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center text-center">
@@ -373,10 +373,10 @@ export function SalesReportPage() {
               transition={{ delay: Math.min(i * 0.015, 0.4) }}
               whileHover={{ y: -1 }}
             >
-              <Card className="group relative overflow-hidden flex items-center gap-4 bg-card border-border rounded-xl p-4 hover:border-border transition-all duration-300">
+              <Card className="group relative overflow-hidden flex flex-col sm:flex-row sm:items-center gap-4 bg-card border-border rounded-xl p-4 hover:border-border transition-all duration-300">
                 {/* Amount circle */}
                 {/* Main info */}
-                <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-y-1 gap-x-6">
+                <div className="flex-1 min-w-0 w-full grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-y-1 gap-x-6">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-sm tracking-tight">
@@ -392,24 +392,15 @@ export function SalesReportPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
-                      {r.clientTelegramUsername && (
-                        <span className="inline-flex items-center gap-1">
-                          <User className="h-3 w-3" /> @{r.clientTelegramUsername}
-                        </span>
-                      )}
-                      {!r.clientTelegramUsername && r.clientEmail && (
-                        <span className="inline-flex items-center gap-1">
-                          <User className="h-3 w-3" /> {r.clientEmail}
-                        </span>
-                      )}
-                      {!r.clientTelegramUsername && !r.clientEmail && r.clientTelegramId && (
-                        <span className="inline-flex items-center gap-1">
-                          <User className="h-3 w-3" /> TG: {r.clientTelegramId}
-                        </span>
-                      )}
+                      {r.clientId ? (
+                        <Link to={clientListUrl(r.clientId)} className="inline-flex min-w-0 items-center gap-1 text-primary hover:underline break-all">
+                          <User className="h-3 w-3 shrink-0" />
+                          {r.clientTelegramUsername ? `@${r.clientTelegramUsername}` : r.clientEmail || r.clientTelegramId || r.clientId}
+                        </Link>
+                      ) : <span>Клиент недоступен</span>}
                       <span className="inline-flex items-center gap-1">
                         <Hash className="h-3 w-3" />
-                        <span className="font-mono select-all">{r.orderId}</span>
+                        <span className="font-mono select-all break-all">{r.orderId}</span>
                       </span>
                     </div>
                   </div>
@@ -421,12 +412,12 @@ export function SalesReportPage() {
                   </div>
                 </div>
 
-                <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="shrink-0 flex items-center justify-end gap-2 w-full sm:w-auto border-t sm:border-t-0 border-border pt-2 sm:pt-0">
                   <Button
                     variant="ghost" size="icon"
                     className="h-8 w-8 rounded-full hover:bg-foreground/10"
                     onClick={() => setActionsPaymentId(r.id)}
-                    title="Действия (refund / mark-failed / retry)"
+                    title="Действия с платежом" aria-label="Действия с платежом"
                   >
                     <MoreVertical className="h-4 w-4" />
                   </Button>
@@ -434,7 +425,7 @@ export function SalesReportPage() {
                     variant="ghost" size="icon"
                     className="h-8 w-8 rounded-full text-red-500 dark:text-red-400 hover:bg-red-500/10"
                     onClick={() => deletePayment(r.id)}
-                    title="Удалить платёж"
+                    title="Удалить платёж" aria-label="Удалить платёж"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -452,10 +443,10 @@ export function SalesReportPage() {
             Стр. <span className="font-semibold text-foreground">{page}</span> из {totalPages} · {data.total} записей
           </span>
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(1)} className="h-8 px-2 rounded-lg">«</Button>
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="h-8 px-3 rounded-lg">Назад</Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="h-8 px-3 rounded-lg">Вперёд</Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="h-8 px-2 rounded-lg">»</Button>
+            <Button variant="outline" size="sm" disabled={loading || page <= 1} onClick={() => updateList({ page: 1 })} className="h-8 px-2 rounded-lg">«</Button>
+            <Button variant="outline" size="sm" disabled={loading || page <= 1} onClick={() => updateList({ page: page - 1 })} className="h-8 px-3 rounded-lg">Назад</Button>
+            <Button variant="outline" size="sm" disabled={loading || page >= totalPages} onClick={() => updateList({ page: page + 1 })} className="h-8 px-3 rounded-lg">Вперёд</Button>
+            <Button variant="outline" size="sm" disabled={loading || page >= totalPages} onClick={() => updateList({ page: totalPages })} className="h-8 px-2 rounded-lg">»</Button>
           </div>
         </Card>
       )}

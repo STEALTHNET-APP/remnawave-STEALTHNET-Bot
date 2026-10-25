@@ -1,3 +1,5 @@
+import { useAdminListParams } from "@/lib/use-admin-list-params";
+import "@/components/admin/admin-list.css";
 import { AdminReferralQr } from "@/components/referral-qr";
 import { useEffect, useState, useCallback } from "react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -97,14 +99,15 @@ export function ClientsPage() {
     ? { activeLanguages: settingsQuery.data.activeLanguages, activeCurrencies: settingsQuery.data.activeCurrencies }
     : null;
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
+  const { params, update: updateList, page } = useAdminListParams();
+  const searchApplied = params.get("search") ?? "";
+  const filterBlocked = ["blocked", "active"].includes(params.get("status") ?? "") ? params.get("status")! : "all";
   const [editing, setEditing] = useState<ClientRecord | null>(null);
   const [editForm, setEditForm] = useState<UpdateClientPayload & Partial<UpdateClientRemnaPayload>>({});
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [passwordForm, setPasswordForm] = useState<{ newPassword: string; confirm: string }>({ newPassword: "", confirm: "" });
-  const [search, setSearch] = useState("");
-  const [searchApplied, setSearchApplied] = useState("");
-  const [filterBlocked, setFilterBlocked] = useState<"all" | "blocked" | "active">("all");
+  const [search, setSearch] = useState(searchApplied);
+  useEffect(() => setSearch(searchApplied), [searchApplied]);
   //  Bulk-actions state 
   const selectedIds = useAdminSelection((s) => s.selectedClientIds);
   const toggleClientSelected = useAdminSelection((s) => s.toggleClientSelected);
@@ -129,6 +132,10 @@ export function ClientsPage() {
     ? { items: clientsQuery.data.items, total: clientsQuery.data.total }
     : null;
   const loading = clientsQuery.isLoading;
+  useEffect(() => {
+    clearSelectedClients();
+    return () => clearSelectedClients();
+  }, [listParamsJson, clearSelectedClients]);
   const onlineUuids = (data?.items ?? [])
     .map((c) => c.remnawaveUuid)
     .filter((u): u is string => Boolean(u));
@@ -241,9 +248,11 @@ export function ClientsPage() {
     remnaBulkMutation.mutate({ action, uuids: remnaUuids });
   };
   function toggleId(id: string) {
+    if (clientsQuery.isPlaceholderData) return;
     toggleClientSelected(id);
   }
   function toggleAll() {
+    if (clientsQuery.isPlaceholderData) return;
     if (allSelected) setSelectedClients([]);
     else setSelectedClients(allRowIds);
   }
@@ -278,8 +287,7 @@ export function ClientsPage() {
   }
 
   const applySearch = () => {
-    setSearchApplied(search);
-    setPage(1);
+    updateList({ search: search.trim(), page: 1 });
   };
 
   function openEdit(c: ClientRecord) {
@@ -374,7 +382,7 @@ export function ClientsPage() {
             </div>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={() => refetchClients()} disabled={loading} className="relative h-9 w-9 rounded-full hover:bg-foreground/[0.06] dark:hover:bg-card">
+        <Button variant="ghost" size="icon" onClick={() => refetchClients()} aria-label="Обновить клиентов" disabled={clientsQuery.isFetching} className="relative h-9 w-9 rounded-full hover:bg-foreground/[0.06] dark:hover:bg-card">
           <RefreshCw className={cn("h-4 w-4 text-muted-foreground transition-all", loading && "animate-[spin_1.5s_linear_infinite] text-primary")} />
         </Button>
       </motion.div>
@@ -403,7 +411,7 @@ export function ClientsPage() {
             {(["all", "active", "blocked"] as const).map((f) => (
               <button
                 key={f}
-                onClick={() => { setFilterBlocked(f); setPage(1); }}
+                onClick={() => { updateList({ status: f === "all" ? undefined : f, page: 1 }); }}
                 className={cn(
                   "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
                   filterBlocked === f
@@ -411,7 +419,7 @@ export function ClientsPage() {
                     : "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.05] dark:hover:bg-card"
                 )}
               >
-                {f === "all" ? t("admin.clients.all") : f === "active" ? t("admin.clients.active") : t("admin.clients.blocked")}
+                {f === "all" ? t("admin.clients.all") : f === "active" ? "Не заблок." : t("admin.clients.blocked")}
               </button>
             ))}
           </div>
@@ -558,18 +566,28 @@ export function ClientsPage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
             <span className="text-sm font-medium text-muted-foreground">{t("admin.clients.loading")}</span>
           </div>
+        ) : clientsQuery.isError ? (
+          <div role="alert" className="py-20 text-center space-y-3">
+            <p>Не удалось загрузить клиентов</p>
+            <Button variant="outline" onClick={() => void refetchClients()}>Повторить</Button>
+          </div>
         ) : !data || data.items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
-            <p className="text-muted-foreground font-medium">{t("admin.clients.loading_error")}</p>
-            {searchApplied && (
-              <Button variant="link" size="sm" className="mt-2 text-primary" onClick={() => { setSearch(""); setSearchApplied(""); }}>
-                {t("admin.common.refresh")}
+            <p className="text-muted-foreground font-medium">{searchApplied || filterBlocked !== "all" ? "Клиенты не найдены" : "Клиентов пока нет"}</p>
+            {(searchApplied || filterBlocked !== "all") && (
+              <Button variant="link" size="sm" className="mt-2 text-primary" onClick={() => { setSearch(""); updateList({ search: undefined, status: undefined, page: 1 }); }}>
+                Сбросить фильтры
               </Button>
             )}
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left whitespace-nowrap">
+            <div className="lg:hidden px-4 pt-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={allSelected} disabled={clientsQuery.isPlaceholderData} onChange={toggleAll} /> Выбрать страницу
+              </label>
+            </div>
+            <table className="admin-card-table w-full text-sm text-left whitespace-nowrap" aria-busy={clientsQuery.isFetching}>
               <thead className="text-[10.5px] uppercase tracking-[0.7px] text-muted-foreground border-b border-border">
                 <tr>
                   <th className="px-3 pb-2 pt-1">
@@ -577,6 +595,7 @@ export function ClientsPage() {
                       type="checkbox"
                       className="h-4 w-4 rounded border-border bg-background cursor-pointer accent-primary"
                       checked={allSelected}
+                      disabled={clientsQuery.isPlaceholderData}
                       onChange={toggleAll}
                       onClick={(e) => e.stopPropagation()}
                       aria-label="Выбрать всех"
@@ -608,16 +627,17 @@ export function ClientsPage() {
                         c.isBlocked && "bg-destructive/5"
                       )}
                     >
-                      <td className="px-3 py-2 w-9" onClick={(e) => e.stopPropagation()}>
+                      <td data-label="Выбрать" className="px-3 py-2 w-9" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           className="h-4 w-4 rounded border-border bg-background cursor-pointer accent-primary"
                           checked={selectedIdSet.has(c.id)}
+                          disabled={clientsQuery.isPlaceholderData}
                           onChange={() => toggleId(c.id)}
                           aria-label={`Выбрать клиента ${c.id}`}
                         />
                       </td>
-                      <td className="px-3 py-2">
+                      <td data-label="Клиент" className="px-3 py-2">
                         <div className="flex items-center gap-3">
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
@@ -637,20 +657,20 @@ export function ClientsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 py-2">
+                      <td data-label="Контакты" className="px-3 py-2">
                         <div className="flex flex-col gap-0.5 text-[12px] text-muted-foreground">
                           {c.email && c.telegramUsername && <div className="flex items-center gap-1"><span className="text-foreground/80">{c.email}</span></div>}
                           {c.telegramId && <div className="flex items-center gap-1">TG: <span className="text-foreground/80">{c.telegramId}</span></div>}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-[12px] uppercase text-muted-foreground">{c.preferredLang}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td data-label="Язык" className="px-3 py-2 text-[12px] uppercase text-muted-foreground">{c.preferredLang}</td>
+                      <td data-label="Баланс" className="px-3 py-2 text-right">
                         <span className={cn("tabular-nums text-[12.7px]", c.balance > 0 ? "text-foreground font-semibold" : "text-muted-foreground")}>
                           {c.balance.toFixed(2)} {c.preferredCurrency.toUpperCase()}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-[12px] text-muted-foreground tabular-nums">{fmtMskDate(c.createdAt)}</td>
-                      <td className="px-3 py-2">
+                      <td data-label="Регистрация" className="px-3 py-2 text-[12px] text-muted-foreground tabular-nums">{fmtMskDate(c.createdAt)}</td>
+                      <td data-label="Статус" className="px-3 py-2">
                         <div className="flex flex-col gap-1">
                           {c.isBlocked && (
                             <span className="inline-flex items-center rounded-full bg-red-500/15 text-red-400 px-2.5 py-0.5 text-[11px] font-medium border border-red-500/20 max-w-fit shadow-sm">
@@ -663,16 +683,16 @@ export function ClientsPage() {
                             </span>
                           )}
                           {!c.isBlocked && !c.activeNode && (
-                            <span className="text-[10.5px] font-bold px-2 py-[2px] rounded-full bg-muted text-muted-foreground max-w-fit">НЕТ ПОДПИСКИ</span>
+                            <span className="text-[10.5px] font-bold px-2 py-[2px] rounded-full bg-muted text-muted-foreground max-w-fit">Нет активной ноды</span>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted hover:text-foreground" onClick={(e) => { e.stopPropagation(); openEdit(c); }} title="Редактировать">
+                      <td data-label="Действия" className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-muted hover:text-foreground" onClick={(e) => { e.stopPropagation(); openEdit(c); }} title="Редактировать" aria-label="Редактировать клиента">
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/15 text-destructive" onClick={(e) => { e.stopPropagation(); deleteClient(c); }} title="Удалить">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/15 text-destructive" onClick={(e) => { e.stopPropagation(); deleteClient(c); }} title="Удалить" aria-label="Удалить клиента">
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -687,20 +707,20 @@ export function ClientsPage() {
       </Card>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between bg-card border border-border px-3 py-2 rounded-xl">
+        <div className="flex flex-wrap gap-3 items-center justify-between bg-card border border-border px-3 py-2 rounded-xl">
           <span className="text-sm font-medium text-muted-foreground px-3">
             {page} / {totalPages}
           </span>
           <div className="flex items-center gap-1.5">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(1)} className="h-8 w-8 p-0 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-border rounded-lg">
+            <Button variant="outline" size="sm" disabled={clientsQuery.isFetching || page <= 1} onClick={() => updateList({ page: 1 })} className="h-8 w-8 p-0 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-border rounded-lg">
               «</Button>
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="h-8 px-3 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-border rounded-lg">
+            <Button variant="outline" size="sm" disabled={clientsQuery.isFetching || page <= 1} onClick={() => updateList({ page: page - 1 })} className="h-8 px-3 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-border rounded-lg">
               {t("admin.common.back")}
             </Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="h-8 px-3 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-border rounded-lg">
+            <Button variant="outline" size="sm" disabled={clientsQuery.isFetching || page >= totalPages} onClick={() => updateList({ page: page + 1 })} className="h-8 px-3 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-border rounded-lg">
               {t("admin.sales.next")}
             </Button>
-            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="h-8 w-8 p-0 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-border rounded-lg">»
+            <Button variant="outline" size="sm" disabled={clientsQuery.isFetching || page >= totalPages} onClick={() => updateList({ page: totalPages })} className="h-8 w-8 p-0 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08] border-border rounded-lg">»
             </Button>
           </div>
         </div>
