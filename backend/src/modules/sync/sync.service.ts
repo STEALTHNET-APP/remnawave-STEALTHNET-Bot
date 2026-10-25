@@ -16,6 +16,7 @@ import {
   remnaUsernameFromClient,
 } from "../remna/remna.client.js";
 import { getSystemConfig } from "../client/client.service.js";
+import { upsertSubscriptionByRemnaUuid } from "../subscription/subscription.helpers.js";
 import { getPrimaryBot } from "../bot/bot.service.js";
 
 const PAGE_SIZE = 100;
@@ -109,6 +110,7 @@ export async function syncFromRemna(): Promise<{
 
           const existing = existingByUuid || existingByTg || existingByEmail;
 
+          let clientTargetId: string;
           if (existing) {
             const data: { remnawaveUuid: string; telegramId?: string; email?: string | null; telegramUsername?: string; trialUsed?: boolean } = {
               remnawaveUuid: uuid,
@@ -131,10 +133,11 @@ export async function syncFromRemna(): Promise<{
               where: { id: existing.id },
               data,
             });
+            clientTargetId = existing.id;
             result.updated++;
           } else {
             const refCode = "REF-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
-            await prisma.client.create({
+            const created = await prisma.client.create({
               data: {
                 remnawaveUuid: uuid,
                 email: email ?? null,
@@ -147,8 +150,10 @@ export async function syncFromRemna(): Promise<{
                 trialUsed: true,
               },
             });
+            clientTargetId = created.id;
             result.created++;
           }
+          await upsertSubscriptionByRemnaUuid(clientTargetId, { remnawaveUuid: uuid }).catch(() => {});
         } catch (e) {
           result.errors.push(`${uuid}: ${e instanceof Error ? e.message : String(e)}`);
         }

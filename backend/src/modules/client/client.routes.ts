@@ -413,13 +413,48 @@ clientAuthRouter.post("/register", async (req, res) => {
         }
       }
       if (existing.isBlocked) return res.status(403).json({ message: "Аккаунт заблокирован" });
+
+      // Если remnawaveUuid у клиента не был привязан — ищем в Remna по telegramId
+      if (!existing.remnawaveUuid && isRemnaConfigured()) {
+        try {
+          const byTg = await remnaGetUserByTelegramId(data.telegramId!);
+          const remnaUuid = extractRemnaUuid(byTg.data);
+          if (remnaUuid) {
+            existing.remnawaveUuid = remnaUuid;
+            await prisma.client.update({
+              where: { id: existing.id },
+              data: { remnawaveUuid: remnaUuid, trialUsed: true },
+            }).catch(() => {});
+            await upsertSubscriptionByRemnaUuid(existing.id, { remnawaveUuid: remnaUuid }).catch(() => {});
+          }
+        } catch (e) {
+          console.error("[register/telegram] existing remna sync failed:", e);
+        }
+      } else if (existing.remnawaveUuid) {
+        const subCount = await prisma.subscription.count({ where: { ownerId: existing.id } });
+        if (subCount === 0) {
+          await upsertSubscriptionByRemnaUuid(existing.id, { remnawaveUuid: existing.remnawaveUuid }).catch(() => {});
+        }
+      }
+
       // isNewClient=false — клиент уже был
       // (бот не будет fire after_registration broadcast).
       return res.json({ token: signClientToken(existing.id), client: toClientShape(existing), isNewClient: false });
     }
   }
 
-  // Не создаём пользователя в Remna при регистрации — клиент неактивен до триала или оплаты тарифа.
+  // Не создаём нового пользователя в Remna при регистрации — если пользователь уже существует в Remna,
+  // привязываем его существующий uuid, предотвращая дубликаты с одинаковым telegramId.
+  let remnawaveUuid: string | null = null;
+  if (data.telegramId && isRemnaConfigured()) {
+    try {
+      const byTgRes = await remnaGetUserByTelegramId(data.telegramId);
+      remnawaveUuid = extractRemnaUuid(byTgRes.data);
+    } catch (e) {
+      console.error("[register/telegram] remnaGetUserByTelegramId failed:", e);
+    }
+  }
+
   const referralCode = generateReferralCode();
   let referrerId: string | null = null;
   if (data.referralCode) {
@@ -438,7 +473,7 @@ clientAuthRouter.post("/register", async (req, res) => {
     data: asClientUncheckedCreate({
       email: data.email ?? null,
       passwordHash,
-      remnawaveUuid: null,
+      remnawaveUuid,
       referralCode,
       referrerId,
       preferredLang: data.preferredLang,
@@ -455,9 +490,14 @@ clientAuthRouter.post("/register", async (req, res) => {
       registrationUa: (req.headers["user-agent"] as string)?.slice(0, 500) ?? null,
       registrationSource: data.telegramId ? "telegram" : "web",
       ...(isBareTgUser ? { onboardingCompleted: false } : {}),
+      ...(remnawaveUuid ? { trialUsed: true } : {}),
     }),
   });
   notifyAdminsAboutNewClient(client.id).catch(() => {});
+
+  if (remnawaveUuid) {
+    await upsertSubscriptionByRemnaUuid(client.id, { remnawaveUuid }).catch(() => {});
+  }
 
   if (data.telegramId) {
     const blConfig2 = await getSystemConfig();
@@ -3084,6 +3124,45 @@ clientRouter.get("/subscription/all", async (req, res) => {
     const gs = s.giftStatus ?? "";
     return gs !== "GIFT_RESERVED" && gs !== "GIFT_CODE_ACTIVE";
   });
+
+  // Self-heal: если у клиента есть remnawaveUuid (или профиль в Remna по TG), но в таблице subscriptions нет слота 0
+  if (visible.length === 0) {
+    const cl = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { remnawaveUuid: true, telegramId: true },
+    });
+    let uuidToHeal = cl?.remnawaveUuid;
+    if (!uuidToHeal && cl?.telegramId && isRemnaConfigured()) {
+      try {
+        const byTg = await remnaGetUserByTelegramId(cl.telegramId);
+        uuidToHeal = extractRemnaUuid(byTg.data);
+        if (uuidToHeal) {
+          await prisma.client.update({ where: { id: clientId }, data: { remnawaveUuid: uuidToHeal } }).catch(() => {});
+        }
+      } catch {}
+    }
+    if (uuidToHeal) {
+      await upsertSubscriptionByRemnaUuid(clientId, { remnawaveUuid: uuidToHeal }).catch(() => {});
+      const healedSub = await prisma.subscription.findFirst({
+        where: { ownerId: clientId, subscriptionIndex: 0 },
+        select: {
+          id: true,
+          remnawaveUuid: true,
+          subscriptionIndex: true,
+          trialId: true,
+          giftStatus: true,
+          autoRenewEnabled: true,
+          extraDevices: true,
+          extraDevicesMonthlyPrice: true,
+          bannedUntil: true,
+          banReason: true,
+          tariff: { select: { id: true, name: true, menuEmoji: true } },
+          trial: { select: { name: true, convertEnabled: true, convertAllTariffs: true, convertTariffIds: true } },
+        },
+      });
+      if (healedSub) visible.push(healedSub);
+    }
+  }
 
   const items: SubInfo[] = [];
   for (const sub of visible) {
