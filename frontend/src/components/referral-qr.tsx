@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { usePublicConfig } from "@/lib/public-config";
 import { buildReferralLinks, type ReferralLink } from "@/lib/referral-links";
+import { canvasPng, qrImage, saveDownload } from "@/lib/qr-download";
 
 function saveFile(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -90,6 +91,7 @@ export function ReferralQrButton({ code, links }: { code: string; links: Referra
         <div className="flex flex-wrap gap-2">
           {(["png", "svg"] as const).map((format) => <Button key={format} type="button" variant="outline" className="flex-1 gap-2" disabled={busy} onClick={() => void download(format)}><Download className="h-4 w-4" />{t("referralQr.download", { format: format.toUpperCase() })}</Button>)}
         </div>
+        <ReferralPrintButton code={code} links={links} />
         {error && <p role="alert" className="text-sm text-destructive">{t("referralQr.failed")}</p>}
       </DialogContent>
     </Dialog>
@@ -101,6 +103,7 @@ export function ReferralQrLinks({ code, links }: { code: string; links: Referral
   const [copied, setCopied] = useState<string | null>(null);
   const [error, setError] = useState(false);
   return <div className="space-y-3">
+    <ReferralPrintButton code={code} links={links} />
     {links.map((link) => <div key={link.kind} className="min-w-0 space-y-2">
       <p className="text-xs font-semibold">{t(`referralQr.${link.kind}`)}</p>
       <p className="break-all font-mono text-xs select-all">{link.url}</p>
@@ -110,6 +113,56 @@ export function ReferralQrLinks({ code, links }: { code: string; links: Referral
       </div>
     </div>)}
     {error && <p role="alert" className="text-xs text-destructive">{t("referralQr.copyFailed")}</p>}
+  </div>;
+}
+
+export function ReferralPrintButton({ code, links }: { code: string; links: ReferralLink[] }) {
+  const { t } = useTranslation();
+  const config = usePublicConfig();
+  const root = useRef<HTMLDivElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const printable = links.filter(link => link.url).slice(0, 2);
+  if (!code || !printable.length) return null;
+  return <div className="space-y-2">
+    <div hidden ref={root}>{printable.map(link => <QRCodeSVG key={link.kind} value={link.url} size={900} level="M" marginSize={4} bgColor="#ffffff" fgColor="#000000" />)}</div>
+    <Button type="button" variant="outline" className="w-full gap-2 whitespace-normal h-auto min-h-10" disabled={busy || !config} onClick={async () => {
+      if (!root.current || !config || busy) return;
+      setBusy(true); setFailed(false);
+      try {
+        const canvas = document.createElement("canvas"); canvas.width = 2480; canvas.height = 1754;
+        const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Canvas unavailable");
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        if (config.logo) {
+          const logo = new Image(); logo.crossOrigin = "anonymous";
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const timer = window.setTimeout(() => reject(new Error("Logo timeout")), 3000);
+              logo.onload = () => { clearTimeout(timer); resolve(); };
+              logo.onerror = () => { clearTimeout(timer); reject(new Error("Logo unavailable")); };
+              logo.src = config.logo!;
+            });
+            const scale = Math.min(110 / logo.width, 110 / logo.height);
+            ctx.drawImage(logo, 1240 - logo.width * scale / 2, 30, logo.width * scale, logo.height * scale);
+          } catch {}
+        }
+        ctx.fillStyle = "#111111"; ctx.textAlign = "center";
+        ctx.font = "bold 88px Arial, sans-serif";
+        ctx.fillText(config.serviceName || "STEALTHNET", 1240, 210, 2200);
+        const svgs = Array.from(root.current.querySelectorAll("svg"));
+        for (let i = 0; i < printable.length; i++) {
+          const image = await qrImage(svgs[i], 900);
+          const center = printable.length === 1 ? 1240 : 640 + i * 1200;
+          ctx.drawImage(image, center - 450, 370, 900, 900);
+          ctx.font = "bold 60px Arial, sans-serif";
+          ctx.fillText(t(printable[i].kind === "bot" ? "referralQr.printBot" : "referralQr.site"), center, 1370, 1050);
+        }
+        ctx.font = "48px Arial, sans-serif";
+        ctx.fillText(t("referralQr.printCode", { code }), 1240, 1590, 2200);
+        saveDownload(await canvasPng(canvas), `ref-${code.replace(/[^a-zA-Z0-9_-]/g, "_")}-print.png`);
+      } catch { setFailed(true); } finally { setBusy(false); }
+    }}><Download className="h-4 w-4 shrink-0" />{t("referralQr.printDownload")}</Button>
+    {failed && <p role="alert" className="text-sm text-destructive">{t("referralQr.failed")}</p>}
   </div>;
 }
 

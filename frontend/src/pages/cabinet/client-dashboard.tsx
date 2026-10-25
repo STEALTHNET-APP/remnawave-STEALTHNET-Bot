@@ -1,3 +1,4 @@
+import { CopyLinkButton, SubscriptionQrButton } from "@/components/subscription-link-actions";
 import { PromoCodeForm } from "@/components/cabinet/promo-code-form";
 import { ReferralQrButton } from "@/components/referral-qr";
 import { useEffect, useState } from "react";
@@ -832,9 +833,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                     <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={vpnUrl}>
                       {vpnUrl}
                     </code>
-                    <Button size="icon" variant="outline" className="shrink-0 h-auto w-11 rounded-xl bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { navigator.clipboard.writeText(vpnUrl || ""); window.Telegram?.WebApp?.showPopup?.({ title: t("cabinet.dashboard.copied_title"), message: t("cabinet.dashboard.copied_message") }); }}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
+                    <CopyLinkButton url={vpnUrl} className="shrink-0 h-11 w-11 rounded-xl" /><SubscriptionQrButton url={vpnUrl} name={tariffDisplayName || undefined} className="shrink-0 h-11 w-11 rounded-xl" />
                   </div>
                   <div className="pt-1">
                     <Button className="w-full gap-2 shadow-lg h-12 rounded-xl text-md hover:scale-[1.02] transition-transform duration-300 [&_svg]:self-center [&_span]:leading-none bg-gradient-to-r from-primary via-fuchsia-500 to-purple-500 text-white border-0" asChild>
@@ -965,9 +964,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                     <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={secParsed.subscriptionUrl}>
                       {secParsed.subscriptionUrl}
                     </code>
-                    <Button size="icon" variant="outline" className="shrink-0 h-auto w-11 rounded-xl bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { navigator.clipboard.writeText(secParsed.subscriptionUrl || ""); window.Telegram?.WebApp?.showPopup?.({ title: t("cabinet.dashboard.copied_title"), message: t("cabinet.dashboard.copied_message") }); }}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
+                    <CopyLinkButton url={secParsed.subscriptionUrl} className="shrink-0 h-11 w-11 rounded-xl" /><SubscriptionQrButton url={secParsed.subscriptionUrl} name={sec.tariffDisplayName || `Подписка #${(sec.subscriptionIndex ?? 0) + 1}`} className="shrink-0 h-11 w-11 rounded-xl" />
                   </div>
                 )}
                 {!sec.isBanned && <div className="pt-2 flex flex-col sm:flex-row gap-2">
@@ -1352,9 +1349,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                       <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={vpnUrl}>
                         {vpnUrl}
                       </code>
-                      <Button size="icon" variant="outline" aria-label="Скопировать ссылку подписки" className="shrink-0 h-auto min-h-11 w-11 rounded-xl bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { navigator.clipboard.writeText(vpnUrl || ""); }}>
-                        <Copy className="h-4 w-4" />
-                      </Button>
+                      <CopyLinkButton url={vpnUrl} className="shrink-0 h-11 w-11 rounded-xl" /><SubscriptionQrButton url={vpnUrl} name={tariffDisplayName || undefined} className="shrink-0 h-11 w-11 rounded-xl" />
                     </div>
                     <Button className="w-full gap-2 shadow-lg h-12 rounded-xl text-md hover:scale-[1.02] transition-transform [&_svg]:self-center [&_span]:leading-none bg-gradient-to-r from-primary via-fuchsia-500 to-purple-500 text-white border-0" asChild>
                       {useRemnaPage && vpnUrl ? (
@@ -1698,9 +1693,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                           <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={secParsed.subscriptionUrl}>
                             {secParsed.subscriptionUrl}
                           </code>
-                          <Button size="icon" variant="outline" aria-label="Скопировать ссылку подписки" className="shrink-0 h-auto min-h-11 w-11 rounded-xl bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { navigator.clipboard.writeText(secParsed.subscriptionUrl || ""); window.Telegram?.WebApp?.showPopup?.({ title: t("cabinet.dashboard.copied_title"), message: t("cabinet.dashboard.copied_message") }); }}>
-                            <Copy className="h-4 w-4" />
-                          </Button>
+                          <CopyLinkButton url={secParsed.subscriptionUrl} className="shrink-0 h-11 w-11 rounded-xl" /><SubscriptionQrButton url={secParsed.subscriptionUrl} name={sec.tariffDisplayName || `Подписка #${(sec.subscriptionIndex ?? 0) + 1}`} className="shrink-0 h-11 w-11 rounded-xl" />
                         </div>
                       )}
                       {!sec.isBanned && <div className="pt-2 flex flex-col gap-2">

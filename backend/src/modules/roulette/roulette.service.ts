@@ -1,3 +1,5 @@
+import { nextRouletteSpinAt } from "./roulette-cooldown.js";
+import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../db.js";
 import {
@@ -20,6 +22,8 @@ export type RouletteSector = {
 export type RouletteSettings = {
   enabled: boolean;
   cooldownHours: number;
+  resetMode?: "hours" | "daily";
+  timeZone?: string;
   sectors: RouletteSector[];
 };
 
@@ -149,7 +153,7 @@ async function resolveTargetSubscription(clientId: string, targetSubscriptionId?
 
 export async function getRouletteSettings(db: Prisma.TransactionClient = prisma): Promise<RouletteSettings> {
   const settings = await db.systemSetting.findMany({
-    where: { key: { in: ["roulette_enabled", "roulette_cooldown_hours", "roulette_sectors"] } },
+    where: { key: { in: ["roulette_enabled", "roulette_cooldown_hours", "roulette_sectors", "roulette_reset_mode", "roulette_time_zone"] } },
   });
   const map = Object.fromEntries(settings.map((s) => [s.key, s.value]));
   const enabled = map.roulette_enabled !== "false";
@@ -163,14 +167,28 @@ export async function getRouletteSettings(db: Prisma.TransactionClient = prisma)
       }
     } catch {}
   }
-  return { enabled, cooldownHours, sectors };
+  const resetMode = map.roulette_reset_mode === "daily" ? "daily" : "hours";
+  let timeZone = map.roulette_time_zone || "UTC";
+  try { new Intl.DateTimeFormat("en", { timeZone }); } catch { timeZone = "UTC"; }
+  return { enabled, cooldownHours, sectors, resetMode, timeZone };
 }
 
 export async function updateRouletteSettings(params: {
   enabled?: boolean;
   cooldownHours?: number;
+  resetMode?: "hours" | "daily";
+  timeZone?: string;
   sectors?: RouletteSector[];
 }): Promise<RouletteSettings> {
+  const schedule = z.object({
+    enabled: z.boolean().optional(),
+    cooldownHours: z.number().int().min(1).max(720).optional(),
+    resetMode: z.enum(["hours", "daily"]).optional(),
+    timeZone: z.string().trim().min(1).max(100).refine(value => { try { new Intl.DateTimeFormat("en", { timeZone: value }); return true; } catch { return false; } }, "Unknown time zone").optional(),
+  }).parse(params);
+  for (const [key, value] of [["roulette_reset_mode", schedule.resetMode], ["roulette_time_zone", schedule.timeZone]]) {
+    if (value !== undefined) await prisma.systemSetting.upsert({ where: { key: key! }, create: { key: key!, value }, update: { value } });
+  }
   if (params.enabled !== undefined) {
     const val = params.enabled ? "true" : "false";
     await prisma.systemSetting.upsert({
@@ -225,14 +243,12 @@ export async function getRouletteStatus(clientId: string) {
     orderBy: { createdAt: "desc" },
   });
 
-  const cooldownMs = settings.cooldownHours * 3600 * 1000;
   const now = Date.now();
-  const lastSpinTime = lastSpin ? lastSpin.createdAt.getTime() : 0;
-  const diff = now - lastSpinTime;
+  const nextAt = lastSpin ? nextRouletteSpinAt(lastSpin.createdAt, settings) : 0;
   const pendingReward = lastSpin?.status === "PENDING";
-  const canSpin = pendingReward || (settings.enabled && diff >= cooldownMs);
-  const nextSpinAt = canSpin ? null : new Date(lastSpinTime + cooldownMs).toISOString();
-  const secondsLeft = canSpin ? 0 : Math.max(0, Math.ceil((cooldownMs - diff) / 1000));
+  const canSpin = pendingReward || (settings.enabled && now >= nextAt);
+  const nextSpinAt = nextAt > now && !pendingReward ? new Date(nextAt).toISOString() : null;
+  const secondsLeft = nextSpinAt ? Math.max(0, Math.ceil((nextAt - now) / 1000)) : 0;
 
   // Клиенту отдаём секторы без полей weight (вероятностей), чтобы не раскрывать шансы
   const publicSectors = settings.sectors.map(({ id, type, value, label, color, icon }) => ({
@@ -297,6 +313,8 @@ export async function getRouletteStatus(clientId: string) {
     enabled: settings.enabled || pendingReward,
     pendingReward,
     cooldownHours: settings.cooldownHours,
+    resetMode: settings.resetMode,
+    timeZone: settings.timeZone,
     canSpin,
     nextSpinAt,
     secondsLeft,
@@ -309,6 +327,8 @@ export async function getRouletteStatus(clientId: string) {
 type AwardPlan = {
   sector: RouletteSector;
   cooldownHours: number;
+  resetMode?: "hours" | "daily";
+  timeZone?: string;
   subscriptionId?: string;
   uuid?: string;
   expireAt?: string;
@@ -342,7 +362,7 @@ async function reserveSpin(clientId: string, targetSubscriptionId?: string) {
     if (last?.status === "PENDING") return last;
     const settings = await getRouletteSettings(db);
     if (!settings.enabled) throw new Error("Рулетка временно отключена");
-    if (last && Date.now() - last.createdAt.getTime() < settings.cooldownHours * 3_600_000) {
+    if (last && Date.now() < nextRouletteSpinAt(last.createdAt, settings)) {
       throw new Error("Следующая попытка пока недоступна");
     }
     const sectors = settings.sectors.filter(s => Number.isFinite(s.weight) && s.weight > 0 && Number.isFinite(s.value) && s.value >= 0);
@@ -350,7 +370,7 @@ async function reserveSpin(clientId: string, targetSubscriptionId?: string) {
     let rand = Math.random() * sectors.reduce((sum, s) => sum + s.weight, 0);
     let sector = sectors[sectors.length - 1];
     for (const candidate of sectors) { rand -= candidate.weight; if (rand < 0) { sector = candidate; break; } }
-    const plan: AwardPlan = { sector: { ...sector }, cooldownHours: settings.cooldownHours };
+    const plan: AwardPlan = { sector: { ...sector }, cooldownHours: settings.cooldownHours, resetMode: settings.resetMode, timeZone: settings.timeZone };
     let label = sector.label;
     if (sector.type === "balance") plan.balance = sector.value;
     if (sector.type === "discount") {
@@ -456,7 +476,7 @@ export async function spinRoulette(clientId: string, targetSubscriptionId?: stri
   return {
     spinId: spin.id, sectorId: spin.sectorId,
     reward: { ...plan.sector, label: spin.rewardLabel, color: plan.sector.color || "#6366f1", icon: plan.sector.icon || "gift" },
-    nextSpinAt: new Date(spin.createdAt.getTime() + plan.cooldownHours * 3_600_000).toISOString(),
+    nextSpinAt: new Date(nextRouletteSpinAt(spin.createdAt, plan)).toISOString(),
   };
 }
 
