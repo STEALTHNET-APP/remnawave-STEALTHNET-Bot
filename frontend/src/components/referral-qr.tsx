@@ -155,7 +155,7 @@ export function ReferralPrintButton({ code, links }: { code: string; links: Refe
           const center = printable.length === 1 ? 1240 : 640 + i * 1200;
           ctx.drawImage(image, center - 450, 370, 900, 900);
           ctx.font = "bold 60px Arial, sans-serif";
-          ctx.fillText(t(`referralQr.${printable[i].kind}`), center, 1370, 1050);
+          ctx.fillText(t(printable[i].kind === "bot" ? "referralQr.printBot" : "referralQr.site"), center, 1370, 1050);
         }
         ctx.font = "48px Arial, sans-serif";
         ctx.fillText(t("referralQr.printCode", { code }), 1240, 1590, 2200);

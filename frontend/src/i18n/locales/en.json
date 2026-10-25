@@ -25,6 +25,7 @@
   },
   "passwordHint": "At least {{count}} characters. We recommend combining letters, numbers and special characters.",
   "referralQr": {
+    "printBot": "Telegram bot",
     "printDownload": "Download for printing (PNG)",
     "printCode": "Referral code: {{code}}",
     "open": "QR code",

@@ -454,7 +454,7 @@ export function StealthSubscribe() {
                       <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1.5">Subscription URL</p>
                       <p className="font-mono text-[11px] text-zinc-200 break-all">{subUrl}</p>
                     </div>
-                    <div className="flex gap-2"><CopyLinkButton url={subUrl || ""} showLabel className="min-h-12 flex-1 gap-2 rounded-2xl" /><SubscriptionQrButton url={subUrl || ""} className="h-12 w-12 shrink-0 rounded-2xl" /></div>
+                    <div className="flex gap-2"><CopyLinkButton url={subUrl || ""} showLabel className="min-h-12 flex-1 gap-2 rounded-2xl" /><SubscriptionQrButton url={subUrl || ""} name={subsList.find(sub => sub.id === selectedSubId)?.label} className="h-12 w-12 shrink-0 rounded-2xl" /></div>
                   </>
                 )}
             </div>
@@ -542,7 +542,7 @@ export function StealthSubscribe() {
               </div>
             )}
 
-            <div className="flex gap-2"><CopyLinkButton url={subUrl || ""} showLabel className="min-h-12 flex-1 gap-2 rounded-2xl" /><SubscriptionQrButton url={subUrl || ""} className="h-12 w-12 shrink-0 rounded-2xl" /></div>
+            <div className="flex gap-2"><CopyLinkButton url={subUrl || ""} showLabel className="min-h-12 flex-1 gap-2 rounded-2xl" /><SubscriptionQrButton url={subUrl || ""} name={subsList.find(sub => sub.id === selectedSubId)?.label} className="h-12 w-12 shrink-0 rounded-2xl" /></div>
 
             <StadiumButton variant="ghost" size="md" iconLeft={<ArrowRight className="h-4 w-4" />} onClick={() => navigate("/cabinet/dashboard")}>
               Завершить

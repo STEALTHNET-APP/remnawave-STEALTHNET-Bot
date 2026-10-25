@@ -25,6 +25,7 @@
   },
   "passwordHint": "Минимум {{count}} символов. Рекомендуем сочетать буквы, цифры и специальные символы.",
   "referralQr": {
+    "printBot": "Telegram-бот",
     "printDownload": "Скачать для печати (PNG)",
     "printCode": "Реферальный код: {{code}}",
     "open": "QR-код",

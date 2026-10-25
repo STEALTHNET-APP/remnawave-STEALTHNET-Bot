@@ -245,7 +245,7 @@ export function AuroraDashboard() {
 
 <div className="flex gap-2">
         <CopyLinkButton url={subUrl || ""} showLabel className="flex-1 h-auto min-h-12 rounded-[20px] gap-2" />
-        <SubscriptionQrButton url={subUrl || ""} className="shrink-0 h-12 w-12 rounded-[20px]" />
+        <SubscriptionQrButton url={subUrl || ""} name={main.tariffDisplayName || undefined} className="shrink-0 h-12 w-12 rounded-[20px]" />
       </div>
 
       {/* ── Рулетка удачи ── */}
