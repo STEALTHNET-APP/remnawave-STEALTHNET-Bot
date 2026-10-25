@@ -1,4 +1,13 @@
 {
+  "subscriptionLink": {
+    "copy": "Copy link",
+    "copied": "Link copied",
+    "manual": "Automatic copying failed. Select the link and copy it manually.",
+    "url": "Subscription link",
+    "title": "Subscription QR code",
+    "qr": "Show subscription QR code",
+    "scan": "Scan with another device. Keep this code private."
+  },
   "mailTest": {
     "title": "Test email delivery",
     "hint": "Uses saved SMTP or Resend settings. Save any changes above before sending a test.",
@@ -16,6 +25,8 @@
   },
   "passwordHint": "At least {{count}} characters. We recommend combining letters, numbers and special characters.",
   "referralQr": {
+    "printDownload": "Download for printing (PNG)",
+    "printCode": "Referral code: {{code}}",
     "open": "QR code",
     "title": "Referral link QR code",
     "printHint": "For printing: 1024×1024 PNG or scalable SVG.",

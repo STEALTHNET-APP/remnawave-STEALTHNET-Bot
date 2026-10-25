@@ -1,3 +1,4 @@
+import { CopyLinkButton, SubscriptionQrButton } from "@/components/subscription-link-actions";
 /**
  * AuroraDashboard — главный экран мини-аппа «Aurora».
  *
@@ -14,7 +15,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, Copy, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { api } from "@/lib/api";
@@ -91,7 +92,6 @@ export function AuroraDashboard() {
   const [items, setItems] = useState<Awaited<ReturnType<typeof api.clientAllSubscriptions>>["items"]>([]);
   const [devices, setDevices] = useState<{ total: number }>({ total: 0 });
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
   const [devicesSheetOpen, setDevicesSheetOpen] = useState(false);
 
   async function reloadDevices() {
@@ -144,16 +144,6 @@ export function AuroraDashboard() {
   const deviceLimit = num(remna?.hwidDeviceLimit);
   const isTrial = !!main?.trialId;
 
-  const copyLink = async () => {
-    if (!subUrl) return;
-    try {
-      await navigator.clipboard.writeText(subUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch {
-      /* буфер недоступен — молча игнорируем */
-    }
-  };
 
   if (loading) {
     return (
@@ -253,15 +243,10 @@ export function AuroraDashboard() {
         Подключиться
       </button>
 
-      <button
-        type="button"
-        onClick={copyLink}
-        disabled={!subUrl}
-        className="flex w-full items-center justify-center gap-2 rounded-[20px] border-2 border-[var(--au-from)]/35 px-5 py-4 text-[16px] font-bold text-[var(--au-from)] disabled:opacity-40 active:scale-[0.99] transition-transform"
-      >
-        {copied ? <Check className="h-[18px] w-[18px]" /> : <Copy className="h-[18px] w-[18px]" />}
-        {copied ? "Ссылка скопирована" : "Скопировать ссылку"}
-      </button>
+<div className="flex gap-2">
+        <CopyLinkButton url={subUrl || ""} showLabel className="flex-1 h-auto min-h-12 rounded-[20px] gap-2" />
+        <SubscriptionQrButton url={subUrl || ""} className="shrink-0 h-12 w-12 rounded-[20px]" />
+      </div>
 
       {/* ── Рулетка удачи ── */}
       {config?.rouletteEnabled !== false && (

@@ -1,3 +1,4 @@
+import { CopyLinkButton, SubscriptionQrButton } from "@/components/subscription-link-actions";
 /**
  * Stealth Subscribe — wizard «Установить и настроить VPN» в 3 шага.
  * Работает с реальной структурой SubscriptionPageConfig:
@@ -16,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import gsap from "gsap";
 import { EASE_OUT, reducedMotion } from "@/lib/gsap-utils";
-import { Laptop, Download, Key, Copy, Check, ArrowRight, Smartphone, MonitorSmartphone, Apple, Tv, ExternalLink, Plus } from "lucide-react";
+import { Laptop, Download, Key, Check, ArrowRight, Smartphone, MonitorSmartphone, Apple, Tv, ExternalLink, Plus } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type SubscriptionPageConfig } from "@/lib/api";
 import { ConcentricRings } from "@/components/stealth/concentric-rings";
@@ -129,7 +130,6 @@ export function StealthSubscribe() {
   const [platform, setPlatform] = useState<Platform>(() => detectPlatform());
   const [showOtherDevices, setShowOtherDevices] = useState(false);
   const [selectedAppIdx, setSelectedAppIdx] = useState(0);
-  const [copied, setCopied] = useState(false);
   // Смена шага wizard'а: gsap slide-in на контейнер шага (бывший
   // AnimatePresence mode="wait": slide-out → unmount → slide-in).
   const stepRef = useRef<HTMLDivElement>(null);
@@ -249,12 +249,6 @@ export function StealthSubscribe() {
     return () => ctx.revert();
   }, [platform, apps.length, loading]);
 
-  function copyUrl() {
-    if (!subUrl) return;
-    navigator.clipboard.writeText(subUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
 
   function openDeeplink(href: string) {
     if (typeof window === "undefined") return;
@@ -460,9 +454,7 @@ export function StealthSubscribe() {
                       <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1.5">Subscription URL</p>
                       <p className="font-mono text-[11px] text-zinc-200 break-all">{subUrl}</p>
                     </div>
-                    <StadiumButton variant="outline" size="md" iconLeft={<Copy className="h-4 w-4" />} onClick={copyUrl}>
-                      {copied ? "Скопировано" : "Скопировать ссылку с ключом"}
-                    </StadiumButton>
+                    <div className="flex gap-2"><CopyLinkButton url={subUrl || ""} showLabel className="min-h-12 flex-1 gap-2 rounded-2xl" /><SubscriptionQrButton url={subUrl || ""} className="h-12 w-12 shrink-0 rounded-2xl" /></div>
                   </>
                 )}
             </div>
@@ -550,9 +542,7 @@ export function StealthSubscribe() {
               </div>
             )}
 
-            <StadiumButton variant="outline" size="md" iconLeft={copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />} onClick={copyUrl} disabled={!subUrl}>
-              {copied ? "Скопировано" : "Скопировать ссылку с ключом"}
-            </StadiumButton>
+            <div className="flex gap-2"><CopyLinkButton url={subUrl || ""} showLabel className="min-h-12 flex-1 gap-2 rounded-2xl" /><SubscriptionQrButton url={subUrl || ""} className="h-12 w-12 shrink-0 rounded-2xl" /></div>
 
             <StadiumButton variant="ghost" size="md" iconLeft={<ArrowRight className="h-4 w-4" />} onClick={() => navigate("/cabinet/dashboard")}>
               Завершить
