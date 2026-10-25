@@ -14,7 +14,7 @@
 
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Globe, Wallet, UserPlus, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +35,7 @@ const TABS: Tab[] = [
 
 export function AuroraTabs() {
   const location = useLocation();
+  const reduceMotion = useReducedMotion();
   const { t: translate } = useTranslation();
 
   return (
@@ -70,7 +71,7 @@ export function AuroraTabs() {
               {active && (
                 <motion.span
                   layoutId="aurora-tab-dot"
-                  transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
                   className="absolute inset-0 rounded-full"
                   style={{
                     background: "linear-gradient(135deg, var(--au-from), var(--au-to))",

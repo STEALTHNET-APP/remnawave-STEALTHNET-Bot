@@ -2319,6 +2319,9 @@
     "friends": "Друзья",
     "main_navigation": "Основная навигация",
     "link_email": "Привязать email",
-    "link_telegram": "Привязать Telegram"
+    "link_telegram": "Привязать Telegram",
+    "roulette_load_error": "Не удалось загрузить рулетку",
+    "roulette_retry_hint": "Попробуйте ещё раз. Если ошибка повторяется, обратитесь в поддержку.",
+    "retry": "Повторить"
   }
 }

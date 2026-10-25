@@ -34,3 +34,9 @@ html.dark[data-au-active]{--color-primary:#79e3a4;--color-primary-foreground:#10
     font-size: 16px !important;
   }
 }
+
+@keyframes au-page-enter{from{opacity:0}to{opacity:1}}
+.au-page{animation:au-page-enter 180ms ease-out}
+.au-settings :is(button,a),.au-header button{transition:background-color 180ms ease,color 180ms ease,box-shadow 180ms ease,transform 150ms ease}
+.au-settings :is(button,a):active,.au-header button:active{transform:scale(.97)}
+@media(prefers-reduced-motion:reduce){.au-page{animation:none}.au-client *,.au-client *::before,.au-client *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}

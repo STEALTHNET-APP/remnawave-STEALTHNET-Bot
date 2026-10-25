@@ -19,7 +19,7 @@ export function AuroraLayout() {
   const [currency,setCurrency]=useState(state.client?.preferredCurrency || "rub");
   const [saving,setSaving]=useState(false);
   const [saveMessage,setSaveMessage]=useState("");
-  const savePreferences=async()=>{if(!state.token)return;setSaving(true);setSaveMessage("");try{await api.clientUpdateProfile(state.token,{preferredLang:language,preferredCurrency:currency});await refreshProfile();await i18n.changeLanguage(language);setSaveMessage(t("aurora.settings_saved"));}catch(e){setSaveMessage(e instanceof Error?e.message:t("aurora.settings_error"));}finally{setSaving(false);}};
+  const savePreferences=async()=>{if(!state.token)return;setSaving(true);setSaveMessage("");try{await api.clientUpdateProfile(state.token,{preferredLang:language,preferredCurrency:currency});await refreshProfile();await i18n.changeLanguage(language);setSaveMessage(i18n.t("aurora.settings_saved"));}catch(e){setSaveMessage(e instanceof Error?e.message:t("aurora.settings_error"));}finally{setSaving(false);}};
   const { config: theme, setMode, resolvedMode } = useTheme();
   const [menu, setMenu] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -38,7 +38,28 @@ export function AuroraLayout() {
     return () => { delete document.documentElement.dataset.auActive; document.documentElement.style.removeProperty("--au-accent"); };
   }, [accent]);
   useEffect(() => { setMenu(false); }, [location.pathname]);
-  useEffect(() => { if(menu) dialog.current?.showModal(); else dialog.current?.close(); }, [menu]);
+  useEffect(() => {
+    const element = dialog.current;
+    if (!element) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (menu) element.showModal();
+    if (!element.open) return;
+    if (reduced) {
+      if (!menu) element.close();
+      return;
+    }
+    const animation = element.animate(
+      menu
+        ? [{ opacity: 0, transform: "translateY(14px) scale(.98)" }, { opacity: 1, transform: "none" }]
+        : [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(10px) scale(.98)" }],
+      { duration: menu ? 220 : 160, easing: "cubic-bezier(.2,.8,.2,1)" },
+    );
+    let cancelled = false;
+    animation.finished.then(() => {
+      if (!menu && !cancelled) element.close();
+    }).catch(() => {});
+    return () => { cancelled = true; animation.cancel(); };
+  }, [menu]);
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (!tg?.initData?.trim()) return;
@@ -56,9 +77,9 @@ export function AuroraLayout() {
   ].filter(x=>x.show);
   return <div className="au-client min-h-screen" data-au-theme={resolvedMode} style={{"--au-link":dark?"#79e3a4":accent,"--au-from":accent,"--au-to":gradientEnd,"--au-bg":dark?"#10131d":"#ffffff","--au-surface":dark?"#1b2030":"#f2f3f7","--au-nav":dark?"#202637":"#f2f3f7","--au-ink":dark?"#f1f3fa":"#0f1222","--au-muted":dark?"#adb6ce":"#606a80"} as React.CSSProperties}>
     <header className="au-header"><Link to="/cabinet/dashboard" className="au-wordmark">{config?.serviceName || "Aurora"}</Link><button type="button" onClick={()=>setMenu(true)} aria-label={t("aurora.profile_appearance")}><Settings2 size={20}/><span>{t("aurora.settings")}</span></button></header>
-    <main className="au-content"><Outlet/></main>
+    <main className="au-content"><div key={location.pathname} className="au-page"><Outlet/></div></main>
     <AuroraTabs/>
-    <dialog ref={dialog} className="au-settings" onCancel={()=>setMenu(false)} onClose={()=>setMenu(false)} aria-labelledby="au-settings-title">
+    <dialog ref={dialog} className="au-settings" onCancel={e=>{e.preventDefault();setMenu(false);}} onClose={()=>setMenu(false)} aria-labelledby="au-settings-title">
       <div className="au-settings-heading"><h2 id="au-settings-title">{t("aurora.your_cabinet")}</h2><button onClick={()=>setMenu(false)} aria-label={t("aurora.close_settings")}><X size={22}/></button></div>
       <h3>{t("aurora.appearance")}</h3><div className="au-theme-modes">{([{value:"light",label:t("aurora.light"),icon:Sun},{value:"dark",label:t("aurora.dark"),icon:Moon},{value:"system",label:t("aurora.system"),icon:Monitor}] as const).map(({value,label,icon:Icon})=><button key={value} onClick={()=>setMode(value)} aria-pressed={theme.mode===value}><Icon size={20}/>{label}</button>)}</div>
       <h3>{t("aurora.language_currency")}</h3><div className="au-preferences"><label>{t("aurora.language")}<select value={language} onChange={e=>setLanguage(e.target.value)} disabled={saving}>{(config?.activeLanguages?.length?config.activeLanguages:["ru","en"]).map(v=><option key={v} value={v}>{v==="ru"?"Русский":v==="en"?"English":v.toUpperCase()}</option>)}</select></label><label>{t("aurora.currency")}<select value={currency} onChange={e=>setCurrency(e.target.value)} disabled={saving}>{(config?.activeCurrencies?.length?config.activeCurrencies:["rub","usd"]).map(v=><option key={v} value={v}>{v.toUpperCase()}</option>)}</select></label></div><button className="au-save-preferences" onClick={()=>void savePreferences()} disabled={saving}>{saving?t("aurora.saving"):t("aurora.save_preferences")}</button>{saveMessage&&<p role="status">{saveMessage}</p>}

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Sparkles, Clock, Gift, History, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -59,11 +60,13 @@ function formatDate(iso: string): string {
 }
 
 export function AuroraRoulette() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { state, refreshProfile } = useClientAuth();
   const invalidateClientData = useInvalidateClientData();
   const [data, setData] = useState<RouletteStatusData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number>(0);
   const [spinning, setSpinning] = useState(false);
   const awardedRef = useRef<WheelSector | null>(null);
@@ -79,6 +82,7 @@ export function AuroraRoulette() {
     if (!state.token) return;
     try {
       const res = await api.clientGetRoulette(state.token);
+      setLoadError(false);
       setData(res as RouletteStatusData);
       if (res.subscriptions && res.subscriptions.length > 0) {
         setSelectedSubId((prev) => {
@@ -91,8 +95,8 @@ export function AuroraRoulette() {
       serverSecondsRef.current = sec;
       startPerfRef.current = performance.now();
       setSecondsLeft(sec);
-    } catch (e: any) {
-      toast.error("Ошибка загрузки", e?.message || "Не удалось загрузить данные рулетки");
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -172,7 +176,15 @@ export function AuroraRoulette() {
     );
   }
 
-  if (data && !data.enabled) {
+  if (loadError || !data) {
+    return <section role="alert" className="rounded-[26px] bg-[var(--au-surface)] p-6 text-center space-y-4">
+      <h1 className="text-lg font-bold">{t("aurora.roulette_load_error")}</h1>
+      <p className="text-sm text-[var(--au-muted)]">{t("aurora.roulette_retry_hint")}</p>
+      <button type="button" className="rounded-2xl bg-[var(--au-from)] px-5 py-3 text-white font-semibold" onClick={() => { setLoading(true); void loadStatus(); }}>{t("aurora.retry")}</button>
+    </section>;
+  }
+
+  if (!data.enabled) {
     return (
       <div className="rounded-[26px] bg-[var(--au-surface)] p-6 text-center space-y-3">
         <Sparkles className="w-10 h-10 text-[var(--au-muted)] mx-auto opacity-50" />

@@ -2313,6 +2313,9 @@
     "friends": "Friends",
     "main_navigation": "Main navigation",
     "link_email": "Link email",
-    "link_telegram": "Link Telegram"
+    "link_telegram": "Link Telegram",
+    "roulette_load_error": "Could not load the lucky wheel",
+    "roulette_retry_hint": "Try again. If the problem persists, contact support.",
+    "retry": "Retry"
   }
 }
