@@ -2219,7 +2219,7 @@ export const api = {
     return request("/client/payments/platega", { method: "POST", body: JSON.stringify(data), token });
   },
 
-  async getPublicTariffs(): Promise<{ items: PublicTariffCategory[] }> {
+  async getPublicTariffs(): Promise<{ items: PublicTariffCategory[]; remnaAvailable?: boolean }> {
     return request("/public/tariffs");
   },
 

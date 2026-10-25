@@ -6055,7 +6055,7 @@ export function SettingsPage() {
                     </button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    После сохранения замените BOT_TOKEN в .env и выполните docker compose up -d --force-recreate bot. До пересоздания контейнера бот использует старый токен.
+                    После сохранения замените BOT_TOKEN в .env и выполните docker compose up -d --force-recreate api bot broadcast-worker. До пересоздания контейнера бот использует старый токен.
                   </p>
                 </div>
 

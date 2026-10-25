@@ -239,6 +239,7 @@ function ClassicTariffsPage() {
   const [promoChecking, setPromoChecking] = useState(false);
   const [promoResult, setPromoResult] = useState<{ type: string; discountPercent?: number | null; discountFixed?: number | null; name: string } | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
+  const [remnaAvailable, setRemnaAvailable] = useState<boolean>(true);
 
   // Триал предлагаем только если у юзера ещё нет активной подписки и триал не использован.
   // Без проверки hasActive плашка висит даже после покупки тарифа.
@@ -250,6 +251,7 @@ function ClassicTariffsPage() {
     setCatalogError(false);
     api.getPublicTariffs().then((r) => {
       setTariffs(r.items ?? []);
+      if (r.remnaAvailable !== undefined) setRemnaAvailable(r.remnaAvailable);
     }).catch(() => setCatalogError(true)).finally(() => setLoading(false));
   }, []);
 
@@ -474,6 +476,10 @@ function ClassicTariffsPage() {
 
   async function payByBalance(tariff: TariffForPay) {
     if (!token) return;
+    if (!remnaAvailable) {
+      setPayError("Панель VPN временно недоступна. Повторите покупку позже.");
+      return;
+    }
     setPayError(null);
     setPayLoading(true);
     try {
@@ -1405,6 +1411,18 @@ async function startParitypayPayment(tariff: TariffForPay) {
             )}
 
             <div data-tour="tariff-list">
+              {!remnaAvailable && (
+                <div className="mb-4 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-sm flex items-start gap-3">
+                  <span className="text-xl shrink-0 mt-0.5">⚠️</span>
+                  <div>
+                    <div className="font-semibold text-amber-900 dark:text-amber-300">Панель VPN временно недоступна</div>
+                    <div className="text-xs text-amber-900/90 dark:text-amber-200/90 mt-1">
+                      Покупка и продление тарифов Remnawave временно недоступны. Попробуйте позже.
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={loadCatalog} disabled={loading} className="mt-2">Проверить снова</Button>
+                  </div>
+                </div>
+              )}
               {loading ? (
                 <div className="flex justify-center py-20" role="status">
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
