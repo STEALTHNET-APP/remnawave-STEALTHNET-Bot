@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
-import { useAdminTrials } from "@/lib/admin-queries";
+import { useAdminTrials, useAdminSettings } from "@/lib/admin-queries";
 import { qk } from "@/lib/query-client";
 import type { TrialRecord, CreateTrialPayload, TariffCategoryWithTariffs } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -31,6 +31,13 @@ export function TrialsPage() {
   const queryClient = useQueryClient();
 
   const trialsQuery = useAdminTrials(token);
+  const settingsQuery = useAdminSettings(token);
+  const legacy = settingsQuery.data;
+  const legacyMutation = useMutation({
+    mutationFn: () => api.updateSettings(token!, { trialDays: 0 }),
+    onSuccess: () => { void settingsQuery.refetch(); },
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка отключения триала"),
+  });
   const trials = trialsQuery.data?.items ?? [];
   const loading = trialsQuery.isLoading;
   const error = trialsQuery.error instanceof Error ? trialsQuery.error.message : null;
@@ -102,6 +109,14 @@ export function TrialsPage() {
           Добавить триал
         </Button>
       </motion.div>
+      {legacy?.trialSquadUuid && (
+        <Card className="rounded-2xl p-5 space-y-3">
+          <h2 className="font-semibold">Старый триал из настроек — {legacy.trialDays > 0 ? "включён" : "выключен"}</h2>
+          <p className="text-sm text-muted-foreground">Сохранён после обновления со старой версии. Он предлагается, когда нет включённых триалов в списке ниже. Отключение не затрагивает уже выданные подписки.</p>
+          {legacy.trialDays > 0 && <Button variant="outline" disabled={legacyMutation.isPending} onClick={() => legacyMutation.mutate()}>Отключить старый триал ({legacy.trialDays} дн.)</Button>}
+          {legacyMutation.isSuccess && <p role="status" className="text-sm">Старый триал отключён. Новые пробные подписки можно настроить в списке ниже.</p>}
+        </Card>
+      )}
       {(errorState || error) && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{errorState ?? error}</div>
       )}
