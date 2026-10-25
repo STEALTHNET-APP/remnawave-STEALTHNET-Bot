@@ -5,39 +5,65 @@
 
 import { env } from "../../config/index.js";
 
-const REMNA_API_URL = env.REMNA_API_URL?.replace(/\/$/, "") ?? "";
-const REMNA_ADMIN_TOKEN = env.REMNA_ADMIN_TOKEN ?? "";
-const REMNA_SECRET_KEY = env.REMNA_SECRET_KEY?.trim() ?? "";
-
-export function isRemnaConfigured(): boolean {
-  return Boolean(REMNA_API_URL && REMNA_ADMIN_TOKEN);
+export interface RemnaRuntimeConfig {
+  apiUrl: string;
+  adminToken: string;
+  secretKey: string;
+  source: "database" | "env" | "none";
 }
 
-function getHeaders(): Record<string, string> {
+let _activeRemnaConfig: RemnaRuntimeConfig = {
+  apiUrl: env.REMNA_API_URL?.replace(/\/+$/, "") ?? "",
+  adminToken: env.REMNA_ADMIN_TOKEN ?? "",
+  secretKey: env.REMNA_SECRET_KEY?.trim() ?? "",
+  source: (env.REMNA_API_URL && env.REMNA_ADMIN_TOKEN ? "env" : "none"),
+};
+
+export function setRemnaRuntimeConfig(cfg: RemnaRuntimeConfig): void {
+  const previous = JSON.stringify(_activeRemnaConfig);
+  _activeRemnaConfig = {
+    ...cfg,
+    apiUrl: (cfg.apiUrl || "").trim().replace(/\/+$/, ""),
+    adminToken: (cfg.adminToken || "").trim(),
+    secretKey: (cfg.secretKey || "").trim(),
+  };
+  if (previous !== JSON.stringify(_activeRemnaConfig)) clearRemnaSquadCache();
+}
+
+export function getRemnaRuntimeConfig(): RemnaRuntimeConfig {
+  return _activeRemnaConfig;
+}
+
+export function isRemnaConfigured(): boolean {
+  return Boolean(_activeRemnaConfig.apiUrl && _activeRemnaConfig.adminToken);
+}
+
+function getHeaders(customToken?: string, customSecret?: string): Record<string, string> {
+  const token = customToken ?? _activeRemnaConfig.adminToken;
   const h: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${REMNA_ADMIN_TOKEN}`,
+    Authorization: `Bearer ${token}`,
   };
-  const cookie = remnaSecretCookieHeader();
+  const cookie = remnaSecretCookieHeader(customSecret);
   if (cookie) h["Cookie"] = cookie;
   return h;
 }
 
 /**
- * Кука секретного ключа Remnawave — та, которой caddy перед панелью отличает
+ * Кука секретного ключа Remnawave — та, которой caddy/eGames перед панелью отличает
  * своих от чужих: запрос без неё он обрывает через `abort`, без ответа вообще.
  *
  * В .env встречаются обе записи: `имя:значение` и уже готовая пара
- * `имя=значение`. Раньше эту логику продублировали в проверке здоровья, но там
- * куку ставили ТОЛЬКО при наличии двоеточия — и на установках со вторым
- * форматом виджет показывал «remna: TypeError: fetch failed», хотя сама панель
- * работала. Поэтому построение куки живёт здесь в одном месте.
+ * `имя=значение`.
  */
-export function remnaSecretCookieHeader(): string | null {
-  if (!REMNA_SECRET_KEY) return null;
-  const colonIdx = REMNA_SECRET_KEY.indexOf(":");
-  const name = colonIdx > 0 ? REMNA_SECRET_KEY.slice(0, colonIdx) : REMNA_SECRET_KEY;
-  const value = colonIdx > 0 ? REMNA_SECRET_KEY.slice(colonIdx + 1) : REMNA_SECRET_KEY;
+export function remnaSecretCookieHeader(customSecret?: string): string | null {
+  const secret = (customSecret !== undefined ? customSecret : _activeRemnaConfig.secretKey)?.trim() ?? "";
+  if (!secret) return null;
+  const colonIdx = secret.indexOf(":");
+  const eqIdx = secret.indexOf("=");
+  const splitIdx = eqIdx > 0 && (colonIdx < 0 || eqIdx < colonIdx) ? eqIdx : colonIdx;
+  const name = splitIdx > 0 ? secret.slice(0, splitIdx).trim() : secret;
+  const value = splitIdx > 0 ? secret.slice(splitIdx + 1).trim() : secret;
   return `${name}=${value}`;
 }
 
@@ -45,11 +71,16 @@ export async function remnaFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<{ data?: T; error?: string; status: number }> {
+  try {
+    await (await import("../client/client.service.js")).getSystemConfig();
+  } catch {
+    return { error: "Remna settings unavailable", status: 503 };
+  }
   if (!isRemnaConfigured()) {
     return { error: "Remna API not configured", status: 503 };
   }
 
-  const url = `${REMNA_API_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  const url = `${_activeRemnaConfig.apiUrl}${path.startsWith("/") ? path : `/${path}`}`;
   // таймаут на запрос к Remna. Без него медленная/мёртвая нода
   // (или ProxyCheck, рвущий сокет) подвешивала клиентские эндпоинты (/client/subscription,
   // /client/devices синхронно ходят в Remna) до дефолтного undici-таймаута — фронт ловил
@@ -62,6 +93,7 @@ export async function remnaFetch<T>(
       ...options,
       headers: { ...getHeaders(), ...(options.headers as object) },
       signal: ctrl.signal,
+      redirect: "error",
     });
     const text = await res.text();
     let data: T | undefined;
@@ -260,6 +292,54 @@ export function remnaUsernameFromClient(opts: {
  * Список сквадов кэшируем на 60 секунд, чтобы не ходить в API на каждого клиента.
  */
 let squadCache: { at: number; uuids: Set<string> } | null = null;
+
+export function clearRemnaSquadCache(): void {
+  squadCache = null;
+}
+
+/** Проверка подключения к Remnawave API (для Settings) */
+export async function testRemnaApiConnection(params?: {
+  apiUrl?: string;
+  adminToken?: string;
+  secretKey?: string;
+}): Promise<{ ok: boolean; status: number; latencyMs: number; message?: string; error?: string }> {
+  const url = (params?.apiUrl !== undefined ? params.apiUrl : _activeRemnaConfig.apiUrl).trim().replace(/\/+$/, "");
+  const token = (params?.adminToken !== undefined ? params.adminToken : _activeRemnaConfig.adminToken).trim();
+  const secretKey = params?.secretKey !== undefined ? params.secretKey : _activeRemnaConfig.secretKey;
+
+  if (!url || !token) {
+    return { ok: false, status: 400, latencyMs: 0, error: "Укажите URL API и токен администратора" };
+  }
+
+  const start = Date.now();
+  const headers = getHeaders(token, secretKey);
+  const tryHit = async (path: string) => fetch(`${url}${path}`, {
+    headers,
+    signal: AbortSignal.timeout(7_000),
+    redirect: "error",
+  });
+
+  try {
+    let res = await tryHit("/api/system/stats");
+    if (res.status === 404) res = await tryHit("/api/users?size=1");
+    const latencyMs = Date.now() - start;
+    if (res.ok) {
+      return { ok: true, status: res.status, latencyMs, message: `Успешное подключение (${latencyMs} мс)` };
+    }
+    if (res.status === 401) {
+      return { ok: false, status: res.status, latencyMs, error: "Неверный токен администратора (HTTP 401 Unauthorized)" };
+    }
+    if (res.status === 403) {
+      return { ok: false, status: res.status, latencyMs, error: "Доступ запрещен (HTTP 403 Forbidden). Проверьте секретный ключ / Cookie (REMNA_SECRET_KEY)." };
+    }
+    const text = await res.text().catch(() => "");
+    return { ok: false, status: res.status, latencyMs, error: `Remnawave API вернул HTTP ${res.status}: ${text.slice(0, 150)}` };
+  } catch (e) {
+    const latencyMs = Date.now() - start;
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, status: 500, latencyMs, error: `Ошибка соединения: ${msg}` };
+  }
+}
 
 export async function getKnownSquadUuids(): Promise<Set<string>> {
   if (squadCache && Date.now() - squadCache.at < 60_000) return squadCache.uuids;

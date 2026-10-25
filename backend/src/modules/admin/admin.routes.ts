@@ -24,6 +24,7 @@ import { notifyClientAbout2FAReset } from "../client/client-security-notify.serv
 import { hashPassword as hashClientPassword } from "../client/client.service.js";
 import {
   remnaGetUsers,
+  testRemnaApiConnection,
   remnaGetSubscriptions,
   remnaGetSubscriptionTemplates,
   remnaGetInternalSquads,
@@ -369,6 +370,93 @@ adminRouter.delete("/remna/infra-billing/providers/:uuid", async (req, res) => r
 adminRouter.post("/remna/infra-billing/nodes", async (req, res) => remnaPass(await remnaCreateInfraBillingNode(req.body), res));
 adminRouter.patch("/remna/infra-billing/nodes", async (req, res) => remnaPass(await remnaUpdateInfraBillingNode(req.body), res));
 adminRouter.delete("/remna/infra-billing/nodes/:uuid", async (req, res) => remnaPass(await remnaDeleteInfraBillingNode(req.params.uuid), res));
+/**
+ * POST /api/admin/remna/test-connection
+ * Проверка связи с Remnawave API (переданными или текущими реквизитами)
+ */
+adminRouter.post("/remna/test-connection", asyncRoute(async (req, res) => {
+  const body = z.object({
+    apiUrl: z.string().url().max(1000).refine(value => /^https?:\/\//.test(value)).optional(),
+    adminToken: z.string().max(5000).optional(),
+    secretKey: z.string().max(1000).optional(),
+  }).safeParse(req.body ?? {});
+  if (!body.success) return res.status(400).json({ message: "Неверные настройки подключения" });
+  await getSystemConfig();
+  const result = await testRemnaApiConnection(body.data);
+  return res.json(result);
+}));
+
+/**
+ * POST /api/admin/bot/test-token
+ * Проверка токена Telegram бота через getMe
+ */
+adminRouter.post("/bot/test-token", asyncRoute(async (req, res) => {
+  let token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+  if (!token) {
+    const config = await getSystemConfig();
+    token = (config.telegramBotToken || process.env.BOT_TOKEN || "").trim();
+  }
+  if (!token) {
+    return res.status(400).json({ ok: false, error: "Токен бота не указан и отсутствует в .env" });
+  }
+
+  const start = Date.now();
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${token}/getMe`, {
+      signal: AbortSignal.timeout(7_000),
+    });
+    const latencyMs = Date.now() - start;
+    const data = await r.json().catch(() => ({})) as { ok: boolean; description?: string; result?: { id: number; is_bot: boolean; first_name: string; username?: string } };
+    if (!r.ok || !data.ok) {
+      return res.status(400).json({
+        ok: false,
+        latencyMs,
+        error: data.description || `Telegram API вернул HTTP ${r.status}`,
+      });
+    }
+    return res.json({
+      ok: true,
+      latencyMs,
+      bot: {
+        id: data.result?.id,
+        firstName: data.result?.first_name,
+        username: data.result?.username,
+      },
+      message: `Бот @${data.result?.username ?? "bot"} (${data.result?.first_name}) доступен (${latencyMs} мс)`,
+    });
+  } catch (e) {
+    const latencyMs = Date.now() - start;
+    const msg = e instanceof Error ? e.message : String(e);
+    return res.status(500).json({ ok: false, latencyMs, error: `Ошибка запроса к Telegram: ${msg}` });
+  }
+}));
+
+/**
+ * POST /api/admin/remna/reset-config
+ * Сброс настроек Remnawave к значениям из .env
+ */
+adminRouter.post("/remna/reset-config", asyncRoute(async (_req, res) => {
+  await prisma.systemSetting.deleteMany({
+    where: { key: { in: ["remna_api_url", "remna_admin_token", "remna_secret_key"] } },
+  });
+  invalidateSystemConfigCache();
+  await getSystemConfig();
+  return res.json({ ok: true });
+}));
+
+/**
+ * POST /api/admin/bot/reset-token
+ * Сброс токена Telegram бота к значению из .env (BOT_TOKEN)
+ */
+adminRouter.post("/bot/reset-token", asyncRoute(async (_req, res) => {
+  await prisma.systemSetting.deleteMany({
+    where: { key: "telegram_bot_token" },
+  });
+  invalidateSystemConfigCache();
+  await getSystemConfig();
+  return res.json({ ok: true });
+}));
+
 adminRouter.get("/remna/subscription-settings", async (_req, res) => remnaPass(await remnaGetSubSettings(), res));
 adminRouter.patch("/remna/subscription-settings", async (req, res) => remnaPass(await remnaUpdateSubSettings(req.body), res));
 adminRouter.get("/remna/user-devices/:uuid", async (req, res) => remnaPass(await remnaGetUserDevices(req.params.uuid), res));
@@ -2967,6 +3055,9 @@ const updateSettingsSchema = z.object({
   ogImage: z.string().max(5_500_000).nullable().optional(),
   cabinetDesign: z.enum(["classic", "stealth", "aurora"]).optional(),
   cabinetDesignApplyInBrowser: z.boolean().optional(),
+  remnaApiUrl: z.string().trim().max(1000).refine(value => !value || /^https?:\/\//.test(value) && URL.canParse(value)).nullable().optional(),
+  remnaAdminToken: z.string().trim().max(2000).nullable().optional(),
+  remnaSecretKey: z.string().trim().max(1000).nullable().optional(),
   remnaClientUrl: z.string().max(2000).nullable().optional(),
   smtpHost: z.string().max(255).nullable().optional(),
   smtpPort: z.number().int().min(1).max(65535).optional(),
@@ -3463,6 +3554,22 @@ adminRouter.patch("/settings", async (req, res) => {
       create: { key: "cabinet_design_apply_in_browser", value: val },
       update: { value: val },
     });
+  }
+  const remnaChanges = [
+    ["remna_api_url", updates.remnaApiUrl],
+    ["remna_admin_token", updates.remnaAdminToken],
+    ["remna_secret_key", updates.remnaSecretKey],
+  ] as const;
+  if (remnaChanges.some(([, value]) => value !== undefined)) {
+    await prisma.$transaction(async db => {
+      for (const [key, input] of remnaChanges) {
+        if (input === undefined) continue;
+        const value = (input ?? "").trim();
+        if (!value && key !== "remna_secret_key") await db.systemSetting.deleteMany({ where: { key } });
+        else await db.systemSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
+      }
+    });
+    invalidateSystemConfigCache();
   }
   if (updates.remnaClientUrl !== undefined) {
     const val = updates.remnaClientUrl ?? "";
