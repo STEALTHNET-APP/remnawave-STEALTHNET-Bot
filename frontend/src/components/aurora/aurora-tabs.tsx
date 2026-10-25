@@ -12,6 +12,7 @@
  * Fixed bottom + safe-area iOS.
  */
 
+import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Globe, Wallet, UserPlus, MessageCircle, User } from "lucide-react";
@@ -25,19 +26,20 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { to: "/cabinet/dashboard", label: "Подписка", icon: Globe },
-  { to: "/cabinet/tariffs", label: "Тарифы", icon: Wallet },
-  { to: "/cabinet/referral", label: "Друзья", icon: UserPlus },
-  { to: "/cabinet/tickets", label: "Поддержка", icon: MessageCircle },
-  { to: "/cabinet/profile", label: "Профиль", icon: User },
+  { to: "/cabinet/dashboard", label: "aurora.subscription", icon: Globe },
+  { to: "/cabinet/tariffs", label: "aurora.tariffs", icon: Wallet },
+  { to: "/cabinet/referral", label: "aurora.friends", icon: UserPlus },
+  { to: "/cabinet/tickets", label: "aurora.support", icon: MessageCircle },
+  { to: "/cabinet/profile", label: "aurora.profile", icon: User },
 ];
 
 export function AuroraTabs() {
   const location = useLocation();
+  const { t: translate } = useTranslation();
 
   return (
     <nav
-      aria-label="Основная навигация"
+      aria-label={translate("aurora.main_navigation")}
       className="au-nav fixed inset-x-0 bottom-0 z-30 pointer-events-none px-5"
       style={{ paddingBottom: "calc(max(env(safe-area-inset-bottom, 0px), var(--app-tg-bottom, 0px)) + 12px)" }}
     >
@@ -61,7 +63,7 @@ export function AuroraTabs() {
             <Link
               key={t.to}
               to={t.to}
-              aria-label={t.label}
+              aria-label={translate(t.label)}
               aria-current={active ? "page" : undefined}
               className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full active:scale-95 transition-transform"
             >

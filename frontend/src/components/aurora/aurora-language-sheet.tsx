@@ -45,7 +45,7 @@ const KNOWN_LANGUAGES: Record<string, { label: string; subLabel: string; flag: s
 
 export function AuroraLanguageSheet({ open, onClose }: Props) {
   const { state, refreshProfile } = useClientAuth();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const token = state.token;
 
   const [activeCodes, setActiveCodes] = useState<string[]>(["ru", "en"]);
@@ -85,23 +85,17 @@ export function AuroraLanguageSheet({ open, onClose }: Props) {
     setSavingCode(code);
 
     try {
-      // 1. Мгновенно переключаем i18n для интерфейса
-      await i18n.changeLanguage(code);
-
-      // 2. Сохраняем в профиле пользователя на бэкенде
       if (token) {
         await api.clientUpdateProfile(token, { preferredLang: code });
         await refreshProfile().catch(() => {});
       }
 
-      // Небольшая пауза для визуального подтверждения выбора
-      setTimeout(() => {
-        setSavingCode(null);
-        onClose();
-      }, 250);
+      await i18n.changeLanguage(code);
+      setSavingCode(null);
+      onClose();
     } catch (err) {
       setSavingCode(null);
-      setError(err instanceof Error ? err.message : "Не удалось сохранить выбранный язык");
+      setError(err instanceof Error ? err.message : t("aurora.language_error"));
     }
   }
 
@@ -114,14 +108,13 @@ export function AuroraLanguageSheet({ open, onClose }: Props) {
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--au-surface)] text-[var(--au-from)]">
             <Globe className="h-4 w-4" />
           </span>
-          <span>Язык интерфейса</span>
+          <span>{t("aurora.interface_language")}</span>
         </div>
       }
     >
       <div className="space-y-3 pb-3">
         <p className="px-1 text-[13px] text-[var(--au-muted)]">
-          Выберите язык для отображения личного кабинета:
-        </p>
+          {t("aurora.choose_language")}</p>
 
         {error && (
           <div className="flex items-start gap-2 rounded-[16px] border border-red-500/25 bg-red-500/10 p-3.5 text-[13px] text-red-600 dark:text-red-400">

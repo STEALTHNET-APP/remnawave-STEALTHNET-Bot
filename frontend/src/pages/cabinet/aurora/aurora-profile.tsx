@@ -1,22 +1,11 @@
-/**
- * AuroraProfile — профиль клиента в светлом и тёмном стилях Aurora.
- *
- * Композиция:
- *   • градиентная карточка-близнец: аватар-буква + имя/email + баланс;
- *   • карточка «Пополнить баланс» — сумма + кнопка (открывает нативную шторку AuroraTopUpSheet);
- *   • меню-список в карточках au-surface:
- *       «Приложение»: Подключить VPN / История платежей (AuroraPaymentsSheet) / Поддержка;
- *       «Аккаунт»: Язык (AuroraLanguageSheet) / Пароль и безопасность (AuroraSecuritySheet);
- *       «Документы»: Соглашение / Оферта / Инструкции (если заданы в админке);
- *   • Выйти — акцентная кнопка с мягким фоном в конце;
- *   • Полная гармоничная поддержка тёмной темы.
- */
-
+import { useTranslation } from "react-i18next";
+import { AuroraAccountSheet } from "@/components/aurora/aurora-account-sheet";
+import { auroraProfileTab, formatAuroraBalance, type AuroraProfileTab } from "@/lib/aurora-profile";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   Globe, HelpCircle, CreditCard, FileText, Wallet, ChevronRight,
-  Shield, LogOut, Lock, Wifi, Smartphone, type LucideIcon,
+  User, Shield, LogOut, Lock, Wifi, Smartphone, type LucideIcon,
 } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { getPublicConfigCached } from "@/lib/public-config";
@@ -67,15 +56,23 @@ const KNOWN_LANG_NAMES: Record<string, string> = {
 };
 
 export function AuroraProfile() {
+  const { t, i18n } = useTranslation();
+  const location = useLocation();
   const { state, logout } = useClientAuth();
   const navigate = useNavigate();
   const [config, setConfig] = useState<Record<string, unknown> | null>(null);
 
-  // Шторки действий Aurora
-  const [topUpOpen, setTopUpOpen] = useState(false);
-  const [paymentsOpen, setPaymentsOpen] = useState(false);
-  const [securityOpen, setSecurityOpen] = useState(false);
-  const [languageOpen, setLanguageOpen] = useState(false);
+  const activeTab = auroraProfileTab(location.search, location.hash);
+  const openTab = (tab: AuroraProfileTab) => {
+    const params = new URLSearchParams(location.search);
+    params.set("tab", tab);
+    navigate({ search: params.toString(), hash: "" });
+  };
+  const closeTab = () => {
+    const params = new URLSearchParams(location.search);
+    params.delete("tab");
+    navigate({ search: params.toString(), hash: "" }, { replace: true });
+  };
 
   useEffect(() => {
     getPublicConfigCached()
@@ -83,20 +80,6 @@ export function AuroraProfile() {
       .catch(() => {});
   }, []);
 
-  // Открытие шторок по прямым ссылкам / хэшам
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.location.hash === "#topup") {
-      setTopUpOpen(true);
-    }
-    const params = new URLSearchParams(window.location.search);
-    const tab = params.get("tab");
-    if (tab === "payments") setPaymentsOpen(true);
-    else if (tab === "security") setSecurityOpen(true);
-    else if (tab === "language") setLanguageOpen(true);
-  }, []);
-
-  const [devicesOpen, setDevicesOpen] = useState(false);
   const [devicesTotal, setDevicesTotal] = useState<number | null>(null);
   const token = state.token;
 
@@ -107,21 +90,10 @@ export function AuroraProfile() {
       .catch(() => {});
   }, [token]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("tab") === "devices" || window.location.hash === "#devices") {
-      setDevicesOpen(true);
-    }
-  }, []);
-
   const client = state.client;
-  const display = client?.email?.trim() || (client?.telegramUsername ? `@${client.telegramUsername}` : "Профиль");
+  const display = client?.email?.trim() || (client?.telegramUsername ? `@${client.telegramUsername}` : t("aurora.profile"));
   const currency = (client?.preferredCurrency ?? "rub").toLowerCase();
-  const balanceText = new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: currency.toUpperCase() === "USD" ? "USD" : "RUB",
-    minimumFractionDigits: 0,
-  }).format(client?.balance ?? 0);
+  const balanceText = formatAuroraBalance(client?.balance ?? 0, currency, i18n.language);
 
   const langCode = (client?.preferredLang ?? "ru").toLowerCase();
   const langLabel = KNOWN_LANG_NAMES[langCode] || langCode.toUpperCase();
@@ -133,34 +105,35 @@ export function AuroraProfile() {
 
   const groups: MenuGroup[] = [
     {
-      title: "Приложение",
+      title: t("aurora.app"),
       rows: [
-        { id: "connect", label: "Подключить VPN", icon: Wifi, to: "/cabinet/subscribe" },
+        { id: "connect", label: t("aurora.connect"), icon: Wifi, to: "/cabinet/subscribe" },
         {
           id: "devices",
-          label: "Подключённые устройства",
+          label: t("aurora.devices"),
           icon: Smartphone,
           right: devicesTotal != null ? String(devicesTotal) : undefined,
-          onClick: () => setDevicesOpen(true),
+          onClick: () => openTab("devices"),
         },
-        { id: "payments", label: "История платежей", icon: CreditCard, onClick: () => setPaymentsOpen(true) },
-        { id: "support", label: "Поддержка", icon: HelpCircle, to: "/cabinet/tickets" },
+        { id: "payments", label: t("aurora.payments"), icon: CreditCard, onClick: () => openTab("payments") },
+        { id: "support", label: t("aurora.support"), icon: HelpCircle, to: "/cabinet/tickets" },
       ],
     },
     {
-      title: "Аккаунт",
+      title: t("aurora.account"),
       rows: [
-        { id: "language", label: "Язык", icon: Globe, right: langLabel, onClick: () => setLanguageOpen(true) },
-        { id: "security", label: "Пароль и безопасность", icon: Lock, onClick: () => setSecurityOpen(true) },
+        { id: "account", label: t("aurora.account_details"), icon: User, onClick: () => openTab("account") },
+        { id: "language", label: t("aurora.language"), icon: Globe, right: langLabel, onClick: () => openTab("language") },
+        { id: "security", label: t("aurora.security"), icon: Lock, onClick: () => openTab("security") },
       ],
     },
     ...(agreementUrl || offerUrl || instructionsUrl
       ? [{
-          title: "Документы",
+          title: t("aurora.documents"),
           rows: [
-            ...(agreementUrl ? [{ id: "tos", label: "Пользовательское соглашение", icon: FileText, href: agreementUrl }] : []),
-            ...(offerUrl ? [{ id: "offer", label: "Публичная оферта", icon: FileText, href: offerUrl }] : []),
-            ...(instructionsUrl ? [{ id: "docs", label: "Инструкции по подключению", icon: FileText, href: instructionsUrl }] : []),
+            ...(agreementUrl ? [{ id: "tos", label: t("aurora.agreement"), icon: FileText, href: agreementUrl }] : []),
+            ...(offerUrl ? [{ id: "offer", label: t("aurora.offer"), icon: FileText, href: offerUrl }] : []),
+            ...(instructionsUrl ? [{ id: "docs", label: t("aurora.instructions"), icon: FileText, href: instructionsUrl }] : []),
           ] as MenuRow[],
         }]
       : []),
@@ -175,8 +148,8 @@ export function AuroraProfile() {
   return (
     <div className="space-y-3">
       <header className="px-1 pb-1">
-        <h1 className="text-[26px] font-extrabold leading-tight tracking-tight text-[var(--au-ink)]">Профиль</h1>
-        <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">{serviceName} · личные данные и настройки</p>
+        <h1 className="text-[26px] font-extrabold leading-tight tracking-tight text-[var(--au-ink)]">{t("aurora.profile")}</h1>
+        <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">{serviceName} {t("aurora.profile_subtitle")}</p>
       </header>
 
       {/* ── Карточка клиента: аватар + имя + баланс ── */}
@@ -188,7 +161,7 @@ export function AuroraProfile() {
           <div className="min-w-0">
             <div className="truncate text-[17px] font-bold leading-tight">{display}</div>
             <div className="mt-0.5 text-[13px] text-white/75">
-              ID аккаунта: <span className="font-mono">{client?.id ? client.id.slice(-6).toUpperCase() : "—"}</span>
+              {t("aurora.account_id_label")}<span className="font-mono break-all select-all">{client?.id || "—"}</span>
             </div>
           </div>
         </div>
@@ -198,7 +171,7 @@ export function AuroraProfile() {
           </span>
           <div>
             <div className="text-[17px] font-bold leading-tight tabular-nums">{balanceText}</div>
-            <div className="text-[13px] text-white/75">баланс для оплаты тарифов</div>
+            <div className="text-[13px] text-white/75">{t("aurora.balance_hint")}</div>
           </div>
         </div>
       </section>
@@ -206,15 +179,15 @@ export function AuroraProfile() {
       {/* ── Пополнить баланс ── */}
       <button
         type="button"
-        onClick={() => setTopUpOpen(true)}
+        onClick={() => openTab("topup")}
         className="flex w-full items-center gap-3 rounded-[22px] bg-[var(--au-surface)] p-4 text-left transition-transform active:scale-[0.99]"
       >
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--au-bg)] text-[var(--au-from)] shadow-sm">
           <Wallet className="h-5 w-5" />
         </span>
         <span className="flex-1 min-w-0">
-          <span className="block text-[15px] font-semibold text-[var(--au-ink)]">Пополнить баланс</span>
-          <span className="block text-[12.5px] text-[var(--au-muted)]">карта · СБП · кошелёк · крипта</span>
+          <span className="block text-[15px] font-semibold text-[var(--au-ink)]">{t("aurora.topup")}</span>
+          <span className="block text-[12.5px] text-[var(--au-muted)]">{t("aurora.topup_methods")}</span>
         </span>
         <ChevronRight className="h-4 w-4 shrink-0 text-[var(--au-muted)]" />
       </button>
@@ -245,8 +218,8 @@ export function AuroraProfile() {
                   )}>
                     <Icon className={cn("h-[18px] w-[18px]", r.danger ? "text-red-500" : "text-[var(--au-muted)]")} />
                   </span>
-                  <span className="flex-1 text-[14.5px] font-semibold text-[var(--au-ink)]">{r.label}</span>
-                  {r.right && <span className="shrink-0 text-[13px] text-[var(--au-muted)]">{r.right}</span>}
+                  <span className="flex-1 min-w-0 text-[14.5px] font-semibold text-[var(--au-ink)]">{r.label}</span>
+                  {r.right && <span className="max-w-[35%] break-words text-[13px] text-[var(--au-muted)]">{r.right}</span>}
                   <ChevronRight className="h-4 w-4 shrink-0 text-[var(--au-muted)]" />
                 </button>
               );
@@ -262,12 +235,11 @@ export function AuroraProfile() {
         className="flex w-full items-center justify-center gap-2 rounded-[22px] border-2 border-red-500/25 bg-red-500/10 px-4 py-3.5 text-[15px] font-bold text-red-600 dark:text-red-400 transition-colors hover:bg-red-500/15 active:scale-[0.98]"
       >
         <LogOut className="h-[18px] w-[18px]" />
-        Выйти из аккаунта
-      </button>
+        {t("aurora.logout")}</button>
 
       <AuroraDevicesSheet
-        open={devicesOpen}
-        onClose={() => setDevicesOpen(false)}
+        open={activeTab === "devices"}
+        onClose={closeTab}
         onChanged={() => {
           if (token) {
             api.getMyAllDevices(token)
@@ -284,10 +256,11 @@ export function AuroraProfile() {
       </div>
 
       {/* ── Шторки действий ── */}
-      <AuroraTopUpSheet open={topUpOpen} onClose={() => setTopUpOpen(false)} />
-      <AuroraPaymentsSheet open={paymentsOpen} onClose={() => setPaymentsOpen(false)} />
-      <AuroraSecuritySheet open={securityOpen} onClose={() => setSecurityOpen(false)} />
-      <AuroraLanguageSheet open={languageOpen} onClose={() => setLanguageOpen(false)} />
+      <AuroraAccountSheet open={activeTab === "account"} onClose={closeTab} />
+      <AuroraTopUpSheet open={activeTab === "topup"} onClose={closeTab} />
+      <AuroraPaymentsSheet open={activeTab === "payments"} onClose={closeTab} />
+      <AuroraSecuritySheet open={activeTab === "security"} onClose={closeTab} />
+      <AuroraLanguageSheet open={activeTab === "language"} onClose={closeTab} />
     </div>
   );
 }

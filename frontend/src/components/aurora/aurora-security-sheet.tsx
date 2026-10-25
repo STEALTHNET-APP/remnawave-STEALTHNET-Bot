@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 /**
  * AuroraSecuritySheet — управление паролем и 2FA в стиле Aurora.
  *
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export function AuroraSecuritySheet({ open, onClose }: Props) {
+  const { t } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
   const client = state.client;
   const token = state.token;
@@ -73,15 +75,15 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
     if (!token) return;
 
     if (hasPassword && !currentPassword.trim()) {
-      setPasswordError("Введите текущий пароль");
+      setPasswordError(t("aurora.enter_current_password"));
       return;
     }
     if (newPassword.length < 6) {
-      setPasswordError("Минимальная длина пароля — 6 символов");
+      setPasswordError(t("aurora.password_min"));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setPasswordError("Пароли не совпадают");
+      setPasswordError(t("aurora.password_mismatch"));
       return;
     }
 
@@ -95,12 +97,12 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
           currentPassword,
           newPassword,
         });
-        setPasswordSuccess("Пароль успешно изменён!");
+        setPasswordSuccess(t("aurora.password_changed"));
       } else {
         await api.clientSetPassword(token, {
           newPassword,
         });
-        setPasswordSuccess("Пароль успешно установлен!");
+        setPasswordSuccess(t("aurora.password_set"));
       }
 
       await refreshProfile().catch(() => {});
@@ -112,7 +114,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
         setPasswordSuccess(null);
       }, 3500);
     } catch (err) {
-      setPasswordError(err instanceof Error ? err.message : "Не удалось сохранить пароль");
+      setPasswordError(err instanceof Error ? err.message : t("aurora.password_error"));
     } finally {
       setPasswordLoading(false);
     }
@@ -130,7 +132,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
       setTwoFaSetupData(data);
       setTwoFaCode("");
     } catch (err) {
-      setTwoFaError(err instanceof Error ? err.message : "Не удалось начать настройку 2FA");
+      setTwoFaError(err instanceof Error ? err.message : t("aurora.setup_error"));
     } finally {
       setTwoFaLoading(false);
     }
@@ -141,7 +143,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
     if (!token) return;
     const cleanCode = twoFaCode.replace(/\s+/g, "");
     if (cleanCode.length !== 6) {
-      setTwoFaError("Введите 6-значный код из приложения");
+      setTwoFaError(t("aurora.enter_code"));
       return;
     }
 
@@ -153,13 +155,13 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
       await refreshProfile().catch(() => {});
       setTwoFaSetupData(null);
       setTwoFaCode("");
-      setTwoFaSuccess("Двухфакторная защита успешно включена!");
+      setTwoFaSuccess(t("aurora.twofa_enabled"));
 
       setTimeout(() => {
         setTwoFaSuccess(null);
       }, 3500);
     } catch (err) {
-      setTwoFaError(err instanceof Error ? err.message : "Неверный код подтверждения");
+      setTwoFaError(err instanceof Error ? err.message : t("aurora.invalid_code"));
     } finally {
       setTwoFaLoading(false);
     }
@@ -170,7 +172,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
     if (!token) return;
     const cleanCode = twoFaCode.replace(/\s+/g, "");
     if (cleanCode.length !== 6) {
-      setTwoFaError("Введите 6-значный код для отключения");
+      setTwoFaError(t("aurora.enter_disable_code"));
       return;
     }
 
@@ -182,13 +184,13 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
       await refreshProfile().catch(() => {});
       setTwoFaDisabling(false);
       setTwoFaCode("");
-      setTwoFaSuccess("Двухфакторная защита отключена");
+      setTwoFaSuccess(t("aurora.twofa_disabled"));
 
       setTimeout(() => {
         setTwoFaSuccess(null);
       }, 3500);
     } catch (err) {
-      setTwoFaError(err instanceof Error ? err.message : "Неверный код подтверждения");
+      setTwoFaError(err instanceof Error ? err.message : t("aurora.invalid_code"));
     } finally {
       setTwoFaLoading(false);
     }
@@ -209,7 +211,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--au-surface)] text-[var(--au-from)]">
             <Lock className="h-4 w-4" />
           </span>
-          <span>Пароль и безопасность</span>
+          <span>{t("aurora.security")}</span>
         </div>
       }
     >
@@ -222,12 +224,12 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
             </span>
             <div>
               <h3 className="text-[15px] font-bold text-[var(--au-ink)]">
-                {hasPassword ? "Смена пароля" : "Установка пароля"}
+                {hasPassword ? t("aurora.change_password") : t("aurora.set_password")}
               </h3>
               <p className="text-[12px] text-[var(--au-muted)]">
                 {hasPassword
-                  ? "Обновите пароль для входа в кабинет"
-                  : "Задайте пароль для входа через браузер по логину"}
+                  ? t("aurora.change_password_hint")
+                  : t("aurora.set_password_hint")}
               </p>
             </div>
           </div>
@@ -236,8 +238,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
             {hasPassword && (
               <div>
                 <label className="px-1 text-[12.5px] font-semibold text-[var(--au-muted)]">
-                  Текущий пароль
-                </label>
+                  {t("aurora.current_password")}</label>
                 <input
                   type="password"
                   value={currentPassword}
@@ -254,7 +255,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
 
             <div>
               <label className="px-1 text-[12.5px] font-semibold text-[var(--au-muted)]">
-                {hasPassword ? "Новый пароль" : "Придумайте пароль"}
+                {hasPassword ? t("aurora.new_password") : t("aurora.create_password")}
               </label>
               <input
                 type="password"
@@ -263,7 +264,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
                   setNewPassword(e.target.value);
                   setPasswordError(null);
                 }}
-                placeholder="Минимум 6 символов"
+                placeholder={t("aurora.password_placeholder")}
                 autoComplete="new-password"
                 className="mt-1 w-full rounded-[16px] border-2 border-transparent bg-[var(--au-bg)] px-3.5 py-3 text-[16px] text-[var(--au-ink)] outline-none transition-colors placeholder:text-[var(--au-muted)] focus:border-[var(--au-from)]"
               />
@@ -271,8 +272,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
 
             <div>
               <label className="px-1 text-[12.5px] font-semibold text-[var(--au-muted)]">
-                Повторите новый пароль
-              </label>
+                {t("aurora.repeat_new_password")}</label>
               <input
                 type="password"
                 value={confirmPassword}
@@ -280,7 +280,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
                   setConfirmPassword(e.target.value);
                   setPasswordError(null);
                 }}
-                placeholder="Повторите пароль"
+                placeholder={t("aurora.repeat_password")}
                 autoComplete="new-password"
                 className="mt-1 w-full rounded-[16px] border-2 border-transparent bg-[var(--au-bg)] px-3.5 py-3 text-[16px] text-[var(--au-ink)] outline-none transition-colors placeholder:text-[var(--au-muted)] focus:border-[var(--au-from)]"
               />
@@ -307,10 +307,10 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
             >
               {passwordLoading && <Loader2 className="h-4 w-4 animate-spin" />}
               {passwordLoading
-                ? "Сохраняем…"
+                ? t("aurora.saving")
                 : hasPassword
-                  ? "Сохранить новый пароль"
-                  : "Установить пароль"}
+                  ? t("aurora.save_password")
+                  : t("aurora.set_password_button")}
             </button>
           </form>
         </section>
@@ -324,11 +324,9 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
               </span>
               <div>
                 <h3 className="text-[15px] font-bold text-[var(--au-ink)]">
-                  Двухфакторная защита (2FA)
-                </h3>
+                  {t("aurora.twofa")}</h3>
                 <p className="text-[12px] text-[var(--au-muted)]">
-                  Одноразовые 6-значные коды из Google Authenticator / 2FAS
-                </p>
+                  {t("aurora.twofa_hint")}</p>
               </div>
             </div>
             <span
@@ -339,7 +337,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
                   : "border-black/5 bg-black/5 text-[var(--au-muted)] dark:border-white/10 dark:bg-white/5",
               )}
             >
-              {totpEnabled ? "Включена" : "Отключена"}
+              {totpEnabled ? t("aurora.enabled") : t("aurora.disabled")}
             </span>
           </div>
 
@@ -361,16 +359,14 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
           {twoFaSetupData ? (
             <div className="space-y-3.5 rounded-[18px] bg-[var(--au-bg)] p-4">
               <p className="text-[13px] font-semibold text-[var(--au-ink)]">
-                1. Отсканируйте QR-код в приложении аутентификатора:
-              </p>
+                {t("aurora.scan_qr")}</p>
               <div className="flex justify-center rounded-[18px] bg-white p-3.5 shadow-sm">
                 <QRCodeSVG value={twoFaSetupData.otpauthUrl} size={180} />
               </div>
 
               <div>
                 <p className="text-[12px] text-[var(--au-muted)]">
-                  Или введите ключ вручную, если сканирование недоступно:
-                </p>
+                  {t("aurora.manual_key")}</p>
                 <div className="mt-1 flex items-center justify-between gap-2 rounded-[14px] bg-[var(--au-surface)] px-3 py-2">
                   <code className="select-all font-mono text-[12px] font-bold text-[var(--au-ink)]">
                     {twoFaSetupData.secret}
@@ -379,7 +375,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
                     type="button"
                     onClick={() => copySecretToClipboard(twoFaSetupData.secret)}
                     className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--au-bg)] text-[var(--au-muted)] transition-colors hover:text-[var(--au-ink)] active:scale-95"
-                    aria-label="Скопировать ключ"
+                    aria-label={t("aurora.copy_key")}
                   >
                     {copiedSecret ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
@@ -388,8 +384,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
 
               <div>
                 <p className="text-[13px] font-semibold text-[var(--au-ink)]">
-                  2. Введите 6-значный код для подтверждения:
-                </p>
+                  {t("aurora.confirm_code")}</p>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -414,15 +409,14 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
                   }}
                   className="flex-1 rounded-[16px] bg-[var(--au-surface)] py-3 text-[14px] font-bold text-[var(--au-muted)] transition-transform active:scale-95"
                 >
-                  Отмена
-                </button>
+                  {t("aurora.cancel")}</button>
                 <button
                   type="button"
                   onClick={confirmTwoFa}
                   disabled={twoFaLoading || twoFaCode.length < 6}
                   className="flex-1 rounded-[16px] bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] py-3 text-[14px] font-bold text-white shadow-sm transition-transform enabled:active:scale-95 disabled:opacity-45"
                 >
-                  {twoFaLoading ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Подтвердить"}
+                  {twoFaLoading ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : t("aurora.confirm")}
                 </button>
               </div>
             </div>
@@ -431,8 +425,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
             twoFaDisabling ? (
               <div className="space-y-3 rounded-[18px] bg-[var(--au-bg)] p-3.5">
                 <p className="text-[13px] font-semibold text-[var(--au-ink)]">
-                  Введите 6-значный код из аутентификатора для отключения:
-                </p>
+                  {t("aurora.disable_code_hint")}</p>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -455,15 +448,14 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
                     }}
                     className="flex-1 rounded-[16px] bg-[var(--au-surface)] py-3 text-[14px] font-bold text-[var(--au-muted)] transition-transform active:scale-95"
                   >
-                    Отмена
-                  </button>
+                    {t("aurora.cancel")}</button>
                   <button
                     type="button"
                     onClick={disableTwoFa}
                     disabled={twoFaLoading || twoFaCode.length < 6}
                     className="flex-1 rounded-[16px] border border-red-500/30 bg-red-500/15 py-3 text-[14px] font-bold text-red-600 dark:text-red-400 transition-transform enabled:active:scale-95 disabled:opacity-45"
                   >
-                    {twoFaLoading ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "Отключить 2FA"}
+                    {twoFaLoading ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : t("aurora.disable_twofa")}
                   </button>
                 </div>
               </div>
@@ -477,8 +469,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
                 }}
                 className="w-full rounded-[16px] border border-red-500/20 bg-red-500/10 py-3 text-[14px] font-bold text-red-600 dark:text-red-400 transition-colors hover:bg-red-500/20 active:scale-[0.99]"
               >
-                Отключить 2FA
-              </button>
+                {t("aurora.disable_twofa")}</button>
             )
           ) : (
             /* Если 2FA не включена */
@@ -489,7 +480,7 @@ export function AuroraSecuritySheet({ open, onClose }: Props) {
               className="flex w-full items-center justify-center gap-2 rounded-[16px] border-2 border-dashed border-[var(--au-from)]/40 bg-[var(--au-bg)] py-3 text-[14px] font-bold text-[var(--au-from)] transition-colors hover:border-[var(--au-from)] active:scale-[0.99]"
             >
               {twoFaLoading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {twoFaLoading ? "Загружаем данные…" : "Включить 2FA защиту"}
+              {twoFaLoading ? t("aurora.loading") : t("aurora.enable_twofa")}
             </button>
           )}
         </section>

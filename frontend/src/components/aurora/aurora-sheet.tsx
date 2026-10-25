@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 /**
  * AuroraSheet — нижняя шторка дизайна Aurora.
  *
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
+  const { t } = useTranslation();
   const [mounted, setMounted] = useState(open);
   const [visible, setVisible] = useState(false);
 
@@ -97,7 +99,7 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
             <button
               type="button"
               onClick={onClose}
-              aria-label="Закрыть"
+              aria-label={t("aurora.close")}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--au-surface)] text-[var(--au-muted)] active:scale-95 transition-transform"
             >
               <X className="h-[18px] w-[18px]" />
