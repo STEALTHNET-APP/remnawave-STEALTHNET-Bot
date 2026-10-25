@@ -1,322 +1,106 @@
-# AGENTS.md — Master Architecture Guide & Codebase Map
+# Repository guide
 
-> **Target Audience:** Autonomous AI Coding Agents (Cursor, Claude Code, Codex, Antigravity, Aider, Windsurf, Copilot) & Human Core Contributors.  
-> **Purpose:** Authoritative single source of truth for the `STEALTHNET` repository. Eliminates redundant codebase scanning, establishes strict architectural invariants, and provides exact file navigation maps.
+Use this file to locate code, then read the implementation and tests for the behavior being changed. Open pull requests describe proposed changes, not guarantees about the current checkout. Package manifests, the Prisma schema, and deployment files are the source of truth for versions and configuration.
 
----
+## Applications and deployment
 
-## 1. High-Level Architecture & Tech Stack
+| Component | Source | Responsibility |
+| --- | --- | --- |
+| API | `backend/src/index.ts`, `backend/src/modules/` | Express API, authentication, billing, subscriptions, integrations and scheduled jobs |
+| Telegram bot | `bot/src/index.ts`, `bot/src/api.ts`, `bot/src/keyboard.ts` | grammY bot, Telegram menus and requests to the API |
+| Web UI | `frontend/src/` | React/Vite admin interface, client cabinet and Telegram Mini App |
+| Broadcast worker | `backend/src/worker/broadcast-worker.ts` | Separate process that polls broadcast jobs in the database |
+| SSH console | `console/main.go` | Go/Bubble Tea read-only SSH dashboard; it does not serve the React application |
+| Database | `backend/prisma/schema.prisma` | PostgreSQL data model managed with Prisma |
+| Update agent | `scripts/updater/` | Host-side update and backup workflow |
 
-**STEALTHNET** is an enterprise-grade automated billing, user management, and key distribution platform for VPN services powered by **Remnawave**. It connects Telegram users, Web App clients, payment gateways, and VPN nodes into a unified reactive ecosystem.
+`docker-compose.yml` defines the services and the `stealthnet` bridge network. The frontend service copies its built assets into a shared volume and exits. Nginx serves those assets and forwards API requests; the API also reads the frontend bundle for the branded SPA shell. The built-in nginx and certbot services use the `builtin-nginx` profile. The SSH console uses host networking and obtains its configuration from the API.
 
-### System Stack
+Read the actual Compose file and deployment overrides before changing ports or volumes. Do not infer exposure from comments: the repository currently publishes API port 5000 on `0.0.0.0`. PostgreSQL has no published host port in the base Compose file. Local deployment settings may differ.
 
-| Layer | Technologies & Runtime | Core Packages & Frameworks |
-| :--- | :--- | :--- |
-| **Backend API** | Node.js `>=22`, TypeScript `5.6`, Express `4.21` | `@prisma/client` (6.0), `undici`, `node-cron`, `jose`, `zod`, `otplib`, `socks-proxy-agent` |
-| **Telegram Bot** | Node.js `>=22`, TypeScript `5.6`, grammY `1.21` | `grammy`, `undici`, `socks-proxy-agent` |
-| **Frontend UI** | React `18`, TypeScript `5.6`, Vite | Tailwind CSS, Radix UI, TanStack Query 5, `lucide-react`, `react-i18next`, `@dnd-kit` |
-| **Database** | PostgreSQL `16` | Prisma ORM 6.0 (`backend/prisma/schema.prisma`) |
-| **Workers** | Node.js isolated background processes | `stealthnet-broadcast-worker` (mass queues, asynchronous notifications) |
-| **VPN Nodes** | Sing-box, Xray, AmneziaWG | `singbox-node/`, `proxy-node/`, `amneziawg-node/` |
-| **Infrastructure** | Docker Compose, Nginx, Certbot | `docker-compose.yml`, `nginx/nginx.conf` |
+Node packages require Node.js 22 or newer. Install and build each package in its own directory. The console is a separate Go module.
 
----
+## Data model and subscription behavior
 
-## 2. Docker Architecture & Container Topology
+Read `backend/prisma/schema.prisma` before writing queries or migrations.
 
-The application runs as 6 orchestrated containers on an internal bridge network (`stealthnet_network`):
+- `Client` represents the panel account. Its ID uses Prisma's `cuid()` default; `telegramId` is a nullable unique string.
+- `Subscription` belongs to a client and stores the subscription index, optional Remna UUID, tariff or trial association, gift state and cached VPN data.
+- Index 0 is the primary subscription when present. New or migrated accounts can lack this record. Do not assume every client already has one.
+- `Client.remnawaveUuid` is a legacy primary-profile reference. Check it together with the subscription records when repairing migrated data.
+- A null `tariffId` does not prove that a subscription is empty or disposable. Imported subscriptions and standalone trials require separate handling.
+- Multiple VPN profiles with the same Telegram ID can represent legitimate separate subscriptions. Do not merge or delete them solely because the Telegram ID matches.
+- `Payment` records payment details and purchase metadata. Receiving money and successfully delivering the purchased service are distinct steps.
+- `SystemSetting` holds runtime settings loaded by `getSystemConfig()` in `backend/src/modules/client/client.service.ts`.
 
-```mermaid
-flowchart TD
-    subgraph External["External World"]
-        UserBrowser["Client / Admin Browser"]
-        TelegramUser["Telegram App User"]
-        BankWebhook["Payment Gateway Webhooks"]
-    end
+Follow the purchase intent in `backend/src/modules/tariff/tariff-activation.service.ts`: an explicit target requests a renewal; another purchase may create a new subscription. Also inspect single-subscription mode, trial conversion, gifts and additional devices before changing this behavior. Do not unconditionally reuse slot 0.
 
-    subgraph ReverseProxy["Edge Proxy"]
-        Nginx["stealthnet-nginx (:80 / :443)"]
-    end
+## Backend navigation
 
-    subgraph CoreServices["Internal Docker Network"]
-        API["stealthnet-api (:5000)<br/><i>Express + Prisma</i>"]
-        Bot["stealthnet-bot<br/><i>grammY Worker</i>"]
-        Console["stealthnet-console (:3000)<br/><i>Internal Nginx + SPA</i>"]
-        Worker["stealthnet-broadcast-worker<br/><i>Async Notifications</i>"]
-        Postgres[("stealthnet-postgres (:5432)<br/><i>PostgreSQL 16</i>")]
-    end
+Paths in this table are relative to `backend/src/modules/`.
 
-    subgraph RemnaMaster["VPN Infrastructure"]
-        RemnaPanel[("Remnawave Master Panel<br/>REST API")]
-        VPN_Nodes["Xray / Sing-box / Amnezia Nodes"]
-    end
+| Area | Modules |
+| --- | --- |
+| Remna integration and synchronization | `remna/`, `sync/` |
+| Subscriptions, purchases and trials | `subscription/`, `tariff/`, `trial/`, `gift/`, `extra-options/` |
+| Other VPN products | `singbox/`, `proxy/`, `amnezia-web/` |
+| Admin and client access | `admin/`, `admin-permissions/`, `auth/`, `client/`, `api-keys/` |
+| Payments and renewals | `payment/`, `payment-actions/`, `payment-redirect/` and the provider-specific directories |
+| Payment/event intake | `webhooks/`, `webhook-inbox/` and provider routes |
+| Marketing | `referral/`, `promo-code/`, `promo-bulk/`, `contest/`, `roulette/` |
+| Messaging and support | `broadcast/`, `auto-broadcast/`, `ticket/`, `notification/`, `mail/`, `bot-messages/`, `bot-conversations/` |
+| Operations | `backup/`, `diagnostics/`, `update/`, `server/`, `audit/` |
 
-    UserBrowser -->|HTTPS| Nginx
-    BankWebhook -->|POST /api/webhooks/*| Nginx
-    Nginx -->|/api/*| API
-    Nginx -->|/cabinet/*, /admin/*| Console
+Provider implementations include `yookassa/`, `yoomoney/`, `platega/`, `cryptopay/`, `telegram-stars/`, `heleket/`, `lava/`, `lavatop/`, `overpay/`, `rollypay/` and `paritypay/`. Inspect the route mounting in the API entry point as well as the provider service; webhook handling is not necessarily contained in one directory.
 
-    TelegramUser <-->|Long Polling| Bot
-    Bot <-->|Internal HTTP /api/*| API
-    API <--> Postgres
-    Worker <--> Postgres
-    API -->|Async Tasks| Worker
+For scheduled work, inspect the scheduler registration and the called service together. Useful starting points include `payment/auto-renew.cron.ts`, `sync/sync.scheduler.ts`, `referral/referral-rewards.scheduler.ts` and `gift/gift-expiry.cron.ts`. Frequencies and enabled conditions belong to the implementation and runtime settings; do not assume a fixed schedule from this document.
 
-    API <-->|REST + Circuit Breaker| RemnaPanel
-    RemnaPanel --> VPN_Nodes
-```
+## Frontend and bot navigation
 
-### Container Responsibilities & Port Bindings:
-* **`stealthnet-api`**: Core business API (port `127.0.0.1:5000`). Handles Auth, Subscriptions, Payments, Fiscalization, Sync, and Remnawave REST calls.
-* **`stealthnet-bot`**: Autonomous Telegram bot. Polls Telegram Bot API, renders inline menus, handles WebApp launches, notifies users.
-* **`stealthnet-console`**: Serves React SPA (Admin panel & Client cabinet) via internal lightweight server on port `3000`.
-* **`stealthnet-broadcast-worker`**: Consumes broadcast queue from PostgreSQL, sending throttled messages to Telegram users without blocking API threads.
-* **`stealthnet-postgres`**: Relational data store on `127.0.0.1:5432`.
-* **`stealthnet-nginx`**: Edge gateway handling SSL termination, static file caching, and routing.
+Admin pages live in `frontend/src/pages/`; client pages are in `frontend/src/pages/cabinet/`. Shared UI and behavior live in `frontend/src/components/`, API types and calls in `frontend/src/lib/api.ts`, and translations in `frontend/src/i18n/locales/`.
 
----
+Check `frontend/src/lib/use-cabinet-design.ts` and the relevant page wrapper for Classic, Aurora and Stealth routing. A component's presence on disk does not prove that a route currently renders it. Test browser and Telegram Mini App behavior separately where it matters.
 
-## 3. Core Database Entities & Data Relationships (Prisma)
+PWA update behavior is in `frontend/src/components/pwa/pwa-update-prompt.tsx`. Preserve unsaved input and in-progress payment flows when changing reload behavior.
 
-The schema in `backend/prisma/schema.prisma` contains 68 models. The core domain revolves around:
+Bot callbacks are handled in `bot/src/index.ts`, with keyboards in `bot/src/keyboard.ts` and API calls in `bot/src/api.ts`. Read existing callback handlers before choosing a namespace. Menu buttons may open inline Telegram flows or cabinet routes depending on settings.
 
-```mermaid
-erDiagram
-    Client ||--o{ Subscription : "owns (slots 0..N)"
-    Client ||--o{ Payment : "initiates"
-    Client ||--o{ Ticket : "creates"
-    Client ||--o{ ReferralReward : "earns"
-    Subscription }|--|| Tariff : "bound to"
-    Subscription ||--o| Trial : "or trial"
-    Tariff }|--|| TariffCategory : "categorized by"
-    Tariff ||--o{ TariffPriceOption : "duration options"
-    Payment }|--o| Tariff : "purchases"
-    Ticket ||--o{ TicketMessage : "contains"
-```
+## Rules for changes involving money or VPN state
 
-### Key Models & Their Invariants:
-1. **`Client`**: Represents a registered user.
-   - `id`: Internal UUID.
-   - `telegramId`: BigInt/string Telegram User ID (used for bot auth and Remnawave mapping).
-   - `remnawaveUuid`: Mirrors the UUID of the primary subscription (`subscriptionIndex = 0`) in Remnawave.
-   - `balance`: Virtual credit balance.
-   - `trialUsed`: Boolean flag preventing trial abuse.
-2. **`Subscription`**: The core VPN access entity.
-   - `ownerId`: Foreign key to `Client`.
-   - `subscriptionIndex`: Integer index (`0` = primary subscription, `1+` = secondary / gift).
-   - `remnawaveUuid`: Unique identifier of user profile in Remnawave.
-   - `tariffId`: Foreign key to `Tariff` (can be `null` if imported from Remnawave or expired).
-   - `autoRenewEnabled`: Boolean toggle for automatic card/balance recurring renewal.
-   - `expireAt`: Cached expiration timestamp used for offline fallbacks and quick filters.
-3. **`Payment`**: Financial transaction record.
-   - `provider`: Gateway identifier (`yookassa`, `yoomoney`, `platega`, `stars`, `heleket`, `crypto`, etc.).
-   - `status`: `PENDING` -> `PAID` / `FAILED` / `CANCELLED`.
-   - `metadata`: JSON payload holding purchase parameters, including `pendingRemnaActivation` flag during Remnawave downtime.
-4. **`SystemSetting`**: Key-value table storing dynamic runtime settings loaded via `getSystemConfig()`.
+1. Follow the payment provider's current official documentation and existing verification code. Do not substitute a generic signature algorithm for the provider's required one.
+2. Authenticate and validate payment notifications independently of VPN availability. Do not place a blanket Remna availability guard in front of a bank webhook. Follow the provider's acknowledgement and retry contract after recording the verified event durably.
+3. Keep payment receipt, fulfillment success and retry state distinct. Do not tell a user that access has been issued merely because money arrived.
+4. A timeout or server error does not mean a VPN user is absent. An operation may have succeeded remotely before the response was lost. Reconcile uncertain results before creating another user or applying another renewal.
+5. Retry processing must claim work safely and prevent duplicate effects across overlapping runs, multiple processes and repeated webhooks. A read followed by an unrelated update is not an exclusive claim.
+6. Remna outages must not automatically disable independent Sing-box, proxy or balance operations.
+7. Preserve existing subscription mappings until a migration has successfully reconciled each affected subscription. Back up data before destructive migration work.
+8. Keep credentials out of logs, committed files and unmasked API responses.
 
----
+These are review requirements, not a claim that every current code path already enforces them. Verify the paths being changed. Do not assume a circuit breaker or pending-activation worker exists merely because an open PR proposes one.
 
-## 4. Backend Modules Directory Map (69 Modules Categorized)
+## Adding settings
 
-All backend domain modules reside in `backend/src/modules/`:
+Inspect all parts of an existing similar setting:
 
-### A. Core VPN & Remnawave Integration
-* **`remna/`**: Remnawave REST API client (`remna.client.ts`), Circuit Breaker pattern, connection state probe, squad/host/node management.
-* **`sync/`**: Two-way synchronization engine (`sync.service.ts`, `sync.scheduler.ts`) syncing users and traffic counters between Remnawave and PostgreSQL.
-* **`server/`**: Server nodes and backend infrastructure management.
-* **`proxy/` & `proxy-util/`**: HTTP/SOCKS5 proxy management and nodes.
-* **`singbox/`**: Sing-box node subscription and protocol generation.
-* **`amnezia-web/`**: Integration with Amnezia Web / AmneziaWG protocols.
+- The settings keys, defaults, loading and cache invalidation in `backend/src/modules/client/client.service.ts`.
+- Validation, persistence, permissions and response masking in `backend/src/modules/admin/admin.routes.ts`.
+- The public config response, if clients need a safe public value.
+- API types in `frontend/src/lib/api.ts` and the relevant admin controls.
+- Bot configuration or worker processes that consume the value.
 
-### B. Billing, Tariffs & Subscriptions
-* **`subscription/`**: Slot management helpers (`subscription.helpers.ts`), extra devices pricing (`extras.helper.ts`), traffic calculations.
-* **`tariff/`**: Tariff definitions, categories, duration pricing, and payment fulfillment (`tariff-activation.service.ts`).
-* **`trial/`**: Trial activation, eligibility checks, and conversion rules.
-* **`gift/`**: Gift purchase, gift codes generation, and multi-subscription creation (`createAdditionalSubscription`).
-* **`extra-options/`**: Upselling additional device slots and speed boosts.
-* **`tariff-csv/`**: Bulk export/import of tariff configurations.
+A setting stored in PostgreSQL does not automatically reconfigure another running process. Check the lifetime of cached configuration and long-running connections explicitly.
 
-### C. Payment Gateways (The 11 Providers)
-* **`payment/`**: Unified payment router, invoice creation, balance deductions, and `auto-renew.cron.ts`.
-* **`platega/`**: Platega card processing and webhooks.
-* **`yookassa/`**: YooKassa API, webhooks, and 54-FZ receipt fiscalization.
-* **`yoomoney/`**: YooMoney P2P notifications with HMAC SHA1 verification.
-* **`cryptopay/`**: Telegram @CryptoBot integration.
-* **`telegram-stars/`**: Native Telegram Stars digital payment processing.
-* **`heleket/`**: Heleket gateway integration.
-* **`rollypay/`**: RollyPay card acquisition.
-* **`paritypay/`**: ParityPay gateway integration.
-* **`lava/` & `lavatop/`**: Lava.ru and Lavatop digital payment processing.
-* **`overpay/`**: Overpay gateway integration.
-* **`nalog/`**: Integration with official Russian self-employed tax service (Мой налог).
+## Build and verification
 
-### D. Identity, Client & Admin Auth
-* **`client/`**: Client registration (`/register`), Telegram login check, client routes (`client.routes.ts`), system config cache.
-* **`auth/`**: Admin JWT authentication, password reset, 2FA OTP verification.
-* **`admin/`**: Admin dashboard CRUD APIs for clients, tariffs, and servers.
-* **`admin-permissions/`**: Role-based access control (RBAC) for sub-admins.
-* **`clients-bulk/`**: Bulk client management (ban, unban, migration).
-
-### E. Marketing, Referrals & Community
-* **`referral/`**: 3-level referral network tracking, reward calculations, and withdrawal processing.
-* **`promo-code/` & `promo-bulk/`**: Promo code generation, redemption limits, and bulk issuing.
-* **`contest/`**: Referral and engagement contests with automated winner selection and daily reminders.
-* **`roulette/`**: Gamified "Lucky Wheel" spins granting balance or extra VPN days.
-* **`landing/`**: Built-in landing page CMS and blocks API.
-* **`marketplace/`**: Plugin and theme marketplace.
-
-### F. Support & Notifications
-* **`ticket/`**: Support ticketing system between users and staff.
-* **`broadcast/`**: Targeted mass notifications to bot users with filtering.
-* **`auto-broadcast/`**: Automated trigger-based mailings (e.g. 3 days before expiry, inactive user).
-* **`notification/` & `notifications-counters/`**: In-app notifications and badge counters.
-* **`bot-messages/` & `bot-conversations/`**: Live chat mirroring between bot and admin.
-
-### G. Security, Anti-Abuse & System
-* **`anti-abuse/`**: Automated detection of traffic and device sharing abuse with auto-ban/unban schedulers.
-* **`anti-fraud/`**: Suspicious payment and referral cycle detection.
-* **`blacklist/`**: IP and Telegram ID blacklisting.
-* **`signup-protection`**: Rate limiting and anti-bot verification on register.
-* **`backup/`**: Automated PostgreSQL database dumps and Telegram delivery.
-* **`diagnostics/`**: System health check, Remnawave latency probes, cron registry.
-* **`audit/`**: Audit log of administrative actions.
-
----
-
-## 5. Telegram Bot Architecture (`bot/src/`)
-
-The bot is built on the **grammY** framework. Entry point: `bot/src/index.ts`.
-
-### Callback Query Routing & Namespaces:
-All inline buttons follow a structured namespace protocol:
-* `menu:main` — Return to root keyboard.
-* `menu:tariffs` — Open tariff selection (or maintenance screen if Remna is down).
-* `menu:my_subs` — Display active and offline subscriptions with connect URLs.
-* `menu:devices` — Device management flow (`device-flow.ts`).
-* `menu:topup` — Balance recharge menu.
-* `menu:trial` — Trial activation screen.
-* `menu:gifts` — Gift subscription issuance.
-* `menu:support` — Ticket creation and support dialogue.
-* `menu:proxy` & `menu:singbox` — Dedicated protocol slots.
-* `pay:<provider>:<tariffId>:<optionId>` — Payment invoice generation.
-* `yk_recpt:<no|saved|ask>:<token>` — 54-FZ tax receipt prompt for YooKassa.
-* `sub:<index>` — Select subscription slot.
-
-### Dual Interface Mode:
-The bot dynamically adapts to two interface modes configured by the administrator:
-1. **Classic Mode**: Navigates entirely through Telegram inline messages and keyboards (`keyboard.ts`).
-2. **Web Mode (Mini App)**: Telegram buttons open the WebApp at `https://<domain>/cabinet/<route>`.
-
----
-
-## 6. Frontend Architecture (`frontend/src/`)
-
-A Vite-powered React 18 SPA serving two distinct layouts:
-
-1. **Admin Console (`frontend/src/pages/`)**:
-   - `dashboard.tsx`: Business KPIs, sales charts, and active nodes.
-   - `tariffs.tsx`: Tariff constructor (squads, duration tiers, price per day, device options).
-   - `clients.tsx`: Client database with filtering, subscription inspection, and manual balance adjustment.
-   - `settings.tsx`: Master configuration center (remna, branding, payments, bot buttons, backups).
-   - `broadcast.tsx` & `auto-broadcast.tsx`: Notification campaigns and trigger automations.
-2. **Client Cabinet PWA (`frontend/src/pages/cabinet/`)**:
-   - Designed for mobile screens and Telegram WebApp integration.
-   - Subscriptions list, QR-code display, connection key copy, speed test guides, and balance top-up.
-   - Protected with PWA Service Worker caching (`vite-plugin-pwa`) and automatic update detection.
-
----
-
-## 7. Critical Domain Invariants & Rules (The "Gotchas" Index)
-
-> [!CAUTION]
-> Breaking these invariants will corrupt user subscriptions, duplicate profiles, or drop paid transactions!
-
-### Invariant 1: The Subscription Slot 0 Model
-* Every client has a primary subscription slot: `subscriptionIndex = 0`.
-* `Client.remnawaveUuid` **always** mirrors the primary slot's `Subscription.remnawaveUuid`.
-* Slots with `subscriptionIndex >= 1` are secondary subscriptions or gifts.
-* If slot `#0` expires or is revoked, its database record **is never deleted**; it retains `tariffId = null`. The client's subsequent purchase must update slot `#0`, restoring primary status.
-
-### Invariant 2: Remnawave Profile Deduplication (Issue #233)
-* Remnawave maps users by `uuid` and `telegramId`.
-* **Never** call `remnaCreateUser` blindly upon user registration or first purchase.
-* Always query `remnaGetUserByTelegramId(telegramId)`:
-  - If a profile exists in Remnawave: link its `uuid` to `client.remnawaveUuid` and slot `#0`.
-  - On tariff purchase: call `remnaUpdateUser` (extending `expireAt` and syncing squads), **do not** call `remnaCreateUser`.
-
-### Invariant 3: Remnawave Fault-Tolerance & Circuit Breaker (PR #235)
-* All calls to Remnawave are wrapped by the Circuit Breaker (`backend/src/modules/remna/remna.client.ts`).
-* When Remnawave fails 3 times consecutively, the circuit opens (`OPEN`), failing instantly in 0ms.
-* **In-Flight Bank Webhooks**: If a bank webhook confirms payment while Remnawave is offline:
-  - Mark payment as `PAID`.
-  - Set `payment.metadata.pendingRemnaActivation = true`.
-  - **Do not drop or fail the transaction!** The background cron `processPendingRemnaActivations` retries activation automatically as soon as Remnawave recovers.
-
-### Invariant 4: Dual Verification for YooMoney & YooKassa
-* YooMoney webhook verification must use HMAC SHA1 against `YOOMONEY_NOTIFICATION_SECRET`.
-* YooKassa uses basic HTTP authentication and IP range validation.
-
-### Invariant 5: Safe Production Server Configurations
-* Never commit or overwrite local runtime port bindings in `docker-compose.yml` (`127.0.0.1:5000` for API, `127.0.0.1:3001` for Uptime Kuma).
-* Keep PR branches clean and derived strictly from `origin/main`.
-
----
-
-## 8. Background Crons & Workers Inventory
-
-| Schedule | Frequency | File | Function / Purpose |
-| :--- | :--- | :--- | :--- |
-| `* * * * *` | Every 1 min | `payment/auto-renew.cron.ts` | Auto-renewal charges & pending Remna retries |
-| `* * * * *` | Every 1 min | `sync/sync.scheduler.ts` | Remnawave 2-way sync (`runScheduledRemnaSync`) |
-| `* * * * *` | Every 1 min | `referral/referral-rewards.scheduler.ts` | Accrue pending referral rewards |
-| `15,45 * * * *` | Every 30 min | `gift/gift-expiry.cron.ts` | Expire unredeemed gift codes |
-| Configurable (`0 9 * * *`) | Daily | `auto-broadcast/auto-broadcast-scheduler.ts` | Trigger auto-mailings (ending soon, inactivity) |
-| Configurable (`0 10 * * *`) | Daily | `contest/contest-daily-reminder-scheduler.ts` | Send contest ranking updates |
-| Configurable (`0 1 * * *`) | Daily | `backup/auto-backup.scheduler.ts` | Execute pg_dump & send Telegram backup |
-| Dynamic | By rule | `anti-abuse/anti-abuse.scheduler.ts` | Traffic surge detection & auto-unban |
-
----
-
-## 9. Developer & AI Agent "How-To" Playbooks
-
-### Playbook 1: Adding a New Payment Gateway
-1. Create driver module: `backend/src/modules/<gateway>/`.
-2. Implement invoice creator returning payment URL.
-3. Add webhook route in `backend/src/modules/<gateway>/<gateway>.routes.ts` with signature verification.
-4. On verified payment, call `activateTariffByPaymentId(paymentId)` from `tariff-activation.service.ts`.
-5. Guard webhook with `requireRemnaOnline` or handle `pendingRemnaActivation`.
-6. Add gateway keys to `SystemSetting` and expose in Admin Console (`frontend/src/pages/settings.tsx`).
-
-### Playbook 2: Adding a New System Setting Toggle
-1. Add setting key to `SYSTEM_CONFIG_KEYS` in `backend/src/modules/client/client.service.ts`.
-2. Expose typed field in `loadSystemConfigFromDb()`.
-3. Add UI controller in `frontend/src/pages/settings.tsx`.
-4. Consume via `await getSystemConfig()` anywhere in backend or bot.
-
-### Playbook 3: Adding a Telegram Bot Menu Button
-1. Add button descriptor to `bot/src/keyboard.ts`.
-2. Register callback query handler in `bot/src/index.ts` (handle both classic message edit and WebApp URL).
-3. If new API data is required, define type-safe method in `bot/src/api.ts`.
-
----
-
-## 10. Build, Test & Verification Commands
+From the repository root, with dependencies installed:
 
 ```bash
-# === Backend Verification ===
-cd backend && npx prisma generate
-cd backend && npm run build
-node --test backend/tests/*.test.mjs
-
-# === Telegram Bot Verification ===
-cd bot && npm run build
-node --test bot/src/*.test.ts
-
-# === Frontend Verification ===
-cd frontend && npm run build
-
-# === Docker Compose Full Staging Build ===
-docker compose build --no-cache api bot console broadcast-worker frontend
-docker compose up -d --force-recreate
+npm --prefix backend run db:generate
+npm --prefix backend run build
+npm --prefix bot run build
+npm --prefix frontend run build
 ```
+
+Run focused tests from `backend/tests/` or `frontend/tests/` according to their setup requirements. There is no universal test command for every script: files include Node tests, TypeScript scripts, Python helpers and database integration tests. Read the selected test before running it. Database tests require an isolated test database; browser tests may require Playwright and downloaded browsers. Never run fixture cleanup against an operator's database.
+
+For deployment validation, inspect [Makefile](Makefile), [docker-compose.yml](docker-compose.yml), [installation instructions](README.md), [update documentation](docs/auto-update.md) and the appropriate feature guide in [docs](docs/). Building images and restarting a deployment are separate actions. Keep local configuration and persistent volumes intact.
