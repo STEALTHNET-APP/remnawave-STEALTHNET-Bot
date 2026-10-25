@@ -67,6 +67,8 @@ export function RouletteAdminTab() {
   const [saving, setSaving] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [cooldownHours, setCooldownHours] = useState(24);
+  const [resetMode, setResetMode] = useState<"hours" | "daily">("hours");
+  const [timeZone, setTimeZone] = useState("UTC");
   const [sectors, setSectors] = useState<SectorItem[]>([]);
   const [totalSpins, setTotalSpins] = useState(0);
   const [spinsByType, setSpinsByType] = useState<any[]>([]);
@@ -80,6 +82,8 @@ export function RouletteAdminTab() {
       if (res) {
         setEnabled(res.settings?.enabled ?? true);
         setCooldownHours(res.settings?.cooldownHours ?? 24);
+        setResetMode(res.settings?.resetMode ?? "hours");
+        setTimeZone(res.settings?.timeZone ?? "UTC");
         setSectors(res.settings?.sectors?.length > 0 ? res.settings.sectors : DEFAULT_SECTORS);
         setTotalSpins(res.totalSpins ?? 0);
         setSpinsByType(res.spinsByType ?? []);
@@ -106,7 +110,7 @@ export function RouletteAdminTab() {
       setSaving(true);
       await api.updateAdminRoulette(token, {
         enabled,
-        cooldownHours,
+        cooldownHours, resetMode, timeZone,
         sectors,
       });
       toast.success("Сохранено", "Настройки рулетки успешно обновлены");
@@ -285,11 +289,15 @@ export function RouletteAdminTab() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
             <div className="space-y-1.5">
+              <Label htmlFor="roulette-reset-mode">Обновление попыток</Label>
+              <select id="roulette-reset-mode" value={resetMode} onChange={e => setResetMode(e.target.value as "hours" | "daily")} className="w-full rounded-lg border bg-background p-2"><option value="hours">Кулдаун в часах</option><option value="daily">Раз в календарные сутки</option></select>
+              {resetMode === "daily" && <div className="space-y-2"><Label htmlFor="roulette-zone">Часовой пояс</Label><Input id="roulette-zone" value={timeZone} onChange={e => setTimeZone(e.target.value)} placeholder="Europe/Moscow" /><p className="text-xs text-muted-foreground">Новая попытка в 00:00 выбранного пояса. Например: UTC, Europe/Moscow, Europe/Berlin.</p></div>}
               <Label htmlFor="cooldown-input">Кулдаун между вращениями (часы)</Label>
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-muted-foreground" />
                 <Input
                   id="cooldown-input"
+                  disabled={resetMode === "daily"}
                   type="number"
                   min={1}
                   max={720}
