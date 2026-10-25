@@ -20,6 +20,8 @@
 
 [Automatic updates: setup and limitations](docs/auto-update.md).
 
+> 🤖 **Working with AI Agents (Cursor, Claude Code, Codex, Antigravity, Aider)?** See [AGENTS.md](AGENTS.md) for architecture map, critical invariants, directory layout, and verification commands.
+
 <p align="center">
   <img src="https://img.shields.io/badge/STEALTHNET-3.0-blueviolet?style=for-the-badge&logoColor=white" alt="STEALTHNET 3.0" />
   <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
