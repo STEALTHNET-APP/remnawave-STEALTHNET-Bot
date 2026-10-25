@@ -41,22 +41,101 @@ export function remnaSecretCookieHeader(): string | null {
   return `${name}=${value}`;
 }
 
+
+/* ─── Circuit Breaker & Health State ─── */
+type CircuitState = "CLOSED" | "OPEN" | "HALF_OPEN";
+
+const CIRCUIT_FAILURE_THRESHOLD = 3;
+const CIRCUIT_COOLDOWN_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = 5_000;
+
+interface CircuitBreakerState {
+  state: CircuitState;
+  consecutiveFailures: number;
+  lastFailureAt: number;
+  lastSuccessAt: number;
+}
+
+const circuit: CircuitBreakerState = {
+  state: "CLOSED",
+  consecutiveFailures: 0,
+  lastFailureAt: 0,
+  lastSuccessAt: Date.now(),
+};
+
+export function isRemnaOnline(): boolean {
+  if (!isRemnaConfigured()) return false;
+  if (circuit.state === "OPEN") {
+    const elapsed = Date.now() - circuit.lastFailureAt;
+    if (elapsed < CIRCUIT_COOLDOWN_MS) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function getRemnaCircuitState() {
+  return {
+    state: circuit.state,
+    consecutiveFailures: circuit.consecutiveFailures,
+    lastFailureAt: circuit.lastFailureAt ? new Date(circuit.lastFailureAt).toISOString() : null,
+    lastSuccessAt: circuit.lastSuccessAt ? new Date(circuit.lastSuccessAt).toISOString() : null,
+    isOnline: isRemnaOnline(),
+  };
+}
+
+export function resetRemnaCircuitBreaker(): void {
+  circuit.state = "CLOSED";
+  circuit.consecutiveFailures = 0;
+  circuit.lastFailureAt = 0;
+  circuit.lastSuccessAt = Date.now();
+}
+
+export function recordRemnaSuccess(): void {
+  circuit.state = "CLOSED";
+  circuit.consecutiveFailures = 0;
+  circuit.lastSuccessAt = Date.now();
+}
+
+export function recordRemnaFailure(isNetworkOr5xx = true): void {
+  if (!isNetworkOr5xx) return;
+  circuit.consecutiveFailures++;
+  circuit.lastFailureAt = Date.now();
+  if (circuit.consecutiveFailures >= CIRCUIT_FAILURE_THRESHOLD) {
+    if (circuit.state !== "OPEN") {
+      console.warn(`[remna.client] Circuit breaker tripped to OPEN after ${circuit.consecutiveFailures} failures`);
+    }
+    circuit.state = "OPEN";
+  }
+}
+
+export type RemnaFetchOptions = RequestInit & {
+  timeoutMs?: number;
+  skipCircuitBreaker?: boolean;
+};
+
 export async function remnaFetch<T>(
   path: string,
-  options: RequestInit = {}
-): Promise<{ data?: T; error?: string; status: number }> {
+  options: RemnaFetchOptions = {}
+): Promise<{ data?: T; error?: string; status: number; isCircuitOpen?: boolean }> {
   if (!isRemnaConfigured()) {
     return { error: "Remna API not configured", status: 503 };
   }
 
+  // Circuit Breaker: fast-fail if Remna is down (0ms instead of 12s timeout)
+  if (!options.skipCircuitBreaker && circuit.state === "OPEN") {
+    const elapsed = Date.now() - circuit.lastFailureAt;
+    if (elapsed < CIRCUIT_COOLDOWN_MS) {
+      return { error: "Remna API offline (circuit open)", status: 503, isCircuitOpen: true };
+    }
+    // Cooldown elapsed -> probe in HALF_OPEN
+    circuit.state = "HALF_OPEN";
+  }
+
   const url = `${REMNA_API_URL}${path.startsWith("/") ? path : `/${path}`}`;
-  // таймаут на запрос к Remna. Без него медленная/мёртвая нода
-  // (или ProxyCheck, рвущий сокет) подвешивала клиентские эндпоинты (/client/subscription,
-  // /client/devices синхронно ходят в Remna) до дефолтного undici-таймаута — фронт ловил
-  // «fetch failed», и API «как будто отваливался». Теперь — быстрый контролируемый отказ.
-  const REMNA_TIMEOUT_MS = 12_000;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), REMNA_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
       ...options,
@@ -73,15 +152,18 @@ export async function remnaFetch<T>(
       }
     }
     if (!res.ok) {
+      if (res.status >= 500) {
+        recordRemnaFailure(true);
+      }
       return {
         error: (data as { message?: string })?.message ?? res.statusText ?? text.slice(0, 200),
         status: res.status,
       };
     }
+    recordRemnaSuccess();
     return { data: data as T, status: res.status };
   } catch (e) {
-    // AbortError = таймаут: отдаём 504, чтобы вызывающий код отличал «Remna не ответила вовремя»
-    // от прочих сетевых ошибок (и не возвращал клиенту туманное «fetch failed»).
+    recordRemnaFailure(true);
     if (e instanceof Error && e.name === "AbortError") {
       return { error: "Remna API timeout", status: 504 };
     }
@@ -91,6 +173,21 @@ export async function remnaFetch<T>(
     clearTimeout(timer);
   }
 }
+
+export async function probeRemnaHealth(): Promise<boolean> {
+  if (!isRemnaConfigured()) return false;
+  try {
+    const res = await remnaFetch("/api/users?size=1", { timeoutMs: 3000, skipCircuitBreaker: true });
+    if (res.status === 200) {
+      recordRemnaSuccess();
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 
 /** GET /api/users — пагинация Remna: size и start (offset) */
 export function remnaGetUsers(params?: { page?: number; limit?: number; start?: number; size?: number }) {

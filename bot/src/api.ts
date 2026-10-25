@@ -449,6 +449,7 @@ export async function getSingboxSlots(token: string): Promise<{
 
 /** Публичный список тарифов по категориям с кэшированием */
 export async function getPublicTariffs(): Promise<{
+  remnaAvailable?: boolean;
   items: {
     id: string;
     name: string;
@@ -1152,6 +1153,7 @@ export type SubscriptionListItem = {
   isBanned?: boolean;
   banReason?: string | null;
   bannedUntil?: string | null;
+  isOfflineSnapshot?: boolean;
 };
 
 /** Убрать ВСЕ доп. устройства с подписки */
@@ -1168,7 +1170,7 @@ export async function removeExtraDevices(
 
 export async function getAllSubscriptions(
   token: string
-): Promise<{ items: SubscriptionListItem[] }> {
+): Promise<{ items: SubscriptionListItem[]; remnaAvailable?: boolean }> {
   return fetchJson("/api/client/subscription/all", { token });
 }
 

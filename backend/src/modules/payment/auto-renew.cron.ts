@@ -2,7 +2,7 @@ import cron from "node-cron";
 import { prisma } from "../../db.js";
 import { randomUUID } from "crypto";
 import { activateTariffByPaymentId, applyExtraDevicesPrice, parseDeviceDiscountTiers } from "../tariff/tariff-activation.service.js";
-import { remnaGetUser, isRemnaConfigured } from "../remna/remna.client.js";
+import { remnaGetUser, isRemnaConfigured, isRemnaOnline } from "../remna/remna.client.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { createYookassaAutopayment } from "../yookassa/yookassa.service.js";
 import { applyPercent } from "../client/personal-discount.js";
@@ -115,12 +115,67 @@ async function tryApplyPromoForAutoRenew(
 /**
  * Планировщик автопродления. Запуск раз в минуту для точности UPCOMING-уведомлений.
  */
+/**
+ * Обработка отложенных активаций платежей, которые пришли во время падения Remnawave.
+ */
+export async function processPendingRemnaActivations(): Promise<{ processed: number; success: number }> {
+  if (!isRemnaOnline()) {
+    return { processed: 0, success: 0 };
+  }
+
+  const pendingPayments = await prisma.payment.findMany({
+    where: {
+      status: "PAID",
+      subscriptionId: null,
+      metadata: { contains: '"pendingRemnaActivation":true' },
+    },
+    take: 20,
+  });
+
+  if (pendingPayments.length === 0) return { processed: 0, success: 0 };
+
+  let successCount = 0;
+  for (const p of pendingPayments) {
+    try {
+      const res = await activateTariffByPaymentId(p.id);
+      if (res.ok && !('isPendingRemna' in res && res.isPendingRemna)) {
+        successCount++;
+        let metaObj: Record<string, unknown> = {};
+        try { metaObj = JSON.parse(p.metadata || "{}"); } catch {}
+        delete metaObj.pendingRemnaActivation;
+        delete metaObj.lastActivationError;
+        await prisma.payment.update({
+          where: { id: p.id },
+          data: { metadata: JSON.stringify(metaObj) },
+        }).catch(() => {});
+
+        const client = await prisma.client.findUnique({ where: { id: p.clientId }, select: { telegramId: true } });
+        if (client?.telegramId) {
+          try {
+            const { sendTelegramNotification } = await import("../gift/telegram-notify.js");
+            await sendTelegramNotification(client.telegramId, "🎉 Ваша подписка успешно активирована на сервере VPN! Приятного использования.").catch(() => {});
+          } catch {}
+        }
+      }
+    } catch (e) {
+      console.error(`[processPendingRemnaActivations] failed for payment ${p.id}:`, e);
+    }
+  }
+
+  return { processed: pendingPayments.length, success: successCount };
+}
+
 export function startAutoRenewScheduler() {
   cron.schedule("* * * * *", async () => {
     try {
       await processAutoRenewals();
     } catch (e) {
       console.error("[auto-renew] Error in cron job:", e);
+    }
+    try {
+      await processPendingRemnaActivations();
+    } catch (e) {
+      console.error("[auto-renew] Error processing pending remna activations:", e);
     }
   });
 }

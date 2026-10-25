@@ -3726,7 +3726,21 @@ composer.on("callback_query:data", async (ctx) => {
     if (data === "menu:tariffs") {
       // defensive cleanup — возврат в список тарифов сбрасывает addsub-флаг.
       addsubPending.delete(userId);
-      const { items } = await api.getPublicTariffs();
+      const tariffsRes = await api.getPublicTariffs();
+      if (tariffsRes.remnaAvailable === false) {
+        await editMessageContent(
+          ctx,
+          "⚠️ **Техническое обслуживание сервера тарифов**\n\nСервер синхронизации тарифов сейчас обновляется.\n\nВо избежание задержек с выдачей подписки приём оплаты временно приостановлен на несколько минут.\n\n_Все ваши действующие VPN-подключения работают в обычном режиме._ Пожалуйста, попробуйте повторить через 2–3 минуты.",
+          {
+            inline_keyboard: [
+              [{ text: "🔄 Проверить снова", callback_data: "menu:tariffs" }],
+              [{ text: "🏠 Главное меню", callback_data: "menu:main" }],
+            ],
+          }
+        );
+        return;
+      }
+      const { items } = tariffsRes;
       if (!items?.length) {
         await editMessageContent(ctx, _t("tariffs.not_configured", getUserLang(userId)), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
@@ -7245,6 +7259,10 @@ if (data.startsWith("topup_paritypay:")) {
           const label = `${info.statusEmojiSmall} #${info.idx} ${tariff} (${lifetimeStr})${trialBtnMark}`;
           return { type: it.type, id: it.id, label };
         });
+        if (result.items?.some((it) => it.isOfflineSnapshot)) {
+          bodyLines.push("");
+          bodyLines.push("ℹ️ _Информация обновлена из резервной копии (сервер тарифов на ТО). VPN-подключение работает в обычном режиме._");
+        }
         const { text, entities } = applyMarkdownAndEmoji(bodyLines.join("\n"), config?.botEmojis ?? null);
         await editMessageContent(
           ctx,
