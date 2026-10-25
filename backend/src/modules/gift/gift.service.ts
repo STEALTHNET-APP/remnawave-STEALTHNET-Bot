@@ -206,17 +206,6 @@ export async function createAdditionalSubscription(
   // получала subscription_index=1 вместо 0 для свежего клиента.
   let subscriptionIndex = await getNextSubscriptionIndex(rootClientId);
 
-  // Проверяем: если у клиента есть заготовка primary-подписки (subscriptionIndex=0 без тарифа),
-  // то при обычной покупке (не в подарок) новая покупка обновляет её!
-  const existingSub0 = await prisma.subscription.findUnique({
-    where: { ownerId_subscriptionIndex: { ownerId: rootClientId, subscriptionIndex: 0 } },
-    select: { id: true, remnawaveUuid: true, tariffId: true },
-  });
-
-  if (options?.purchasedAsGift !== true && existingSub0 && !existingSub0.tariffId) {
-    subscriptionIndex = 0;
-  }
-
   // Подарочная подписка (purchasedAsGift=true) НИКОГДА не должна занимать primary-слот.
   // T-gift-index-fix : берём ПЕРВЫЙ СВОБОДНЫЙ индекс ≥1 (а не тупо 1) —
   // иначе у клиента с дырой на index 0 и уже занятым index 1 prisma.subscription.create падал
@@ -257,26 +246,32 @@ export async function createAdditionalSubscription(
   // проверяем, не существует ли уже Remna-пользователь (привязан к клиенту или по TG/email).
   // Если существует — переиспользуем и обновляем его, избегая создания дубликата с тем же telegramId!
   if (subscriptionIndex === 0 && options?.purchasedAsGift !== true && isRemnaConfigured()) {
-    let candidateUuid = existingSub0?.remnawaveUuid ?? rootClient.remnawaveUuid;
+    let candidateUuid = rootClient.remnawaveUuid;
     if (!candidateUuid && rootClient.telegramId?.trim()) {
       try {
         const byTg = await remnaGetUserByTelegramId(rootClient.telegramId.trim());
+        if (byTg.error) return { ok: false, error: "Не удалось проверить существующий VPN-профиль", status: 503 };
         candidateUuid = extractRemnaUuid(byTg.data);
       } catch (e) {
-        console.error("[gift] remnaGetUserByTelegramId failed:", e);
+        return { ok: false, error: "Не удалось проверить существующий VPN-профиль", status: 503 };
       }
     }
     if (!candidateUuid && rootClient.email?.trim()) {
       try {
         const byEmail = await remnaGetUserByEmail(rootClient.email.trim());
+        if (byEmail.error) return { ok: false, error: "Не удалось проверить существующий VPN-профиль", status: 503 };
         candidateUuid = extractRemnaUuid(byEmail.data);
       } catch (e) {
-        console.error("[gift] remnaGetUserByEmail failed:", e);
+        return { ok: false, error: "Не удалось проверить существующий VPN-профиль", status: 503 };
       }
     }
 
     if (candidateUuid) {
+      const linked = await prisma.subscription.findFirst({ where: { remnawaveUuid: candidateUuid }, select: { id: true } });
+      const otherClient = await prisma.client.findFirst({ where: { remnawaveUuid: candidateUuid, id: { not: rootClientId } }, select: { id: true } });
+      if (linked || otherClient) return { ok: false, error: "VPN-профиль уже привязан к подписке. Обновите список подписок", status: 409 };
       const getRes = await remnaGetUser(candidateUuid);
+      if (getRes.error || !getRes.data) return { ok: false, error: "Не удалось загрузить существующий VPN-профиль", status: 503 };
       if (!getRes.error && getRes.data) {
         const currentExp = extractCurrentExpireAt(getRes.data);
         const baseTime = currentExp && currentExp.getTime() > Date.now() ? currentExp.getTime() : Date.now();
@@ -304,7 +299,7 @@ export async function createAdditionalSubscription(
             }).catch(() => {});
           }
         } else {
-          console.error("[gift] failed to update existing Remna user, fallback to create:", updateRes.error);
+          return { ok: false, error: "Не удалось обновить существующий VPN-профиль", status: 503 };
         }
       }
     }
@@ -380,30 +375,7 @@ export async function createAdditionalSubscription(
   const isGiftPurchase = options?.purchasedAsGift === true;
   const defaultAutoRenew = !isGiftPurchase && config.defaultAutoRenewEnabled === true;
 
-  // Создаём или обновляем запись Subscription (если существовала заготовка слота #0 без тарифа)
-  let subscription;
-  if (existingSub0 && subscriptionIndex === 0) {
-    subscription = await prisma.subscription.update({
-      where: { id: existingSub0.id },
-      data: {
-        remnawaveUuid: remnaUuid,
-        tariffId: tariff.id ?? null,
-        purchasedAsGift: isGiftPurchase,
-        autoRenewEnabled: defaultAutoRenew,
-        ...(tariff.price != null && tariff.price > 0 ? {
-          customPrice: tariff.price,
-          currentPricePerDay: tariff.durationDays > 0 ? tariff.price / tariff.durationDays : null,
-        } : {}),
-        ...(extraDevices > 0 ? {
-          extraDevices,
-          extraDevicesMonthlyPrice: extraDevicesMonthlyPrice,
-        } : {}),
-        ...(defaultAutoRenew && tariff.id ? { autoRenewTariffId: tariff.id } : {}),
-        expireAt: new Date(finalExpireAt),
-      },
-    });
-  } else {
-    subscription = await prisma.subscription.create({
+  const subscription = await prisma.subscription.create({
       data: {
         ownerId: rootClientId,
         subscriptionIndex,
@@ -423,7 +395,6 @@ export async function createAdditionalSubscription(
         expireAt: new Date(finalExpireAt),
       },
     });
-  }
 
   // если это primary-подписка (idx=0) — синкаем
   // legacy-поля Client.{remnawaveUuid,currentTariffId,currentPricePerDay} для обратной

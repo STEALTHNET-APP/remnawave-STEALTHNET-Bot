@@ -1,65 +1,77 @@
-import assert from "node:assert/strict";
-import { test } from "node:test";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
+import { test } from 'node:test';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+function loadFunction(path, name, globals) {
+  const source = readFileSync(new URL(path, import.meta.url), 'utf8');
+  const ast = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+  const node = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+  assert.ok(node);
+  const compiled = ts.transpileModule('(' + node.getText(ast).replace(/^export\s+/, '') + ')', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  return vm.runInNewContext(compiled, globals);
+}
 
-test("client.routes.ts: register route looks up existing Remnawave user by telegramId to prevent duplicates", () => {
-  const file = fs.readFileSync(path.join(__dirname, "../src/modules/client/client.routes.ts"), "utf8");
-  
-  // Existing client sync if remnawaveUuid is null
-  assert.match(file, /if \(!existing\.remnawaveUuid && isRemnaConfigured\(\)\)/);
-  assert.match(file, /const byTg = await remnaGetUserByTelegramId\(data\.telegramId!\)/);
-  assert.match(file, /await upsertSubscriptionByRemnaUuid\(existing\.id, \{ remnawaveUuid: remnaUuid \}\)/);
+for (const scenario of ['read-timeout', 'update-failure', 'lookup-failure', 'linked-profile', 'imported-primary', 'gift', 'new', 'legacy']) {
+  test(scenario, async () => {
+    let created = 0;
+    let updated = 0;
+    let stored;
+    const existing = scenario === 'imported-primary';
+    const rootUuid = ['read-timeout', 'update-failure', 'linked-profile', 'legacy'].includes(scenario) ? 'legacy-vpn' : null;
+    const create = loadFunction('../src/modules/gift/gift.service.ts', 'createAdditionalSubscription', {
+      console, Date, Math, Set,
+      isRemnaConfigured: () => true,
+      getSystemConfig: async () => ({ giftSubscriptionsEnabled: true, maxAdditionalSubscriptions: 10 }),
+      getNextSubscriptionIndex: async (_, min = 0) => existing ? 1 : min,
+      prisma: {
+        client: { findUnique: async () => ({ id: 'client', telegramId: '123', remnawaveUuid: rootUuid }), findFirst: async () => null, update: async () => ({}) },
+        subscription: { count: async () => existing ? 1 : 0, findFirst: async () => scenario === 'linked-profile' ? { id: 'other' } : null, create: async ({ data }) => { stored = data; return { id: 'new-sub' }; } },
+      },
+      remnaGetUserByTelegramId: async () => scenario === 'lookup-failure' ? { status: 503, error: 'offline' } : { status: 200, data: { users: [] } },
+      remnaGetUser: async () => scenario === 'read-timeout' ? { status: 504, error: 'timeout' } : { status: 200, data: { uuid: rootUuid } },
+      remnaUpdateUser: async () => { updated++; return scenario === 'update-failure' ? { status: 503, error: 'offline' } : { status: 200 }; },
+      remnaCreateUser: async () => { created++; return { status: 200, data: { uuid: 'new-vpn' } }; },
+      extractRemnaUuid: data => data?.uuid,
+      extractCurrentExpireAt: () => new Date(Date.now() + 86400000),
+      extractCurrentSquads: () => [],
+      secondaryRemnaUsername: () => 'user_123', logGiftEvent: async () => {},
+    });
+    const result = await create('client', { id: 'tariff', durationDays: 30, trafficLimitBytes: null, deviceLimit: 2, internalSquadUuids: ['squad'] }, { purchasedAsGift: scenario === 'gift' });
+    if (['read-timeout', 'update-failure', 'lookup-failure', 'linked-profile'].includes(scenario)) {
+      assert.equal(result.ok, false);
+      assert.equal(created, 0);
+      assert.equal(stored, undefined);
+    } else {
+      assert.equal(result.ok, true);
+      assert.equal(created, scenario === 'legacy' ? 0 : 1);
+      assert.equal(updated, scenario === 'legacy' ? 1 : 0);
+      assert.equal(stored.subscriptionIndex, existing || scenario === 'gift' ? 1 : 0);
+      assert.equal(stored.remnawaveUuid, scenario === 'legacy' ? 'legacy-vpn' : 'new-vpn');
+    }
+  });
+}
 
-  // New client registration links remnawaveUuid if user already exists in Remna
-  assert.match(file, /let remnawaveUuid: string \| null = null;/);
-  assert.match(file, /const byTgRes = await remnaGetUserByTelegramId\(data\.telegramId\)/);
-  assert.match(file, /remnawaveUuid = extractRemnaUuid\(byTgRes\.data\)/);
-  assert.match(file, /\.\.\.\(remnawaveUuid \? \{ trialUsed: true \} : \{\}\)/);
-  assert.match(file, /if \(remnawaveUuid\) \{\s*await upsertSubscriptionByRemnaUuid\(client\.id, \{ remnawaveUuid \}\)/);
-});
-
-test("client.routes.ts: /subscription/all performs self-heal for migrated Remna users missing slot 0", () => {
-  const file = fs.readFileSync(path.join(__dirname, "../src/modules/client/client.routes.ts"), "utf8");
-  assert.match(file, /\/\/ Self-heal: если у клиента есть remnawaveUuid \(или профиль в Remna по TG\), но в таблице subscriptions нет слота 0/);
-  assert.match(file, /if \(visible\.length === 0\)/);
-  assert.match(file, /await upsertSubscriptionByRemnaUuid\(clientId, \{ remnawaveUuid: uuidToHeal \}\)/);
-});
-
-test("gift.service.ts: createAdditionalSubscription reuses existing Remna user when slot 0 exists or user is in Remna", () => {
-  const file = fs.readFileSync(path.join(__dirname, "../src/modules/gift/gift.service.ts"), "utf8");
-  
-  // Reusing existing Remna user on slot 0
-  assert.match(file, /candidateUuid = existingSub0\?\.remnawaveUuid \?\? rootClient\.remnawaveUuid;/);
-  assert.match(file, /await remnaGetUserByTelegramId\(rootClient\.telegramId/);
-  assert.match(file, /await remnaUpdateUser\(\{\s*uuid:\s*candidateUuid/);
-
-  // Update existing slot 0 subscription record instead of duplicate create
-  assert.match(file, /if \(existingSub0 && subscriptionIndex === 0\)/);
-  assert.match(file, /subscription = await prisma\.subscription\.update\(\{/);
-});
-
-test("sync.service.ts: syncFromRemna materializes Subscription record via upsertSubscriptionByRemnaUuid", () => {
-  const file = fs.readFileSync(path.join(__dirname, "../src/modules/sync/sync.service.ts"), "utf8");
-  assert.match(file, /import \{ upsertSubscriptionByRemnaUuid \} from "\.\.\/subscription\/subscription\.helpers\.js";/);
-  assert.match(file, /await upsertSubscriptionByRemnaUuid\(clientTargetId, \{ remnawaveUuid: uuid \}\)/);
-});
-
-test("Simulated slot-0 reuse: extended expiration calculation", () => {
-  const now = Date.now();
-  const futureExpireAt = new Date(now + 15 * 86400 * 1000).toISOString();
-  const durationDays = 30;
-
-  // If user already had 15 days left in Remna, extending adds 30 days
-  const nowMs = Date.now();
-  const currentExpiryMs = new Date(futureExpireAt).getTime();
-  const baseMs = currentExpiryMs > nowMs ? currentExpiryMs : nowMs;
-  const calculatedExpireAt = new Date(baseMs + durationDays * 86400 * 1000).toISOString();
-
-  assert.ok(new Date(calculatedExpireAt).getTime() > currentExpiryMs);
-  const diffDays = Math.round((new Date(calculatedExpireAt).getTime() - currentExpiryMs) / (86400 * 1000));
-  assert.strictEqual(diffDays, 30);
+test('sync retains primary reference when importing another profile for the same Telegram user', async () => {
+  const client = { id: 'client', telegramId: '123', remnawaveUuid: 'primary', telegramUsername: 'user' };
+  const linked = [];
+  const sync = loadFunction('../src/modules/sync/sync.service.ts', 'syncFromRemna', {
+    Date, Math, String, PAGE_SIZE: 100,
+    isRemnaConfigured: () => true, getSystemConfig: async () => ({}), getPrimaryBot: async () => ({}),
+    remnaGetUsers: async () => ({ data: [{ uuid: 'primary', telegramId: 123 }, { uuid: 'secondary', telegramId: 123 }] }),
+    extractRemnaUsers: data => data,
+    prisma: {
+      subscription: { findFirst: async () => null },
+      client: {
+        findFirst: async ({ where }) => where.id?.not ? null : (where.telegramId === '123' || where.remnawaveUuid === client.remnawaveUuid ? { ...client } : null),
+        update: async ({ data }) => Object.assign(client, data),
+      },
+    },
+    upsertSubscriptionByRemnaUuid: async (_, { remnawaveUuid }) => linked.push(remnawaveUuid),
+  });
+  const result = await sync();
+  assert.equal(result.ok, true);
+  assert.equal(client.remnawaveUuid, 'primary');
+  assert.deepEqual(linked, ['primary', 'secondary']);
 });

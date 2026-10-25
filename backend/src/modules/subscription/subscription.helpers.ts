@@ -246,62 +246,31 @@ export async function upsertSubscriptionByRemnaUuid(
     expireAt?: Date | null;
   },
 ): Promise<{ id: string; subscriptionIndex: number; created: boolean }> {
-  // Сначала ищем существующую подписку с этим UUID — чтобы не плодить дубли.
-  const byUuid = await prisma.subscription.findFirst({
-    where: { ownerId: clientId, remnawaveUuid: data.remnawaveUuid },
-    select: { id: true, subscriptionIndex: true },
+  return prisma.$transaction(async db => {
+    await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"subscription-owner:" + clientId}, 0))`;
+    await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"subscription-remna:" + data.remnawaveUuid}, 0))`;
+    const byUuid = await db.subscription.findFirst({
+      where: { remnawaveUuid: data.remnawaveUuid },
+      select: { id: true, ownerId: true, subscriptionIndex: true },
+    });
+    if (byUuid && byUuid.ownerId !== clientId) throw new Error("VPN profile belongs to another client");
+    const otherClient = await db.client.findFirst({
+      where: { remnawaveUuid: data.remnawaveUuid, id: { not: clientId } },
+      select: { id: true },
+    });
+    if (otherClient) throw new Error("VPN profile belongs to another client");
+    if (byUuid) {
+      await db.subscription.update({ where: { id: byUuid.id }, data });
+      return { id: byUuid.id, subscriptionIndex: byUuid.subscriptionIndex, created: false };
+    }
+    const subs = await db.subscription.findMany({ where: { ownerId: clientId }, select: { subscriptionIndex: true } });
+    const used = new Set(subs.map(sub => sub.subscriptionIndex));
+    let subscriptionIndex = 0;
+    while (used.has(subscriptionIndex)) subscriptionIndex++;
+    const created = await db.subscription.create({
+      data: { ownerId: clientId, subscriptionIndex, ...data },
+      select: { id: true, subscriptionIndex: true },
+    });
+    return { ...created, created: true };
   });
-  if (byUuid) {
-    await prisma.subscription.update({
-      where: { id: byUuid.id },
-      data: {
-        ...(data.tariffId !== undefined ? { tariffId: data.tariffId } : {}),
-        ...(data.trialId !== undefined ? { trialId: data.trialId } : {}),
-        ...(data.customPrice !== undefined ? { customPrice: data.customPrice } : {}),
-        ...(data.currentPricePerDay !== undefined ? { currentPricePerDay: data.currentPricePerDay } : {}),
-        ...(data.autoRenewEnabled !== undefined ? { autoRenewEnabled: data.autoRenewEnabled } : {}),
-        ...(data.expireAt !== undefined ? { expireAt: data.expireAt } : {}),
-      },
-    });
-    return { id: byUuid.id, subscriptionIndex: byUuid.subscriptionIndex, created: false };
-  }
-
-  // Новая подписка в первом свободном слоте.
-  const idx = await getNextSubscriptionIndex(clientId);
-  try {
-    const created = await prisma.subscription.create({
-      data: {
-        ownerId: clientId,
-        subscriptionIndex: idx,
-        remnawaveUuid: data.remnawaveUuid,
-        tariffId: data.tariffId ?? null,
-        trialId: data.trialId ?? null,
-        customPrice: data.customPrice ?? null,
-        currentPricePerDay: data.currentPricePerDay ?? null,
-        autoRenewEnabled: data.autoRenewEnabled ?? false,
-        expireAt: data.expireAt ?? null,
-      },
-      select: { id: true, subscriptionIndex: true },
-    });
-    return { id: created.id, subscriptionIndex: created.subscriptionIndex, created: true };
-  } catch (e) {
-    // Race с unique(ownerId, subscriptionIndex) — пробуем ещё раз с следующим свободным.
-    const idx2 = await getNextSubscriptionIndex(clientId);
-    if (idx2 === idx) throw e;
-    const created = await prisma.subscription.create({
-      data: {
-        ownerId: clientId,
-        subscriptionIndex: idx2,
-        remnawaveUuid: data.remnawaveUuid,
-        tariffId: data.tariffId ?? null,
-        trialId: data.trialId ?? null,
-        customPrice: data.customPrice ?? null,
-        currentPricePerDay: data.currentPricePerDay ?? null,
-        autoRenewEnabled: data.autoRenewEnabled ?? false,
-        expireAt: data.expireAt ?? null,
-      },
-      select: { id: true, subscriptionIndex: true },
-    });
-    return { id: created.id, subscriptionIndex: created.subscriptionIndex, created: true };
-  }
 }

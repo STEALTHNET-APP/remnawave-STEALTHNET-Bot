@@ -98,6 +98,7 @@ export async function syncFromRemna(): Promise<{
         const username = u.username && String(u.username).trim() ? String(u.username).trim() : null;
 
         try {
+          const linkedSubscription = await prisma.subscription.findFirst({ where: { remnawaveUuid: uuid }, include: { owner: true } });
           const existingByUuid = await prisma.client.findFirst({
             where: { remnawaveUuid: uuid },
           });
@@ -108,12 +109,12 @@ export async function syncFromRemna(): Promise<{
             ? await prisma.client.findFirst({ where: { email } })
             : null;
 
-          const existing = existingByUuid || existingByTg || existingByEmail;
+          const existing = linkedSubscription?.owner || existingByUuid || existingByTg || existingByEmail;
 
           let clientTargetId: string;
           if (existing) {
-            const data: { remnawaveUuid: string; telegramId?: string; email?: string | null; telegramUsername?: string; trialUsed?: boolean } = {
-              remnawaveUuid: uuid,
+            const data: { remnawaveUuid?: string; telegramId?: string; email?: string | null; telegramUsername?: string; trialUsed?: boolean } = {
+              ...(!existing.remnawaveUuid && (!linkedSubscription || linkedSubscription.subscriptionIndex === 0) ? { remnawaveUuid: uuid } : {}),
               trialUsed: true,
             };
             if (telegramId) {
@@ -153,7 +154,7 @@ export async function syncFromRemna(): Promise<{
             clientTargetId = created.id;
             result.created++;
           }
-          await upsertSubscriptionByRemnaUuid(clientTargetId, { remnawaveUuid: uuid }).catch(() => {});
+          await upsertSubscriptionByRemnaUuid(clientTargetId, { remnawaveUuid: uuid });
         } catch (e) {
           result.errors.push(`${uuid}: ${e instanceof Error ? e.message : String(e)}`);
         }

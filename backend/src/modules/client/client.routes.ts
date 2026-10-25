@@ -420,12 +420,12 @@ clientAuthRouter.post("/register", async (req, res) => {
           const byTg = await remnaGetUserByTelegramId(data.telegramId!);
           const remnaUuid = extractRemnaUuid(byTg.data);
           if (remnaUuid) {
-            existing.remnawaveUuid = remnaUuid;
+            await upsertSubscriptionByRemnaUuid(existing.id, { remnawaveUuid: remnaUuid });
             await prisma.client.update({
               where: { id: existing.id },
               data: { remnawaveUuid: remnaUuid, trialUsed: true },
             }).catch(() => {});
-            await upsertSubscriptionByRemnaUuid(existing.id, { remnawaveUuid: remnaUuid }).catch(() => {});
+            existing.remnawaveUuid = remnaUuid;
           }
         } catch (e) {
           console.error("[register/telegram] existing remna sync failed:", e);
@@ -473,7 +473,7 @@ clientAuthRouter.post("/register", async (req, res) => {
     data: asClientUncheckedCreate({
       email: data.email ?? null,
       passwordHash,
-      remnawaveUuid,
+      remnawaveUuid: null,
       referralCode,
       referrerId,
       preferredLang: data.preferredLang,
@@ -496,7 +496,13 @@ clientAuthRouter.post("/register", async (req, res) => {
   notifyAdminsAboutNewClient(client.id).catch(() => {});
 
   if (remnawaveUuid) {
-    await upsertSubscriptionByRemnaUuid(client.id, { remnawaveUuid }).catch(() => {});
+    try {
+      await upsertSubscriptionByRemnaUuid(client.id, { remnawaveUuid });
+      await prisma.client.update({ where: { id: client.id }, data: { remnawaveUuid } });
+      client.remnawaveUuid = remnawaveUuid;
+    } catch {
+      console.error("[register/telegram] existing VPN profile could not be linked");
+    }
   }
 
   if (data.telegramId) {
@@ -3126,7 +3132,7 @@ clientRouter.get("/subscription/all", async (req, res) => {
   });
 
   // Self-heal: если у клиента есть remnawaveUuid (или профиль в Remna по TG), но в таблице subscriptions нет слота 0
-  if (visible.length === 0) {
+  if (allSubs.length === 0) {
     const cl = await prisma.client.findUnique({
       where: { id: clientId },
       select: { remnawaveUuid: true, telegramId: true },
@@ -3137,14 +3143,15 @@ clientRouter.get("/subscription/all", async (req, res) => {
         const byTg = await remnaGetUserByTelegramId(cl.telegramId);
         uuidToHeal = extractRemnaUuid(byTg.data);
         if (uuidToHeal) {
-          await prisma.client.update({ where: { id: clientId }, data: { remnawaveUuid: uuidToHeal } }).catch(() => {});
+          await upsertSubscriptionByRemnaUuid(clientId, { remnawaveUuid: uuidToHeal });
+          await prisma.client.update({ where: { id: clientId }, data: { remnawaveUuid: uuidToHeal } });
         }
-      } catch {}
+      } catch { uuidToHeal = null; }
     }
     if (uuidToHeal) {
-      await upsertSubscriptionByRemnaUuid(clientId, { remnawaveUuid: uuidToHeal }).catch(() => {});
+      const healed = await upsertSubscriptionByRemnaUuid(clientId, { remnawaveUuid: uuidToHeal }).catch(() => null);
       const healedSub = await prisma.subscription.findFirst({
-        where: { ownerId: clientId, subscriptionIndex: 0 },
+        where: { id: healed?.id ?? "", ownerId: clientId, purchasedAsGift: false, giftStatus: null },
         select: {
           id: true,
           remnawaveUuid: true,
