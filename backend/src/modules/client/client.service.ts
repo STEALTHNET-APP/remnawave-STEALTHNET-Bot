@@ -583,7 +583,7 @@ async function loadSystemConfigFromDb() {
 
   const remnaApiUrl = (map.remna_api_url ?? "").trim() || (env.REMNA_API_URL?.replace(/\/$/, "") ?? "") || null;
   const remnaAdminToken = (map.remna_admin_token ?? "").trim() || (env.REMNA_ADMIN_TOKEN ?? "") || null;
-  const remnaSecretKey = (map.remna_secret_key ?? "").trim() || (env.REMNA_SECRET_KEY?.trim() ?? "") || null;
+  const remnaSecretKey = map.remna_secret_key !== undefined ? map.remna_secret_key.trim() : (env.REMNA_SECRET_KEY?.trim() ?? "");
   const remnaConfigSource: "database" | "env" | "none" =
     ((map.remna_api_url ?? "").trim() || (map.remna_admin_token ?? "").trim())
       ? "database"

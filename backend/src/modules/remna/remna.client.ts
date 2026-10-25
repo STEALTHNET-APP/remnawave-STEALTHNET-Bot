@@ -20,13 +20,14 @@ let _activeRemnaConfig: RemnaRuntimeConfig = {
 };
 
 export function setRemnaRuntimeConfig(cfg: RemnaRuntimeConfig): void {
+  const previous = JSON.stringify(_activeRemnaConfig);
   _activeRemnaConfig = {
     ...cfg,
     apiUrl: (cfg.apiUrl || "").trim().replace(/\/+$/, ""),
     adminToken: (cfg.adminToken || "").trim(),
     secretKey: (cfg.secretKey || "").trim(),
   };
-  clearRemnaSquadCache();
+  if (previous !== JSON.stringify(_activeRemnaConfig)) clearRemnaSquadCache();
 }
 
 export function getRemnaRuntimeConfig(): RemnaRuntimeConfig {
@@ -60,7 +61,7 @@ export function remnaSecretCookieHeader(customSecret?: string): string | null {
   if (!secret) return null;
   const colonIdx = secret.indexOf(":");
   const eqIdx = secret.indexOf("=");
-  const splitIdx = colonIdx > 0 ? colonIdx : eqIdx;
+  const splitIdx = eqIdx > 0 && (colonIdx < 0 || eqIdx < colonIdx) ? eqIdx : colonIdx;
   const name = splitIdx > 0 ? secret.slice(0, splitIdx).trim() : secret;
   const value = splitIdx > 0 ? secret.slice(splitIdx + 1).trim() : secret;
   return `${name}=${value}`;
@@ -70,6 +71,11 @@ export async function remnaFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<{ data?: T; error?: string; status: number }> {
+  try {
+    await (await import("../client/client.service.js")).getSystemConfig();
+  } catch {
+    return { error: "Remna settings unavailable", status: 503 };
+  }
   if (!isRemnaConfigured()) {
     return { error: "Remna API not configured", status: 503 };
   }
@@ -87,6 +93,7 @@ export async function remnaFetch<T>(
       ...options,
       headers: { ...getHeaders(), ...(options.headers as object) },
       signal: ctrl.signal,
+      redirect: "error",
     });
     const text = await res.text();
     let data: T | undefined;
@@ -309,6 +316,7 @@ export async function testRemnaApiConnection(params?: {
   const tryHit = async (path: string) => fetch(`${url}${path}`, {
     headers,
     signal: AbortSignal.timeout(7_000),
+    redirect: "error",
   });
 
   try {

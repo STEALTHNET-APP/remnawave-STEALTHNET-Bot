@@ -41,7 +41,9 @@ function getSectionFromPath(normalisedPath: string): string | null {
   const segments = normalisedPath.split("/").filter(Boolean);
   const first = segments[0];
   if (!first || first === "me") return null;
+  if (first === "bot" && ["test-token", "reset-token"].includes(segments[1])) return "settings";
   if (first === "remna") {
+    if (["test-connection", "reset-config"].includes(segments[1])) return "settings";
     if (segments[1] === "nodes") return "remna-nodes";
     return "dashboard";
   }

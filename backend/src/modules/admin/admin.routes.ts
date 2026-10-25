@@ -375,12 +375,14 @@ adminRouter.delete("/remna/infra-billing/nodes/:uuid", async (req, res) => remna
  * Проверка связи с Remnawave API (переданными или текущими реквизитами)
  */
 adminRouter.post("/remna/test-connection", asyncRoute(async (req, res) => {
-  const { apiUrl, adminToken, secretKey } = (req.body ?? {}) as {
-    apiUrl?: string;
-    adminToken?: string;
-    secretKey?: string;
-  };
-  const result = await testRemnaApiConnection({ apiUrl, adminToken, secretKey });
+  const body = z.object({
+    apiUrl: z.string().url().max(1000).refine(value => /^https?:\/\//.test(value)).optional(),
+    adminToken: z.string().max(5000).optional(),
+    secretKey: z.string().max(1000).optional(),
+  }).safeParse(req.body ?? {});
+  if (!body.success) return res.status(400).json({ message: "Неверные настройки подключения" });
+  await getSystemConfig();
+  const result = await testRemnaApiConnection(body.data);
   return res.json(result);
 }));
 
@@ -438,8 +440,8 @@ adminRouter.post("/remna/reset-config", asyncRoute(async (_req, res) => {
     where: { key: { in: ["remna_api_url", "remna_admin_token", "remna_secret_key"] } },
   });
   invalidateSystemConfigCache();
-  const cfg = await getSystemConfig();
-  return res.json({ ok: true, config: cfg });
+  await getSystemConfig();
+  return res.json({ ok: true });
 }));
 
 /**
@@ -451,22 +453,8 @@ adminRouter.post("/bot/reset-token", asyncRoute(async (_req, res) => {
     where: { key: "telegram_bot_token" },
   });
   invalidateSystemConfigCache();
-  const cfg = await getSystemConfig();
-  return res.json({ ok: true, config: cfg });
-}));
-
-/**
- * POST /api/admin/remna/reset-uuids-and-sync
- * Полный сброс старых привязок UUID клиентов/подписок и запуск пересоздания
- * в подключенной Remnawave (для миграции на новый инстанс).
- */
-adminRouter.post("/remna/reset-uuids-and-sync", asyncRoute(async (_req, res) => {
-  await prisma.$transaction([
-    prisma.subscription.updateMany({ data: { remnawaveUuid: null } }),
-    prisma.client.updateMany({ data: { remnawaveUuid: null } }),
-  ]);
-  const syncRes = await createRemnaUsersForClientsWithoutUuid();
-  return res.json(syncRes);
+  await getSystemConfig();
+  return res.json({ ok: true });
 }));
 
 adminRouter.get("/remna/subscription-settings", async (_req, res) => remnaPass(await remnaGetSubSettings(), res));
@@ -3067,7 +3055,7 @@ const updateSettingsSchema = z.object({
   ogImage: z.string().max(5_500_000).nullable().optional(),
   cabinetDesign: z.enum(["classic", "stealth", "aurora"]).optional(),
   cabinetDesignApplyInBrowser: z.boolean().optional(),
-  remnaApiUrl: z.string().trim().max(1000).nullable().optional(),
+  remnaApiUrl: z.string().trim().max(1000).refine(value => !value || /^https?:\/\//.test(value) && URL.canParse(value)).nullable().optional(),
   remnaAdminToken: z.string().trim().max(2000).nullable().optional(),
   remnaSecretKey: z.string().trim().max(1000).nullable().optional(),
   remnaClientUrl: z.string().max(2000).nullable().optional(),
@@ -3567,41 +3555,21 @@ adminRouter.patch("/settings", async (req, res) => {
       update: { value: val },
     });
   }
-  if (updates.remnaApiUrl !== undefined) {
-    const val = (updates.remnaApiUrl ?? "").trim();
-    if (!val) {
-      await prisma.systemSetting.deleteMany({ where: { key: "remna_api_url" } });
-    } else {
-      await prisma.systemSetting.upsert({
-        where: { key: "remna_api_url" },
-        create: { key: "remna_api_url", value: val },
-        update: { value: val },
-      });
-    }
-  }
-  if (updates.remnaAdminToken !== undefined) {
-    const val = (updates.remnaAdminToken ?? "").trim();
-    if (!val) {
-      await prisma.systemSetting.deleteMany({ where: { key: "remna_admin_token" } });
-    } else {
-      await prisma.systemSetting.upsert({
-        where: { key: "remna_admin_token" },
-        create: { key: "remna_admin_token", value: val },
-        update: { value: val },
-      });
-    }
-  }
-  if (updates.remnaSecretKey !== undefined) {
-    const val = (updates.remnaSecretKey ?? "").trim();
-    if (!val) {
-      await prisma.systemSetting.deleteMany({ where: { key: "remna_secret_key" } });
-    } else {
-      await prisma.systemSetting.upsert({
-        where: { key: "remna_secret_key" },
-        create: { key: "remna_secret_key", value: val },
-        update: { value: val },
-      });
-    }
+  const remnaChanges = [
+    ["remna_api_url", updates.remnaApiUrl],
+    ["remna_admin_token", updates.remnaAdminToken],
+    ["remna_secret_key", updates.remnaSecretKey],
+  ] as const;
+  if (remnaChanges.some(([, value]) => value !== undefined)) {
+    await prisma.$transaction(async db => {
+      for (const [key, input] of remnaChanges) {
+        if (input === undefined) continue;
+        const value = (input ?? "").trim();
+        if (!value && key !== "remna_secret_key") await db.systemSetting.deleteMany({ where: { key } });
+        else await db.systemSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
+      }
+    });
+    invalidateSystemConfigCache();
   }
   if (updates.remnaClientUrl !== undefined) {
     const val = updates.remnaClientUrl ?? "";

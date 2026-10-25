@@ -436,9 +436,7 @@ export function SettingsPage() {
   const [showRemnaToken, setShowRemnaToken] = useState(false);
   const [showRemnaSecret, setShowRemnaSecret] = useState(false);
   const [showBotToken, setShowBotToken] = useState(false);
-  const [relinkOpen, setRelinkOpen] = useState(false);
-  const [relinkLoading, setRelinkLoading] = useState(false);
-  const [relinkMessage, setRelinkMessage] = useState<string | null>(null);
+
 
   async function handleTestRemna() {
     setRemnaTesting(true);
@@ -460,8 +458,9 @@ export function SettingsPage() {
   async function handleResetRemna() {
     try {
       const res = await api.resetRemnaConfig(token);
-      if (res.config) {
-        setSettings((s) => s ? { ...s, ...res.config } : s);
+      if (res.ok) {
+        const fresh = await api.getSettings(token);
+        setSettings((s) => s ? { ...s, ...fresh } : s);
         setRemnaTestResult({ ok: true, message: "Настройки Remnawave сброшены к значениям .env" });
       }
     } catch (e) {
@@ -487,8 +486,9 @@ export function SettingsPage() {
   async function handleResetBotToken() {
     try {
       const res = await api.resetBotToken(token);
-      if (res.config) {
-        setSettings((s) => s ? { ...s, ...res.config } : s);
+      if (res.ok) {
+        const fresh = await api.getSettings(token);
+        setSettings((s) => s ? { ...s, ...fresh } : s);
         setBotTestResult({ ok: true, message: "Токен бота сброшен к значению .env (BOT_TOKEN)" });
       }
     } catch (e) {
@@ -496,18 +496,6 @@ export function SettingsPage() {
     }
   }
 
-  async function handleRelinkUsers() {
-    setRelinkLoading(true);
-    setRelinkMessage(null);
-    try {
-      const res = await api.relinkRemnaUsers(token);
-      setRelinkMessage(`Создано: ${res.created}, Привязано: ${res.linked}${res.errors?.length ? ` (Ошибок: ${res.errors.length})` : ""}`);
-    } catch (e) {
-      setRelinkMessage(`Ошибка: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setRelinkLoading(false);
-    }
-  }
   const [twoFaEnableOpen, setTwoFaEnableOpen] = useState(false);
   const [twoFaDisableOpen, setTwoFaDisableOpen] = useState(false);
   const [twoFaSetupData, setTwoFaSetupData] = useState<{ secret: string; otpauthUrl: string } | null>(null);
@@ -6014,22 +6002,8 @@ export function SettingsPage() {
                   </Button>
                 </div>
 
-                <div className="rounded-xl border border-border/80 bg-muted/40 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold">Миграция на новый инстанс Remnawave</p>
-                    <p className="text-[11.5px] text-muted-foreground">Сбросить старые UUID клиентов и подписок и создать их заново в подключенной Remnawave</p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setRelinkOpen(true)}
-                    className="shrink-0 text-xs gap-1.5"
-                  >
-                    <ArrowLeftRight className="h-3.5 w-3.5" />
-                    Перепривязать клиентов
-                  </Button>
-                </div>
+                <p className="text-xs text-muted-foreground">Смена API не переносит пользователей на другой сервер. Сначала перенесите данные Remnawave с сохранением UUID и сделайте резервную копию. Привязки подписок сохраняются.</p>
+
               </CardContent>
             </Card>
 
@@ -6081,7 +6055,7 @@ export function SettingsPage() {
                     </button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Токен, выданный @BotFather при создании бота
+                    После сохранения замените BOT_TOKEN в .env и выполните docker compose up -d --force-recreate bot. До пересоздания контейнера бот использует старый токен.
                   </p>
                 </div>
 
@@ -6219,40 +6193,6 @@ export function SettingsPage() {
             </Card>
           </div>
         </TabsContent>
-
-        <Dialog open={relinkOpen} onOpenChange={setRelinkOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <ArrowLeftRight className="h-5 w-5 text-amber-500" />
-                Миграция клиентов в новую Remnawave
-              </DialogTitle>
-              <DialogDescription>
-                Это действие сбросит привязку старых UUID у всех клиентов и подписок в локальной базе и заново создаст для них аккаунты в текущей подключенной Remnawave. Используйте при переносе на чистый/новый инстанс Remnawave.
-              </DialogDescription>
-            </DialogHeader>
-            {relinkMessage && (
-              <div className="rounded-xl border border-border bg-muted/50 p-3 text-xs">
-                {relinkMessage}
-              </div>
-            )}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" size="sm" onClick={() => setRelinkOpen(false)}>
-                Отмена
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={relinkLoading}
-                onClick={handleRelinkUsers}
-                className="gap-1.5"
-              >
-                {relinkLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Подтвердить миграцию
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
 
         <TabsContent value="sync">
           <Card className="overflow-hidden border-border">

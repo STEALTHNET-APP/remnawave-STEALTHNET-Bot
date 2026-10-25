@@ -45,6 +45,7 @@ async function checkPostgres(): Promise<HealthCheck> {
 }
 
 async function checkRemna(): Promise<HealthCheck> {
+  await getSystemConfig();
   const remnaCfg = getRemnaRuntimeConfig();
   const url = remnaCfg.apiUrl;
   const token = remnaCfg.adminToken;

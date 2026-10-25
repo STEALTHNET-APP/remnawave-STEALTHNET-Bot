@@ -1465,17 +1465,15 @@ export const api = {
     return request("/admin/bot/test-token", { method: "POST", body: JSON.stringify(body ?? {}), token });
   },
 
-  async resetRemnaConfig(token: string): Promise<{ ok: boolean; config: AdminSettings }> {
+  async resetRemnaConfig(token: string): Promise<{ ok: boolean }> {
     return request("/admin/remna/reset-config", { method: "POST", token });
   },
 
-  async resetBotToken(token: string): Promise<{ ok: boolean; config: AdminSettings }> {
+  async resetBotToken(token: string): Promise<{ ok: boolean }> {
     return request("/admin/bot/reset-token", { method: "POST", token });
   },
 
-  async relinkRemnaUsers(token: string): Promise<{ ok: boolean; reset: boolean; created: number; linked: number; errors: string[] }> {
-    return request("/admin/remna/reset-uuids-and-sync", { method: "POST", token });
-  },
+
 
   async updateSettings(token: string, data: UpdateSettingsPayload): Promise<AdminSettings> {
     return request("/admin/settings", { method: "PATCH", body: JSON.stringify(data), token });

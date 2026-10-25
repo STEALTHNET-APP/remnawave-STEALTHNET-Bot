@@ -30,7 +30,7 @@ async function activeBotToken(): Promise<string> {
     const cfg = await getSystemConfig();
     return (cfg.telegramBotToken || process.env.BOT_TOKEN || "").trim();
   } catch {
-    return (process.env.BOT_TOKEN ?? "").trim();
+    return "";
   }
 }
 
@@ -49,9 +49,7 @@ export async function getPrimaryBot(): Promise<StubBot> {
 export async function getBotByToken(token: string): Promise<StubBot | null> {
   const t = (token ?? "").trim();
   const expected = await activeBotToken();
-  const envVal = (process.env.BOT_TOKEN ?? "").trim();
-  if (!t || (!expected && !envVal)) return null;
-  if (t !== expected && t !== envVal) return null;
+  if (!t || !expected || t !== expected) return null;
   return getPrimaryBot();
 }
 
