@@ -1714,6 +1714,119 @@
       "remove": "Remove",
       "unlimited": "Unlimited",
       "days_short": "days"
+    },
+    "navigation": {
+      "groups": {
+        "management": "Clients and support",
+        "subscription": "Plans and sales",
+        "overview": "Overview and analytics",
+        "marketing": "Marketing",
+        "infrastructure": "Infrastructure",
+        "security": "Security and events",
+        "tools": "Content and tools",
+        "settings": "Settings and access"
+      },
+      "search": "Find a section",
+      "no_results": "No results. Try another name.",
+      "close_menu": "Close menu",
+      "trials": "Trial subscriptions",
+      "referrals": "Client referrals",
+      "open_menu": "Open menu"
+    },
+    "settings_navigation": {
+      "title": "Settings sections",
+      "search": "Search: SMTP, Stars, bot…",
+      "clear": "Clear search",
+      "select": "Settings section",
+      "groups_label": "Settings groups",
+      "groups": {
+        "service": "Service and cabinet",
+        "sales": "Sales and rewards",
+        "communication": "Communication",
+        "system": "Connections and system"
+      },
+      "sections": {
+        "general": {
+          "label": "General",
+          "hint": "Service name, currency, language and cabinet mode."
+        },
+        "theme": {
+          "label": "Appearance",
+          "hint": "Client cabinet design and color scheme."
+        },
+        "landing": {
+          "label": "Landing page",
+          "hint": "Text and sections on your service homepage."
+        },
+        "subpage": {
+          "label": "Subscription page",
+          "hint": "Connection page: apps, instructions and appearance."
+        },
+        "oauth": {
+          "label": "Social sign-in",
+          "hint": "External sign-in providers for the client cabinet."
+        },
+        "payments": {
+          "label": "Payment providers",
+          "hint": "Payment methods, provider keys and Telegram Stars."
+        },
+        "referral": {
+          "label": "Referral program",
+          "hint": "Invite rewards and withdrawal rules."
+        },
+        "options": {
+          "label": "Extra options",
+          "hint": "Sell additional traffic, devices and servers."
+        },
+        "custom-build": {
+          "label": "Custom plans",
+          "hint": "Options and prices for configurable plans."
+        },
+        "gifts": {
+          "label": "Gifts",
+          "hint": "Gift subscriptions, code expiry and limits."
+        },
+        "roulette": {
+          "label": "Roulette",
+          "hint": "Prizes, participation costs and draw limits."
+        },
+        "nalog-settings": {
+          "label": "My Tax",
+          "hint": "Connect the tax service to issue receipts."
+        },
+        "bot": {
+          "label": "Telegram bot",
+          "hint": "Buttons, messages, emoji and bot menu behavior."
+        },
+        "mail-telegram": {
+          "label": "Email and notifications",
+          "hint": "SMTP, email sender and Telegram notifications."
+        },
+        "ai": {
+          "label": "AI chat",
+          "hint": "Assistant model, keys and behavior."
+        },
+        "api": {
+          "label": "Remnawave and bot",
+          "hint": "Remnawave connection, API tokens and connection checks."
+        },
+        "sync": {
+          "label": "Synchronization",
+          "hint": "Sync client and subscription data with Remnawave."
+        },
+        "proxy-settings": {
+          "label": "Outbound proxy",
+          "hint": "Proxy for outgoing Telegram, payment and AI requests."
+        },
+        "server-ssh": {
+          "label": "SSH and console",
+          "hint": "Server access and panel console connection."
+        },
+        "updates": {
+          "label": "Updates",
+          "hint": "Update channel, installation schedule and backups."
+        }
+      }
     }
   },
   "cabinet": {

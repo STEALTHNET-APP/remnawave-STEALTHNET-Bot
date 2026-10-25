@@ -1,4 +1,5 @@
 import { isBotButtonUrl } from "@/lib/bot-button-url";
+import { SettingsNavigation, SETTINGS_TABS } from "@/components/admin/settings-navigation";
 import { MailTest } from "@/components/admin/mail-test";
 import { useSearchParams } from "react-router-dom";
 import { PanelUpdates } from "@/components/admin/panel-updates";
@@ -19,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Download, Upload, Link2, Settings2, Gift, Users, ArrowLeftRight, Mail, MessageCircle, CreditCard, ChevronDown, ChevronUp, Copy, Check, Bot, FileJson, Palette, Wallet, Package, Plus, Trash2, KeyRound, Loader2, Sparkles, Layers, Globe, BarChart3, RotateCw, Shield, Terminal, FileText, GripVertical, Smile, Sliders, MessageSquare, Eye, Plug, EyeOff, RotateCcw, CheckCircle2, AlertCircle } from "lucide-react";
+import { Download, Upload, Link2, Settings2, Gift, Users, MessageCircle, CreditCard, ChevronDown, ChevronUp, Copy, Check, Bot, Wallet, Plus, Trash2, KeyRound, Loader2, Sparkles, Layers, Globe, BarChart3, RotateCw, FileText, GripVertical, Smile, Sliders, MessageSquare, Eye, Plug, EyeOff, RotateCcw, CheckCircle2, AlertCircle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ACCENT_PALETTES } from "@/contexts/theme";
@@ -57,7 +58,6 @@ const LANG_NAMES: Record<string, string> = {
   fa: "فارسی",
 };
 const ALLOWED_CURRENCIES = ["usd", "rub"];
-const SETTINGS_TABS = new Set(["general", "referral", "payments", "bot", "ai", "mail-telegram", "subpage", "theme", "options", "custom-build", "oauth", "landing", "server-ssh", "proxy-settings", "nalog-settings", "gifts", "roulette", "sync", "api", "updates"]);
 
 const DEFAULT_PLATEGA_METHODS: { id: number; enabled: boolean; label: string }[] = [
   { id: 2, enabled: true, label: "СБП" },
@@ -517,7 +517,7 @@ export function SettingsPage() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab") ?? "general";
-  const activeTab = SETTINGS_TABS.has(requestedTab) ? requestedTab : "general";
+  const activeTab = SETTINGS_TABS.has(requestedTab) && (requestedTab !== "updates" || state.admin?.role === "ADMIN") ? requestedTab : "general";
   const setActiveTab = (tab: string) => {
     if (!SETTINGS_TABS.has(tab)) return;
     setSearchParams((current) => {
@@ -1248,7 +1248,7 @@ export function SettingsPage() {
     saveSettingsMut.mutate(payloadBase);
   }
 
-  if (settingsQ.isLoading || settingsQ.isFetching) return <div className="text-muted-foreground">{t("admin.common.loading")}</div>;
+  if (settingsQ.isLoading) return <div className="text-muted-foreground">{t("admin.common.loading")}</div>;
   if (!settings) return <div className="text-destructive">{t("admin.common.loading_error")}</div>;
 
   return (
@@ -1269,74 +1269,11 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <ConsoleAccessCard token={token} />
-
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        {/* grid-cols-9 (было 10) — старая вкладка «Триал» убрана.
-            Все настройки триала теперь живут в отдельном разделе /admin/trials (T15 multi-trials),
-            где можно создавать несколько пробных пресетов с разными тарифами. */}
-        <TabsList className="w-full flex flex-wrap gap-1.5 p-1.5 h-auto bg-muted/40 rounded-xl border border-border shadow-sm">
-          <TabsTrigger value="general" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Settings2 className="h-4 w-4 shrink-0" />{t("admin.settings.tab_general")}
-          </TabsTrigger>
-          <TabsTrigger value="referral" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Users className="h-4 w-4 shrink-0" />{t("admin.settings.tab_referral")}
-          </TabsTrigger>
-          <TabsTrigger value="payments" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <CreditCard className="h-4 w-4 shrink-0" />{t("admin.settings.tab_payments")}
-          </TabsTrigger>
-          <TabsTrigger value="bot" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Bot className="h-4 w-4 shrink-0" />{t("admin.settings.tab_bot")}
-          </TabsTrigger>
-          <TabsTrigger value="ai" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Sparkles className="h-4 w-4 shrink-0" />{t("admin.settings.tab_ai")}
-          </TabsTrigger>
-          <TabsTrigger value="mail-telegram" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Mail className="h-4 w-4 shrink-0" />{t("admin.settings.tab_mail_telegram")}
-          </TabsTrigger>
-          <TabsTrigger value="subpage" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <FileJson className="h-4 w-4 shrink-0" />{t("admin.settings.tab_subpage")}
-          </TabsTrigger>
-          <TabsTrigger value="theme" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Palette className="h-4 w-4 shrink-0" />{t("admin.settings.tab_theme")}
-          </TabsTrigger>
-          <TabsTrigger value="options" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Package className="h-4 w-4 shrink-0" />{t("admin.settings.tab_options")}
-          </TabsTrigger>
-          <TabsTrigger value="custom-build" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Layers className="h-4 w-4 shrink-0" />{t("admin.settings.tab_custom_build")}
-          </TabsTrigger>
-          <TabsTrigger value="oauth" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <KeyRound className="h-4 w-4 shrink-0" />{t("admin.settings.tab_oauth")}
-          </TabsTrigger>
-          <TabsTrigger value="landing" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Globe className="h-4 w-4 shrink-0" />{t("admin.settings.tab_landing")}
-          </TabsTrigger>
-          <TabsTrigger value="server-ssh" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Terminal className="h-4 w-4 shrink-0" />{t("admin.settings.tab_ssh")}
-          </TabsTrigger>
-          <TabsTrigger value="proxy-settings" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Shield className="h-4 w-4 shrink-0" />{t("admin.settings.tab_proxy")}
-          </TabsTrigger>
-          <TabsTrigger value="nalog-settings" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <FileText className="h-4 w-4 shrink-0" />{t("admin.settings.tab_nalog")}
-          </TabsTrigger>
-          <TabsTrigger value="gifts" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Gift className="h-4 w-4 shrink-0" />Подарки
-          </TabsTrigger>
-          <TabsTrigger value="roulette" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Sparkles className="h-4 w-4 shrink-0" />Рулетка
-          </TabsTrigger>
-          <TabsTrigger value="api" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <Plug className="h-4 w-4 shrink-0" />API (.env)
-          </TabsTrigger>
-          <TabsTrigger value="sync" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
-            <ArrowLeftRight className="h-4 w-4 shrink-0" />{t("admin.settings.tab_sync")}
-          </TabsTrigger>
-          {state.admin?.role === "ADMIN" && <TabsTrigger value="updates" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Download className="h-4 w-4 shrink-0" />Обновления</TabsTrigger>}
-        </TabsList>
+        <SettingsNavigation activeTab={activeTab} onChange={setActiveTab} isAdmin={state.admin?.role === "ADMIN"} />
 
         {state.admin?.role === "ADMIN" && <TabsContent value="updates"><PanelUpdates token={token} /></TabsContent>}
+        {activeTab === "server-ssh" && <div className="mt-4"><ConsoleAccessCard token={token} /></div>}
         <form onSubmit={handleSubmit}>
           <TabsContent value="general">
             <Card className="overflow-hidden border-border">

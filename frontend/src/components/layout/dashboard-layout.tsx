@@ -7,7 +7,7 @@ import {
   Search, Megaphone, Tag, BarChart3, FileText, ExternalLink, Sun, Moon, Monitor,
   Palette, Menu, X, Database, Target, UserCog, Send, CalendarClock, Globe, Server, MessageSquare, Trophy,
   Network, ShieldAlert, ShieldBan, Key, Video, Languages, Gift, Sparkles, Rocket, Bot,
-  ChevronRight, Check, ShoppingBag,
+  ChevronRight, ChevronDown, Check, ShoppingBag,
   Activity, Inbox, ClipboardList, TrendingUp, Mail,
   RefreshCw, Layers, FileCode2,
 } from "lucide-react";
@@ -20,6 +20,7 @@ import { useAuth } from "@/contexts/auth";
 import { useTheme, ACCENT_PALETTES, type ThemeMode, type ThemeAccent } from "@/contexts/theme";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { canAccessSection, isNavActive, getManagerRedirect } from "@/lib/admin-navigation";
 import { api, type AdminNotificationCounters } from "@/lib/api";
 import { UpdateNotice } from "@/components/admin/update-notice";
 import { InboxBell } from "@/components/inbox-bell";
@@ -34,16 +35,11 @@ const GITHUB_URL = PROJECT_GITHUB_URL;
 // вместо обычной секции — для гранулярных прав менеджеров (например, «Продажи через баланс»).
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; section: string; category: string; requiredAction?: string };
 
-const CATEGORY_ORDER = ["overview", "management", "infrastructure", "subscription", "tools", "settings"];
+const CATEGORY_ORDER = ["management", "subscription", "overview", "marketing", "infrastructure", "security", "tools", "settings"];
 
-const CATEGORY_I18N: Record<string, string> = {
-  overview: "admin.nav.category_overview",
-  management: "admin.nav.category_management",
-  infrastructure: "Инфраструктура",
-  subscription: "admin.nav.category_subscription",
-  tools: "admin.nav.category_tools",
-  settings: "admin.nav.category_settings",
-};
+const CATEGORY_I18N: Record<string, string> = Object.fromEntries(
+  CATEGORY_ORDER.map((category) => [category, `admin.navigation.groups.${category}`])
+);
 
 function useNavSections(): NavItem[] {
   const { t } = useTranslation();
@@ -51,76 +47,56 @@ function useNavSections(): NavItem[] {
     { to: "/admin", label: t("admin.nav.dashboard"), icon: LayoutDashboard, section: "dashboard", category: "overview" },
     { to: "/admin/analytics", label: t("admin.nav.analytics"), icon: BarChart3, section: "analytics", category: "overview" },
     { to: "/admin/business-analytics", label: "Бизнес-аналитика", icon: TrendingUp, section: "analytics", category: "overview" },
-    { to: "/admin/anti-fraud", label: "Anti-fraud", icon: ShieldAlert, section: "analytics", category: "overview" },
+    { to: "/admin/anti-fraud", label: "Anti-fraud", icon: ShieldAlert, section: "analytics", category: "security" },
     { to: "/admin/bot-conversations", label: "Активность клиентов", icon: MessageSquare, section: "clients", category: "management" },
     { to: "/admin/sales-report", label: t("admin.nav.sales_report"), icon: FileText, section: "sales-report", category: "overview" },
     // отчёт продаж только через баланс — для менеджеров с action'ом.
     { to: "/admin/balance-sales", label: "Продажи через баланс", icon: FileText, section: "balance-sales-virtual", category: "overview", requiredAction: "view_balance_sales" },
-    { to: "/admin/traffic-abuse", label: t("admin.nav.traffic_abuse"), icon: ShieldAlert, section: "traffic-abuse", category: "overview" },
-    { to: "/admin/anti-abuse", label: "Анти-абьюз трафика", icon: ShieldBan, section: "anti-abuse", category: "management" },
+    { to: "/admin/traffic-abuse", label: t("admin.nav.traffic_abuse"), icon: ShieldAlert, section: "traffic-abuse", category: "security" },
+    { to: "/admin/anti-abuse", label: "Анти-абьюз трафика", icon: ShieldBan, section: "anti-abuse", category: "security" },
     { to: "/admin/clients", label: t("admin.nav.clients"), icon: Users, section: "clients", category: "management" },
-    { to: "/admin/proxy", label: t("admin.nav.proxy"), icon: Globe, section: "proxy", category: "management" },
-    { to: "/admin/singbox", label: t("admin.nav.singbox"), icon: Server, section: "singbox", category: "management" },
-    { to: "/admin/backup", label: t("admin.nav.backups"), icon: Database, section: "backup", category: "management" },
+    { to: "/admin/proxy", label: t("admin.nav.proxy"), icon: Globe, section: "proxy", category: "subscription" },
+    { to: "/admin/singbox", label: t("admin.nav.singbox"), icon: Server, section: "singbox", category: "subscription" },
+    { to: "/admin/backup", label: t("admin.nav.backups"), icon: Database, section: "backup", category: "infrastructure" },
     { to: "/admin/tickets", label: t("admin.nav.tickets"), icon: MessageSquare, section: "tickets", category: "management" },
     { to: "/admin/tariffs", label: t("admin.nav.tariffs"), icon: CreditCard, section: "tariffs", category: "subscription" },
     // T15 (11.05.2026) — управление пробными подписками (Trial-пресеты).
-    { to: "/admin/trials", label: "Триалы", icon: Gift, section: "trials", category: "subscription" },
+    { to: "/admin/trials", label: t("admin.navigation.trials"), icon: Gift, section: "trials", category: "subscription" },
     // T6 (11.05.2026) — заявки на вывод реф. баланса (USDT TRC20).
-    { to: "/admin/withdrawals", label: "Заявки на вывод", icon: CreditCard, section: "withdrawals", category: "management" },
+    { to: "/admin/withdrawals", label: "Заявки на вывод", icon: CreditCard, section: "withdrawals", category: "subscription" },
     // T-autorenew (12.05.2026) — автосписание + конструктор уведомлений.
     { to: "/admin/auto-renew", label: "Автосписание", icon: RefreshCw, section: "auto-renew", category: "subscription" },
-    { to: "/admin/promo", label: t("admin.nav.promo_links"), icon: Megaphone, section: "promo", category: "subscription" },
-    { to: "/admin/promo-codes", label: t("admin.nav.promo_codes"), icon: Tag, section: "promo-codes", category: "subscription" },
+    { to: "/admin/promo", label: t("admin.nav.promo_links"), icon: Megaphone, section: "promo", category: "marketing" },
+    { to: "/admin/promo-codes", label: t("admin.nav.promo_codes"), icon: Tag, section: "promo-codes", category: "marketing" },
     // Remnawave инфра-управление (ADMIN-only): ноды / сквады / хосты / config-профили.
     { to: "/admin/remna-nodes", label: "Ноды", icon: Server, section: "infra-nodes", category: "infrastructure" },
     { to: "/admin/remna-squads", label: "Сквады", icon: Layers, section: "infra-squads", category: "infrastructure" },
     { to: "/admin/remna-hosts", label: "Хосты", icon: Network, section: "infra-hosts", category: "infrastructure" },
     { to: "/admin/remna-profiles", label: "Config-профили", icon: FileCode2, section: "infra-profiles", category: "infrastructure" },
     { to: "/admin/remna-sub-templates", label: "Шаблоны подписки", icon: FileText, section: "infra-templates", category: "infrastructure" },
-    { to: "/admin/marketing", label: t("admin.nav.marketing"), icon: Target, section: "marketing", category: "subscription" },
-    { to: "/admin/referral-network", label: t("admin.nav.referral_network"), icon: Network, section: "referral-network", category: "subscription" },
+    { to: "/admin/marketing", label: t("admin.nav.marketing"), icon: Target, section: "marketing", category: "marketing" },
+    { to: "/admin/referral-network", label: t("admin.nav.referral_network"), icon: Network, section: "referral-network", category: "marketing" },
     // детальная страница рефералки по клиенту (поиск, реферер, заработок, кредиты).
-    { to: "/admin/referrals", label: "Рефералка", icon: Users, section: "referrals", category: "subscription" },
-    { to: "/admin/secondary-subscriptions", label: "Подписки", icon: Gift, section: "secondary-subscriptions", category: "subscription" },
+    { to: "/admin/referrals", label: t("admin.navigation.referrals"), icon: Users, section: "referrals", category: "marketing" },
+    { to: "/admin/secondary-subscriptions", label: "Подписки", icon: Gift, section: "secondary-subscriptions", category: "management" },
     { to: "/admin/video-instructions", label: t("admin.nav.video_instructions"), icon: Video, section: "video-instructions", category: "tools" },
-    { to: "/admin/broadcast", label: t("admin.nav.broadcast"), icon: Send, section: "broadcast", category: "tools" },
-    { to: "/admin/auto-broadcast", label: t("admin.nav.auto_broadcast"), icon: CalendarClock, section: "auto-broadcast", category: "tools" },
-    { to: "/admin/contests", label: t("admin.nav.contests"), icon: Trophy, section: "contests", category: "tools" },
+    { to: "/admin/broadcast", label: t("admin.nav.broadcast"), icon: Send, section: "broadcast", category: "marketing" },
+    { to: "/admin/auto-broadcast", label: t("admin.nav.auto_broadcast"), icon: CalendarClock, section: "auto-broadcast", category: "marketing" },
+    { to: "/admin/contests", label: t("admin.nav.contests"), icon: Trophy, section: "contests", category: "marketing" },
     { to: "/admin/tour-constructor", label: "Конструктор тура", icon: Sparkles, section: "tour-constructor", category: "tools" },
-    { to: "/admin/promo-vpn", label: t("admin.nav.promo_vpn"), icon: Rocket, section: "promo-vpn", category: "tools" },
+    { to: "/admin/promo-vpn", label: t("admin.nav.promo_vpn"), icon: Rocket, section: "promo-vpn", category: "marketing" },
     { to: "/admin/marketplace", label: t("admin.nav.marketplace"), icon: ShoppingBag, section: "marketplace", category: "tools" },
     { to: "/admin/settings", label: t("admin.nav.settings"), icon: Settings, section: "settings", category: "settings" },
     { to: "/admin/languages", label: t("admin.nav.languages"), icon: Languages, section: "languages", category: "settings" },
     { to: "/admin/admins", label: t("admin.nav.managers"), icon: UserCog, section: "admins", category: "settings" },
     { to: "/admin/api-keys", label: t("admin.nav.api_keys"), icon: Key, section: "api-keys", category: "settings" },
-    { to: "/admin/antibot", label: "Антибот", icon: Shield, section: "antibot", category: "settings" },
-    { to: "/admin/diagnostics", label: "Диагностика", icon: Activity, section: "diagnostics", category: "settings" },
-    { to: "/admin/email-templates", label: "Email-шаблоны", icon: Mail, section: "settings", category: "settings" },
-    { to: "/admin/bot-messages", label: "Тексты бота", icon: Bot, section: "settings", category: "settings" },
-    { to: "/admin/webhook-inbox", label: "Webhook inbox", icon: Inbox, section: "webhook-inbox", category: "settings" },
-    { to: "/admin/audit", label: "Аудит-лог", icon: ClipboardList, section: "audit", category: "settings" },
+    { to: "/admin/antibot", label: "Антибот", icon: Shield, section: "antibot", category: "security" },
+    { to: "/admin/diagnostics", label: "Диагностика", icon: Activity, section: "diagnostics", category: "infrastructure" },
+    { to: "/admin/email-templates", label: "Email-шаблоны", icon: Mail, section: "settings", category: "tools" },
+    { to: "/admin/bot-messages", label: "Тексты бота", icon: Bot, section: "settings", category: "tools" },
+    { to: "/admin/webhook-inbox", label: "Webhook inbox", icon: Inbox, section: "webhook-inbox", category: "security" },
+    { to: "/admin/audit", label: "Аудит-лог", icon: ClipboardList, section: "audit", category: "security" },
   ];
-}
-
-function canAccessSection(role: string, allowedSections: string[] | undefined, section: string, requiredAction?: string): boolean {
-  if (role === "ADMIN") return true;
-  if (section === "admins") return false;
-  // пункт меню может быть защищён action'ом.
-  if (requiredAction) {
-    return Array.isArray(allowedSections) && allowedSections.includes(`action:${requiredAction}`);
-  }
-  return Array.isArray(allowedSections) && allowedSections.includes(section);
-}
-
-function isNavActive(pathname: string, to: string): boolean {
-  if (to === "/admin") return pathname === "/admin";
-  if (pathname === to) return true;
-  if (pathname.startsWith(to)) {
-    const next = pathname[to.length];
-    return next === "/" || next === undefined;
-  }
-  return false;
 }
 
 function NavItems({ onClick }: { onClick?: () => void }) {
@@ -131,48 +107,86 @@ function NavItems({ onClick }: { onClick?: () => void }) {
   const navBySection = admin
     ? allNav.filter((item) => canAccessSection(admin.role, admin.allowedSections, item.section, item.requiredAction))
     : allNav;
-  const nav = navBySection;
-
-  const groupedNav = nav.reduce((acc, item) => {
-    if (!acc[item.category]) acc[item.category] = [];
-    acc[item.category].push(item);
-    return acc;
-  }, {} as Record<string, NavItem[]>);
-
-  const sortedCategories = Object.keys(groupedNav).sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
+  const [query, setQuery] = useState("");
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("admin-nav-collapsed") ?? "null");
+      if (stored && typeof stored === "object" && !Array.isArray(stored)) return stored;
+    } catch {}
+    return {};
+  });
+  const activeCategory = navBySection.find((item) => isNavActive(location.pathname, item.to))?.category;
+  useEffect(() => {
+    if (activeCategory) setCollapsed((previous) => {
+      const next = { ...previous };
+      delete next[activeCategory];
+      return next;
+    });
+    setQuery("");
+  }, [location.pathname, activeCategory]);
+  const toggleCategory = (category: string) => {
+    setCollapsed((previous) => {
+      const next = { ...previous, [category]: !(previous[category] ?? category !== activeCategory) };
+      try { localStorage.setItem("admin-nav-collapsed", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  const search = query.trim().toLocaleLowerCase();
+  const nav = navBySection.filter((item) => !search || `${item.label} ${t(CATEGORY_I18N[item.category])} ${item.to}`.toLocaleLowerCase().includes(search));
+  const groupedNav = CATEGORY_ORDER.map((category) => ({
+    category,
+    items: nav.filter((item) => item.category === category && item.to !== "/admin").sort((a, b) => {
+      if (category !== "management" && category !== "subscription") return 0;
+      const order = category === "management"
+        ? ["/admin/clients", "/admin/secondary-subscriptions", "/admin/tickets", "/admin/bot-conversations"]
+        : ["/admin/tariffs", "/admin/trials", "/admin/auto-renew", "/admin/withdrawals", "/admin/proxy", "/admin/singbox"];
+      return order.indexOf(a.to) - order.indexOf(b.to);
+    }),
+  })).filter(({ items }) => items.length > 0);
 
   return (
     <>
-      {sortedCategories.map((category) => (
-        <div key={category} className="mb-2 last:mb-0">
-          
-          <div className="flex items-center gap-2 px-3 mb-1.5 mt-3 first:mt-0">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">{t(CATEGORY_I18N[category] ?? category)}</div>
-          </div>
-          <div className="space-y-0.5 px-1.5">
-            {groupedNav[category].map((item) => {
-              const isActive = isNavActive(location.pathname, item.to);
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  onClick={onClick}
-                  className={cn(
-                    "group flex items-center gap-2.5 py-[7px] px-2.5 rounded-lg transition-all duration-200 relative",
-                    isActive
-                      ? "bg-primary/[0.14] text-primary font-semibold shadow-[inset_0_1px_0_0_hsl(0_0%_100%/0.06)]"
-                      : "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06]"
-                  )}
-                >
-                  <item.icon className={cn("h-[15px] w-[15px] shrink-0 transition-colors", isActive ? "text-primary" : "text-muted-foreground/70 group-hover:text-foreground/90")} />
-                  <span className="text-[12.8px] leading-tight tracking-normal">{item.label}</span>
-                  {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-full bg-primary" />}
-                </Link>
-              );
-            })}
-          </div>
+      <div className="sticky top-0 z-20 bg-background pb-2">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <input type="search" aria-label={t("admin.navigation.search")} placeholder={t("admin.navigation.search")}
+            value={query} onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Escape") setQuery(""); }}
+            className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
-      ))}
+      </div>
+      {nav.filter((item) => item.to === "/admin").map((item) => <Link key={item.to} to={item.to} onClick={onClick}
+        aria-current={location.pathname === item.to ? "page" : undefined}
+        className={cn("mb-2 flex min-h-10 items-center gap-2.5 rounded-lg px-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary", location.pathname === item.to ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted")}>
+        <item.icon className="h-4 w-4" aria-hidden="true" />{item.label}
+      </Link>)}
+      {nav.length === 0 && <p role="status" className="px-3 py-4 text-sm text-muted-foreground">{t("admin.navigation.no_results")}</p>}
+      {groupedNav.map(({ category, items }) => {
+        const expanded = !!search || !(collapsed[category] ?? category !== activeCategory);
+        return (
+          <div key={category} className="mb-1 last:mb-0">
+            <button type="button" aria-expanded={expanded} onClick={() => toggleCategory(category)} disabled={!!search}
+              className="flex min-h-10 w-full items-center justify-between gap-2 rounded-lg px-3 text-left text-[11px] font-semibold text-muted-foreground hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-80">
+              <span>{t(CATEGORY_I18N[category])}</span>
+              <ChevronDown aria-hidden="true" className={cn("h-3.5 w-3.5 shrink-0 transition-transform", !expanded && "-rotate-90")} />
+            </button>
+            {expanded && <div className="space-y-0.5 px-1.5">
+              {items.map((item) => {
+                const isActive = isNavActive(location.pathname, item.to);
+                return (
+                  <Link key={item.to} to={item.to} onClick={onClick} aria-current={isActive ? "page" : undefined}
+                    className={cn("group relative flex min-h-10 items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary",
+                      isActive ? "bg-primary/[0.14] text-primary font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-muted")}>
+                    <item.icon aria-hidden="true" className="h-4 w-4 shrink-0" />
+                    <span className="text-[12.8px] leading-snug">{item.label}</span>
+                    {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-full bg-primary" />}
+                  </Link>
+                );
+              })}
+            </div>}
+          </div>
+        );
+      })}
     </>
   );
 }
@@ -196,6 +210,20 @@ export function DashboardLayout() {
   const [notificationToasts, setNotificationToasts] = useState<{ id: number; text: string; icon: string }[]>([]);
   const lastCountersRef = useRef<AdminNotificationCounters | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = overflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileMenuOpen]);
 
   const [mobileSidebarVisible, setMobileSidebarVisible] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -254,19 +282,11 @@ export function DashboardLayout() {
     return () => ctx.revert();
   }, [mobileSidebarVisible, mobileMenuOpen]);
 
-  // Редирект менеджера, если он открыл недоступный раздел.
+  const allNav = useNavSections();
+  const managerRedirect = getManagerRedirect(state.admin, location.pathname, allNav);
   useEffect(() => {
-    const admin = state.admin;
-    if (!admin || admin.role !== "MANAGER") return;
-    const path = location.pathname.replace(/^\/admin\/?/, "") || "dashboard";
-    const section = path.split("/")[0] || "dashboard";
-    const allowed = admin.allowedSections ?? [];
-    if (section === "admins" || !allowed.includes(section)) {
-      const first = allowed[0];
-      const to = !first ? "/admin" : first === "dashboard" ? "/admin" : `/admin/${first}`;
-      navigate(to, { replace: true });
-    }
-  }, [state.admin, location.pathname, navigate]);
+    if (managerRedirect && managerRedirect !== location.pathname) navigate(managerRedirect, { replace: true });
+  }, [managerRedirect, location.pathname, navigate]);
 
   useEffect(() => {
     const token = state.accessToken;
@@ -376,7 +396,7 @@ export function DashboardLayout() {
           <div ref={sidebarOverlayRef} data-sidebar="overlay"
             className="fixed inset-0 z-[69] bg-card md:hidden" onClick={() => setMobileMenuOpen(false)} />
           <aside ref={sidebarRef} data-sidebar="panel"
-            className="fixed left-0 top-0 bottom-0 z-[70] w-[290px] flex flex-col md:hidden bg-primary/20 dark:bg-primary/30 border-r border-border dark:border-border overflow-hidden"
+            className="fixed left-0 top-0 bottom-0 z-[70] w-[290px] flex flex-col md:hidden bg-background border-r border-border overflow-hidden"
           >
             <div className="flex h-16 items-center justify-center px-4 relative z-10">
               <div className="absolute bottom-0 left-6 right-6 h-[1px] bg-transparent"></div>
@@ -384,7 +404,7 @@ export function DashboardLayout() {
                 {brand.logo ? <img src={brand.logo} alt="" className="h-8 w-auto object-contain" /> : <Shield className="h-6 w-6 text-primary shrink-0" />}
                 {brand.serviceName ? <span className="font-bold text-[14.5px] tracking-wide truncate">{brand.serviceName}</span> : null}
               </div>
-              <Button variant="ghost" size="icon" className="absolute right-4 shrink-0" onClick={() => setMobileMenuOpen(false)}>
+              <Button aria-label={t("admin.navigation.close_menu")} variant="ghost" size="icon" className="absolute right-4 shrink-0" onClick={() => setMobileMenuOpen(false)}>
                 <X className="h-5 w-5" />
               </Button>
             </div>
@@ -424,7 +444,7 @@ export function DashboardLayout() {
       <main className="flex-1 min-w-0 flex flex-col md:pl-[240px] w-full relative z-10">
         <header className="sticky top-0 z-20 flex h-[52px] shrink-0 items-center justify-between gap-3 px-5 border-b border-border bg-card">
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <Button variant="ghost" size="icon" className="md:hidden shrink-0 rounded-xl" onClick={() => setMobileMenuOpen(true)}>
+            <Button aria-label={t("admin.navigation.open_menu")} aria-expanded={mobileMenuOpen} variant="ghost" size="icon" className="md:hidden shrink-0 rounded-xl" onClick={() => setMobileMenuOpen(true)}>
               <Menu className="h-5 w-5" />
             </Button>
             {/* Breadcrumb / Page title */}
