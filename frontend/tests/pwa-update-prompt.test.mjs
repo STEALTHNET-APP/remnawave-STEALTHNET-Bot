@@ -1,174 +1,98 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createServer } from "node:http";
+import { build } from "esbuild";
 
-/**
- * Симулятор функции isUserActivelyEditing
- */
-function isUserActivelyEditing(mockDocument) {
-  if (!mockDocument) return false;
-  if (mockDocument.hasDialog) return true;
-  const active = mockDocument.activeElement;
-  if (!active) return false;
-  const tagName = (active.tagName || "").toUpperCase();
-  if (tagName === "TEXTAREA") return true;
-  if (active.isContentEditable) return true;
-  if (tagName === "INPUT") {
-    const inputType = (active.type || "text").toLowerCase();
-    const nonTextTypes = ["button", "submit", "reset", "checkbox", "radio", "image", "file"];
-    if (!nonTextTypes.includes(inputType)) return true;
-  }
-  return false;
+const playwright = await import(process.env.PLAYWRIGHT_MODULE_PATH || "playwright");
+const root = new URL("../", import.meta.url).pathname;
+const bundled = await build({
+  absWorkingDir: root,
+  tsconfig: root + "tsconfig.app.json",
+  stdin: {
+    contents: `import React from 'react';import {createRoot} from 'react-dom/client';import {PwaUpdatePrompt} from './src/components/pwa/pwa-update-prompt';createRoot(document.getElementById('root')).render(<PwaUpdatePrompt/>);`,
+    resolveDir: root, loader: "tsx",
+  },
+  bundle: true, write: false, jsx: "automatic", define: { "process.env.NODE_ENV": '"production"' },
+  plugins: [{ name: "worker-fixture", setup(builder) {
+    builder.onResolve({ filter: /^virtual:pwa-register\/react$/ }, () => ({ path: "worker", namespace: "fixture" }));
+    builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({ loader: "js", resolveDir: root, contents: `import {useState,useCallback} from 'react';export function useRegisterSW(){const needRefresh=useState(false),offlineReady=useState(false);window.offerUpdate=()=>needRefresh[1](true);const updateServiceWorker=useCallback(async()=>{window.updates=(window.updates||0)+1;if(window.failUpdate)throw Error('offline');},[]);return {needRefresh,offlineReady,updateServiceWorker};}` }));
+  }}],
+});
+const server = createServer((req, res) => {
+  res.setHeader("Content-Type", req.url === "/bundle.js" ? "text/javascript" : "text/html");
+  res.end(req.url === "/bundle.js" ? bundled.outputFiles[0].text : '<meta charset="utf-8"><input id="name"><input id="check" type="checkbox"><div id="root"></div><script src="/bundle.js"></script>');
+});
+await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+const browser = await playwright.chromium.launch();
+const base = `http://127.0.0.1:${server.address().port}`;
+
+async function scenario(path, run) {
+  const page = await browser.newPage();
+  try {
+    await page.clock.install({ time: new Date("2026-10-25T12:00:00Z") });
+    await page.goto(base + path);
+    await page.waitForFunction(() => !!window.offerUpdate);
+    await page.evaluate(() => window.offerUpdate());
+    await page.getByText("Доступно обновление", { exact: true }).waitFor();
+    await run(page);
+  } finally { await page.close(); }
 }
 
-/**
- * Логика принятия решения об автообновлении
- */
-function shouldTriggerAutoUpdate({
-  needRefresh,
-  isOnline,
-  isVisible,
-  pathname,
-  isEditing,
-  lastReloadAt,
-  snoozeUntil,
-  now = Date.now(),
-}) {
-  if (!needRefresh) return { shouldUpdate: false, reason: "no_refresh_needed" };
-  if (!isOnline) return { shouldUpdate: false, reason: "offline" };
-  if (!isVisible) return { shouldUpdate: false, reason: "hidden" };
-
-  // Loop guard
-  if (lastReloadAt && now - lastReloadAt < 20_000) {
-    return { shouldUpdate: false, reason: "loop_guard" };
-  }
-
-  // Snooze guard (кнопка Отложить)
-  if (snoozeUntil && now < snoozeUntil) {
-    return { shouldUpdate: false, reason: "snoozed" };
-  }
-
-  const isAdmin = pathname.startsWith("/admin");
-
-  if (isAdmin) {
-    // В админке ждем завершения ввода в форму/диалог
-    if (isEditing) {
-      return { shouldUpdate: false, delaySeconds: null, reason: "admin_actively_editing" };
+try {
+  await test("idle dashboard updates once and preserves URL", () => scenario("/cabinet/dashboard", async page => {
+    await page.clock.runFor(70000);
+    assert.equal(await page.evaluate(() => window.updates), 1);
+    assert.equal(page.url(), base + "/cabinet/dashboard");
+    await page.clock.runFor(70000);
+    assert.equal(await page.evaluate(() => window.updates), 1);
+  }));
+  await test("edited field remains protected after blur", () => scenario("/admin", async page => {
+    await page.locator("#name").fill("unsaved");
+    await page.locator("#name").blur();
+    await page.clock.runFor(120000);
+    assert.equal(await page.evaluate(() => window.updates || 0), 0);
+    page.on("dialog", dialog => dialog.dismiss());
+    await page.getByRole("button", { name: "Обновить сейчас" }).click();
+    assert.equal(await page.evaluate(() => window.updates || 0), 0);
+  }));
+  await test("checkbox changes are protected", () => scenario("/admin", async page => {
+    await page.locator("#check").check();
+    await page.locator("#check").blur();
+    await page.clock.runFor(120000);
+    assert.equal(await page.evaluate(() => window.updates || 0), 0);
+  }));
+  await test("Aurora sheet prevents reload", () => scenario("/cabinet/dashboard", async page => {
+    await page.evaluate(() => { const sheet = document.createElement("div"); sheet.className = "au-sheet-overlay"; sheet.textContent = "payment"; document.body.append(sheet); });
+    await page.clock.runFor(120000);
+    assert.equal(await page.evaluate(() => window.updates || 0), 0);
+  }));
+  await test("payment URLs and settings never reload automatically", async () => {
+    for (const path of ["/cabinet/dashboard?payment=success", "/cabinet/tariffs", "/admin/settings"]) {
+      await scenario(path, async page => {
+        await page.clock.runFor(120000);
+        assert.equal(await page.evaluate(() => window.updates || 0), 0);
+      });
     }
-    // Если админ не редактирует - 5 секунд таймер
-    return { shouldUpdate: true, delaySeconds: 5, reason: "admin_idle" };
-  } else {
-    // Для клиентов в /cabinet или других страницах:
-    // Если открыт модальный диалог (например оплата) - не прерывать
-    if (isEditing) {
-      return { shouldUpdate: false, delaySeconds: null, reason: "client_dialog_open" };
-    }
-    // Быстрое обновление за 3 секунды
-    return { shouldUpdate: true, delaySeconds: 3, reason: "client_auto_update" };
-  }
+  });
+  await test("snooze reappears after ten minutes without another SW event", () => scenario("/admin/settings", async page => {
+    await page.getByRole("button", { name: "Отложить", exact: true }).click();
+    await page.clock.runFor(599000);
+    assert.equal(await page.getByText("Доступно обновление", { exact: true }).count(), 0);
+    await page.clock.runFor(2000);
+    await page.getByText("Доступно обновление", { exact: true }).waitFor();
+  }));
+  await test("failed update requires manual retry", () => scenario("/cabinet/dashboard", async page => {
+    await page.evaluate(() => { window.failUpdate = true; });
+    await page.clock.runFor(70000);
+    assert.equal(await page.evaluate(() => window.updates), 1);
+    await page.getByText("Не удалось обновить. Попробуйте ещё раз.").waitFor();
+    await page.clock.runFor(360000);
+    assert.equal(await page.evaluate(() => window.updates), 1);
+    await page.evaluate(() => { window.failUpdate = false; });
+    await page.getByRole("button", { name: "Обновить сейчас" }).click();
+    assert.equal(await page.evaluate(() => window.updates), 2);
+  }));
+} finally {
+  await browser.close();
+  server.close();
 }
-
-test("isUserActivelyEditing detects active text inputs, textareas, and dialogs", () => {
-  assert.equal(isUserActivelyEditing({ hasDialog: false, activeElement: null }), false);
-  assert.equal(isUserActivelyEditing({ hasDialog: true, activeElement: null }), true);
-  assert.equal(isUserActivelyEditing({ hasDialog: false, activeElement: { tagName: "BODY" } }), false);
-  assert.equal(isUserActivelyEditing({ hasDialog: false, activeElement: { tagName: "BUTTON" } }), false);
-  assert.equal(isUserActivelyEditing({ hasDialog: false, activeElement: { tagName: "INPUT", type: "checkbox" } }), false);
-  assert.equal(isUserActivelyEditing({ hasDialog: false, activeElement: { tagName: "INPUT", type: "text" } }), true);
-  assert.equal(isUserActivelyEditing({ hasDialog: false, activeElement: { tagName: "INPUT", type: "password" } }), true);
-  assert.equal(isUserActivelyEditing({ hasDialog: false, activeElement: { tagName: "TEXTAREA" } }), true);
-  assert.equal(isUserActivelyEditing({ hasDialog: false, activeElement: { tagName: "DIV", isContentEditable: true } }), true);
-});
-
-test("clients in Telegram Mini App (/cabinet/*) trigger auto update in 3 seconds", () => {
-  const result = shouldTriggerAutoUpdate({
-    needRefresh: true,
-    isOnline: true,
-    isVisible: true,
-    pathname: "/cabinet/dashboard",
-    isEditing: false,
-    lastReloadAt: 0,
-    snoozeUntil: 0,
-  });
-
-  assert.equal(result.shouldUpdate, true);
-  assert.equal(result.delaySeconds, 3);
-});
-
-test("clients with URL search params (?tgWebAppStartParam) still trigger auto update", () => {
-  const result = shouldTriggerAutoUpdate({
-    needRefresh: true,
-    isOnline: true,
-    isVisible: true,
-    pathname: "/cabinet/tariffs",
-    isEditing: false,
-    lastReloadAt: 0,
-    snoozeUntil: 0,
-  });
-
-  assert.equal(result.shouldUpdate, true);
-  assert.equal(result.delaySeconds, 3);
-});
-
-test("admin reading page (/admin/clients or /admin/settings) triggers auto update in 5 seconds", () => {
-  const result = shouldTriggerAutoUpdate({
-    needRefresh: true,
-    isOnline: true,
-    isVisible: true,
-    pathname: "/admin/clients",
-    isEditing: false,
-    lastReloadAt: 0,
-    snoozeUntil: 0,
-  });
-
-  assert.equal(result.shouldUpdate, true);
-  assert.equal(result.delaySeconds, 5);
-});
-
-test("admin actively typing pauses auto update until input finishes", () => {
-  const result = shouldTriggerAutoUpdate({
-    needRefresh: true,
-    isOnline: true,
-    isVisible: true,
-    pathname: "/admin/tariffs",
-    isEditing: true, // typing in input
-    lastReloadAt: 0,
-    snoozeUntil: 0,
-  });
-
-  assert.equal(result.shouldUpdate, false);
-  assert.equal(result.reason, "admin_actively_editing");
-});
-
-test("loop guard blocks auto update if reloaded less than 20 seconds ago", () => {
-  const now = 1700000000000;
-  const result = shouldTriggerAutoUpdate({
-    needRefresh: true,
-    isOnline: true,
-    isVisible: true,
-    pathname: "/cabinet",
-    isEditing: false,
-    lastReloadAt: now - 5000, // 5s ago
-    snoozeUntil: 0,
-    now,
-  });
-
-  assert.equal(result.shouldUpdate, false);
-  assert.equal(result.reason, "loop_guard");
-});
-
-test("snooze button postpones auto update", () => {
-  const now = 1700000000000;
-  const result = shouldTriggerAutoUpdate({
-    needRefresh: true,
-    isOnline: true,
-    isVisible: true,
-    pathname: "/admin",
-    isEditing: false,
-    lastReloadAt: 0,
-    snoozeUntil: now + 300000,
-    now,
-  });
-
-  assert.equal(result.shouldUpdate, false);
-  assert.equal(result.reason, "snoozed");
-});
