@@ -16,6 +16,7 @@ import {
   remnaUsernameFromClient,
 } from "../remna/remna.client.js";
 import { getSystemConfig } from "../client/client.service.js";
+import { upsertSubscriptionByRemnaUuid } from "../subscription/subscription.helpers.js";
 import { getPrimaryBot } from "../bot/bot.service.js";
 
 const PAGE_SIZE = 100;
@@ -97,6 +98,7 @@ export async function syncFromRemna(): Promise<{
         const username = u.username && String(u.username).trim() ? String(u.username).trim() : null;
 
         try {
+          const linkedSubscription = await prisma.subscription.findFirst({ where: { remnawaveUuid: uuid }, include: { owner: true } });
           const existingByUuid = await prisma.client.findFirst({
             where: { remnawaveUuid: uuid },
           });
@@ -107,11 +109,12 @@ export async function syncFromRemna(): Promise<{
             ? await prisma.client.findFirst({ where: { email } })
             : null;
 
-          const existing = existingByUuid || existingByTg || existingByEmail;
+          const existing = linkedSubscription?.owner || existingByUuid || existingByTg || existingByEmail;
 
+          let clientTargetId: string;
           if (existing) {
-            const data: { remnawaveUuid: string; telegramId?: string; email?: string | null; telegramUsername?: string; trialUsed?: boolean } = {
-              remnawaveUuid: uuid,
+            const data: { remnawaveUuid?: string; telegramId?: string; email?: string | null; telegramUsername?: string; trialUsed?: boolean } = {
+              ...(!existing.remnawaveUuid && (!linkedSubscription || linkedSubscription.subscriptionIndex === 0) ? { remnawaveUuid: uuid } : {}),
               trialUsed: true,
             };
             if (telegramId) {
@@ -131,10 +134,11 @@ export async function syncFromRemna(): Promise<{
               where: { id: existing.id },
               data,
             });
+            clientTargetId = existing.id;
             result.updated++;
           } else {
             const refCode = "REF-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
-            await prisma.client.create({
+            const created = await prisma.client.create({
               data: {
                 remnawaveUuid: uuid,
                 email: email ?? null,
@@ -147,8 +151,10 @@ export async function syncFromRemna(): Promise<{
                 trialUsed: true,
               },
             });
+            clientTargetId = created.id;
             result.created++;
           }
+          await upsertSubscriptionByRemnaUuid(clientTargetId, { remnawaveUuid: uuid });
         } catch (e) {
           result.errors.push(`${uuid}: ${e instanceof Error ? e.message : String(e)}`);
         }

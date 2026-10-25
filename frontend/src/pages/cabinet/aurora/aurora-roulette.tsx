@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 interface RouletteStatusData {
   enabled: boolean;
   cooldownHours: number;
+  resetMode?: "hours" | "daily";
+  timeZone?: string;
   canSpin: boolean;
   pendingReward?: boolean;
   nextSpinAt: string | null;
@@ -249,7 +251,7 @@ export function AuroraRoulette() {
         <p className="mt-3 text-center text-xs text-[var(--au-muted)] max-w-xs">
           {canSpin
             ? "Нажмите на кнопку в центре или на колесо, чтобы крутить!"
-            : `Крутить можно раз в ${data?.cooldownHours || 24} ч. Таймер обратного отсчета выше.`}
+            : data?.resetMode === "daily" ? `Новая попытка каждый день в 00:00 (${data.timeZone || "UTC"})` : `Крутить можно раз в ${data?.cooldownHours || 24} ч. Таймер обратного отсчета выше.`}
         </p>
       </section>
 

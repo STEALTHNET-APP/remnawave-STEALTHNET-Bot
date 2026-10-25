@@ -3025,6 +3025,8 @@ export const api = {
   async clientGetRoulette(token: string): Promise<{
     enabled: boolean;
     cooldownHours: number;
+    resetMode?: "hours" | "daily";
+    timeZone?: string;
     canSpin: boolean;
     pendingReward: boolean;
     nextSpinAt: string | null;
@@ -3057,7 +3059,7 @@ export const api = {
   },
 
   async getAdminRoulette(token: string): Promise<{
-    settings: { enabled: boolean; cooldownHours: number; sectors: any[] };
+    settings: { enabled: boolean; cooldownHours: number; resetMode?: "hours" | "daily"; timeZone?: string; sectors: any[] };
     totalSpins: number;
     spinsByType: any[];
     recentSpins: any[];
