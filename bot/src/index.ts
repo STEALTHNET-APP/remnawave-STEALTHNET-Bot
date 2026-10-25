@@ -3730,7 +3730,7 @@ composer.on("callback_query:data", async (ctx) => {
       if (tariffsRes.remnaAvailable === false) {
         await editMessageContent(
           ctx,
-          "⚠️ **Техническое обслуживание сервера тарифов**\n\nСервер синхронизации тарифов сейчас обновляется.\n\nВо избежание задержек с выдачей подписки приём оплаты временно приостановлен на несколько минут.\n\n_Все ваши действующие VPN-подключения работают в обычном режиме._ Пожалуйста, попробуйте повторить через 2–3 минуты.",
+          "⚠️ Панель VPN временно недоступна. Покупка и продление этих тарифов пока недоступны. Попробуйте позже.",
           {
             inline_keyboard: [
               [{ text: "🔄 Проверить снова", callback_data: "menu:tariffs" }],
@@ -7261,7 +7261,7 @@ if (data.startsWith("topup_paritypay:")) {
         });
         if (result.items?.some((it) => it.isOfflineSnapshot)) {
           bodyLines.push("");
-          bodyLines.push("ℹ️ _Информация обновлена из резервной копии (сервер тарифов на ТО). VPN-подключение работает в обычном режиме._");
+          bodyLines.push("ℹ️ _Панель VPN временно недоступна. Показаны последние сохранённые данные; они могут быть устаревшими._");
         }
         const { text, entities } = applyMarkdownAndEmoji(bodyLines.join("\n"), config?.botEmojis ?? null);
         await editMessageContent(

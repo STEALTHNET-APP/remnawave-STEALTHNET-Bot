@@ -34,15 +34,21 @@ import {
   notifyAdminsAboutNewTicket,
 } from "../notification/telegram-notify.service.js";
 import { requireClientAuth } from "./client.middleware.js";
-import { remnaCreateUser, remnaUpdateUser, isRemnaConfigured, remnaGetUser, remnaGetUserByUsername, remnaGetUserByEmail, remnaGetUserByTelegramId, remnaGetUserByShortUuid, extractRemnaUuid, remnaUsernameFromClient, remnaGetUserHwidDevices, remnaDeleteUserHwidDevice, encryptSubscriptionUrlInPlace, remnaRevokeUserSubscription, isRemnaOnline, getRemnaCircuitState } from "../remna/remna.client.js";
+import { remnaCreateUser, remnaUpdateUser, isRemnaConfigured, remnaGetUser, remnaGetUserByUsername, remnaGetUserByEmail, remnaGetUserByTelegramId, remnaGetUserByShortUuid, extractRemnaUuid, remnaUsernameFromClient, remnaGetUserHwidDevices, remnaDeleteUserHwidDevice, encryptSubscriptionUrlInPlace, remnaRevokeUserSubscription, probeRemnaHealth } from "../remna/remna.client.js";
 
-function requireRemnaOnline(req: Request, res: Response, next: NextFunction) {
-  if (!isRemnaOnline()) {
-    return res.status(503).json({
-      code: "REMNA_TEMPORARILY_OFFLINE",
-      message: "Сервер тарифов временно обновляется. Прием оплаты приостановлен на несколько минут во избежание задержек активации. Ваши активные VPN-подключения работают в обычном режиме.",
-    });
-  }
+import { offlineSubscriptionSnapshot } from "../remna/offline-snapshot.js";
+
+function requireRemnaOnline(_req: Request, res: Response, next: NextFunction) {
+  void probeRemnaHealth().then(online => {
+    if (!online) {
+      res.status(503).json({ code: "REMNA_TEMPORARILY_OFFLINE", message: "Панель VPN временно недоступна. Повторите действие позже." });
+    } else next();
+  }).catch(next);
+}
+
+function requireRemnaPaymentOnline(req: Request, res: Response, next: NextFunction) {
+  const body = req.body ?? {};
+  if (body.tariffId || body.customBuild || body.extraOption) return requireRemnaOnline(req, res, next);
   next();
 }
 import { isSmtpConfigured, isMailConfigured, mailConfigFromSystem, sendEmail } from "../mail/mail.service.js";
@@ -2272,7 +2278,7 @@ clientRouter.get("/withdrawals", async (req, res) => {
     orderBy: { createdAt: "desc" },
     take: 50,
   });
-  return res.json({ items, remnaAvailable: isRemnaOnline() });
+  return res.json({ items });
 });
 
 clientRouter.post("/trial", requireRemnaOnline, async (req, res) => {
@@ -2540,7 +2546,7 @@ clientRouter.post("/trials/:id/activate", requireRemnaOnline, async (req, res) =
 });
 
 // ——— Активация промо-ссылки ———
-clientRouter.post("/promo/activate", requireRemnaOnline, async (req, res) => {
+clientRouter.post("/promo/activate", async (req, res) => {
   const client = (req as unknown as { client: { id: string; remnawaveUuid: string | null; email: string | null; telegramId: string | null; telegramUsername?: string | null } }).client;
   const { code } = req.body as { code?: string };
   if (!code?.trim()) return res.status(400).json({ message: "Промокод не указан" });
@@ -3179,7 +3185,12 @@ clientRouter.get("/subscription/all", async (req, res) => {
           extraDevicesMonthlyPrice: true,
           bannedUntil: true,
           banReason: true,
-          tariff: { select: { id: true, name: true, menuEmoji: true } },
+          shortUuid: true,
+          expireAt: true,
+          remnaStatus: true,
+          trafficUsedBytes: true,
+          trafficLimitBytes: true,
+          tariff: { select: { id: true, name: true, menuEmoji: true, trafficLimitBytes: true } },
           trial: { select: { name: true, convertEnabled: true, convertAllTariffs: true, convertTariffIds: true } },
         },
       });
@@ -3196,7 +3207,7 @@ clientRouter.get("/subscription/all", async (req, res) => {
     let tariffName = (sub.trialId ? sub.trial?.name?.trim() : undefined) ?? sub.tariff?.name?.trim() ?? "";
     if (sub.remnawaveUuid) {
       let r: { data?: unknown; error?: string; status: number } | null = null;
-      if (isRemnaOnline()) {
+      {
         try {
           r = await remnaGetUser(sub.remnawaveUuid);
         } catch {
@@ -3207,26 +3218,10 @@ clientRouter.get("/subscription/all", async (req, res) => {
         if (cryptOn) await encryptSubscriptionUrlInPlace(r.data);
         remnaPayload = r.data ?? null;
         if (!tariffName) tariffName = await resolveTariffDisplayName(r.data ?? null);
-      } else {
+      } else if (!r || r.status >= 500 || r.status === 429) {
         // Graceful Mirror Fallback из локальной БД при недоступности Remnawave
         isOfflineSnapshot = true;
-        const remnaDomain = env.REMNA_API_URL?.replace(/\/$/, "") ?? "";
-        const subUrl = sub.shortUuid && remnaDomain ? `${remnaDomain}/api/sub/${sub.shortUuid}` : null;
-        const status = sub.remnaStatus ?? (sub.expireAt && sub.expireAt.getTime() > Date.now() ? "ACTIVE" : "EXPIRED");
-        remnaPayload = {
-          response: {
-            uuid: sub.remnawaveUuid,
-            shortUuid: sub.shortUuid,
-            status,
-            expireAt: sub.expireAt ? sub.expireAt.toISOString() : null,
-            subscriptionUrl: subUrl,
-            userTraffic: {
-              usedTrafficBytes: sub.trafficUsedBytes ?? 0,
-            },
-            trafficLimitBytes: sub.trafficLimitBytes ?? (sub.tariff?.trafficLimitBytes ? Number(sub.tariff.trafficLimitBytes) : null),
-          },
-          isOfflineSnapshot: true,
-        };
+        remnaPayload = offlineSubscriptionSnapshot(sub);
       }
     }
     if (!tariffName) tariffName = "Тариф не выбран";
@@ -3773,7 +3768,7 @@ const createPlategaPaymentSchema = z.object({
   extraOption: z.object({ kind: z.enum(["traffic", "devices", "servers"]), productId: z.string().min(1), targetSubscriptionId: z.string().min(1).optional() }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/payments/platega", requireRemnaOnline, asyncHandler(async (req, res) => {
+clientRouter.post("/payments/platega", requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   const clientId = (req as unknown as { clientId: string }).clientId;
   const parsed = createPlategaPaymentSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -4119,7 +4114,7 @@ const payByBalanceSchema = z.object({
   replaceTrialSubId: z.string().min(1).max(64).optional(),
 }).refine((d) => (d.tariffId ? 1 : 0) + (d.proxyTariffId ? 1 : 0) + (d.singboxTariffId ? 1 : 0) === 1, { message: "Укажите tariffId, proxyTariffId или singboxTariffId" });
 
-clientRouter.post("/payments/balance", requireRemnaOnline, asyncHandler(async (req, res) => {
+clientRouter.post("/payments/balance", requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   const clientRaw = (req as unknown as { client: { id: string; remnawaveUuid: string | null; email: string | null; telegramId: string | null } }).client;
   const parsed = payByBalanceSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: "Проверьте введённые данные", errors: parsed.error.flatten() });
@@ -5041,7 +5036,7 @@ const yoomoneyFormPaymentSchema = z.object({
   extraOption: z.object({ kind: z.enum(["traffic", "devices", "servers"]), productId: z.string().min(1), targetSubscriptionId: z.string().min(1).optional() }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/yoomoney/create-form-payment", requireRemnaOnline, asyncHandler(async (req, res) => {
+clientRouter.post("/yoomoney/create-form-payment", requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   const clientId = (req as unknown as { clientId: string }).clientId;
   const parsed = yoomoneyFormPaymentSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ message: "Укажите сумму и способ оплаты", errors: parsed.error.flatten() });
@@ -5326,7 +5321,7 @@ const yookassaCreatePaymentSchema = z.object({
   // Если client.email пустой, а тут пришёл валидный — сохраним в clients.email.
   receiptEmail: z.string().max(254).optional(),
 });
-clientRouter.post("/yookassa/create-payment", requireRemnaOnline, asyncHandler(async (req, res) => {
+clientRouter.post("/yookassa/create-payment", requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = yookassaCreatePaymentSchema.safeParse(req.body);
@@ -5699,7 +5694,7 @@ const cryptopayCreatePaymentSchema = z.object({
   }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post(["/cryptopay/create-payment", "/telegram-stars/create-payment"], requireRemnaOnline, asyncHandler(async (req, res) => {
+clientRouter.post(["/cryptopay/create-payment", "/telegram-stars/create-payment"], requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   try {
     const isStars = req.path === "/telegram-stars/create-payment";
     const clientId = (req as unknown as { clientId: string }).clientId;
@@ -6032,7 +6027,7 @@ const heleketCreatePaymentSchema = z.object({
   }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/heleket/create-payment", requireRemnaOnline, asyncHandler(async (req, res) => {
+clientRouter.post("/heleket/create-payment", requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = heleketCreatePaymentSchema.safeParse(req.body);
@@ -6286,7 +6281,7 @@ clientRouter.post("/heleket/create-payment", requireRemnaOnline, asyncHandler(as
   }
 }));
 
-clientRouter.post("/rollypay/create-payment", requireRemnaOnline, asyncHandler(async (req, res) => {
+clientRouter.post("/rollypay/create-payment", requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = heleketCreatePaymentSchema.safeParse(req.body);
@@ -6545,7 +6540,7 @@ clientRouter.post("/rollypay/create-payment", requireRemnaOnline, asyncHandler(a
   }
 }));
 
-clientRouter.post("/paritypay/create-payment", requireRemnaOnline, asyncHandler(async (req, res) => {
+clientRouter.post("/paritypay/create-payment", requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = heleketCreatePaymentSchema.safeParse(req.body);
@@ -6837,7 +6832,7 @@ const lavaCreatePaymentSchema = z.object({
   }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/lava/create-payment", requireRemnaOnline, asyncHandler(async (req, res) => {
+clientRouter.post("/lava/create-payment", requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = lavaCreatePaymentSchema.safeParse(req.body);
@@ -7131,7 +7126,7 @@ const lavatopCreatePaymentSchema = z.object({
   }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/lavatop/create-payment", requireRemnaOnline, asyncHandler(async (req, res) => {
+clientRouter.post("/lavatop/create-payment", requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = lavatopCreatePaymentSchema.safeParse(req.body);
@@ -7441,7 +7436,7 @@ const overpayCreatePaymentSchema = z.object({
   }).optional(),
   customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
 });
-clientRouter.post("/overpay/create-payment", requireRemnaOnline, asyncHandler(async (req, res) => {
+clientRouter.post("/overpay/create-payment", requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = overpayCreatePaymentSchema.safeParse(req.body);
@@ -8389,7 +8384,7 @@ publicConfigRouter.get("/tariffs", async (req, res) => {
           tariffs: c.tariffs.map((t) => tariffToJson(t, markupPct)),
         };
       }),
-      remnaAvailable: isRemnaOnline(),
+      remnaAvailable: await probeRemnaHealth(),
     });
   } catch (e) {
     console.error("GET /public/tariffs error:", e);

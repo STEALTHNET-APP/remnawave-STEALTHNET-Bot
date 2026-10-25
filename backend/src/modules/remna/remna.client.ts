@@ -4,6 +4,9 @@
  */
 
 import { env } from "../../config/index.js";
+import { RemnaCircuit } from "./remna-circuit.js";
+
+const circuit = new RemnaCircuit();
 
 export interface RemnaRuntimeConfig {
   apiUrl: string;
@@ -27,7 +30,10 @@ export function setRemnaRuntimeConfig(cfg: RemnaRuntimeConfig): void {
     adminToken: (cfg.adminToken || "").trim(),
     secretKey: (cfg.secretKey || "").trim(),
   };
-  if (previous !== JSON.stringify(_activeRemnaConfig)) clearRemnaSquadCache();
+  if (previous !== JSON.stringify(_activeRemnaConfig)) {
+    clearRemnaSquadCache();
+    circuit.reset();
+  }
 }
 
 export function getRemnaRuntimeConfig(): RemnaRuntimeConfig {
@@ -67,27 +73,44 @@ export function remnaSecretCookieHeader(customSecret?: string): string | null {
   return `${name}=${value}`;
 }
 
+export function isRemnaOnline(): boolean {
+  return isRemnaConfigured() && circuit.state === "CLOSED";
+}
+
+export function getRemnaCircuitState() {
+  return { state: circuit.state, isOnline: isRemnaOnline() };
+}
+
+export async function probeRemnaHealth(): Promise<boolean> {
+  try { await (await import("../client/client.service.js")).getSystemConfig(); }
+  catch { return false; }
+  if (!isRemnaConfigured()) return false;
+  if (circuit.state === "CLOSED") return true;
+  const ticket = circuit.acquire();
+  if (ticket === null) return false;
+  const result = await performRemnaFetch("/api/users?size=1", {}, ticket);
+  return result.status === 200 && !result.error;
+}
+
 export async function remnaFetch<T>(
   path: string,
-  options: RequestInit = {}
-): Promise<{ data?: T; error?: string; status: number }> {
-  try {
-    await (await import("../client/client.service.js")).getSystemConfig();
-  } catch {
-    return { error: "Remna settings unavailable", status: 503 };
+  options: RequestInit = {},
+): Promise<{ data?: T; error?: string; status: number; isCircuitOpen?: boolean }> {
+  try { await (await import("../client/client.service.js")).getSystemConfig(); }
+  catch { return { error: "Remna settings unavailable", status: 503 }; }
+  if (!isRemnaConfigured()) return { error: "Remna API not configured", status: 503 };
+  if (circuit.state !== "CLOSED" && !await probeRemnaHealth()) {
+    return { error: "Remna API temporarily unavailable", status: 503, isCircuitOpen: true };
   }
-  if (!isRemnaConfigured()) {
-    return { error: "Remna API not configured", status: 503 };
-  }
+  const ticket = circuit.acquire();
+  if (ticket === null) return { error: "Remna health check in progress", status: 503, isCircuitOpen: true };
+  return performRemnaFetch<T>(path, options, ticket);
+}
 
+async function performRemnaFetch<T>(path: string, options: RequestInit, ticket: number): Promise<{ data?: T; error?: string; status: number }> {
   const url = `${_activeRemnaConfig.apiUrl}${path.startsWith("/") ? path : `/${path}`}`;
-  // таймаут на запрос к Remna. Без него медленная/мёртвая нода
-  // (или ProxyCheck, рвущий сокет) подвешивала клиентские эндпоинты (/client/subscription,
-  // /client/devices синхронно ходят в Remna) до дефолтного undici-таймаута — фронт ловил
-  // «fetch failed», и API «как будто отваливался». Теперь — быстрый контролируемый отказ.
-  const REMNA_TIMEOUT_MS = 12_000;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), REMNA_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), 12_000);
   try {
     const res = await fetch(url, {
       ...options,
@@ -98,30 +121,22 @@ export async function remnaFetch<T>(
     const text = await res.text();
     let data: T | undefined;
     if (text) {
-      try {
-        data = JSON.parse(text) as T;
-      } catch {
-        // non-JSON response
-      }
+      try { data = JSON.parse(text) as T; } catch {}
     }
     if (!res.ok) {
-      return {
-        error: (data as { message?: string })?.message ?? res.statusText ?? text.slice(0, 200),
-        status: res.status,
-      };
+      if (res.status >= 500 || res.status === 401 || res.status === 403 || res.status === 429 || circuit.state === "HALF_OPEN") circuit.failure(ticket);
+      return { error: (data as { message?: string })?.message || `Remna HTTP ${res.status}`, status: res.status };
     }
-    return { data: data as T, status: res.status };
+    if (circuit.state === "HALF_OPEN" && (!data || typeof data !== "object")) {
+      circuit.failure(ticket);
+      return { error: "Invalid Remna health response", status: 502 };
+    }
+    circuit.success(ticket);
+    return { data, status: res.status };
   } catch (e) {
-    // AbortError = таймаут: отдаём 504, чтобы вызывающий код отличал «Remna не ответила вовремя»
-    // от прочих сетевых ошибок (и не возвращал клиенту туманное «fetch failed»).
-    if (e instanceof Error && e.name === "AbortError") {
-      return { error: "Remna API timeout", status: 504 };
-    }
-    const message = e instanceof Error ? e.message : String(e);
-    return { error: message, status: 500 };
-  } finally {
-    clearTimeout(timer);
-  }
+    circuit.failure(ticket);
+    return { error: e instanceof Error && e.name === "AbortError" ? "Remna API timeout" : "Remna connection failed", status: 504 };
+  } finally { clearTimeout(timer); }
 }
 
 /** GET /api/users — пагинация Remna: size и start (offset) */

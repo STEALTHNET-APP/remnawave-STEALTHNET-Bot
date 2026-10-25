@@ -25,7 +25,7 @@ import { isMultiSubscriptionsEnabled } from "../client/multi-subscriptions.js";
 import { isLegacyTrialRecord, isOnTrialSquad, pickConvertibleSubscription } from "./subscription-target.js";
 
 export type ActivationResult =
-  | { ok: true; /** дни, добавленные pro-rata конвертацией остатка (режим convert) */ convertedDays?: number; isPendingRemna?: boolean }
+  | { ok: true; /** дни, добавленные pro-rata конвертацией остатка (режим convert) */ convertedDays?: number }
   | { ok: false; error: string; status: number };
 
 /**
@@ -1201,39 +1201,8 @@ export async function activateTariffByPaymentId(paymentId: string): Promise<Acti
       if (!multiSubEnabled) {
         await consolidateToSingleSubscription(client.id, result.data.subscriptionId).catch(() => {});
       }
-      return { ok: true };
     }
-
-    // Защитная сеть для входящих вебхуков: если Remnawave недоступен, не теряем платеж,
-    // а помечаем его как pendingRemnaActivation в очереди отложенной активации.
-    if (result.status >= 500 || result.status === 502 || result.status === 503 || result.status === 504) {
-      let metaObj: Record<string, unknown> = {};
-      try { metaObj = JSON.parse(payment.metadata || "{}"); } catch {}
-      metaObj.pendingRemnaActivation = true;
-      metaObj.lastActivationError = result.error;
-      metaObj.pendingSince = new Date().toISOString();
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: "PAID",
-          paidAt: new Date(),
-          metadata: JSON.stringify(metaObj),
-        },
-      }).catch(() => {});
-
-      if (client.telegramId) {
-        try {
-          const { sendTelegramNotification } = await import("../gift/telegram-notify.js");
-          await sendTelegramNotification(
-            client.telegramId,
-            "✅ Оплата успешно получена!\n\nСервер синхронизации тарифов сейчас обновляется. Ваша подписка поставлена в очередь и активируется автоматически сразу после завершения технических работ (в течение нескольких минут).",
-          ).catch(() => {});
-        } catch {}
-      }
-      return { ok: true, isPendingRemna: true };
-    }
-
-    return { ok: false, error: result.error, status: result.status };
+    return result.ok ? { ok: true } : { ok: false, error: result.error, status: result.status };
   }
 
   const customBuild = parseCustomBuildMetadata(payment.metadata);

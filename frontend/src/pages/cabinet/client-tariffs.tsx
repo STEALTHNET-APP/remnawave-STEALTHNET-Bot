@@ -477,7 +477,7 @@ function ClassicTariffsPage() {
   async function payByBalance(tariff: TariffForPay) {
     if (!token) return;
     if (!remnaAvailable) {
-      setPayError("Сервер тарифов временно обновляется. Прием оплаты приостановлен на несколько минут во избежание задержек активации. Ваши активные VPN-подключения работают в обычном режиме.");
+      setPayError("Панель VPN временно недоступна. Повторите покупку позже.");
       return;
     }
     setPayError(null);
@@ -1412,13 +1412,14 @@ async function startParitypayPayment(tariff: TariffForPay) {
 
             <div data-tour="tariff-list">
               {!remnaAvailable && (
-                <div className="mb-4 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-sm flex items-start gap-3">
+                <div className="mb-4 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-sm flex items-start gap-3">
                   <span className="text-xl shrink-0 mt-0.5">⚠️</span>
                   <div>
-                    <div className="font-semibold text-amber-300">Техническое обслуживание сервера тарифов</div>
-                    <div className="text-xs text-amber-200/90 mt-1">
-                      Сервер синхронизации тарифов сейчас обновляется. Во избежание задержек покупка и продление временно приостановлены на несколько минут. Все ваши активные VPN-подключения работают в обычном режиме.
+                    <div className="font-semibold text-amber-900 dark:text-amber-300">Панель VPN временно недоступна</div>
+                    <div className="text-xs text-amber-900/90 dark:text-amber-200/90 mt-1">
+                      Покупка и продление тарифов Remnawave временно недоступны. Попробуйте позже.
                     </div>
+                    <Button type="button" variant="outline" size="sm" onClick={loadCatalog} disabled={loading} className="mt-2">Проверить снова</Button>
                   </div>
                 </div>
               )}
