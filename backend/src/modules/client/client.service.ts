@@ -233,7 +233,7 @@ const SYSTEM_CONFIG_KEYS = [
   "landing_feature_3_label", "landing_feature_3_sub", "landing_feature_4_label", "landing_feature_4_sub",
   "landing_feature_5_label", "landing_feature_5_sub",
   "video_instructions_enabled", "video_instructions",
-  "notification_topic_backups", "auto_backup_enabled", "auto_backup_cron", "backup_retention_days",
+  "notification_topic_backups", "auto_backup_enabled", "auto_backup_cron", "backup_retention_days", "backup_retention_value", "backup_retention_unit",
   "landing_benefits_title", "landing_benefits_subtitle",
   "landing_benefit_1_title", "landing_benefit_1_desc", "landing_benefit_2_title", "landing_benefit_2_desc",
   "landing_benefit_3_title", "landing_benefit_3_desc", "landing_benefit_4_title", "landing_benefit_4_desc",
@@ -547,6 +547,19 @@ export async function getSystemConfig() {
 }
 
 /**
+ * Вычисляет срок хранения бэкапов в миллисекундах.
+ * Возвращает 0, если хранить вечно (retention <= 0).
+ */
+export function getBackupRetentionMs(config: { backupRetentionValue?: number; backupRetentionUnit?: string; backupRetentionDays?: number }): number {
+  const value = config.backupRetentionValue ?? config.backupRetentionDays ?? 30;
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  const unit = config.backupRetentionUnit ?? "days";
+  if (unit === "minutes") return value * 60_000;
+  if (unit === "hours") return value * 3_600_000;
+  return value * 86_400_000;
+}
+
+/**
  * T-tariff-restriction (портировано из WolfVPN): проверка, разрешён ли клиенту тариф.
  * Используется явно перед списанием с баланса (payByBalance). Для внешних платёжек —
  * бэкстоп в db.ts createPayment. Возвращает { allowed, reason? }.
@@ -671,15 +684,30 @@ async function loadSystemConfigFromDb() {
     notificationTopicBackups: (map.notification_topic_backups ?? "").trim() || null,
     autoBackupEnabled: map.auto_backup_enabled === "true" || map.auto_backup_enabled === "1",
     autoBackupCron: (map.auto_backup_cron ?? "").trim() || null,
-    /// Сколько дней хранить бэкапы на диске. 0 = хранить вечно. По умолчанию 30:
-    /// без чистки папка росла бесконечно (~1 МБ на бэкап).
+    /// Сколько дней хранить бэкапы на диске (legacy). 0 = хранить вечно. По умолчанию 30:
     backupRetentionDays: (() => {
       const raw = (map.backup_retention_days ?? "").trim();
-      // ⚠️ Number("") === 0, а не NaN — без явной проверки на пустую строку
-      // незаданная настройка означала бы «хранить вечно» вместо дефолта.
       if (!raw) return 30;
       const v = Number(raw);
       return Number.isFinite(v) && v >= 0 ? v : 30;
+    })(),
+    /// Значение времени хранения бэкапа (в минутах / часах / днях). 0 = хранить вечно.
+    backupRetentionValue: (() => {
+      const raw = (map.backup_retention_value ?? "").trim();
+      if (!raw) {
+        const legacy = (map.backup_retention_days ?? "").trim();
+        if (!legacy) return 30;
+        const v = Number(legacy);
+        return Number.isFinite(v) && v >= 0 ? v : 30;
+      }
+      const v = Number(raw);
+      return Number.isFinite(v) && v >= 0 ? v : 30;
+    })(),
+    /// Единица времени хранения: "minutes" | "hours" | "days" (по умолчанию "days")
+    backupRetentionUnit: (() => {
+      const unit = (map.backup_retention_unit ?? "").trim().toLowerCase();
+      if (unit === "minutes" || unit === "hours" || unit === "days") return unit as "minutes" | "hours" | "days";
+      return "days" as const;
     })(),
     plategaMerchantId: map.platega_merchant_id || null,
     plategaWebhookSecret: map.platega_webhook_secret || null,
