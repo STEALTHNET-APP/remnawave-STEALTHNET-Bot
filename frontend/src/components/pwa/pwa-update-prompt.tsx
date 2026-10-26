@@ -50,6 +50,14 @@ export function PwaUpdatePrompt() {
   }, []);
 
   useEffect(() => {
+    if (!registration && typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        if (reg) setRegistration(reg);
+      }).catch(() => {});
+    }
+  }, [registration]);
+
+  useEffect(() => {
     if (!registration) return;
     const check = () => {
       if (!registration.installing && navigator.onLine && document.visibilityState === "visible") {
@@ -74,8 +82,37 @@ export function PwaUpdatePrompt() {
     return () => clearTimeout(timer);
   }, [offlineReady, setOfflineReady]);
 
-  const applyUpdate = async (manual = false) => {
-    if (manual && edited.current && !window.confirm("Обновить страницу? Несохранённые изменения будут потеряны.")) return;
+  const confirmUpdate = (onConfirmed: () => void) => {
+    if (!edited.current) {
+      onConfirmed();
+      return;
+    }
+    const tg = (window as unknown as { Telegram?: { WebApp?: { initData?: string; showConfirm?: (msg: string, cb: (ok: boolean) => void) => void } } })?.Telegram?.WebApp;
+    const isTelegram = Boolean(tg?.initData || (typeof window !== "undefined" && (window as unknown as { TelegramWebviewProxy?: unknown }).TelegramWebviewProxy));
+    if (typeof tg?.showConfirm === "function") {
+      tg.showConfirm("Обновить страницу? Несохранённые изменения будут потеряны.", (ok) => {
+        if (ok) onConfirmed();
+      });
+      return;
+    }
+    if (isTelegram) {
+      // В Telegram WebApp без showConfirm метод window.confirm блокируется WebView,
+      // поэтому применяем ручной запрос пользователя без зависания.
+      onConfirmed();
+      return;
+    }
+    try {
+      if (typeof window !== "undefined" && typeof window.confirm === "function") {
+        if (window.confirm("Обновить страницу? Несохранённые изменения будут потеряны.")) {
+          onConfirmed();
+        }
+        return;
+      }
+    } catch {}
+    onConfirmed();
+  };
+
+  const doApplyUpdate = async () => {
     if (updateTriggeredRef.current) return;
     autoBlocked.current = false;
     updateTriggeredRef.current = true;
@@ -85,13 +122,55 @@ export function PwaUpdatePrompt() {
       try {
         sessionStorage.setItem(AUTO_RELOAD_KEY, String(Date.now()));
       } catch {}
+
+      const hasSwSupport = typeof navigator !== "undefined" && "serviceWorker" in navigator;
+      const isControlled = Boolean(hasSwSupport && navigator.serviceWorker.controller);
+
+      if (hasSwSupport) {
+        navigator.serviceWorker.addEventListener(
+          "controllerchange",
+          () => {
+            window.location.reload();
+          },
+          { once: true }
+        );
+      }
+
+      if (registration?.waiting) {
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      }
+
       await updateServiceWorker(true);
+
+      // В реальных браузерах и WebView с активным SW гарантируем перезагрузку,
+      // даже если событие controllerchange не сработало во фрейме/WebView.
+      if (hasSwSupport && (isControlled || registration?.waiting)) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      }
+
+      // Страховочный сброс состояния на случай отмены перезагрузки браузером
+      setTimeout(() => {
+        updateTriggeredRef.current = false;
+        setAutoUpdating(false);
+      }, 6000);
     } catch {
       updateTriggeredRef.current = false;
       autoBlocked.current = true;
       setAutoUpdating(false);
       setUpdateError(true);
     }
+  };
+
+  const applyUpdate = async (manual = false) => {
+    if (manual) {
+      confirmUpdate(() => {
+        void doApplyUpdate();
+      });
+      return;
+    }
+    await doApplyUpdate();
   };
 
   applyUpdateRef.current = () => { void applyUpdate(); };
