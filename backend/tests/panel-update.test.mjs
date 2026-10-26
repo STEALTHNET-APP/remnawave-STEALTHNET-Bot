@@ -12,8 +12,10 @@ const calls = [];
 before(async () => {
   directory = await fs.mkdtemp(path.join(os.tmpdir(), 'st-upd-'));
   process.env.UPDATER_SOCKET = path.join(directory, 'control.sock');
-  agent = http.createServer((req, res) => {
-    calls.push([req.method, req.url]);
+  agent = http.createServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    calls.push([req.method, req.url, body ? JSON.parse(body) : null]);
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ settings: { enabled: false, channel: 'stable', hourUtc: 3 }, status: { phase: 'idle' } }));
   });
@@ -61,6 +63,18 @@ test('admin can request a check and save a valid schedule', async () => {
     assert.equal(response.status, 200);
     assert.equal(calls.at(-1)[1], '/' + action);
   }
+});
+test('manual local-change confirmation is forwarded and validated', async () => {
+  const id = 'a'.repeat(64);
+  const response = await fetch(base + '/install', { method: 'POST', headers: { 'x-test-role': 'ADMIN', 'Content-Type': 'application/json' }, body: JSON.stringify({ localChangesId: id }) });
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls.at(-1), ['POST', '/install', { localChangesId: id }]);
+  const count = calls.length;
+  for (const body of [{ localChangesId: true }, { localChangesId: 'invalid' }, { localChangesId: id, force: true }]) {
+    const rejected = await fetch(base + '/install', { method: 'POST', headers: { 'x-test-role': 'ADMIN', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal(rejected.status, 400);
+  }
+  assert.equal(calls.length, count);
 });
 test('missing agent is reported honestly and install fails', async () => {
   process.env.UPDATER_SOCKET = path.join(directory, 'absent.sock');

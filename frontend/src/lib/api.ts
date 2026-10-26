@@ -345,7 +345,7 @@ export type PanelUpdateState = {
   installed: { version: string; commit: string | null; builtAt: string | null };
   settings?: { enabled: boolean; channel: "stable" | "main"; hourUtc: number; backupRetentionDays: number };
   backups?: { name: string; createdAt: string; expiresAt: string; protected: boolean; complete: boolean }[];
-  status?: { phase: string; message?: string; available?: boolean; version?: string; target?: string; changes?: string; backup?: string; rolledBack?: boolean; checkedAt?: string; recoveryRequired?: boolean; blockedReason?: string | null };
+  status?: { phase: string; message?: string; available?: boolean; version?: string; target?: string; changes?: string; backup?: string; rolledBack?: boolean; checkedAt?: string; recoveryRequired?: boolean; blockedReason?: string | null; localChanges?: { id: string; files: string[]; count: number; canPreserve: boolean } | null; localChangesBackup?: string };
 };
 
 export const api = {

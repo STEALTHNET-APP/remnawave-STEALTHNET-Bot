@@ -13,6 +13,7 @@ import time
 import urllib.request
 
 from deployment import Deployment
+from local_changes import LocalChanges
 
 REPOSITORY = 'https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git'
 RELEASES = 'https://api.github.com/repos/STEALTHNET-APP/remnawave-STEALTHNET-Bot/releases/latest'
@@ -59,7 +60,7 @@ def validate_settings(value):
     return {**value, 'backupRetentionDays': days}
 
 
-class Updater(Deployment):
+class Updater(Deployment, LocalChanges):
     write_json = staticmethod(save)
 
     def __init__(self, config):
@@ -111,11 +112,12 @@ class Updater(Deployment):
     def snapshot(self):
         return {'installed': read(self.root / 'version.json', {}), 'settings': self.settings, 'status': self.status, 'backups': self.backup_list()[:50]}
 
-    def clean(self):
-        if self.git('status', '--porcelain', '--untracked-files=normal'):
-            raise RuntimeError('В папке проекта есть локальные изменения. Сохраните их отдельно перед обновлением.')
+    def clean(self, local_changes_id=None):
         if not self.git('branch', '--show-current'):
             raise RuntimeError('Проект должен находиться на ветке Git, а не на отдельном коммите.')
+        changes = self.local_changes()
+        if changes and (not changes['canPreserve'] or changes['id'] != local_changes_id):
+            raise RuntimeError('В папке проекта есть локальные изменения. Сохраните их отдельно или подтвердите обновление с резервной копией правок.')
 
     def check(self):
         self.phase('checking', 'Проверяем GitHub', available=False)
@@ -144,7 +146,7 @@ class Updater(Deployment):
             blocked = str(error)
         changes = self.git('log', '--format=%s', '-15', current + '..' + target) if available else ''
         self.phase('ready', message, available=available, target=target, current=current,
-                   version=version, checkedAt=now(), changes=changes, channel=self.settings['channel'], blockedReason=blocked)
+                   version=version, checkedAt=now(), changes=changes, channel=self.settings['channel'], blockedReason=blocked, localChanges=self.local_changes())
         return self.status
 
     def service_images(self):
@@ -173,24 +175,28 @@ class Updater(Deployment):
                       read(override, {})['services']['frontend']['image'], '-ec',
                       'find /out -mindepth 1 -maxdepth 1 -exec rm -rf {} +; cp -a /dist/. /out/'], timeout=180, capture=False)
 
-    def install(self):
-        self.deploy()
+    def install(self, local_changes_id=None):
+        self.deploy(local_changes_id)
 
-    def start(self, action):
+    def start(self, action, local_changes_id=None):
+        if local_changes_id is not None:
+            if action != "install" or not isinstance(local_changes_id, str) or not re.fullmatch(r"[a-f0-9]{64}", local_changes_id):
+                raise ValueError("Некорректное подтверждение локальных изменений")
+            self.clean(local_changes_id)
         if self.status.get('recoveryRequired') and action == 'install':
             raise RuntimeError('После прерванного обновления требуется проверка администратора на сервере')
         if not self.lock.acquire(blocking=False):
             raise RuntimeError('Операция уже выполняется')
         self.phase('checking', 'Начинаем проверку', rolledBack=False)
-        threading.Thread(target=self.job, args=(action,), daemon=True).start()
+        threading.Thread(target=self.job, args=(action, local_changes_id), daemon=True).start()
 
-    def job(self, action):
+    def job(self, action, local_changes_id=None):
         try:
             with (self.state_dir / 'operation.lock').open('w') as lockfile:
                 fcntl.flock(lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 with (self.state_dir / 'update.log').open('a') as log:
                     self.log = log
-                    self.install() if action == 'install' else self.check()
+                    self.install(local_changes_id) if action == 'install' else self.check()
         except Exception as error:
             self.phase('failed', str(error))
         finally:
@@ -268,6 +274,8 @@ def serve(config):
                 body = json.loads(self.rfile.read(length))
                 if self.path == '/settings':
                     updater.configure(body)
+                elif self.path == '/install' and isinstance(body, dict) and set(body) == {'localChangesId'}:
+                    updater.start('install', body['localChangesId'])
                 elif self.path in ('/check', '/install') and body == {}:
                     updater.start(self.path[1:])
                 else:

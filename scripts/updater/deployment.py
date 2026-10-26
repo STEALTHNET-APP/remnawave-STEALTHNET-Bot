@@ -112,7 +112,7 @@ class Deployment:
                       '-e', 'POSTGRES_USER=updater', '-e', 'POSTGRES_PASSWORD=' + password, '-e', 'POSTGRES_DB=updater', pg_image])
             for _ in range(60):
                 try:
-                    self.run(['docker', 'exec', database, 'pg_isready', '-U', 'updater'])
+                    self.run(['docker', 'exec', database, 'pg_isready', '-h', '127.0.0.1', '-U', 'updater', '-d', 'updater'])
                     break
                 except RuntimeError:
                     time.sleep(1)
@@ -148,7 +148,7 @@ class Deployment:
             except FileNotFoundError:
                 continue
             created = dt.datetime.fromisoformat(value['createdAt'])
-            protected = value.get('outcome') not in ('success', 'rolledBack')
+            protected = bool(value.get('localChanges')) or value.get('outcome') not in ('success', 'rolledBack')
             result.append({'name': path.name, 'createdAt': value['createdAt'], 'expiresAt': (created + dt.timedelta(days=self.settings['backupRetentionDays'])).isoformat(), 'protected': protected, 'complete': value.get('complete', False)})
         return result
 
@@ -183,8 +183,8 @@ class Deployment:
         if shutil.disk_usage(self.state_dir).free < required:
             raise RuntimeError(f'Недостаточно места для сборки и двух копий базы: нужно минимум {required // (1024 ** 3) + 1} ГБ свободного места')
 
-    def deploy(self):
-        self.clean()
+    def deploy(self, local_changes_id=None):
+        self.clean(local_changes_id)
         self.check()
         if not self.status['available']:
             return
@@ -199,11 +199,11 @@ class Deployment:
             shutil.rmtree(build)
         build.mkdir(mode=0o700)
         try:
-            self.deploy_from_archive(build, images, previous, target)
+            self.deploy_from_archive(build, images, previous, target, local_changes_id)
         finally:
             shutil.rmtree(build, ignore_errors=True)
 
-    def deploy_from_archive(self, build, images, previous, target):
+    def deploy_from_archive(self, build, images, previous, target, local_changes_id=None):
         archive = build / 'source.tar'
         with archive.open('wb') as stream:
             self.run(['git', 'archive', target], output=stream)
@@ -235,7 +235,7 @@ class Deployment:
             built['nginx'] = self.run(['docker', 'image', 'inspect', '--format', '{{.Id}}', tag])
         self.check_space()
         self.rehearse(build, built['api'], after)
-        self.clean()
+        self.clean(local_changes_id)
         if self.git('rev-parse', 'HEAD') != previous:
             raise RuntimeError('Исходники изменились во время сборки. Повторите проверку.')
         backup = self.state_dir / ('backup-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%S%f'))
@@ -261,6 +261,7 @@ class Deployment:
                     bundle.add(self.root / name, arcname=name)
         stopped = False
         switched = False
+        local_stash = None
         writes_resumed = False
         writers = [name for name in ('api', 'bot', 'broadcast-worker', 'console') if name in images]
         try:
@@ -271,8 +272,15 @@ class Deployment:
             manifest['complete'] = True
             self.write_json(backup / 'manifest.json', manifest)
             self.phase('installing', 'Устанавливаем обновление и миграции. Приём запросов временно приостановлен.')
+            if local_changes_id:
+                manifest['localChanges'] = True
+                self.write_json(backup / 'manifest.json', manifest)
+            local_stash = self.save_local_changes(backup, local_changes_id)
+            if local_changes_id:
+                self.phase('installing', 'Локальные правки сохранены отдельно. Устанавливаем исходники релиза.', localChangesBackup=str(backup))
             self.git('merge', '--ff-only', target)
             switched = True
+            self.restore_runtime_config(backup)
             self.frontend(deployment)
             self.health(build / 'verify.json', ['api'])
             self.wait_probe(self.compose('ps', '-q', 'api'))
@@ -287,7 +295,7 @@ class Deployment:
                     self.run(['docker', 'tag', built[name], 'stealthnet-' + name + ':latest'])
             manifest['outcome'] = 'success'
             self.write_json(backup / 'manifest.json', manifest)
-            self.phase('success', 'Обновление установлено', available=False, current=target, finishedAt=dt.datetime.now(dt.timezone.utc).isoformat())
+            self.phase('success', 'Обновление установлено', available=False, current=target, blockedReason=None, localChanges=None, finishedAt=dt.datetime.now(dt.timezone.utc).isoformat())
             self.restart_needed = True
         except Exception:
             if writes_resumed:
@@ -297,8 +305,14 @@ class Deployment:
                 self.status['recoveryRequired'] = True
                 self.persist()
                 self.compose('stop', *writers, capture=False)
+                if self.status.get('localChangesRecoveryRequired'):
+                    raise RuntimeError('Не удалось завершить сохранение локальных правок. Проверьте Git stash и резервную копию на сервере перед запуском служб.')
                 if switched:
                     self.git('reset', '--hard', previous)
+                if local_stash:
+                    self.restore_local_changes(local_stash)
+                self.restore_runtime_config(backup)
+                if switched:
                     self.restore_database(backup / 'database.dump')
                     self.restore_files(backup)
                     self.frontend(rollback)

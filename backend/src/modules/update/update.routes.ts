@@ -39,6 +39,8 @@ export function updaterRequest(path: string, body?: unknown): Promise<{ status: 
   });
 }
 
+const installSchema = z.object({ localChangesId: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict();
+
 const settingsSchema = z.object({ enabled: z.boolean(), channel: z.enum(["stable", "main"]), hourUtc: z.number().int().min(0).max(23), backupRetentionDays: z.number().int().min(1).max(30).default(3) }).strict();
 
 updateRouter.get("/", async (_req, res) => {
@@ -52,7 +54,7 @@ updateRouter.get("/", async (_req, res) => {
 
 for (const action of ["check", "install", "settings"] as const) {
   updateRouter.post(`/${action}`, async (req, res) => {
-    const parsed = (action === "settings" ? settingsSchema : z.object({}).strict()).safeParse(req.body);
+    const parsed = (action === "settings" ? settingsSchema : action === "install" ? installSchema : z.object({}).strict()).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Некорректные параметры обновления" });
     try {
       const result = await updaterRequest(`/${action}`, parsed.data);

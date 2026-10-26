@@ -86,6 +86,8 @@ exec node /app/server.cjs
         (root / name / 'Dockerfile').write_text('FROM alpine:3.20\nCMD ["sleep", "3600"]\n')
     (root / 'frontend/Dockerfile').write_text('FROM alpine:3.20\nCOPY frontend/index.html /dist/index.html\n')
     (root / 'frontend/index.html').write_text('old frontend')
+    (root / 'nginx').mkdir()
+    (root / 'nginx/nginx.conf').write_text('upstream config')
     (root / 'version.json').write_text('{"version":"6.7.1"}')
     services = {
         'postgres': {'image': 'postgres:16-alpine', 'environment': {'POSTGRES_USER': 'fixture', 'POSTGRES_PASSWORD': 'fixture', 'POSTGRES_DB': 'fixture'}, 'healthcheck': {'test': ['CMD-SHELL', 'pg_isready -U fixture'], 'interval': '1s', 'retries': 20}, 'tmpfs': ['/var/lib/postgresql/data']},
@@ -103,11 +105,11 @@ exec node /app/server.cjs
     return previous
 
 
-def install(updater, label, fail=False):
+def install(updater, label, fail=False, local_changes_id=None):
     with (workspace / (label + '.log')).open('w') as log:
         updater.log = log
         try:
-            updater.install()
+            updater.install(local_changes_id)
             assert not fail, 'Expected failure'
         except RuntimeError:
             if not fail:
@@ -126,7 +128,31 @@ try:
     (root / 'frontend/index.html').write_text('new frontend')
     updater.target = commit()
     updater.git('reset', '--hard', previous)
-    install(updater, 'success')
+    (root / 'nginx/nginx.conf').write_text('server_name customer.example;')
+    updater.clean()
+    install(updater, 'generated-nginx')
+    assert (root / 'nginx/nginx.conf').read_text() == 'server_name customer.example;'
+    updater.clean()
+    print('PASS: generated Nginx configuration updates without manual override and keeps customer domain', flush=True)
+    previous = updater.target
+    updater.git('checkout', '--', 'nginx/nginx.conf')
+    (root / 'frontend/index.html').write_text('new frontend revision')
+    (root / 'nginx/nginx.conf').write_text('updated upstream config')
+    updater.target = commit()
+    updater.git('reset', '--hard', previous)
+    (root / 'nginx/nginx.conf').write_text('server_name customer.example;')
+    (root / 'frontend/index.html').write_text('local frontend')
+    updater.git('add', 'frontend/index.html')
+    (root / 'local-note.txt').write_text('preserve note')
+    (root / 'docker-compose.override.yml').write_text('services: {}')
+    install(updater, 'success', local_changes_id=updater.local_changes()['id'])
+    assert (root / 'nginx/nginx.conf').read_text() == 'server_name customer.example;'
+    assert not (root / 'local-note.txt').exists()
+    assert (root / 'docker-compose.override.yml').read_text() == 'services: {}'
+    local_backup = Path(updater.status['backup'])
+    local_stash = json.loads((local_backup / 'local-changes.json').read_text())['stash']
+    assert updater.git('show', local_stash + ':frontend/index.html') == 'local frontend'
+    assert (local_backup / 'local-changes.bundle').is_file()
     assert updater.status['phase'] == 'success', updater.status
     assert updater.git('rev-parse', 'HEAD') == updater.target
     assert updater.compose('exec', '-T', 'postgres', 'psql', '-U', 'fixture', '-Atc', 'SELECT value FROM preserved') == 'keep-me'
@@ -136,13 +162,22 @@ try:
     assert 'new frontend' in command('docker', 'run', '--rm', '-v', project + '_front:/out', 'alpine:3.20', 'cat', '/out/index.html')
     print('PASS: full update, migration, frontend, console, database/files backup, preserved data', flush=True)
     previous = updater.target
+    updater.git('checkout', '--', 'nginx/nginx.conf')
     for marker in ('bad-migration', 'bad-live'):
         (root / 'backend/marker').write_text(marker)
         (root / 'frontend/index.html').write_text('broken frontend')
         updater.target = commit()
         updater.git('reset', '--hard', previous)
         updater.status.update(rolledBack=False)
-        install(updater, marker, fail=True)
+        (root / 'frontend/index.html').write_text('local frontend rollback')
+        updater.git('add', 'frontend/index.html')
+        (root / 'local-note.txt').write_text('restore note')
+        original_changes = updater.local_changes()
+        install(updater, marker, fail=True, local_changes_id=original_changes['id'])
+        assert updater.local_changes() == original_changes
+        assert updater.git('show', ':frontend/index.html') == 'local frontend rollback'
+        assert (root / 'local-note.txt').read_text() == 'restore note'
+        updater.git('stash', 'push', '-u', '--', '.', ':(exclude)docker-compose.override.yml')
         assert updater.git('rev-parse', 'HEAD') == previous
         assert updater.compose('exec', '-T', 'postgres', 'psql', '-U', 'fixture', '-Atc', 'SELECT value FROM preserved') == 'keep-me'
         assert updater.compose('exec', '-T', 'postgres', 'psql', '-U', 'fixture', '-Atc', "SELECT count(*) FROM information_schema.columns WHERE table_name='preserved' AND column_name='rollback_column'") == '0'

@@ -29,6 +29,7 @@ export function PanelUpdates({ token }: { token: string }) {
     },
   });
   const busy = mutation.isPending || ["checking", "building", "rehearsal", "backup", "installing", "verifying"].includes(data?.status?.phase || "");
+  const localChanges = data?.status?.localChanges;
   const update = (value: Partial<Schedule>) => { if (draft) { setDraft({ ...draft, ...value }); setDirty(true); } };
   if (!data) return <p role="status">{query.error ? "Не удалось получить состояние обновления. Повторяем подключение…" : "Загружаем состояние обновления…"}</p>;
   return (
@@ -51,18 +52,29 @@ export function PanelUpdates({ token }: { token: string }) {
             <p className="font-medium">{phases[data.status?.phase || "idle"] || data.status?.phase}</p>
             <p className="text-sm">{data.status?.message}</p>
             {data.status?.available && <p>Доступна версия {data.status.version} · {data.status.target?.slice(0, 7)}</p>}
+            {data.status?.localChangesBackup && <p className="text-sm break-all">Копия локальных правок: {data.status.localChangesBackup}</p>}
             {data.status?.blockedReason && <p className="text-amber-600 dark:text-amber-400">{data.status.blockedReason}</p>}
             {data.status?.recoveryRequired && <p className="text-destructive">Требуется восстановление или проверка служб на сервере. Автоматическая установка приостановлена, резервная копия сохранена.</p>}
             {data.status?.rolledBack && <p>Предыдущая версия восстановлена.</p>}
             {data.status?.backup && <p className="text-xs text-muted-foreground break-all">Резервная копия на сервере: {data.status.backup}</p>}
             {query.isError && <p>Переподключаемся к панели. Во время установки она может быть временно недоступна.</p>}
           </div>
+          {localChanges && <div className="rounded-lg border p-4 space-y-2">
+            <p className="font-medium">Локальные изменения: {localChanges.count}</p>
+            <ul className="text-xs font-mono break-all">{localChanges.files.map(file => <li key={file}>{file}</li>)}</ul>
+            {localChanges.count > localChanges.files.length && <p className="text-sm">Показаны первые {localChanges.files.length} файлов.</p>}
+            {!localChanges.canPreserve && <p className="text-sm text-amber-600 dark:text-amber-400">Нужна проверка на сервере: есть конфликт Git, вложенный репозиторий, изменения защищённых настроек или исходники не на ветке.</p>}
+            <p className="text-sm text-muted-foreground">При ручном обновлении сохраним правки отдельно и установим исходники новой версии. Правки не применяются поверх новой версии автоматически. .env и локальный docker-compose.override.yml сохраняются. Резервная копия локальных правок не удаляется по расписанию.</p>
+          </div>}
           {data.status?.changes && <details><summary className="cursor-pointer">Что изменилось</summary><pre className="mt-2 whitespace-pre-wrap break-words text-sm">{data.status.changes}</pre></details>}
           <div className="flex flex-wrap gap-3">
             <Button type="button" variant="outline" disabled={busy || dirty} onClick={() => mutation.mutate({ action: "check" })}>Проверить обновления</Button>
             <Button type="button" disabled={busy || dirty || !data.status?.available || data.status?.recoveryRequired || !!data.status?.blockedReason} onClick={() => {
               if (window.confirm("Установить обновление? Панель и бот будут временно недоступны. Перед установкой сохраним резервную копию.")) mutation.mutate({ action: "install" });
             }}>Обновить сейчас</Button>
+            {localChanges?.canPreserve && <Button type="button" variant="outline" disabled={busy || dirty || !data.status?.available || data.status?.recoveryRequired} onClick={() => {
+              if (window.confirm("Сохранить локальные изменения отдельно и установить исходники обновления? Панель и бот будут временно недоступны. Локальные правки останутся в резервной копии и Git stash, но не будут применены к новой версии.")) mutation.mutate({ action: "install", body: { localChangesId: localChanges.id } });
+            }}>Сохранить правки и обновить</Button>}
           </div>
           {draft && <div className="space-y-4 border-t pt-4">
             <label className="flex items-center gap-2"><input type="checkbox" checked={draft.enabled} disabled={busy} onChange={(e) => update({ enabled: e.target.checked })} />Автоматически устанавливать обновления</label>
