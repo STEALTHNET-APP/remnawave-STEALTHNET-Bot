@@ -8065,7 +8065,12 @@ clientRouter.post("/tickets/:id/messages", uploadTicketAttachment.array("files",
       attachments: serializeAttachments(attachments),
     },
   });
-  await prisma.ticket.update({ where: { id: ticket.id }, data: { updatedAt: new Date() } });
+  const updateData: { updatedAt: Date; status?: string; closedAt?: Date | null } = { updatedAt: new Date() };
+  if (ticket.status === "closed") {
+    updateData.status = "open";
+    updateData.closedAt = null;
+  }
+  await prisma.ticket.update({ where: { id: ticket.id }, data: updateData });
   notifyAdminsAboutClientTicketMessage({
     ticketId: ticket.id,
     clientId,

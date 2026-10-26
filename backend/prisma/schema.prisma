@@ -172,18 +172,20 @@ model Client {
 
 // Тикет поддержки (включается/выключается в настройках)
 model Ticket {
-  id        String   @id @default(cuid())
-  clientId  String   @map("client_id")
-  subject   String   @db.VarChar(500)
-  status    String   @default("open") @db.VarChar(20) // open | closed
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id        String    @id @default(cuid())
+  clientId  String    @map("client_id")
+  subject   String    @db.VarChar(500)
+  status    String    @default("open") @db.VarChar(20) // open | closed
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  closedAt  DateTime? @map("closed_at")
 
   client   Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   messages TicketMessage[]
 
   @@index([clientId])
   @@index([status])
+  @@index([closedAt])
   @@map("tickets")
 }
 

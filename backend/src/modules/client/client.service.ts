@@ -681,6 +681,19 @@ async function loadSystemConfigFromDb() {
       const v = Number(raw);
       return Number.isFinite(v) && v >= 0 ? v : 30;
     })(),
+    /// Сколько времени хранить закрытые тикеты (0 = бессрочно). По умолчанию 0 (выключено).
+    ticketRetentionValue: (() => {
+      const raw = (map.ticket_retention_value ?? "").trim();
+      if (!raw) return 0;
+      const v = Number(raw);
+      return Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+    })(),
+    /// Единица измерения ретеншена тикетов: "minutes" | "hours" | "days"
+    ticketRetentionUnit: (() => {
+      const u = (map.ticket_retention_unit ?? "").trim().toLowerCase();
+      if (u === "minutes" || u === "hours" || u === "days") return u as "minutes" | "hours" | "days";
+      return "days" as const;
+    })(),
     plategaMerchantId: map.platega_merchant_id || null,
     plategaWebhookSecret: map.platega_webhook_secret || null,
     plategaSecret: map.platega_secret || null,
