@@ -130,3 +130,15 @@ test("schema.prisma defines closedAt with index", () => {
   assert.ok(schema.includes('closedAt  DateTime? @map("closed_at")'));
   assert.ok(schema.includes("@@index([closedAt])"));
 });
+
+// 5. System config keys inclusion verification
+test("client.service.ts includes ticket retention keys in SYSTEM_CONFIG_KEYS", () => {
+  const clientService = readFileSync(
+    new URL("../src/modules/client/client.service.ts", import.meta.url),
+    "utf8"
+  );
+  assert.ok(clientService.includes('"ticket_retention_value"'));
+  assert.ok(clientService.includes('"ticket_retention_unit"'));
+  assert.ok(clientService.includes("ticketRetentionValue: (() => {"));
+  assert.ok(clientService.includes("ticketRetentionUnit: (() => {"));
+});

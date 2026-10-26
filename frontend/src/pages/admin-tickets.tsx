@@ -91,7 +91,7 @@ export function AdminTicketsPage() {
 
   // Retention settings state
   const [showRetention, setShowRetention] = useState(false);
-  const [retentionValue, setRetentionValue] = useState<number>(0);
+  const [retentionValue, setRetentionValue] = useState<number | string>(0);
   const [retentionUnit, setRetentionUnit] = useState<"minutes" | "hours" | "days">("days");
 
   // "Удалить всё" dialog state
@@ -223,11 +223,14 @@ export function AdminTicketsPage() {
   });
 
   const updateRetentionMutation = useMutation({
-    mutationFn: () =>
-      api.updateSettings(token, {
-        ticketRetentionValue: retentionValue,
+    mutationFn: () => {
+      const parsed = typeof retentionValue === "number" ? retentionValue : parseInt(retentionValue, 10);
+      const val = Number.isFinite(parsed) && parsed >= 0 ? Math.min(36500, Math.floor(parsed)) : 0;
+      return api.updateSettings(token, {
+        ticketRetentionValue: val,
         ticketRetentionUnit: retentionUnit,
-      }),
+      });
+    },
     onSuccess: () => {
       toast.success("Настройки сохранены", "Срок хранения закрытых тикетов обновлён");
       void qc.invalidateQueries({ queryKey: ["admin", "settings"], exact: false });
@@ -653,7 +656,22 @@ export function AdminTicketsPage() {
                     min={0}
                     max={36500}
                     value={retentionValue}
-                    onChange={(e) => setRetentionValue(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === "") {
+                        setRetentionValue("");
+                        return;
+                      }
+                      const n = parseInt(raw, 10);
+                      if (!Number.isNaN(n)) {
+                        setRetentionValue(Math.max(0, Math.min(36500, n)));
+                      }
+                    }}
+                    onBlur={() => {
+                      if (retentionValue === "") {
+                        setRetentionValue(0);
+                      }
+                    }}
                     className="w-28 rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border"
                   />
                   <div className="flex items-center gap-1 bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-border">

@@ -234,6 +234,7 @@ const SYSTEM_CONFIG_KEYS = [
   "landing_feature_5_label", "landing_feature_5_sub",
   "video_instructions_enabled", "video_instructions",
   "notification_topic_backups", "auto_backup_enabled", "auto_backup_cron", "backup_retention_days",
+  "ticket_retention_value", "ticket_retention_unit",
   "landing_benefits_title", "landing_benefits_subtitle",
   "landing_benefit_1_title", "landing_benefit_1_desc", "landing_benefit_2_title", "landing_benefit_2_desc",
   "landing_benefit_3_title", "landing_benefit_3_desc", "landing_benefit_4_title", "landing_benefit_4_desc",
