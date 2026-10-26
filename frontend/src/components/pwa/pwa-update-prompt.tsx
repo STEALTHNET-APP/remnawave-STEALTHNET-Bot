@@ -124,7 +124,6 @@ export function PwaUpdatePrompt() {
       } catch {}
 
       const hasSwSupport = typeof navigator !== "undefined" && "serviceWorker" in navigator;
-      const isControlled = Boolean(hasSwSupport && navigator.serviceWorker.controller);
 
       if (hasSwSupport) {
         navigator.serviceWorker.addEventListener(
@@ -142,13 +141,11 @@ export function PwaUpdatePrompt() {
 
       await updateServiceWorker(true);
 
-      // В реальных браузерах и WebView с активным SW гарантируем перезагрузку,
+      // В реальных браузерах и WebView гарантируем перезагрузку через 1.5 сек,
       // даже если событие controllerchange не сработало во фрейме/WebView.
-      if (hasSwSupport && (isControlled || registration?.waiting)) {
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
-      }
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
 
       // Страховочный сброс состояния на случай отмены перезагрузки браузером
       setTimeout(() => {
