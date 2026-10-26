@@ -546,6 +546,10 @@ export function AdminTicketsPage() {
     (t) => t.status === "open" && t.lastMessage?.authorType === "client"
   ).length;
 
+  const selectedTickets = list.filter((t) => selectedIds.includes(t.id));
+  const selectedClosedCount = selectedTickets.filter((t) => t.status === "closed").length;
+  const selectedOpenCount = selectedTickets.length - selectedClosedCount;
+
   return (
     <div className="flex flex-col gap-3.5 relative pb-20">
       {/* Header */}
@@ -1076,6 +1080,20 @@ export function AdminTicketsPage() {
           </DialogHeader>
 
           <div className="space-y-3 py-2">
+            {selectedClosedCount > 0 && (
+              <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-500 dark:text-amber-400 space-y-1">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  Среди выбранных: {selectedOpenCount > 0 ? `${selectedOpenCount} открытых и ` : ""}{selectedClosedCount} закрытых
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {bulkReplyCloseAfter
+                    ? "Все тикеты останутся или перейдут в статус закрытых."
+                    : "Закрытые тикеты будут автоматически переоткрыты после отправки ответа, чтобы продолжить диалог."}
+                </p>
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label htmlFor="bulk-reply-text" className="text-xs text-muted-foreground">
                 Текст ответа

@@ -4660,14 +4660,27 @@ adminRouter.post("/tickets/bulk-status", asyncRoute(async (req, res) => {
   if (!body.success) return res.status(400).json({ message: "Invalid input", errors: body.error.flatten() });
 
   const { ticketIds, status } = body.data;
-  const closedAt = status === "closed" ? new Date() : null;
 
-  const result = await prisma.ticket.updateMany({
-    where: { id: { in: ticketIds } },
-    data: { status, closedAt },
-  });
-
-  return res.json({ success: true, count: result.count, status });
+  if (status === "closed") {
+    // Закрываем только открытые тикеты (чтобы не сбрасывать таймер retention у уже закрытых)
+    const updateOpen = await prisma.ticket.updateMany({
+      where: { id: { in: ticketIds }, status: { not: "closed" } },
+      data: { status: "closed", closedAt: new Date() },
+    });
+    // Если среди закрытых были легаси тикеты с closedAt == null, дозаполняем
+    await prisma.ticket.updateMany({
+      where: { id: { in: ticketIds }, status: "closed", closedAt: null },
+      data: { closedAt: new Date() },
+    });
+    return res.json({ success: true, count: ticketIds.length, updatedCount: updateOpen.count, status });
+  } else {
+    // Открываем все выбранные тикеты со сбросом closedAt
+    const result = await prisma.ticket.updateMany({
+      where: { id: { in: ticketIds } },
+      data: { status: "open", closedAt: null },
+    });
+    return res.json({ success: true, count: result.count, status });
+  }
 }));
 
 // Массовый ответ выбранным тикетам (с поддержкой фото-вложений и опции автозакрытия)
@@ -4702,7 +4715,7 @@ adminRouter.post("/tickets/bulk-reply", uploadTicketAttachment.array("files", 5)
 
   const tickets = await prisma.ticket.findMany({
     where: { id: { in: ticketIds } },
-    select: { id: true, clientId: true },
+    select: { id: true, clientId: true, status: true },
   });
 
   if (tickets.length === 0) {
@@ -4728,6 +4741,10 @@ adminRouter.post("/tickets/bulk-reply", uploadTicketAttachment.array("files", 5)
     if (closeAfterReply) {
       updateData.status = "closed";
       updateData.closedAt = new Date();
+    } else if (ticket.status === "closed") {
+      // Если закрытый тикет получил ответ без галочки закрытия — переоткрываем его
+      updateData.status = "open";
+      updateData.closedAt = null;
     }
     await prisma.ticket.update({
       where: { id: ticket.id },
