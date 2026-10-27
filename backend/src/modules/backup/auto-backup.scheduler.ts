@@ -74,18 +74,18 @@ export async function runAutoBackup(options: { force?: boolean } = {}): Promise<
         const release = holdBackup(archive.fullPath);
         const total = Math.ceil(archive.bytes / TELEGRAM_PART_BYTES);
         try {
-        const messages: number[] = [];
-        let index = 0;
-        for await (const part of readFileParts(archive.fullPath)) {
-          index++;
-          const partName = total === 1 ? archive.filename : `${archive.filename}.part${String(index).padStart(3, "0")}-of-${String(total).padStart(3, "0")}`;
-          const caption = `💾 ${source.label}\n${new Date().toISOString()}\n${archive.filename}\nЧасть ${index}/${total} · ${(part.length / 1048576).toFixed(1)} МБ\nПосле получения всех частей: объединить по порядку, распаковать gzip → SQL.\nSHA256 целого архива: ${archive.sha256}`;
-          messages.push(await sendDocument(destination, part, partName, caption));
-          console.log(`${LOG} Delivered ${source.name} part ${index}/${total}, message ${messages.at(-1)}`);
-        }
-        const manifest = { filename: archive.filename, bytes: archive.bytes, sha256: archive.sha256, source: source.name, format: "SQL + gzip", parts: total, messages, chatId, topicId, deliveredAt: new Date().toISOString() };
-        await sendDocument(destination, Buffer.from(JSON.stringify(manifest, null, 2)), `${archive.filename}.manifest.json`, `✅ ${source.label}: все ${total} частей отправлены. Контрольная сумма и список сообщений — в файле.`);
-        await writeFile(`${archive.fullPath}.delivered.json`, JSON.stringify(manifest, null, 2), { mode: 0o600 });
+          const messages: number[] = [];
+          let index = 0;
+          for await (const part of readFileParts(archive.fullPath)) {
+            index++;
+            const partName = total === 1 ? archive.filename : `${archive.filename}.part${String(index).padStart(3, "0")}-of-${String(total).padStart(3, "0")}`;
+            const caption = `💾 ${source.label}\n${new Date().toISOString()}\n${archive.filename}\nЧасть ${index}/${total} · ${(part.length / 1048576).toFixed(1)} МБ\nПосле получения всех частей: объединить по порядку, распаковать gzip → SQL.\nSHA256 целого архива: ${archive.sha256}`;
+            messages.push(await sendDocument(destination, part, partName, caption));
+            console.log(`${LOG} Delivered ${source.name} part ${index}/${total}, message ${messages.at(-1)}`);
+          }
+          const manifest = { filename: archive.filename, bytes: archive.bytes, sha256: archive.sha256, source: source.name, format: "SQL + gzip", parts: total, messages, chatId, topicId, deliveredAt: new Date().toISOString() };
+          await sendDocument(destination, Buffer.from(JSON.stringify(manifest, null, 2)), `${archive.filename}.manifest.json`, `✅ ${source.label}: все ${total} частей отправлены. Контрольная сумма и список сообщений — в файле.`);
+          await writeFile(`${archive.fullPath}.delivered.json`, JSON.stringify(manifest, null, 2), { mode: 0o600 });
         } finally { release(); }
         try {
           const { cleanupOldBackups } = await import("./backup.service.js");

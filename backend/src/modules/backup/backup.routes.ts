@@ -35,6 +35,7 @@ export function registerBackupRoutes(
     if (!db) return res.status(503).json({ message: "Неверный формат DATABASE_URL" });
     try {
       const { relativePath, filename, fullPath } = await saveBackupToFile(db);
+      if (res.destroyed) return;
       const release = holdBackup(fullPath);
       res.once("close", release);
       // Чистим старые бэкапы сразу после успешного создания нового,
@@ -49,9 +50,7 @@ export function registerBackupRoutes(
       res.setHeader("Content-Type", "application/sql");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader("Content-Length", String(st.size));
-      const releaseDownload = holdBackup(fullPath);
-    res.once("close", releaseDownload);
-    res.download(fullPath, filename, (error) => {
+      res.download(fullPath, filename, (error) => {
         if (!error) return;
         if (res.headersSent) { res.destroy(error); return; }
         res.status(500).json({ message: "Не удалось скачать бэкап." });

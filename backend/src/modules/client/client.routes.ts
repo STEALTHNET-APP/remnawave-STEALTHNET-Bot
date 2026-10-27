@@ -85,7 +85,6 @@ import {
   serializeAttachments,
   parseAttachments,
   pickField,
-  deleteTicketAttachments,
 } from "../ticket/attachments.js";
 import { validateEmailForSignup } from "../signup-protection/email-blocklist.js";
 import { autoRenewPrefsFromLastPayment } from "../payment/secondary-renew-plan.js";

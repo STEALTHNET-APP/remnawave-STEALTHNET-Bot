@@ -131,7 +131,6 @@ import {
   serializeAttachments,
   parseAttachments,
   pickField as pickTicketField,
-  deleteTicketAttachments,
 } from "../ticket/attachments.js";
 import { notifyClientAboutSupportReply } from "../ticket/ticket-client-notify.service.js";
 import {

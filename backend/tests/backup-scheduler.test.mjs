@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { beforeEach, mock, test } from 'node:test';
 const config = { autoBackupEnabled: true, telegramBotToken: 'test-secret', notificationTelegramGroupId: '-1001', notificationTopicBackups: '2', backupRetentionDays: 30 };
 let sent, saved, markers, pruned, rejectUpload, rejectSource, waiting, rejectAt;
-mock.module('../dist/modules/backup/backup.service.js', { namedExports: { parseDatabaseUrl: url => url ? { database: 'test' } : null } });
+mock.module('../dist/modules/backup/backup.service.js', { namedExports: { parseDatabaseUrl: url => url ? { database: 'test' } : null, cleanupOldBackups: async cfg => pruned.push(cfg) } });
 process.env.DATABASE_URL = 'postgresql://user:password@database/bot';
 mock.module('../dist/modules/client/client.service.js', { namedExports: { getSystemConfig: async () => ({ ...config }) } });
 mock.module('../dist/modules/proxy-util/get-proxy-url.js', { namedExports: { getProxyUrl: async () => null } });
@@ -33,7 +33,7 @@ test('bot database delivers all parts and manifest to the configured topic', asy
   assert.equal(sent[0].get('document').name, 'bot.sql.gz.part001-of-002');
   assert.equal(markers.length, 1);
   assert.equal(pruned.length, 1);
-  assert.equal(pruned[0][2], 30);
+  assert.equal(pruned[0].backupRetentionDays, 30);
 });
 test('Telegram rejection propagates and never marks or prunes failed deliveries', async () => {
   rejectUpload = true;
