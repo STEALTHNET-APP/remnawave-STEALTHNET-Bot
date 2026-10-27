@@ -6,8 +6,7 @@ async function test(){
   const start=source.indexOf('clientRouter.delete("/tickets/:id"');const block=source.slice(start,source.indexOf('\n});',start)+4);
   vm.runInNewContext(ts.transpileModule(block,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{
    clientRouter:{delete:(_p,h)=>{handler=h;}},ensureTicketsEnabled:async()=>true,
-   prisma:{ticket:{findFirst:async({where})=>{assert.equal(where.clientId,'client');return owner?{id:'ticket',messages:[]}:null;},delete:async()=>{if(fails)throw Error('DB failure');deleted++;}}},
-   deleteTicketAttachments:async()=>{assert.equal(deleted,1);files++;},
+   deleteTickets:async where=>{assert.equal(where.clientId,'client');assert.equal(where.id,'ticket');if(!owner)return 0;if(fails)throw Error('DB failure');deleted++;files++;return 1;},
   });
   let status=200;const res={status(n){status=n;return this;},json(x){return x;}};
   await handler({params:{id:'ticket'},client:{id:'client'}},res,e=>{error=e;});

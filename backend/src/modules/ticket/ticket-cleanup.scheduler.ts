@@ -4,15 +4,8 @@ import { deleteTickets } from "./ticket-delete.service.js";
 
 let task: cron.ScheduledTask | null = null;
 
-export function calculateRetentionCutoff(
-  value: number,
-  unit: "minutes" | "hours" | "days",
-  now = new Date(),
-): Date | null {
-  if (!Number.isFinite(value) || value <= 0) return null;
-  const multiplier = unit === "minutes" ? 60 * 1000 : unit === "hours" ? 3600 * 1000 : 86400 * 1000;
-  return new Date(now.getTime() - value * multiplier);
-}
+export { calculateRetentionCutoff } from "./ticket-retention.js";
+import { calculateRetentionCutoff } from "./ticket-retention.js";
 
 export async function cleanupExpiredClosedTickets(): Promise<{ prunedCount: number }> {
   try {
@@ -31,15 +24,11 @@ export async function cleanupExpiredClosedTickets(): Promise<{ prunedCount: numb
   }
 }
 
-/**
- * Запуск фонового планировщика очистки закрытых тикетов (раз в 5 минут).
- */
 export function startTicketCleanupScheduler(): void {
   if (task) {
     task.stop();
     task = null;
   }
-  // Проверяем каждые 5 минут
   task = cron.schedule("*/5 * * * *", async () => {
     await cleanupExpiredClosedTickets();
   });
