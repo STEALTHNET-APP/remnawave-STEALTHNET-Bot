@@ -1486,7 +1486,16 @@ export const api = {
 
   /** Админ: список тикетов (опционально ?status=open|closed) */
   async getAdminTickets(token: string, status?: "open" | "closed"): Promise<{
-    items: { id: string; subject: string; status: string; createdAt: string; updatedAt: string; client: { id: string; email: string | null; telegramUsername: string | null } }[];
+    items: {
+      id: string;
+      subject: string;
+      status: string;
+      createdAt: string;
+      updatedAt: string;
+      closedAt: string | null;
+      client: { id: string; email: string | null; telegramUsername: string | null };
+      lastMessage?: { id: string; authorType: string; content: string; createdAt: string; isRead: boolean } | null;
+    }[];
   }> {
     const q = status ? `?status=${status}` : "";
     return request(`/admin/tickets${q}`, { token });
@@ -1498,13 +1507,14 @@ export const api = {
     status: string;
     createdAt: string;
     updatedAt: string;
+    closedAt: string | null;
     client: { id: string; email: string | null; telegramUsername: string | null };
     messages: TicketMessageDto[];
   }> {
     return request(`/admin/tickets/${id}`, { token });
   },
   /** Админ: закрыть/открыть тикет */
-  async patchAdminTicket(token: string, id: string, data: { status: "open" | "closed" }): Promise<{ id: string; status: string }> {
+  async patchAdminTicket(token: string, id: string, data: { status: "open" | "closed" }): Promise<{ id: string; status: string; closedAt: string | null }> {
     return request(`/admin/tickets/${id}`, { method: "PATCH", body: JSON.stringify(data), token });
   },
   /** Админ: удалить тикет */
@@ -1527,6 +1537,63 @@ export const api = {
     return request(`/admin/tickets/${ticketId}/messages`, {
       method: "POST",
       body: JSON.stringify({ content: data.content }),
+      token,
+    });
+  },
+
+  /** Админ: массовое изменение статуса тикетов (открыть/закрыть) */
+  async bulkStatusAdminTickets(
+    token: string,
+    data: { ticketIds: string[]; status: "open" | "closed" }
+  ): Promise<{ success: boolean; count: number; status: "open" | "closed" }> {
+    return request("/admin/tickets/bulk-status", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    });
+  },
+
+  /** Админ: массовый ответ выбранным тикетам */
+  async bulkReplyAdminTickets(
+    token: string,
+    data: { ticketIds: string[]; content: string; files?: File[]; closeAfterReply?: boolean }
+  ): Promise<{ success: boolean; count: number; closedAfterReply: boolean }> {
+    const files = data.files ?? [];
+    if (files.length > 0) {
+      const fd = new FormData();
+      fd.append("content", data.content ?? "");
+      fd.append("ticketIds", JSON.stringify(data.ticketIds));
+      if (data.closeAfterReply) fd.append("closeAfterReply", "true");
+      for (const f of files) fd.append("files", f);
+      return request("/admin/tickets/bulk-reply", { method: "POST", body: fd, token });
+    }
+    return request("/admin/tickets/bulk-reply", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    });
+  },
+
+  /** Админ: массовое удаление выбранных тикетов */
+  async bulkDeleteAdminTickets(
+    token: string,
+    data: { ticketIds: string[] }
+  ): Promise<{ success: boolean; count: number }> {
+    return request("/admin/tickets/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    });
+  },
+
+  /** Админ: удаление всех закрытых или абсолютно всех тикетов */
+  async deleteAllAdminTickets(
+    token: string,
+    data: { scope: "closed" | "all" }
+  ): Promise<{ success: boolean; count: number; scope: "closed" | "all" }> {
+    return request("/admin/tickets/delete-all", {
+      method: "POST",
+      body: JSON.stringify(data),
       token,
     });
   },
@@ -3445,6 +3512,8 @@ export type UpdateSettingsPayload = {
   notificationTopicAutoRenew?: string | null;
   autoBackupEnabled?: boolean;
   autoBackupCron?: string | null;
+  ticketRetentionValue?: number;
+  ticketRetentionUnit?: "minutes" | "hours" | "days";
   plategaMerchantId?: string | null;
   plategaSecret?: string | null;
   plategaMethods?: string | null;
@@ -3971,6 +4040,8 @@ export interface AdminSettings {
   notificationTopicAutoRenew?: string | null;
   autoBackupEnabled?: boolean;
   autoBackupCron?: string | null;
+  ticketRetentionValue?: number;
+  ticketRetentionUnit?: "minutes" | "hours" | "days";
   plategaMerchantId?: string | null;
   plategaSecret?: string | null;
   plategaMethods?: { id: number; enabled: boolean; label: string }[];

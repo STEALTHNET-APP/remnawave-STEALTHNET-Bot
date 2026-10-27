@@ -18,6 +18,7 @@ import { startAutoBroadcastScheduler, stopAutoBroadcastScheduler } from "./modul
 import { startContestDailyReminderScheduler, stopContestDailyReminderScheduler } from "./modules/contest/contest-daily-reminder-scheduler.js";
 import { startAutoRenewScheduler } from "./modules/payment/auto-renew.cron.js";
 import { startAutoBackupScheduler, stopAutoBackupScheduler } from "./modules/backup/auto-backup.scheduler.js";
+import { startTicketCleanupScheduler, stopTicketCleanupScheduler } from "./modules/ticket/ticket-cleanup.scheduler.js";
 import { startGiftExpiryCron } from "./modules/gift/gift-expiry.cron.js";
 import { startMarketplaceScheduler, stopMarketplaceScheduler } from "./modules/marketplace/marketplace.scheduler.js";
 import { startAntiAbuseScheduler, stopAntiAbuseScheduler } from "./modules/anti-abuse/anti-abuse.scheduler.js";
@@ -96,6 +97,7 @@ async function main() {
   // Он удалял всех с onboardingCompleted=false старше 30 мин — а теперь этот флаг ставится
   // TG-юзерам для запуска онбординга (см. /telegram-login-check, /register). Крон бы их стирал.
   await startAutoBackupScheduler();
+  startTicketCleanupScheduler();
   startMarketplaceScheduler();
   await startAntiAbuseScheduler();
   startBroadcastStaleScheduler();
@@ -116,6 +118,7 @@ async function main() {
   registerCron({ name: "remna-sync", cron: "* * * * *", description: "Автоматический импорт из Remnawave по настройкам панели" });
   registerCron({ name: "referral-days", cron: "* * * * *", description: "Начисление бонусных дней за рефералов" });
   registerCron({ name: "auto-backup", cron: "0 4 * * *", description: "Автоматический бэкап БД" });
+  registerCron({ name: "ticket-cleanup", cron: "*/5 * * * *", description: "Очистка закрытых тикетов по сроку хранения" });
   registerCron({ name: "marketplace-heartbeat", cron: "*/10 * * * *", description: "Heartbeat в маркетплейс-хаб" });
 
   const server = app.listen(env.PORT, "0.0.0.0", () => {
@@ -129,6 +132,7 @@ async function main() {
     stopBroadcastStaleScheduler();
     stopContestDailyReminderScheduler();
     stopAutoBackupScheduler();
+    stopTicketCleanupScheduler();
     stopMarketplaceScheduler();
     stopAntiAbuseScheduler();
     server.close();
