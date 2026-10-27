@@ -6,8 +6,10 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { writeSqlArchive } from "./backup-archive.js";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat, lstat, unlink, rmdir } from "node:fs/promises";
 import path from "node:path";
+import { lstatSync } from "node:fs";
+import { backupIsActive, getBackupRetentionMs } from "./backup-retention.js";
 
 const BACKUPS_DIR = process.env.BACKUPS_DIR || path.join(process.cwd(), "backups");
 
@@ -99,6 +101,7 @@ export async function listBackups(): Promise<BackupItem[]> {
   return items.sort((a, b) => (b.createdAt || b.date).localeCompare(a.createdAt || a.date));
 
   async function walkDir(dir: string, prefix: string): Promise<void> {
+    if ((await lstat(dir)).isSymbolicLink()) return;
     const entries = await readdir(dir, { withFileTypes: true });
     for (const e of entries) {
       const rel = prefix ? path.join(prefix, e.name) : e.name;
@@ -128,6 +131,15 @@ export function resolveBackupPath(relativePath: string): string | null {
   const full = path.resolve(base, relativePath);
   const relative = path.relative(base, full);
   if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return null;
+  try {
+    let current = base;
+    if (lstatSync(current).isSymbolicLink()) return null;
+    for (const part of relative.split(path.sep)) {
+      current = path.join(current, part);
+      if (lstatSync(current).isSymbolicLink()) return null;
+    }
+    if (!lstatSync(full).isFile()) return null;
+  } catch { return null; }
   return full;
 }
 
@@ -144,172 +156,62 @@ export async function readBackupFile(relativePath: string): Promise<Buffer | nul
 
 export { runPgRestore } from "./backup-restore.js";
 
-/**
- * Удаляет бэкапы старше заданного времени (retention).
- * Поддерживает минуты, часы, дни (через config) или число дней (legacy).
- * Очищает как .sql (ручные), так и .sql.gz (автоматические),
- * а также связанные с ними метафайлы (.delivered.json, .manifest.json, .partial)
- * и зависшие .partial файлы старше 1 часа.
- */
-export async function cleanupOldBackups(
-  retention: number | { backupRetentionValue?: number; backupRetentionUnit?: string; backupRetentionDays?: number }
-): Promise<{ deleted: number; freedBytes: number }> {
+async function removeArchive(relativePath: string): Promise<{ deleted: number; freedBytes: number }> {
   const result = { deleted: 0, freedBytes: 0 };
-  let retentionMs = 0;
-  if (typeof retention === "number") {
-    if (!Number.isFinite(retention) || retention <= 0) return result;
-    // Если передано число < 1000 — трактуем как дни (legacy), если больше — как ms
-    retentionMs = retention < 1000 ? retention * 86_400_000 : retention;
-  } else if (retention && typeof retention === "object") {
-    const { getBackupRetentionMs } = await import("../client/client.service.js");
-    retentionMs = getBackupRetentionMs(retention);
+  const full = resolveBackupPath(relativePath);
+  if (!full || backupIsActive(full)) return result;
+  const info = await lstat(full).catch(() => null);
+  if (!info?.isFile() || backupIsActive(full)) return result;
+  try { await unlink(full); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return result;
+    throw error;
   }
-  if (!Number.isFinite(retentionMs) || retentionMs <= 0) return result; // 0 = хранить вечно
-
-  const { readdir, stat, unlink, rmdir } = await import("node:fs/promises");
-  const now = Date.now();
-  const cutoff = now - retentionMs;
-  const partialCutoff = now - 3_600_000; // зависшие .partial старше 1 часа
-
-  const walk = async (dir: string): Promise<void> => {
-    let entries: string[];
-    try {
-      entries = await readdir(dir);
-    } catch {
-      return; // папки может не быть — это не ошибка
-    }
-    for (const name of entries) {
-      const full = path.join(dir, name);
-      let st;
-      try {
-        st = await stat(full);
-      } catch {
-        continue;
-      }
-      if (st.isDirectory()) {
-        await walk(full);
-        // подчищаем опустевшие папки дат (YYYY/MM/DD)
-        try {
-          const rest = await readdir(full);
-          if (rest.length === 0) await rmdir(full);
-        } catch {
-          /* не критично */
-        }
-      } else {
-        const isBackupArchive = name.endsWith(".sql") || name.endsWith(".sql.gz");
-        const isOrphanPartial = name.endsWith(".partial") && st.mtimeMs < partialCutoff;
-        if ((isBackupArchive && st.mtimeMs < cutoff) || isOrphanPartial) {
-          try {
-            await unlink(full);
-            result.deleted++;
-            result.freedBytes += st.size;
-            // Удаляем сопутствующие файлы метаданных
-            for (const suffix of [".delivered.json", ".manifest.json", ".partial"]) {
-              try {
-                const compPath = full + suffix;
-                const compSt = await stat(compPath).catch(() => null);
-                if (compSt) {
-                  await unlink(compPath);
-                  result.freedBytes += compSt.size;
-                }
-              } catch { /* игнорируем */ }
-            }
-          } catch (e) {
-            console.error("[backup] не удалось удалить", full, e);
-          }
-        }
-      }
-    }
-  };
-
-  await walk(BACKUPS_DIR);
-  if (result.deleted > 0) {
-    console.log(`[backup] чистка: удалено ${result.deleted} бэкапов (срок ${Math.round(retentionMs / 60000)} мин.), освобождено ${(result.freedBytes / 1048576).toFixed(1)} МБ`);
+  result.deleted = 1;
+  result.freedBytes = info.size;
+  for (const suffix of [".delivered.json", ".manifest.json"]) {
+    const companion = full + suffix;
+    const metadata = await lstat(companion).catch(() => null);
+    if (!metadata?.isFile()) continue;
+    await unlink(companion).catch(error => {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    });
+    result.freedBytes += metadata.size;
+  }
+  let parent = path.dirname(full);
+  const base = path.resolve(BACKUPS_DIR);
+  while (parent !== base && path.relative(base, parent) && !path.relative(base, parent).startsWith("..")) {
+    try { await rmdir(parent); } catch { break; }
+    parent = path.dirname(parent);
   }
   return result;
 }
 
-/**
- * Удаляет один указанный файл бэкапа по относительному пути (вместе с сопутствующими метафайлами)
- */
-export async function deleteBackupFile(relativePath: string): Promise<boolean> {
-  const full = resolveBackupPath(relativePath);
-  if (!full) return false;
-  const { unlink, stat, readdir, rmdir } = await import("node:fs/promises");
-  try {
-    const st = await stat(full);
-    if (!st.isFile()) return false;
-    await unlink(full);
-    // Удаляем сопутствующие метафайлы
-    for (const suffix of [".delivered.json", ".manifest.json", ".partial"]) {
-      try { await unlink(full + suffix); } catch {}
-    }
-    // Удаляем пустые родительские папки дат
-    let parent = path.dirname(full);
-    const base = path.resolve(BACKUPS_DIR);
-    while (parent.startsWith(base) && parent !== base) {
-      try {
-        const remaining = await readdir(parent);
-        if (remaining.length === 0) {
-          await rmdir(parent);
-          parent = path.dirname(parent);
-        } else {
-          break;
-        }
-      } catch {
-        break;
-      }
-    }
-    return true;
-  } catch (e) {
-    console.error("[backup] ошибка удаления бэкапа:", relativePath, e);
-    return false;
+export async function cleanupOldBackups(
+  retention: number | { backupRetentionValue?: number; backupRetentionUnit?: string; backupRetentionDays?: number },
+): Promise<{ deleted: number; freedBytes: number }> {
+  const result = { deleted: 0, freedBytes: 0 };
+  const duration = getBackupRetentionMs(typeof retention === "number" ? { backupRetentionDays: retention } : retention);
+  if (!Number.isFinite(duration) || duration <= 0) return result;
+  const cutoff = Date.now() - duration;
+  for (const archive of await listBackups()) {
+    if (!archive.createdAt || new Date(archive.createdAt).getTime() >= cutoff) continue;
+    const removed = await removeArchive(archive.path);
+    result.deleted += removed.deleted;
+    result.freedBytes += removed.freedBytes;
   }
+  return result;
 }
 
-/**
- * Полностью удаляет все бэкапы на сервере (включая ручные и автоматические архивы)
- */
+export async function deleteBackupFile(relativePath: string): Promise<boolean> {
+  return (await removeArchive(relativePath)).deleted > 0;
+}
+
 export async function deleteAllBackups(): Promise<{ deleted: number; freedBytes: number }> {
   const result = { deleted: 0, freedBytes: 0 };
-  const { readdir, stat, unlink, rm } = await import("node:fs/promises");
-  const base = path.resolve(BACKUPS_DIR);
-
-  const walk = async (dir: string): Promise<void> => {
-    let entries: string[];
-    try {
-      entries = await readdir(dir);
-    } catch {
-      return;
-    }
-    for (const name of entries) {
-      const full = path.join(dir, name);
-      let st;
-      try {
-        st = await stat(full);
-      } catch {
-        continue;
-      }
-      if (st.isDirectory()) {
-        await walk(full);
-        try {
-          if (full !== base) {
-            await rm(full, { recursive: true, force: true });
-          }
-        } catch { /* игнорируем */ }
-      } else {
-        try {
-          await unlink(full);
-          result.deleted++;
-          result.freedBytes += st.size;
-        } catch (e) {
-          console.error("[backup] не удалось удалить", full, e);
-        }
-      }
-    }
-  };
-
-  await walk(base);
-  console.log(`[backup] удалены все бэкапы: ${result.deleted} файлов, освобождено ${(result.freedBytes / 1048576).toFixed(1)} МБ`);
+  for (const archive of await listBackups()) {
+    const removed = await removeArchive(archive.path);
+    result.deleted += removed.deleted;
+    result.freedBytes += removed.freedBytes;
+  }
   return result;
 }

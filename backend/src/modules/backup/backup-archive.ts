@@ -6,6 +6,7 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 import { createGzip } from "node:zlib";
+import { holdBackup } from "./backup-retention.js";
 import type { DbConnection } from "./backup.service.js";
 
 export const TELEGRAM_PART_BYTES = 45 * 1024 * 1024;
@@ -45,6 +46,7 @@ export function writeSqlArchive(proc: ChildProcess, fullPath: string): Promise<v
 }
 
 async function writeArchive(proc: ChildProcess, fullPath: string, gzip: boolean): Promise<void> {
+  const release = holdBackup(fullPath);
   const partial = `${fullPath}.partial`;
   const exited = new Promise<void>((resolve, reject) => {
     proc.once("error", reject);
@@ -66,7 +68,7 @@ async function writeArchive(proc: ChildProcess, fullPath: string, gzip: boolean)
     await Promise.allSettled([exited, compressed]);
     await rm(partial, { force: true });
     throw error;
-  }
+  } finally { release(); }
 }
 
 export async function saveCompressedBackup(db: DbConnection, source: "bot") {

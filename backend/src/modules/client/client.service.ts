@@ -551,14 +551,7 @@ export async function getSystemConfig() {
  * Вычисляет срок хранения бэкапов в миллисекундах.
  * Возвращает 0, если хранить вечно (retention <= 0).
  */
-export function getBackupRetentionMs(config: { backupRetentionValue?: number; backupRetentionUnit?: string; backupRetentionDays?: number }): number {
-  const value = config.backupRetentionValue ?? config.backupRetentionDays ?? 30;
-  if (!Number.isFinite(value) || value <= 0) return 0;
-  const unit = config.backupRetentionUnit ?? "days";
-  if (unit === "minutes") return value * 60_000;
-  if (unit === "hours") return value * 3_600_000;
-  return value * 86_400_000;
-}
+export { getBackupRetentionMs } from "../backup/backup-retention.js";
 
 /**
  * T-tariff-restriction (портировано из WolfVPN): проверка, разрешён ли клиенту тариф.

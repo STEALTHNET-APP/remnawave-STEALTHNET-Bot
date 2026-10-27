@@ -1,8 +1,9 @@
+import { holdBackup } from "./backup-retention.js";
 import cron, { type ScheduledTask } from "node-cron";
 import { writeFile } from "node:fs/promises";
 import { getSystemConfig } from "../client/client.service.js";
 import { parseDatabaseUrl } from "./backup.service.js";
-import { AUTO_BACKUPS_DIR, TELEGRAM_PART_BYTES, pruneDeliveredBackups, readFileParts, saveCompressedBackup } from "./backup-archive.js";
+import { TELEGRAM_PART_BYTES, readFileParts, saveCompressedBackup } from "./backup-archive.js";
 import { proxyFetch } from "../proxy-util/proxy-fetch.js";
 import { getProxyUrl } from "../proxy-util/get-proxy-url.js";
 
@@ -70,7 +71,9 @@ export async function runAutoBackup(options: { force?: boolean } = {}): Promise<
         if (!db) throw new Error(`Не настроено подключение к БД: ${source.name}`);
         console.log(`${LOG} Creating compressed backup: ${source.name}`);
         const archive = await saveCompressedBackup(db, source.name);
+        const release = holdBackup(archive.fullPath);
         const total = Math.ceil(archive.bytes / TELEGRAM_PART_BYTES);
+        try {
         const messages: number[] = [];
         let index = 0;
         for await (const part of readFileParts(archive.fullPath)) {
@@ -83,7 +86,7 @@ export async function runAutoBackup(options: { force?: boolean } = {}): Promise<
         const manifest = { filename: archive.filename, bytes: archive.bytes, sha256: archive.sha256, source: source.name, format: "SQL + gzip", parts: total, messages, chatId, topicId, deliveredAt: new Date().toISOString() };
         await sendDocument(destination, Buffer.from(JSON.stringify(manifest, null, 2)), `${archive.filename}.manifest.json`, `✅ ${source.label}: все ${total} частей отправлены. Контрольная сумма и список сообщений — в файле.`);
         await writeFile(`${archive.fullPath}.delivered.json`, JSON.stringify(manifest, null, 2), { mode: 0o600 });
-        await pruneDeliveredBackups(AUTO_BACKUPS_DIR, `stealthnet-${source.name}-`, config.backupRetentionDays ?? 30);
+        } finally { release(); }
         try {
           const { cleanupOldBackups } = await import("./backup.service.js");
           await cleanupOldBackups(config);

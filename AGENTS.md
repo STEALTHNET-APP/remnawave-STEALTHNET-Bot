@@ -104,3 +104,7 @@ npm --prefix frontend run build
 Run focused tests from `backend/tests/` or `frontend/tests/` according to their setup requirements. There is no universal test command for every script: files include Node tests, TypeScript scripts, Python helpers and database integration tests. Read the selected test before running it. Database tests require an isolated test database; browser tests may require Playwright and downloaded browsers. Never run fixture cleanup against an operator's database.
 
 For deployment validation, inspect [Makefile](Makefile), [docker-compose.yml](docker-compose.yml), [installation instructions](README.md), [update documentation](docs/auto-update.md) and the appropriate feature guide in [docs](docs/). Building images and restarting a deployment are separate actions. Keep local configuration and persistent volumes intact.
+
+## Operator instructions
+
+Write installation, update and recovery instructions for a nontechnical panel owner. Explain where to run each command, what to copy, what success looks like, how long to wait, and what to do on failure. Distinguish starting a job from its successful completion. Prefer a small number of clearly named paths over a wall of alternatives. Never assume Git, SSH or Docker knowledge. Preserve local configuration and backups; do not suggest destructive reset or cleanup as a routine update step. Keep new implementation code free of explanatory inline comments, per the project owner's preference.

@@ -1,3 +1,4 @@
+import { deleteTickets } from "../ticket/ticket-delete.service.js";
 import { ClientProfileError, updateClientSchema, updateAdminClientProfile } from "./client-profile.service.js";
 import { botButtonsJsonSchema } from "../bot/menu-buttons.js";
 import { mailTestRouter } from "../mail/mail-test.routes.js";
@@ -3713,17 +3714,6 @@ adminRouter.patch("/settings", async (req, res) => {
     const val = String(updates.backupRetentionValue === 0 ? 0 : days);
     await prisma.systemSetting.upsert({ where: { key: "backup_retention_days" }, create: { key: "backup_retention_days", value: val }, update: { value: val } });
   }
-  if (updates.backupRetentionValue !== undefined || updates.backupRetentionUnit !== undefined || updates.backupRetentionDays !== undefined) {
-    invalidateSystemConfigCache();
-    try {
-      const { cleanupOldBackups } = await import("../backup/backup.service.js");
-      const { getSystemConfig } = await import("../client/client.service.js");
-      const cfg = await getSystemConfig();
-      await cleanupOldBackups(cfg);
-    } catch (e) {
-      console.error("[backup] auto cleanup on retention update failed:", e);
-    }
-  }
   if (updates.plategaMerchantId !== undefined) {
     const val = updates.plategaMerchantId ?? "";
     await prisma.systemSetting.upsert({ where: { key: "platega_merchant_id" }, create: { key: "platega_merchant_id", value: val }, update: { value: val } });
@@ -4649,15 +4639,10 @@ adminRouter.post("/tickets/:id/messages", uploadTicketAttachment.array("files", 
   if (!trimmed && attachments.length === 0) {
     return res.status(400).json({ message: "Пустое сообщение" });
   }
-  const msg = await prisma.ticketMessage.create({
-    data: {
-      ticketId: ticket.id,
-      authorType: "support",
-      content: trimmed,
-      attachments: serializeAttachments(attachments),
-    },
+  const msg = await prisma.$transaction(async tx => {
+    await tx.ticket.update({ where: { id: ticket.id }, data: { updatedAt: new Date() } });
+    return tx.ticketMessage.create({ data: { ticketId: ticket.id, authorType: "support", content: trimmed, attachments: serializeAttachments(attachments) } });
   });
-  await prisma.ticket.update({ where: { id: ticket.id }, data: { updatedAt: new Date() } });
   notifyAdminsAboutSupportReply({
     ticketId: ticket.id,
     clientId: ticket.clientId,
@@ -4734,6 +4719,8 @@ adminRouter.post("/tickets/bulk-reply", uploadTicketAttachment.array("files", 5)
     }
   }
 
+  ticketIds = [...new Set(ticketIds)];
+  if (ticketIds.length > 500 || content.length > 10000) return res.status(400).json({ message: "Не более 500 тикетов и 10000 символов" });
   if (ticketIds.length === 0) {
     return res.status(400).json({ message: "Не указаны тикеты для ответа" });
   }
@@ -4754,36 +4741,16 @@ adminRouter.post("/tickets/bulk-reply", uploadTicketAttachment.array("files", 5)
   }
 
   const serializedAtt = serializeAttachments(attachments);
-  let sentCount = 0;
-
-  for (const ticket of tickets) {
-    await prisma.ticketMessage.create({
-      data: {
-        ticketId: ticket.id,
-        authorType: "support",
-        content: trimmed,
-        attachments: serializedAtt,
-      },
-    });
-
-    const updateData: { updatedAt: Date; status?: string; closedAt?: Date | null } = {
-      updatedAt: new Date(),
-    };
-    if (closeAfterReply) {
-      updateData.status = "closed";
-      updateData.closedAt = new Date();
-    } else if (ticket.status === "closed") {
-      // Если закрытый тикет получил ответ без галочки закрытия — переоткрываем его
-      updateData.status = "open";
-      updateData.closedAt = null;
+  await prisma.$transaction(async tx => {
+    for (const ticket of [...tickets].sort((a, b) => a.id.localeCompare(b.id))) {
+      await tx.ticket.update({
+        where: { id: ticket.id },
+        data: { updatedAt: new Date(), status: closeAfterReply ? "closed" : "open", closedAt: closeAfterReply ? new Date() : null },
+      });
+      await tx.ticketMessage.create({ data: { ticketId: ticket.id, authorType: "support", content: trimmed, attachments: serializedAtt } });
     }
-    await prisma.ticket.update({
-      where: { id: ticket.id },
-      data: updateData,
-    });
-
-    sentCount++;
-
+  }, { timeout: 60_000 });
+  for (const ticket of tickets) {
     notifyAdminsAboutSupportReply({
       ticketId: ticket.id,
       clientId: ticket.clientId,
@@ -4801,7 +4768,7 @@ adminRouter.post("/tickets/bulk-reply", uploadTicketAttachment.array("files", 5)
     });
   }
 
-  return res.json({ success: true, count: sentCount, closedAfterReply: closeAfterReply });
+  return res.json({ success: true, count: tickets.length, closedAfterReply: closeAfterReply });
 }));
 
 // Массовое удаление выбранных тикетов
@@ -4813,23 +4780,8 @@ adminRouter.post("/tickets/bulk-delete", asyncRoute(async (req, res) => {
   if (!body.success) return res.status(400).json({ message: "Invalid input", errors: body.error.flatten() });
 
   const { ticketIds } = body.data;
-  const tickets = await prisma.ticket.findMany({
-    where: { id: { in: ticketIds } },
-    include: { messages: { select: { attachments: true } } },
-  });
-
-  if (tickets.length === 0) {
-    return res.json({ success: true, count: 0 });
-  }
-
-  const attachments = tickets.flatMap((t) => t.messages.map((m) => m.attachments));
-  const deleteResult = await prisma.ticket.deleteMany({
-    where: { id: { in: ticketIds } },
-  });
-
-  await deleteTicketAttachments(attachments);
-
-  return res.json({ success: true, count: deleteResult.count });
+  const count = await deleteTickets({ id: { in: ticketIds } });
+  return res.json({ success: true, count });
 }));
 
 // Удаление всех тикетов (только закрытых или абсолютно всех)
@@ -4843,35 +4795,15 @@ adminRouter.post("/tickets/delete-all", asyncRoute(async (req, res) => {
   const scope = body.data.scope;
   const where = scope === "closed" ? { status: "closed" } : {};
 
-  const tickets = await prisma.ticket.findMany({
-    where,
-    include: { messages: { select: { attachments: true } } },
-  });
-
-  if (tickets.length === 0) {
-    return res.json({ success: true, count: 0, scope });
-  }
-
-  const attachments = tickets.flatMap((t) => t.messages.map((m) => m.attachments));
-  const deleteResult = await prisma.ticket.deleteMany({ where });
-
-  await deleteTicketAttachments(attachments);
-
-  return res.json({ success: true, count: deleteResult.count, scope });
+  const count = await deleteTickets(where);
+  return res.json({ success: true, count, scope });
 }));
 
 // Удаление тикета админом (каскадное удаление сообщений в БД + удаление файлов с диска)
 adminRouter.delete("/tickets/:id", asyncRoute(async (req, res) => {
-  const ticket = await prisma.ticket.findUnique({
-    where: { id: req.params.id },
-    include: { messages: { select: { attachments: true } } },
-  });
-  if (!ticket) return res.status(404).json({ message: "Тикет не найден" });
-
-  await prisma.ticket.delete({ where: { id: ticket.id } });
-  await deleteTicketAttachments(ticket.messages.map((m) => m.attachments));
-
-  return res.json({ success: true, id: ticket.id });
+  const count = await deleteTickets({ id: req.params.id });
+  if (!count) return res.status(404).json({ message: "Тикет не найден" });
+  return res.json({ success: true, id: req.params.id });
 }));
 
 // Синхронизация с Remna

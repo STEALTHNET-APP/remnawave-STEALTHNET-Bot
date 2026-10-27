@@ -1,3 +1,4 @@
+import { deleteTickets } from "../ticket/ticket-delete.service.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { webClientRouter } from "../amnezia-web/client.routes.js";
 import { isWebPanel, WEB_PROTOCOLS } from "../amnezia-web/api.js";
@@ -8042,7 +8043,7 @@ clientRouter.get("/tickets/:id", async (req, res) => {
 
 // Ответ в тикет. multipart/form-data — если приложены фото.
 const replyTicketSchema = z.object({ content: z.string().max(10000).optional().default("") });
-clientRouter.post("/tickets/:id/messages", uploadTicketAttachment.array("files", 5), async (req, res) => {
+clientRouter.post("/tickets/:id/messages", uploadTicketAttachment.array("files", 5), asyncHandler(async (req, res) => {
   if (!(await ensureTicketsEnabled(res))) return;
   const clientId = (req as unknown as { client: { id: string } }).client.id;
   const content = pickField(req, "content");
@@ -8057,20 +8058,10 @@ clientRouter.post("/tickets/:id/messages", uploadTicketAttachment.array("files",
   if (!trimmed && attachments.length === 0) {
     return res.status(400).json({ message: "Пустое сообщение" });
   }
-  const msg = await prisma.ticketMessage.create({
-    data: {
-      ticketId: ticket.id,
-      authorType: "client",
-      content: trimmed,
-      attachments: serializeAttachments(attachments),
-    },
+  const msg = await prisma.$transaction(async tx => {
+    await tx.ticket.update({ where: { id: ticket.id, clientId }, data: { updatedAt: new Date(), status: "open", closedAt: null } });
+    return tx.ticketMessage.create({ data: { ticketId: ticket.id, authorType: "client", content: trimmed, attachments: serializeAttachments(attachments) } });
   });
-  const updateData: { updatedAt: Date; status?: string; closedAt?: Date | null } = { updatedAt: new Date() };
-  if (ticket.status === "closed") {
-    updateData.status = "open";
-    updateData.closedAt = null;
-  }
-  await prisma.ticket.update({ where: { id: ticket.id }, data: updateData });
   notifyAdminsAboutClientTicketMessage({
     ticketId: ticket.id,
     clientId,
@@ -8084,23 +8075,16 @@ clientRouter.post("/tickets/:id/messages", uploadTicketAttachment.array("files",
     attachments: parseAttachments(msg.attachments),
     createdAt: msg.createdAt.toISOString(),
   });
-});
+}));
 
 // Удаление тикета клиентом
 clientRouter.delete("/tickets/:id", async (req, res, next) => {
   try {
   if (!(await ensureTicketsEnabled(res))) return;
   const clientId = (req as unknown as { client: { id: string } }).client.id;
-  const ticket = await prisma.ticket.findFirst({
-    where: { id: req.params.id, clientId },
-    include: { messages: { select: { attachments: true } } },
-  });
-  if (!ticket) return res.status(404).json({ message: "Тикет не найден" });
-
-  await prisma.ticket.delete({ where: { id: ticket.id } });
-  await deleteTicketAttachments(ticket.messages.map((m) => m.attachments));
-
-  return res.json({ success: true, id: ticket.id });
+  const count = await deleteTickets({ id: req.params.id, clientId });
+  if (!count) return res.status(404).json({ message: "Тикет не найден" });
+  return res.json({ success: true, id: req.params.id });
   } catch (error) { next(error); }
 });
 

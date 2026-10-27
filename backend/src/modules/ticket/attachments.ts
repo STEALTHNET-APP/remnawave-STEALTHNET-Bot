@@ -1,3 +1,4 @@
+import { prisma } from "../../db.js";
 import type { Request } from "express";
 import fs from "fs/promises";
 import path from "path";
@@ -68,19 +69,15 @@ export function pickField(req: Request, key: string): string {
 /** Безопасно удалить с диска файлы вложений тикета */
 export async function deleteTicketAttachments(attachmentsList: (string | null | undefined)[]): Promise<void> {
   const uploadsDir = "/app/uploads/tickets";
-  for (const raw of attachmentsList) {
-    const list = parseAttachments(raw);
-    for (const att of list) {
-      if (!att.url) continue;
-      const filename = path.basename(att.url);
-      if (filename) {
-        const filePath = path.join(uploadsDir, filename);
-        try {
-          await fs.unlink(filePath);
-        } catch {
-          // ignore error if file not found
-        }
-      }
+  const urls = new Set(attachmentsList.flatMap(raw => parseAttachments(raw).map(attachment => attachment.url)));
+  for (const url of urls) {
+    if (!/^\/api\/uploads\/tickets\/[a-zA-Z0-9._-]+$/.test(url)) continue;
+    const referenced = await prisma.ticketMessage.findFirst({
+      where: { attachments: { contains: JSON.stringify(url) } }, select: { id: true },
+    });
+    if (referenced) continue;
+    try { await fs.unlink(path.join(uploadsDir, path.basename(url))); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
 }

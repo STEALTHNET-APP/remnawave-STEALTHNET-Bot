@@ -1,7 +1,6 @@
 import cron from "node-cron";
-import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
-import { deleteTicketAttachments } from "./attachments.js";
+import { deleteTickets } from "./ticket-delete.service.js";
 
 let task: cron.ScheduledTask | null = null;
 
@@ -21,35 +20,11 @@ export async function cleanupExpiredClosedTickets(): Promise<{ prunedCount: numb
     const cutoff = calculateRetentionCutoff(config.ticketRetentionValue, config.ticketRetentionUnit);
     if (!cutoff) return { prunedCount: 0 };
 
-    const candidates = await prisma.ticket.findMany({
-      where: {
-        status: "closed",
-        OR: [
-          { closedAt: { lte: cutoff } },
-          { closedAt: null, updatedAt: { lte: cutoff } },
-        ],
-      },
-      include: {
-        messages: { select: { attachments: true } },
-      },
-      take: 500,
-    });
-
-    if (candidates.length === 0) return { prunedCount: 0 };
-
-    const candidateIds = candidates.map((t) => t.id);
-    const attachments = candidates.flatMap((t) => t.messages.map((m) => m.attachments));
-
-    await prisma.ticket.deleteMany({
-      where: { id: { in: candidateIds } },
-    });
-
-    await deleteTicketAttachments(attachments);
-
-    console.log(
-      `[ticket-cleanup] Pruned ${candidateIds.length} closed ticket(s) older than ${config.ticketRetentionValue} ${config.ticketRetentionUnit}`,
-    );
-    return { prunedCount: candidateIds.length };
+    const count = await deleteTickets({
+      status: "closed",
+      OR: [{ closedAt: { lte: cutoff } }, { closedAt: null, updatedAt: { lte: cutoff } }],
+    }, 500);
+    return { prunedCount: count };
   } catch (error) {
     console.error("[ticket-cleanup] Error during ticket retention cleanup:", error);
     return { prunedCount: 0 };

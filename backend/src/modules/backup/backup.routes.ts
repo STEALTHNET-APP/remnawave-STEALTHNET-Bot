@@ -1,3 +1,4 @@
+import { holdBackup } from "./backup-retention.js";
 /**
  * Роуты бэкапа: создание (сохранение на диск + скачивание), список, скачивание, восстановление
  */
@@ -34,6 +35,8 @@ export function registerBackupRoutes(
     if (!db) return res.status(503).json({ message: "Неверный формат DATABASE_URL" });
     try {
       const { relativePath, filename, fullPath } = await saveBackupToFile(db);
+      const release = holdBackup(fullPath);
+      res.once("close", release);
       // Чистим старые бэкапы сразу после успешного создания нового,
       // чтобы папка не росла бесконечно (без этого диск забивался).
       try {
@@ -46,7 +49,9 @@ export function registerBackupRoutes(
       res.setHeader("Content-Type", "application/sql");
       res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader("Content-Length", String(st.size));
-      res.download(fullPath, filename, (error) => {
+      const releaseDownload = holdBackup(fullPath);
+    res.once("close", releaseDownload);
+    res.download(fullPath, filename, (error) => {
         if (!error) return;
         if (res.headersSent) { res.destroy(error); return; }
         res.status(500).json({ message: "Не удалось скачать бэкап." });
@@ -92,7 +97,7 @@ export function registerBackupRoutes(
       const result = await deleteAllBackups();
       return res.json({
         ok: true,
-        message: `Все бэкапы удалены (${result.deleted} шт., освобождено ${(result.freedBytes / 1048576).toFixed(1)} МБ)`,
+        message: `Удалено ${result.deleted} бэкапов, освобождено ${(result.freedBytes / 1048576).toFixed(1)} МБ. Выполняющиеся операции пропущены.`,
         deleted: result.deleted,
         freedBytes: result.freedBytes,
       });
@@ -133,6 +138,8 @@ export function registerBackupRoutes(
     const filename = pathParam.split("/").pop() || "backup.sql";
     res.setHeader("Content-Type", filename.endsWith(".gz") ? "application/gzip" : "application/sql");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    const releaseDownload = holdBackup(fullPath);
+    res.once("close", releaseDownload);
     res.download(fullPath, filename, (error) => {
       if (!error) return;
       if (res.headersSent) { res.destroy(error); return; }
@@ -173,6 +180,7 @@ export function registerBackupRoutes(
       filename = file.originalname;
     }
 
+    const releaseRestore = typeof input === "string" ? holdBackup(input) : () => {};
     try {
       await runPgRestore(db, input, filename);
       return res.json({ message: "База данных восстановлена из бэкапа." });
@@ -180,6 +188,6 @@ export function registerBackupRoutes(
       console.error("Backup restore error:", e);
       const msg = e instanceof Error ? e.message : String(e);
       res.status(500).json({ message: msg, error: msg });
-    }
+    } finally { releaseRestore(); }
   }));
 }

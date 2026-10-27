@@ -1,6 +1,6 @@
 {
   "name": "stealthnet-admin",
-  "version": "6.8.1",
+  "version": "6.8.2",
   "private": true,
   "engines": {
     "node": ">=22"

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
 import { build } from "esbuild";
+import { readFile } from "node:fs/promises";
 
 const playwright = await import(process.env.PLAYWRIGHT_MODULE_PATH || "playwright");
 const root = new URL("../", import.meta.url).pathname;
@@ -13,7 +14,9 @@ const bundled = await build({
     resolveDir: root, loader: "tsx",
   },
   bundle: true, write: false, jsx: "automatic", define: { "process.env.NODE_ENV": '"production"' },
-  plugins: [{ name: "worker-fixture", setup(builder) {
+  plugins: [{ name: "observe-reload", setup(builder) {
+    builder.onLoad({ filter: /pwa-apply-update\.ts$/ }, async args => ({ loader: "ts", contents: (await readFile(args.path, "utf8")).replace("window.location.reload()", "(window.reloads = (window.reloads || 0) + 1)") }));
+  } }, { name: "worker-fixture", setup(builder) {
     builder.onResolve({ filter: /^virtual:pwa-register\/react$/ }, () => ({ path: "worker", namespace: "fixture" }));
     builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({ loader: "js", resolveDir: root, contents: `import {useState,useCallback} from 'react';export function useRegisterSW(){const needRefresh=useState(false),offlineReady=useState(false);window.offerUpdate=()=>needRefresh[1](true);const updateServiceWorker=useCallback(async()=>{window.updates=(window.updates||0)+1;if(window.failUpdate)throw Error('offline');},[]);return {needRefresh,offlineReady,updateServiceWorker};}` }));
   }}],
@@ -23,7 +26,7 @@ const server = createServer((req, res) => {
   res.end(req.url === "/bundle.js" ? bundled.outputFiles[0].text : '<meta charset="utf-8"><input id="name"><input id="check" type="checkbox"><div id="root"></div><script src="/bundle.js"></script>');
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-const browser = await playwright.chromium.launch();
+const browser = await playwright.chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined });
 const base = `http://127.0.0.1:${server.address().port}`;
 
 async function scenario(path, run) {
@@ -51,9 +54,24 @@ try {
     await page.locator("#name").blur();
     await page.clock.runFor(120000);
     assert.equal(await page.evaluate(() => window.updates || 0), 0);
-    page.on("dialog", dialog => dialog.dismiss());
+
     await page.getByRole("button", { name: "Обновить сейчас" }).click();
+    await page.getByRole("dialog").waitFor();
+    await page.getByRole("button", { name: "Остаться", exact: true }).click();
     assert.equal(await page.evaluate(() => window.updates || 0), 0);
+  }));
+  await test("Telegram without native confirmation requires explicit consent", () => scenario("/cabinet/profile", async page => {
+    await page.evaluate(() => { window.Telegram = { WebApp: { initData: "fixture" } }; window.confirm = () => { throw Error("unsupported"); }; });
+    await page.locator("#name").fill("keep me");
+    await page.locator("#name").blur();
+    await page.clock.runFor(120000);
+    await page.getByRole("button", { name: "Обновить сейчас" }).click();
+    await page.getByRole("dialog").waitFor();
+    assert.equal(await page.evaluate(() => window.updates || 0), 0);
+    await page.getByRole("button", { name: "Обновить без сохранения" }).click();
+    assert.equal(await page.evaluate(() => window.updates), 1);
+    await page.clock.runFor(2000);
+    assert.equal(await page.evaluate(() => window.reloads), 1);
   }));
   await test("checkbox changes are protected", () => scenario("/admin", async page => {
     await page.locator("#check").check();
