@@ -10,7 +10,7 @@ class LocalChanges:
         records = raw.split(b'\0')
         paths = []
         digest = hashlib.sha256(self.git('rev-parse', 'HEAD').encode())
-        conflicts = not bool(self.git('branch', '--show-current'))
+        conflicts = False
         while records and records[0]:
             record = records.pop(0)
             code, path = record[:2], os.fsdecode(record[3:])

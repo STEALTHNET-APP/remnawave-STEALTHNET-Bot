@@ -54,3 +54,17 @@ class RecoveryTests(unittest.TestCase):
         with patch.object(recovery, 'Updater', return_value=updater), patch.object(recovery.subprocess, 'run', return_value=Mock(returncode=3)) as systemctl:
             recovery.recover(self.config, 'main')
         self.assertEqual(systemctl.call_count, 1)
+
+    def test_launcher_uses_systemd_without_ssh_stdio_or_wait(self):
+        config = self.state / 'config.json'
+        config.write_text(json.dumps(self.config))
+        with patch.object(recovery.subprocess, 'run') as run:
+            recovery.launch(str(config), 'main')
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], 'systemd-run')
+        self.assertIn('--unit=stealthnet-update-recovery', command)
+        self.assertIn('--run', command)
+        self.assertNotIn('--pipe', command)
+        self.assertNotIn('--pty', command)
+        self.assertNotIn('--wait', command)
+        self.assertEqual(command[-2:], ['--channel', 'main'])

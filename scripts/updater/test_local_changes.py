@@ -92,7 +92,7 @@ class LocalChangesTests(unittest.TestCase):
         stash = json.loads((backup / 'local-changes.json').read_text())['stash']
         self.assertEqual(git('show', stash + ':version.json'), 'keep')
 
-    def test_tracked_runtime_config_and_detached_head_need_manual_review(self):
+    def test_tracked_runtime_config_needs_manual_review(self):
         (self.root / 'docker-compose.override.yml').write_text('services: {}')
         self.commit()
         (self.root / 'docker-compose.override.yml').write_text('services: {api: {}}')
@@ -100,8 +100,7 @@ class LocalChangesTests(unittest.TestCase):
         self.assertFalse(changes['canPreserve'])
         with self.assertRaises(RuntimeError):
             self.updater.clean(changes['id'])
-        self.updater.git('checkout', '--detach')
-        self.assertFalse(self.updater.local_changes()['canPreserve'])
+
 
     def test_renames_deletions_and_symlinks_round_trip(self):
         (self.root / 'delete-me').write_text('delete')
@@ -173,3 +172,25 @@ class LocalChangesTests(unittest.TestCase):
         self.updater.git('add', '.')
         with self.assertRaises(RuntimeError):
             self.updater.clean()
+
+    def test_detached_release_allows_fast_forward_and_preserves_config(self):
+        (self.root / 'nginx').mkdir()
+        config = self.root / 'nginx/nginx.conf'
+        config.write_text('release config')
+        previous = self.commit()
+        (self.root / 'fix').write_text('new release')
+        target = self.commit()
+        self.updater.git('checkout', '--detach', previous)
+        config.write_text('customer domain')
+        self.updater.clean()
+        backup = self.backup()
+        stash = self.updater.save_local_changes(backup, None)
+        self.updater.git('merge', '--ff-only', target)
+        self.updater.restore_runtime_config(backup)
+        self.assertEqual(self.updater.git('rev-parse', 'HEAD'), target)
+        self.assertEqual(self.updater.git('branch', '--show-current'), '')
+        self.assertEqual(config.read_text(), 'customer domain')
+        self.updater.clean()
+        self.updater.git('reset', '--hard', previous)
+        self.updater.restore_local_changes(stash)
+        self.assertEqual(config.read_text(), 'customer domain')

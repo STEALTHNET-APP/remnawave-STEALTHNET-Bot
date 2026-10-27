@@ -43,16 +43,36 @@ def recover(config, channel):
                 subprocess.run(['systemctl', 'start', 'stealthnet-updater'], check=True)
 
 
+def launch(config_path, channel):
+    config_path = Path(config_path).resolve()
+    config = read(config_path, {})
+    state = Path(config.get('stateDir', '/var/lib/stealthnet-updater'))
+    if not config.get('project') or not (state / 'status.json').is_file():
+        raise RuntimeError('Не найдена настроенная служба обновления. Проверьте путь конфигурации.')
+    subprocess.run([
+        'systemd-run', '--unit=stealthnet-update-recovery', '--collect', '--property=Type=exec',
+        '--property=UMask=0077', '--property=TimeoutStartSec=infinity',
+        sys.executable, str(Path(__file__).resolve()), '--run', '--config', str(config_path), '--channel', channel,
+    ], check=True)
+    print('Задание обновления запущено отдельно от SSH. Терминал можно закрыть.', flush=True)
+    print('Прогресс: journalctl -fu stealthnet-update-recovery', flush=True)
+    print('Подробный журнал: ' + str(state / 'update.log'), flush=True)
+
+
 if __name__ == '__main__':
     os.umask(0o077)
     parser = argparse.ArgumentParser(description='Однократное обновление старой панели с сохранением конфигурации Nginx')
     parser.add_argument('--config', default='/etc/stealthnet-updater/config.json')
     parser.add_argument('--channel', required=True, choices=['main', 'stable'])
+    parser.add_argument('--run', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
     if os.geteuid() != 0:
         parser.error('Запустите через sudo')
     try:
-        recover(read(args.config, {}), args.channel)
+        if args.run:
+            recover(read(args.config, {}), args.channel)
+        else:
+            launch(args.config, args.channel)
     except Exception as error:
         print(str(error), file=sys.stderr)
         raise SystemExit(1)

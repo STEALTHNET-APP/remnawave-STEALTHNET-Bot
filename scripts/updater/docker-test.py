@@ -127,7 +127,7 @@ try:
     updater.compose('exec', '-T', 'api', 'sh', '-c', 'echo preserved-file > /app/uploads/example.txt')
     (root / 'frontend/index.html').write_text('new frontend')
     updater.target = commit()
-    updater.git('reset', '--hard', previous)
+    updater.git('checkout', '--detach', previous)
     (root / 'nginx/nginx.conf').write_text('server_name customer.example;')
     updater.clean()
     install(updater, 'generated-nginx')

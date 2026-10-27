@@ -113,8 +113,6 @@ class Updater(Deployment, LocalChanges):
         return {'installed': read(self.root / 'version.json', {}), 'settings': self.settings, 'status': self.status, 'backups': self.backup_list()[:50]}
 
     def clean(self, local_changes_id=None):
-        if not self.git('branch', '--show-current'):
-            raise RuntimeError('Проект должен находиться на ветке Git, а не на отдельном коммите.')
         changes = self.local_changes()
         if changes and (not changes['canPreserve'] or changes['id'] != local_changes_id):
             raise RuntimeError('В папке проекта есть локальные изменения. Сохраните их отдельно или подтвердите обновление с резервной копией правок.')

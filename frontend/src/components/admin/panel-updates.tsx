@@ -43,8 +43,8 @@ export function PanelUpdates({ token }: { token: string }) {
         </div>
         {!data.connected ? (
           <div className="rounded-lg border p-4 space-y-2">
-            <p className="font-medium">Служба обновления ещё не установлена</p>
-            <p className="text-sm text-muted-foreground">Администратору сервера нужно один раз установить службу и пересобрать панель. После этого обновления можно запускать здесь.</p>
+            <p className="font-medium">Служба обновления недоступна</p>
+            <p className="text-sm text-muted-foreground">Не удалось подключиться к службе. Во время разового восстановления она может быть временно остановлена. Если обновление не выполняется, проверьте состояние службы на сервере. Для первой установки используйте инструкцию ниже.</p>
             <a className="text-primary underline" href="https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot/blob/main/docs/auto-update.md" target="_blank" rel="noreferrer">Инструкция по установке</a>
           </div>
         ) : <>
@@ -63,7 +63,7 @@ export function PanelUpdates({ token }: { token: string }) {
             <p className="font-medium">Локальные изменения: {localChanges.count}</p>
             <ul className="text-xs font-mono break-all">{localChanges.files.map(file => <li key={file}>{file}</li>)}</ul>
             {localChanges.count > localChanges.files.length && <p className="text-sm">Показаны первые {localChanges.files.length} файлов.</p>}
-            {!localChanges.canPreserve && <p className="text-sm text-amber-600 dark:text-amber-400">Нужна проверка на сервере: есть конфликт Git, вложенный репозиторий, изменения защищённых настроек или исходники не на ветке.</p>}
+            {!localChanges.canPreserve && <p className="text-sm text-amber-600 dark:text-amber-400">Нужна проверка на сервере: есть конфликт Git, вложенный репозиторий, изменения защищённых настроек.</p>}
             <p className="text-sm text-muted-foreground">При ручном обновлении сохраним правки отдельно и установим исходники новой версии. Правки не применяются поверх новой версии автоматически. .env и локальный docker-compose.override.yml сохраняются. Резервная копия локальных правок не удаляется по расписанию.</p>
           </div>}
           {data.status?.changes && <details><summary className="cursor-pointer">Что изменилось</summary><pre className="mt-2 whitespace-pre-wrap break-words text-sm">{data.status.changes}</pre></details>}
