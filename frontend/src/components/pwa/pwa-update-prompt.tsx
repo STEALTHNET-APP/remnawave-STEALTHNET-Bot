@@ -14,6 +14,70 @@ export function isUserActivelyEditing(): boolean {
   return active instanceof HTMLElement && (active.matches("input, textarea, select") || active.isContentEditable);
 }
 
+export type SafeLocation = {
+  pathname: string;
+  search?: string;
+  hash?: string;
+};
+
+export function isSafeUrlForAutoUpdate(location: SafeLocation): boolean {
+  const pathname = location.pathname || "/";
+  const search = location.search || "";
+
+  // 1. Опасные параметры платежей и возвратов с шлюзов — перезагрузка строго запрещена
+  if (search && (search.includes("payment=") || search.includes("invoice=") || search.includes("order="))) {
+    return false;
+  }
+  const unsafePaths = [
+    "/cabinet/payment-wait",
+    "/cabinet/yoomoney-pay",
+    "/cabinet/custom-build",
+    "/cabinet/onboarding",
+    "/admin/settings",
+    "/admin/backup",
+    "/admin/tickets",
+    "/admin/landing-editor",
+    "/admin/tour-constructor",
+  ];
+  if (unsafePaths.some((p) => pathname.startsWith(p))) {
+    return false;
+  }
+
+  // 2. Безопасные страницы клиентов (лендинг, дашборд, профиль, подарки, меню и т.д.)
+  const safeClientPaths = [
+    "/",
+    "/cabinet",
+    "/cabinet/dashboard",
+    "/cabinet/profile",
+    "/cabinet/referral",
+    "/cabinet/gifts",
+    "/cabinet/roulette",
+    "/cabinet/proxy",
+    "/cabinet/singbox",
+    "/cabinet/documents/privacy",
+    "/cabinet/documents/offer",
+    "/cabinet/documents/refund",
+  ];
+  if (safeClientPaths.includes(pathname) || pathname.startsWith("/cabinet/menu/")) {
+    return true;
+  }
+
+  // 3. Безопасные страницы админки (просмотр аналитики / дашборда)
+  const safeAdminPaths = [
+    "/admin",
+    "/admin/analytics",
+    "/admin/sales-report",
+    "/admin/business-analytics",
+    "/admin/referral-network",
+    "/admin/diagnostics",
+  ];
+  if (safeAdminPaths.includes(pathname)) {
+    return true;
+  }
+
+  return false;
+}
+
 export function PwaUpdatePrompt() {
   const [registration, setRegistration] = useState<ServiceWorkerRegistration>();
   const [autoUpdating, setAutoUpdating] = useState(false);
@@ -22,7 +86,7 @@ export function PwaUpdatePrompt() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSnoozed, setIsSnoozed] = useState(false);
   const updateTriggeredRef = useRef(false);
-  const edited = useRef(false);
+  const lastEditTime = useRef(0);
   const autoBlocked = useRef(false);
   const lastActivity = useRef(Date.now());
   const snoozeUntil = useRef(0);
@@ -40,14 +104,25 @@ export function PwaUpdatePrompt() {
   useEffect(() => {
     try { snoozeUntil.current = Number(sessionStorage.getItem(SNOOZE_KEY)) || 0; } catch {}
     const activity = () => { lastActivity.current = Date.now(); };
-    const edit = () => { edited.current = true; activity(); };
-    for (const event of ["pointerdown", "keydown", "scroll"]) window.addEventListener(event, activity, true);
+    const edit = () => {
+      lastEditTime.current = Date.now();
+      activity();
+    };
+    for (const event of ["pointerdown", "touchstart", "keydown", "scroll"]) window.addEventListener(event, activity, true);
     for (const event of ["input", "change"]) document.addEventListener(event, edit, true);
     return () => {
-      for (const event of ["pointerdown", "keydown", "scroll"]) window.removeEventListener(event, activity, true);
+      for (const event of ["pointerdown", "touchstart", "keydown", "scroll"]) window.removeEventListener(event, activity, true);
       for (const event of ["input", "change"]) document.removeEventListener(event, edit, true);
     };
   }, []);
+
+  useEffect(() => {
+    if (!registration && typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        if (reg) setRegistration(reg);
+      }).catch(() => {});
+    }
+  }, [registration]);
 
   useEffect(() => {
     if (!registration) return;
@@ -74,8 +149,38 @@ export function PwaUpdatePrompt() {
     return () => clearTimeout(timer);
   }, [offlineReady, setOfflineReady]);
 
-  const applyUpdate = async (manual = false) => {
-    if (manual && edited.current && !window.confirm("Обновить страницу? Несохранённые изменения будут потеряны.")) return;
+  const confirmUpdate = (onConfirmed: () => void) => {
+    const isActivelyEditing = isUserActivelyEditing() || Date.now() - lastEditTime.current < 15000;
+    if (!isActivelyEditing) {
+      onConfirmed();
+      return;
+    }
+    const tg = (window as unknown as { Telegram?: { WebApp?: { initData?: string; showConfirm?: (msg: string, cb: (ok: boolean) => void) => void } } })?.Telegram?.WebApp;
+    const isTelegram = Boolean(tg?.initData || (typeof window !== "undefined" && (window as unknown as { TelegramWebviewProxy?: unknown }).TelegramWebviewProxy));
+    if (typeof tg?.showConfirm === "function") {
+      tg.showConfirm("Обновить страницу? Несохранённые изменения будут потеряны.", (ok) => {
+        if (ok) onConfirmed();
+      });
+      return;
+    }
+    if (isTelegram) {
+      // В Telegram WebApp без showConfirm метод window.confirm блокируется WebView,
+      // поэтому применяем ручной запрос пользователя без зависания.
+      onConfirmed();
+      return;
+    }
+    try {
+      if (typeof window !== "undefined" && typeof window.confirm === "function") {
+        if (window.confirm("Обновить страницу? Несохранённые изменения будут потеряны.")) {
+          onConfirmed();
+        }
+        return;
+      }
+    } catch {}
+    onConfirmed();
+  };
+
+  const doApplyUpdate = async () => {
     if (updateTriggeredRef.current) return;
     autoBlocked.current = false;
     updateTriggeredRef.current = true;
@@ -85,13 +190,52 @@ export function PwaUpdatePrompt() {
       try {
         sessionStorage.setItem(AUTO_RELOAD_KEY, String(Date.now()));
       } catch {}
+
+      const hasSwSupport = typeof navigator !== "undefined" && "serviceWorker" in navigator;
+
+      if (hasSwSupport) {
+        navigator.serviceWorker.addEventListener(
+          "controllerchange",
+          () => {
+            window.location.reload();
+          },
+          { once: true }
+        );
+      }
+
+      if (registration?.waiting) {
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      }
+
       await updateServiceWorker(true);
+
+      // В реальных браузерах и WebView гарантируем перезагрузку через 1.5 сек,
+      // даже если событие controllerchange не сработало во фрейме/WebView.
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+
+      // Страховочный сброс состояния на случай отмены перезагрузки браузером
+      setTimeout(() => {
+        updateTriggeredRef.current = false;
+        setAutoUpdating(false);
+      }, 6000);
     } catch {
       updateTriggeredRef.current = false;
       autoBlocked.current = true;
       setAutoUpdating(false);
       setUpdateError(true);
     }
+  };
+
+  const applyUpdate = async (manual = false) => {
+    if (manual) {
+      confirmUpdate(() => {
+        void doApplyUpdate();
+      });
+      return;
+    }
+    await doApplyUpdate();
   };
 
   applyUpdateRef.current = () => { void applyUpdate(); };
@@ -110,13 +254,21 @@ export function PwaUpdatePrompt() {
       const now = Date.now();
       const snoozed = now < snoozeUntil.current;
       setIsSnoozed(snoozed);
-      const editing = edited.current || isUserActivelyEditing();
+      const editing = isUserActivelyEditing() || now - lastEditTime.current < 15000;
       setIsEditing(editing);
-      const location = window.location;
-      const safePage = ["/admin", "/cabinet/dashboard", "/cabinet/referral"].includes(location.pathname) && !location.search && !location.hash;
+      const safePage = typeof window !== "undefined" && isSafeUrlForAutoUpdate(window.location);
       let previousReload = now;
       try { previousReload = Number(sessionStorage.getItem(AUTO_RELOAD_KEY)) || 0; } catch {}
-      if (autoBlocked.current || snoozed || editing || !safePage || document.visibilityState !== "visible" || !navigator.onLine || now - lastActivity.current < 60000 || now - previousReload < 300000) {
+      if (
+        autoBlocked.current ||
+        snoozed ||
+        editing ||
+        !safePage ||
+        document.visibilityState !== "visible" ||
+        !navigator.onLine ||
+        now - lastActivity.current < 7000 ||
+        now - previousReload < 180000
+      ) {
         seconds = null;
         setCountdown(null);
         return;
