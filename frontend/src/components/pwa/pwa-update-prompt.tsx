@@ -16,6 +16,25 @@ export function isUserActivelyEditing(): boolean {
   return active instanceof HTMLElement && (active.matches("input, textarea, select") || active.isContentEditable);
 }
 
+export function hasUnsavedFormInput(): boolean {
+  if (typeof document === "undefined") return false;
+  const inputs = document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+    "input:not([type=hidden]):not([type=checkbox]):not([type=radio]), textarea"
+  );
+  for (const input of inputs) {
+    if (input.value !== input.defaultValue) {
+      return true;
+    }
+  }
+  const checkables = document.querySelectorAll<HTMLInputElement>("input[type=checkbox], input[type=radio]");
+  for (const cb of checkables) {
+    if (cb.checked !== cb.defaultChecked) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export type SafeLocation = {
   pathname: string;
   search?: string;
@@ -80,7 +99,7 @@ export function PwaUpdatePrompt() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSnoozed, setIsSnoozed] = useState(false);
   const updateTriggeredRef = useRef(false);
-  const edited = useRef(false);
+  const lastEditTime = useRef(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const autoBlocked = useRef(false);
   const lastActivity = useRef(Date.now());
@@ -100,7 +119,7 @@ export function PwaUpdatePrompt() {
     try { snoozeUntil.current = Number(sessionStorage.getItem(SNOOZE_KEY)) || 0; } catch {}
     const activity = () => { lastActivity.current = Date.now(); };
     const edit = () => {
-      edited.current = true;
+      lastEditTime.current = Date.now();
       activity();
     };
     for (const event of ["pointerdown", "touchstart", "keydown", "scroll"]) window.addEventListener(event, activity, true);
@@ -169,7 +188,8 @@ export function PwaUpdatePrompt() {
 
   const applyUpdate = async (manual = false) => {
     if (manual) {
-      if (edited.current || isUserActivelyEditing()) setConfirmOpen(true);
+      const isEditingNow = isUserActivelyEditing() || hasUnsavedFormInput() || Date.now() - lastEditTime.current < 15000;
+      if (isEditingNow) setConfirmOpen(true);
       else void doApplyUpdate();
       return;
     }
@@ -192,7 +212,7 @@ export function PwaUpdatePrompt() {
       const now = Date.now();
       const snoozed = now < snoozeUntil.current;
       setIsSnoozed(snoozed);
-      const editing = isUserActivelyEditing() || edited.current;
+      const editing = isUserActivelyEditing() || hasUnsavedFormInput() || now - lastEditTime.current < 15000;
       setIsEditing(editing);
       const safePage = typeof window !== "undefined" && isSafeUrlForAutoUpdate(window.location);
       let previousReload = now;
@@ -204,7 +224,7 @@ export function PwaUpdatePrompt() {
         !safePage ||
         document.visibilityState !== "visible" ||
         !navigator.onLine ||
-        now - lastActivity.current < 60000 ||
+        now - lastActivity.current < 7000 ||
         now - previousReload < 180000
       ) {
         seconds = null;

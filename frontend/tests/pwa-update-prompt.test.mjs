@@ -42,8 +42,10 @@ async function scenario(path, run) {
 }
 
 try {
-  await test("idle dashboard updates once and preserves URL", () => scenario("/cabinet/dashboard", async page => {
-    await page.clock.runFor(70000);
+  await test("idle dashboard updates once after 7s idle threshold and preserves URL", () => scenario("/cabinet/dashboard", async page => {
+    await page.clock.runFor(6000);
+    assert.equal(await page.evaluate(() => window.updates || 0), 0);
+    await page.clock.runFor(7000);
     assert.equal(await page.evaluate(() => window.updates), 1);
     assert.equal(page.url(), base + "/cabinet/dashboard");
     await page.clock.runFor(70000);

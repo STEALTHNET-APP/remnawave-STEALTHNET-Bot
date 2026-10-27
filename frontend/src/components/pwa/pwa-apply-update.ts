@@ -24,9 +24,7 @@ export function applyWorkerUpdate(
       clean();
       reject(error);
     };
-    const fallback = setTimeout(() => {
-      if (!registration?.waiting || registration.waiting.state === "activated") complete();
-    }, 1500);
+    const fallback = setTimeout(complete, 1500);
     const timeout = setTimeout(() => fail(new Error("Обновление не ответило. Попробуйте ещё раз.")), 8000);
     worker?.addEventListener("controllerchange", complete, { once: true });
     try {
