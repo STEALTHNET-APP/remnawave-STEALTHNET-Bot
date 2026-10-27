@@ -3090,6 +3090,9 @@ const updateSettingsSchema = z.object({
   autoBackupCron: z.string().max(50).nullable().optional(),
   ticketRetentionValue: z.number().int().min(0).max(36500).optional(),
   ticketRetentionUnit: z.enum(["minutes", "hours", "days"]).optional(),
+  backupRetentionDays: z.number().int().min(0).max(3650).optional(),
+  backupRetentionValue: z.number().int().min(0).max(100000).optional(),
+  backupRetentionUnit: z.enum(["minutes", "hours", "days"]).optional(),
   plategaMerchantId: z.string().max(200).nullable().optional(),
   plategaSecret: z.string().max(500).nullable().optional(),
   plategaMethods: z.string().max(2000).nullable().optional(),
@@ -3692,6 +3695,34 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.ticketRetentionUnit !== undefined) {
     const val = updates.ticketRetentionUnit;
     await prisma.systemSetting.upsert({ where: { key: "ticket_retention_unit" }, create: { key: "ticket_retention_unit", value: val }, update: { value: val } });
+  }
+  if (updates.backupRetentionValue !== undefined) {
+    const val = String(updates.backupRetentionValue);
+    await prisma.systemSetting.upsert({ where: { key: "backup_retention_value" }, create: { key: "backup_retention_value", value: val }, update: { value: val } });
+  }
+  if (updates.backupRetentionUnit !== undefined) {
+    const val = updates.backupRetentionUnit;
+    await prisma.systemSetting.upsert({ where: { key: "backup_retention_unit" }, create: { key: "backup_retention_unit", value: val }, update: { value: val } });
+  }
+  if (updates.backupRetentionDays !== undefined) {
+    const val = String(updates.backupRetentionDays);
+    await prisma.systemSetting.upsert({ where: { key: "backup_retention_days" }, create: { key: "backup_retention_days", value: val }, update: { value: val } });
+  } else if (updates.backupRetentionValue !== undefined) {
+    const unit = updates.backupRetentionUnit ?? "days";
+    const days = unit === "days" ? updates.backupRetentionValue : Math.max(1, Math.round(updates.backupRetentionValue / (unit === "hours" ? 24 : 1440)));
+    const val = String(updates.backupRetentionValue === 0 ? 0 : days);
+    await prisma.systemSetting.upsert({ where: { key: "backup_retention_days" }, create: { key: "backup_retention_days", value: val }, update: { value: val } });
+  }
+  if (updates.backupRetentionValue !== undefined || updates.backupRetentionUnit !== undefined || updates.backupRetentionDays !== undefined) {
+    invalidateSystemConfigCache();
+    try {
+      const { cleanupOldBackups } = await import("../backup/backup.service.js");
+      const { getSystemConfig } = await import("../client/client.service.js");
+      const cfg = await getSystemConfig();
+      await cleanupOldBackups(cfg);
+    } catch (e) {
+      console.error("[backup] auto cleanup on retention update failed:", e);
+    }
   }
   if (updates.plategaMerchantId !== undefined) {
     const val = updates.plategaMerchantId ?? "";

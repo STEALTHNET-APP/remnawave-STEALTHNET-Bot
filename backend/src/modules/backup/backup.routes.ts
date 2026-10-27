@@ -11,6 +11,8 @@ import {
   cleanupOldBackups,
   listBackups,
   resolveBackupPath,
+  deleteBackupFile,
+  deleteAllBackups,
 } from "./backup.service.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { stat } from "node:fs/promises";
@@ -36,7 +38,7 @@ export function registerBackupRoutes(
       // чтобы папка не росла бесконечно (без этого диск забивался).
       try {
         const cfg = await getSystemConfig();
-        await cleanupOldBackups(cfg.backupRetentionDays ?? 30);
+        await cleanupOldBackups(cfg);
       } catch (e) {
         console.error("[backup] чистка старых бэкапов не удалась:", e);
       }
@@ -60,10 +62,62 @@ export function registerBackupRoutes(
   router.get("/backup/list", asyncRoute(async (_req, res) => {
     try {
       const items = await listBackups();
-      return res.json({ items });
+      const totalSize = items.reduce((acc, it) => acc + (it.size || 0), 0);
+      return res.json({ items, totalSize, totalCount: items.length });
     } catch (e) {
       console.error("Backup list error:", e);
       return res.status(500).json({ message: "Ошибка чтения списка бэкапов" });
+    }
+  }));
+
+  /** DELETE /api/admin/backup?path=... — удалить один бэкап с сервера */
+  router.delete("/backup", asyncRoute(async (req, res) => {
+    const pathParam = (req.query.path || req.body?.path) as string | undefined;
+    if (!pathParam || typeof pathParam !== "string") {
+      return res.status(400).json({ message: "Укажите параметр path (относительный путь к бэкапу)" });
+    }
+    const success = await deleteBackupFile(pathParam);
+    if (!success) {
+      return res.status(404).json({ message: "Бэкап не найден или не может быть удалён" });
+    }
+    return res.json({ ok: true, message: "Бэкап успешно удалён", path: pathParam });
+  }));
+
+  /** POST /api/admin/backup/delete-all — удалить все бэкапы на сервере */
+  router.post("/backup/delete-all", asyncRoute(async (req, res) => {
+    if (req.body?.confirm !== "DELETE_ALL") {
+      return res.status(400).json({ message: "Подтвердите удаление всех бэкапов: укажите confirm: DELETE_ALL" });
+    }
+    try {
+      const result = await deleteAllBackups();
+      return res.json({
+        ok: true,
+        message: `Все бэкапы удалены (${result.deleted} шт., освобождено ${(result.freedBytes / 1048576).toFixed(1)} МБ)`,
+        deleted: result.deleted,
+        freedBytes: result.freedBytes,
+      });
+    } catch (e) {
+      console.error("Backup delete all error:", e);
+      return res.status(500).json({ message: "Ошибка удаления бэкапов" });
+    }
+  }));
+
+  /** POST /api/admin/backup/cleanup — запустить немедленную очистку устаревших бэкапов */
+  router.post("/backup/cleanup", asyncRoute(async (_req, res) => {
+    try {
+      const cfg = await getSystemConfig();
+      const result = await cleanupOldBackups(cfg);
+      return res.json({
+        ok: true,
+        message: result.deleted > 0
+          ? `Очистка завершена: удалено ${result.deleted} бэкапов, освобождено ${(result.freedBytes / 1048576).toFixed(1)} МБ`
+          : "Устаревших бэкапов не обнаружено",
+        deleted: result.deleted,
+        freedBytes: result.freedBytes,
+      });
+    } catch (e) {
+      console.error("Backup cleanup error:", e);
+      return res.status(500).json({ message: "Ошибка очистки бэкапов" });
     }
   }));
 

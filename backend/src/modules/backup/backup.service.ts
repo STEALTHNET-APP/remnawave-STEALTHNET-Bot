@@ -84,9 +84,11 @@ export interface BackupItem {
   filename: string;
   date: string;
   size: number;
+  createdAt?: string;
+  type?: "manual" | "automatic";
 }
 
-/** Список бэкапов (рекурсивно по backups/YYYY/MM/DD/) */
+/** Список бэкапов (рекурсивно по backups/YYYY/MM/DD/ и backups/automatic/) */
 export async function listBackups(): Promise<BackupItem[]> {
   const items: BackupItem[] = [];
   try {
@@ -94,7 +96,7 @@ export async function listBackups(): Promise<BackupItem[]> {
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
-  return items.sort((a, b) => b.date.localeCompare(a.date));
+  return items.sort((a, b) => (b.createdAt || b.date).localeCompare(a.createdAt || a.date));
 
   async function walkDir(dir: string, prefix: string): Promise<void> {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -105,11 +107,14 @@ export async function listBackups(): Promise<BackupItem[]> {
         await walkDir(full, rel);
       } else if (e.isFile() && (e.name.endsWith(".sql") || e.name.endsWith(".sql.gz"))) {
         const st = await stat(full);
+        const isAuto = e.name.endsWith(".sql.gz") || rel.startsWith("automatic/") || rel.startsWith("automatic\\");
         items.push({
           path: rel.replace(/\\/g, "/"),
           filename: e.name,
-          date: e.name.endsWith(".sql.gz") ? st.mtime.toISOString().slice(0, 10).replace(/-/g, "/") : path.dirname(rel).replace(/\\/g, "/"),
+          date: isAuto ? st.mtime.toISOString().slice(0, 10).replace(/-/g, "/") : path.dirname(rel).replace(/\\/g, "/"),
           size: st.size,
+          createdAt: st.mtime.toISOString(),
+          type: isAuto ? "automatic" : "manual",
         });
       }
     }
@@ -140,16 +145,31 @@ export async function readBackupFile(relativePath: string): Promise<Buffer | nul
 export { runPgRestore } from "./backup-restore.js";
 
 /**
- * Удаляет бэкапы старше N дней (срок берётся из настройки backup_retention_days,
- * по умолчанию 30; 0 = хранить вечно). Раньше чистки не было вообще — папка росла
- * бесконечно, а на сервере с почти полным диском это приводило к отказу записи.
- * Вызывается после ручного бэкапа; автоматические gzip-архивы имеют отдельную ротацию.
+ * Удаляет бэкапы старше заданного времени (retention).
+ * Поддерживает минуты, часы, дни (через config) или число дней (legacy).
+ * Очищает как .sql (ручные), так и .sql.gz (автоматические),
+ * а также связанные с ними метафайлы (.delivered.json, .manifest.json, .partial)
+ * и зависшие .partial файлы старше 1 часа.
  */
-export async function cleanupOldBackups(retentionDays: number): Promise<{ deleted: number; freedBytes: number }> {
+export async function cleanupOldBackups(
+  retention: number | { backupRetentionValue?: number; backupRetentionUnit?: string; backupRetentionDays?: number }
+): Promise<{ deleted: number; freedBytes: number }> {
   const result = { deleted: 0, freedBytes: 0 };
-  if (!Number.isFinite(retentionDays) || retentionDays <= 0) return result; // 0 = хранить всё
+  let retentionMs = 0;
+  if (typeof retention === "number") {
+    if (!Number.isFinite(retention) || retention <= 0) return result;
+    // Если передано число < 1000 — трактуем как дни (legacy), если больше — как ms
+    retentionMs = retention < 1000 ? retention * 86_400_000 : retention;
+  } else if (retention && typeof retention === "object") {
+    const { getBackupRetentionMs } = await import("../client/client.service.js");
+    retentionMs = getBackupRetentionMs(retention);
+  }
+  if (!Number.isFinite(retentionMs) || retentionMs <= 0) return result; // 0 = хранить вечно
+
   const { readdir, stat, unlink, rmdir } = await import("node:fs/promises");
-  const cutoff = Date.now() - retentionDays * 86_400_000;
+  const now = Date.now();
+  const cutoff = now - retentionMs;
+  const partialCutoff = now - 3_600_000; // зависшие .partial старше 1 часа
 
   const walk = async (dir: string): Promise<void> => {
     let entries: string[];
@@ -175,7 +195,109 @@ export async function cleanupOldBackups(retentionDays: number): Promise<{ delete
         } catch {
           /* не критично */
         }
-      } else if (name.endsWith(".sql") && st.mtimeMs < cutoff) {
+      } else {
+        const isBackupArchive = name.endsWith(".sql") || name.endsWith(".sql.gz");
+        const isOrphanPartial = name.endsWith(".partial") && st.mtimeMs < partialCutoff;
+        if ((isBackupArchive && st.mtimeMs < cutoff) || isOrphanPartial) {
+          try {
+            await unlink(full);
+            result.deleted++;
+            result.freedBytes += st.size;
+            // Удаляем сопутствующие файлы метаданных
+            for (const suffix of [".delivered.json", ".manifest.json", ".partial"]) {
+              try {
+                const compPath = full + suffix;
+                const compSt = await stat(compPath).catch(() => null);
+                if (compSt) {
+                  await unlink(compPath);
+                  result.freedBytes += compSt.size;
+                }
+              } catch { /* игнорируем */ }
+            }
+          } catch (e) {
+            console.error("[backup] не удалось удалить", full, e);
+          }
+        }
+      }
+    }
+  };
+
+  await walk(BACKUPS_DIR);
+  if (result.deleted > 0) {
+    console.log(`[backup] чистка: удалено ${result.deleted} бэкапов (срок ${Math.round(retentionMs / 60000)} мин.), освобождено ${(result.freedBytes / 1048576).toFixed(1)} МБ`);
+  }
+  return result;
+}
+
+/**
+ * Удаляет один указанный файл бэкапа по относительному пути (вместе с сопутствующими метафайлами)
+ */
+export async function deleteBackupFile(relativePath: string): Promise<boolean> {
+  const full = resolveBackupPath(relativePath);
+  if (!full) return false;
+  const { unlink, stat, readdir, rmdir } = await import("node:fs/promises");
+  try {
+    const st = await stat(full);
+    if (!st.isFile()) return false;
+    await unlink(full);
+    // Удаляем сопутствующие метафайлы
+    for (const suffix of [".delivered.json", ".manifest.json", ".partial"]) {
+      try { await unlink(full + suffix); } catch {}
+    }
+    // Удаляем пустые родительские папки дат
+    let parent = path.dirname(full);
+    const base = path.resolve(BACKUPS_DIR);
+    while (parent.startsWith(base) && parent !== base) {
+      try {
+        const remaining = await readdir(parent);
+        if (remaining.length === 0) {
+          await rmdir(parent);
+          parent = path.dirname(parent);
+        } else {
+          break;
+        }
+      } catch {
+        break;
+      }
+    }
+    return true;
+  } catch (e) {
+    console.error("[backup] ошибка удаления бэкапа:", relativePath, e);
+    return false;
+  }
+}
+
+/**
+ * Полностью удаляет все бэкапы на сервере (включая ручные и автоматические архивы)
+ */
+export async function deleteAllBackups(): Promise<{ deleted: number; freedBytes: number }> {
+  const result = { deleted: 0, freedBytes: 0 };
+  const { readdir, stat, unlink, rm } = await import("node:fs/promises");
+  const base = path.resolve(BACKUPS_DIR);
+
+  const walk = async (dir: string): Promise<void> => {
+    let entries: string[];
+    try {
+      entries = await readdir(dir);
+    } catch {
+      return;
+    }
+    for (const name of entries) {
+      const full = path.join(dir, name);
+      let st;
+      try {
+        st = await stat(full);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) {
+        await walk(full);
+        try {
+          if (full !== base) {
+            await rm(full, { recursive: true, force: true });
+          }
+        } catch { /* игнорируем */ }
+      } else {
         try {
           await unlink(full);
           result.deleted++;
@@ -187,9 +309,7 @@ export async function cleanupOldBackups(retentionDays: number): Promise<{ delete
     }
   };
 
-  await walk(BACKUPS_DIR);
-  if (result.deleted > 0) {
-    console.log(`[backup] чистка: удалено ${result.deleted} бэкапов старше ${retentionDays} дн., освобождено ${(result.freedBytes / 1048576).toFixed(1)} МБ`);
-  }
+  await walk(base);
+  console.log(`[backup] удалены все бэкапы: ${result.deleted} файлов, освобождено ${(result.freedBytes / 1048576).toFixed(1)} МБ`);
   return result;
 }

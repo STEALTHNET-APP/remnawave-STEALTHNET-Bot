@@ -7,8 +7,10 @@ import { proxyFetch } from "../proxy-util/proxy-fetch.js";
 import { getProxyUrl } from "../proxy-util/get-proxy-url.js";
 
 const DEFAULT_CRON = "0 7 * * *";
+const CLEANUP_CRON = "*/10 * * * *";
 const LOG = "[auto-backup]";
 let currentTask: ScheduledTask | null = null;
+let cleanupTask: ScheduledTask | null = null;
 let running = false;
 
 interface TelegramDestination { botToken: string; chatId: string; topicId: number | null }
@@ -82,6 +84,12 @@ export async function runAutoBackup(options: { force?: boolean } = {}): Promise<
         await sendDocument(destination, Buffer.from(JSON.stringify(manifest, null, 2)), `${archive.filename}.manifest.json`, `✅ ${source.label}: все ${total} частей отправлены. Контрольная сумма и список сообщений — в файле.`);
         await writeFile(`${archive.fullPath}.delivered.json`, JSON.stringify(manifest, null, 2), { mode: 0o600 });
         await pruneDeliveredBackups(AUTO_BACKUPS_DIR, `stealthnet-${source.name}-`, config.backupRetentionDays ?? 30);
+        try {
+          const { cleanupOldBackups } = await import("./backup.service.js");
+          await cleanupOldBackups(config);
+        } catch (e) {
+          console.error(`${LOG} cleanupOldBackups error:`, e);
+        }
         console.log(`${LOG} Backup complete: ${source.name}, ${archive.bytes} bytes, ${total} parts`);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown backup failure";
@@ -100,6 +108,20 @@ export async function runAutoBackup(options: { force?: boolean } = {}): Promise<
 
 export async function startAutoBackupScheduler(): Promise<void> {
   const config = await getSystemConfig();
+
+  // Фоновая периодическая чистка устаревших бэкапов (каждые 10 минут)
+  if (!cleanupTask) {
+    cleanupTask = cron.schedule(CLEANUP_CRON, async () => {
+      try {
+        const cfg = await getSystemConfig();
+        const { cleanupOldBackups } = await import("./backup.service.js");
+        await cleanupOldBackups(cfg);
+      } catch (error) {
+        console.error(LOG, "Periodic cleanup error:", error instanceof Error ? error.message : error);
+      }
+    });
+  }
+
   if (!config.autoBackupEnabled) {
     console.log(`${LOG} Disabled, skip scheduler`);
     return;
@@ -121,4 +143,6 @@ export async function restartAutoBackupScheduler(): Promise<void> {
 export function stopAutoBackupScheduler(): void {
   currentTask?.stop();
   currentTask = null;
+  cleanupTask?.stop();
+  cleanupTask = null;
 }

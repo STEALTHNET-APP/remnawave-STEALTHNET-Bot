@@ -1837,8 +1837,33 @@ export const api = {
   },
 
   /** Список сохранённых на сервере бэкапов */
-  async getBackupList(token: string): Promise<{ items: { path: string; filename: string; date: string; size: number }[] }> {
+  async getBackupList(token: string): Promise<{ items: { path: string; filename: string; date: string; size: number; createdAt?: string; type?: "manual" | "automatic" }[]; totalSize?: number; totalCount?: number }> {
     return request("/admin/backup/list", { token });
+  },
+
+  /** Удалить один бэкап с сервера */
+  async deleteBackup(token: string, path: string): Promise<{ ok: boolean; message: string }> {
+    return request(`/admin/backup?path=${encodeURIComponent(path)}`, {
+      method: "DELETE",
+      token,
+    });
+  },
+
+  /** Удалить все бэкапы с сервера */
+  async deleteAllBackups(token: string): Promise<{ ok: boolean; message: string; deleted: number; freedBytes: number }> {
+    return request("/admin/backup/delete-all", {
+      method: "POST",
+      body: JSON.stringify({ confirm: "DELETE_ALL" }),
+      token,
+    });
+  },
+
+  /** Запустить немедленную очистку устаревших бэкапов */
+  async cleanupBackupsNow(token: string): Promise<{ ok: boolean; message: string; deleted: number; freedBytes: number }> {
+    return request("/admin/backup/cleanup", {
+      method: "POST",
+      token,
+    });
   },
 
   /** Скачать бэкап с сервера по пути (path из списка) */
@@ -3514,6 +3539,9 @@ export type UpdateSettingsPayload = {
   autoBackupCron?: string | null;
   ticketRetentionValue?: number;
   ticketRetentionUnit?: "minutes" | "hours" | "days";
+  backupRetentionDays?: number;
+  backupRetentionValue?: number;
+  backupRetentionUnit?: "minutes" | "hours" | "days";
   plategaMerchantId?: string | null;
   plategaSecret?: string | null;
   plategaMethods?: string | null;
@@ -4042,6 +4070,9 @@ export interface AdminSettings {
   autoBackupCron?: string | null;
   ticketRetentionValue?: number;
   ticketRetentionUnit?: "minutes" | "hours" | "days";
+  backupRetentionDays?: number;
+  backupRetentionValue?: number;
+  backupRetentionUnit?: "minutes" | "hours" | "days";
   plategaMerchantId?: string | null;
   plategaSecret?: string | null;
   plategaMethods?: { id: number; enabled: boolean; label: string }[];
