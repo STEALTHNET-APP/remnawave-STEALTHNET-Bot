@@ -92,3 +92,26 @@ test("bot bootstrap data contract assembly", () => {
   assert.equal(bootstrap.allSubscriptions.items.length, 1);
   assert.equal(bootstrap.availableTrials.hasAnyEnabled, false);
 });
+
+test("bot webhook secret retention and clearing logic", () => {
+  function resolveEffectiveSecret(existingSecret, newSecretToken, clearSecret) {
+    let effective = (existingSecret || "").trim();
+    if (clearSecret) {
+      effective = "";
+    } else if (newSecretToken !== undefined && newSecretToken.trim().length > 0) {
+      effective = newSecretToken.trim();
+    }
+    return effective;
+  }
+
+  // 1. Keeps existing secret when secretToken is omitted/empty
+  assert.equal(resolveEffectiveSecret("old-secret", undefined, false), "old-secret");
+  assert.equal(resolveEffectiveSecret("old-secret", "", false), "old-secret");
+
+  // 2. Overwrites secret when new non-empty secret is provided
+  assert.equal(resolveEffectiveSecret("old-secret", "new-secret", false), "new-secret");
+
+  // 3. Clears secret when clearSecret is true
+  assert.equal(resolveEffectiveSecret("old-secret", undefined, true), "");
+  assert.equal(resolveEffectiveSecret("old-secret", "", true), "");
+});

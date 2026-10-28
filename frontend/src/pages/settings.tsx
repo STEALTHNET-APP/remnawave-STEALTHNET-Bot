@@ -4702,8 +4702,6 @@ export function SettingsPage() {
                 </Button>
               </CardContent>
             </Card>
-
-            <BotWebhookManager token={token} />
           </TabsContent>
         </form>
 

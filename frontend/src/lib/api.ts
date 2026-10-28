@@ -1477,6 +1477,7 @@ export const api = {
     ok: boolean;
     enabled?: boolean;
     configuredUrl?: string | null;
+    hasSecret?: boolean;
     webhookInfo?: {
       url?: string;
       has_custom_certificate?: boolean;
@@ -1488,6 +1489,7 @@ export const api = {
       max_connections?: number;
       allowed_updates?: string[];
     };
+    checkedAt?: string;
     error?: string;
   }> {
     return request("/admin/bot/webhook/status", { token });
@@ -1495,7 +1497,7 @@ export const api = {
 
   async setBotWebhook(
     token: string,
-    data: { url: string; secretToken?: string; dropPendingUpdates?: boolean }
+    data: { url: string; secretToken?: string; clearSecret?: boolean; dropPendingUpdates?: boolean }
   ): Promise<{ ok: boolean; message?: string; error?: string }> {
     return request("/admin/bot/webhook/set", { method: "POST", body: JSON.stringify(data), token });
   },

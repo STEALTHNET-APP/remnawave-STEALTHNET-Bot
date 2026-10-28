@@ -79,6 +79,7 @@ botWebhookAdminRouter.get("/status", async (_req: Request, res: Response) => {
       ok: true,
       enabled: config.botWebhookEnabled ?? false,
       configuredUrl: config.botWebhookUrl,
+      hasSecret: Boolean(config.botWebhookSecret && config.botWebhookSecret.trim().length > 0),
       webhookInfo: data.result,
       checkedAt: new Date().toISOString(),
     });
@@ -90,6 +91,7 @@ botWebhookAdminRouter.get("/status", async (_req: Request, res: Response) => {
 const setWebhookSchema = z.object({
   url: z.string().url(),
   secretToken: z.string().optional(),
+  clearSecret: z.boolean().optional(),
   dropPendingUpdates: z.boolean().optional(),
 });
 
@@ -99,7 +101,7 @@ botWebhookAdminRouter.post("/set", async (req: Request, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ ok: false, error: "Некорректный URL вебхука" });
     }
-    const { url, secretToken, dropPendingUpdates } = parsed.data;
+    const { url, secretToken, clearSecret, dropPendingUpdates } = parsed.data;
 
     const config = await getSystemConfig();
     const token = (config.telegramBotToken || process.env.BOT_TOKEN || "").trim();
@@ -107,13 +109,21 @@ botWebhookAdminRouter.post("/set", async (req: Request, res: Response) => {
       return res.status(400).json({ ok: false, error: "Токен бота не задан" });
     }
 
+    // Retain existing secret if not explicitly cleared or overwritten
+    let effectiveSecret = (config.botWebhookSecret || "").trim();
+    if (clearSecret) {
+      effectiveSecret = "";
+    } else if (secretToken !== undefined && secretToken.trim().length > 0) {
+      effectiveSecret = secretToken.trim();
+    }
+
     const payload: Record<string, unknown> = {
       url,
       allowed_updates: ["message", "callback_query", "pre_checkout_query", "my_chat_member"],
       drop_pending_updates: Boolean(dropPendingUpdates),
     };
-    if (secretToken && secretToken.trim()) {
-      payload.secret_token = secretToken.trim();
+    if (effectiveSecret) {
+      payload.secret_token = effectiveSecret;
     }
 
     const tgRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
@@ -140,8 +150,8 @@ botWebhookAdminRouter.post("/set", async (req: Request, res: Response) => {
       }),
       prisma.systemSetting.upsert({
         where: { key: "bot_webhook_secret" },
-        update: { value: secretToken?.trim() || "" },
-        create: { key: "bot_webhook_secret", value: secretToken?.trim() || "" },
+        update: { value: effectiveSecret },
+        create: { key: "bot_webhook_secret", value: effectiveSecret },
       }),
     ]);
     invalidateSystemConfigCache();
