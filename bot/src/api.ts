@@ -1,6 +1,7 @@
 /**
  * STEALTHNET 3.0 - API клиент бота (вызовы бэкенда).
  */
+import { setProviderLabels, setStarsPaymentsEnabled } from "./keyboard.js";
 
 const API_URL = (process.env.API_URL || "").replace(/\/$/, "");
 if (!API_URL) {
@@ -9,16 +10,36 @@ if (!API_URL) {
 
 let cachedConfig: any = null;
 let configCacheTime = 0;
+let _configRefreshPromise: Promise<any> | null = null;
+
+let cachedTariffs: any = null;
+let tariffsCacheTime = 0;
+let _tariffsRefreshPromise: Promise<any> | null = null;
+
+let _cachedProxyTariffs: any = null;
+let _cachedProxyTariffsAt = 0;
+let _proxyTariffsRefreshPromise: Promise<any> | null = null;
+
+let _cachedSingboxTariffs: any = null;
+let _cachedSingboxTariffsAt = 0;
+let _singboxTariffsRefreshPromise: Promise<any> | null = null;
+
+const CACHE_TTL = 5 * 60 * 1000; // Кэш на 5 минут (с Stale-While-Revalidate)
 
 export function invalidateConfigCache() {
   cachedConfig = null;
   configCacheTime = 0;
+  _configRefreshPromise = null;
+  cachedTariffs = null;
+  tariffsCacheTime = 0;
+  _tariffsRefreshPromise = null;
+  _cachedProxyTariffs = null;
+  _cachedProxyTariffsAt = 0;
+  _proxyTariffsRefreshPromise = null;
+  _cachedSingboxTariffs = null;
+  _cachedSingboxTariffsAt = 0;
+  _singboxTariffsRefreshPromise = null;
 }
-
-let cachedTariffs: any = null;
-let tariffsCacheTime = 0;
-
-const CACHE_TTL = 60 * 1000; // Кэш на 60 секунд
 
 function getHeaders(token?: string): HeadersInit {
   const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -212,25 +233,47 @@ export async function getPublicConfig(): Promise<{
   defaultLanguage?: string;
   translations?: Record<string, Record<string, unknown>>;
 } | null> {
+  const refreshConfigInternal = async () => {
+    const cfg = await fetchJson<{
+      paymentProviders?: { id: string; label: string; sortOrder: number }[];
+      telegramStarsEnabled?: boolean;
+    } | null>("/api/public/config");
+
+    try {
+      setProviderLabels(cfg?.paymentProviders ?? null);
+      setStarsPaymentsEnabled(cfg?.telegramStarsEnabled === true);
+    } catch {}
+
+    cachedConfig = cfg;
+    configCacheTime = Date.now();
+    return cfg;
+  };
+
   const now = Date.now();
-  if (cachedConfig && now - configCacheTime < CACHE_TTL) {
+  if (cachedConfig) {
+    if (now - configCacheTime < CACHE_TTL) {
+      return cachedConfig;
+    }
+    // Stale-While-Revalidate: отдаём закэшированное сразу (0мс)
+    if (!_configRefreshPromise) {
+      _configRefreshPromise = refreshConfigInternal()
+        .catch((err) => {
+          console.error("[getPublicConfig] Background refresh failed:", err);
+          return cachedConfig;
+        })
+        .finally(() => {
+          _configRefreshPromise = null;
+        });
+    }
     return cachedConfig;
   }
 
-  const cfg = await fetchJson<{
-    paymentProviders?: { id: string; label: string; sortOrder: number }[];
-    telegramStarsEnabled?: boolean;
-  } | null>("/api/public/config");
-
-  try {
-    const { setProviderLabels, setStarsPaymentsEnabled } = await import("./keyboard.js");
-    setProviderLabels(cfg?.paymentProviders ?? null);
-    setStarsPaymentsEnabled(cfg?.telegramStarsEnabled === true);
-  } catch {}
-
-  cachedConfig = cfg;
-  configCacheTime = now;
-  return cfg as any;
+  if (!_configRefreshPromise) {
+    _configRefreshPromise = refreshConfigInternal().finally(() => {
+      _configRefreshPromise = null;
+    });
+  }
+  return _configRefreshPromise as any;
 }
 
 /** Регистрация / вход по Telegram */
@@ -469,23 +512,43 @@ export async function postClientDeviceDelete(
   return fetchJson("/api/client/devices/delete", { method: "POST", body, token });
 }
 
-let _cachedProxyTariffs: { items: { id: string; name: string; tariffs: { id: string; name: string; proxyCount: number; durationDays: number; price: number; currency: string }[] }[] } | null = null;
-let _cachedProxyTariffsAt = 0;
-
-/** Публичный список тарифов прокси по категориям (с in-memory кэшем 60с) */
+/** Публичный список тарифов прокси по категориям (с in-memory кэшем и Stale-While-Revalidate) */
 export async function getPublicProxyTariffs(): Promise<{
   items: { id: string; name: string; tariffs: { id: string; name: string; proxyCount: number; durationDays: number; price: number; currency: string }[] }[];
 }> {
+  const refreshProxyTariffsInternal = async () => {
+    const data = await fetchJson<{
+      items: { id: string; name: string; tariffs: { id: string; name: string; proxyCount: number; durationDays: number; price: number; currency: string }[] }[];
+    }>("/api/public/proxy-tariffs");
+    _cachedProxyTariffs = data;
+    _cachedProxyTariffsAt = Date.now();
+    return data;
+  };
+
   const now = Date.now();
-  if (_cachedProxyTariffs && now - _cachedProxyTariffsAt < 60_000) {
+  if (_cachedProxyTariffs) {
+    if (now - _cachedProxyTariffsAt < CACHE_TTL) {
+      return _cachedProxyTariffs;
+    }
+    if (!_proxyTariffsRefreshPromise) {
+      _proxyTariffsRefreshPromise = refreshProxyTariffsInternal()
+        .catch((err) => {
+          console.error("[getPublicProxyTariffs] Background refresh failed:", err);
+          return _cachedProxyTariffs;
+        })
+        .finally(() => {
+          _proxyTariffsRefreshPromise = null;
+        });
+    }
     return _cachedProxyTariffs;
   }
-  const data = await fetchJson<{
-    items: { id: string; name: string; tariffs: { id: string; name: string; proxyCount: number; durationDays: number; price: number; currency: string }[] }[];
-  }>("/api/public/proxy-tariffs");
-  _cachedProxyTariffs = data;
-  _cachedProxyTariffsAt = now;
-  return data;
+
+  if (!_proxyTariffsRefreshPromise) {
+    _proxyTariffsRefreshPromise = refreshProxyTariffsInternal().finally(() => {
+      _proxyTariffsRefreshPromise = null;
+    });
+  }
+  return _proxyTariffsRefreshPromise;
 }
 
 /** Активные прокси-слоты клиента */
@@ -495,23 +558,43 @@ export async function getProxySlots(token: string): Promise<{
   return fetchJson("/api/client/proxy-slots", { token });
 }
 
-let _cachedSingboxTariffs: { items: { id: string; name: string; tariffs: { id: string; name: string; slotCount: number; durationDays: number; price: number; currency: string }[] }[] } | null = null;
-let _cachedSingboxTariffsAt = 0;
-
-/** Публичный список тарифов Sing-box по категориям (с in-memory кэшем 60с) */
+/** Публичный список тарифов Sing-box по категориям (с in-memory кэшем и Stale-While-Revalidate) */
 export async function getPublicSingboxTariffs(): Promise<{
   items: { id: string; name: string; tariffs: { id: string; name: string; slotCount: number; durationDays: number; price: number; currency: string }[] }[];
 }> {
+  const refreshSingboxTariffsInternal = async () => {
+    const data = await fetchJson<{
+      items: { id: string; name: string; tariffs: { id: string; name: string; slotCount: number; durationDays: number; price: number; currency: string }[] }[];
+    }>("/api/public/singbox-tariffs");
+    _cachedSingboxTariffs = data;
+    _cachedSingboxTariffsAt = Date.now();
+    return data;
+  };
+
   const now = Date.now();
-  if (_cachedSingboxTariffs && now - _cachedSingboxTariffsAt < 60_000) {
+  if (_cachedSingboxTariffs) {
+    if (now - _cachedSingboxTariffsAt < CACHE_TTL) {
+      return _cachedSingboxTariffs;
+    }
+    if (!_singboxTariffsRefreshPromise) {
+      _singboxTariffsRefreshPromise = refreshSingboxTariffsInternal()
+        .catch((err) => {
+          console.error("[getPublicSingboxTariffs] Background refresh failed:", err);
+          return _cachedSingboxTariffs;
+        })
+        .finally(() => {
+          _singboxTariffsRefreshPromise = null;
+        });
+    }
     return _cachedSingboxTariffs;
   }
-  const data = await fetchJson<{
-    items: { id: string; name: string; tariffs: { id: string; name: string; slotCount: number; durationDays: number; price: number; currency: string }[] }[];
-  }>("/api/public/singbox-tariffs");
-  _cachedSingboxTariffs = data;
-  _cachedSingboxTariffsAt = now;
-  return data;
+
+  if (!_singboxTariffsRefreshPromise) {
+    _singboxTariffsRefreshPromise = refreshSingboxTariffsInternal().finally(() => {
+      _singboxTariffsRefreshPromise = null;
+    });
+  }
+  return _singboxTariffsRefreshPromise;
 }
 
 /** Активные Sing-box слоты клиента */
@@ -521,7 +604,7 @@ export async function getSingboxSlots(token: string): Promise<{
   return fetchJson("/api/client/singbox-slots", { token });
 }
 
-/** Публичный список тарифов по категориям с кэшированием */
+/** Публичный список тарифов по категориям с кэшированием (Stale-While-Revalidate) */
 export async function getPublicTariffs(): Promise<{
   remnaAvailable?: boolean;
   items: {
@@ -544,36 +627,57 @@ export async function getPublicTariffs(): Promise<{
     }[];
   }[];
 }> {
+  const refreshTariffsInternal = async () => {
+    const res = await fetchJson<{
+      items: {
+        id: string;
+        name: string;
+        emojiKey: string | null;
+        emoji: string;
+        singleSubscriptionMode?: boolean;
+        tariffs: {
+          id: string;
+          name: string;
+          description?: string | null;
+          durationDays: number;
+          trafficLimitBytes?: number | null;
+          trafficResetMode?: string;
+          deviceLimit?: number | null;
+          price: number;
+          currency: string;
+          priceOptions: { id: string; durationDays: number; price: number; sortOrder: number }[];
+        }[];
+      }[];
+    }>("/api/public/tariffs");
+    cachedTariffs = res;
+    tariffsCacheTime = Date.now();
+    return res;
+  };
+
   const now = Date.now();
-  if (cachedTariffs && now - tariffsCacheTime < CACHE_TTL) {
+  if (cachedTariffs) {
+    if (now - tariffsCacheTime < CACHE_TTL) {
+      return cachedTariffs;
+    }
+    if (!_tariffsRefreshPromise) {
+      _tariffsRefreshPromise = refreshTariffsInternal()
+        .catch((err) => {
+          console.error("[getPublicTariffs] Background refresh failed:", err);
+          return cachedTariffs;
+        })
+        .finally(() => {
+          _tariffsRefreshPromise = null;
+        });
+    }
     return cachedTariffs;
   }
 
-  const res = await fetchJson<{
-    items: {
-      id: string;
-      name: string;
-      emojiKey: string | null;
-      emoji: string;
-      singleSubscriptionMode?: boolean;
-      tariffs: {
-        id: string;
-        name: string;
-        description?: string | null;
-        durationDays: number;
-        trafficLimitBytes?: number | null;
-        trafficResetMode?: string;
-        deviceLimit?: number | null;
-        price: number;
-        currency: string;
-        priceOptions: { id: string; durationDays: number; price: number; sortOrder: number }[];
-      }[];
-    }[];
-  }>("/api/public/tariffs");
-
-  cachedTariffs = res;
-  tariffsCacheTime = now;
-  return res;
+  if (!_tariffsRefreshPromise) {
+    _tariffsRefreshPromise = refreshTariffsInternal().finally(() => {
+      _tariffsRefreshPromise = null;
+    });
+  }
+  return _tariffsRefreshPromise;
 }
 
 /** Создать платёж Platega */

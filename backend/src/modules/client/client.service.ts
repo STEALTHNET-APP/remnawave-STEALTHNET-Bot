@@ -525,27 +525,54 @@ function parseBotEmojis(raw: string | undefined): BotEmojisConfig {
   }
 }
 
-// TTL-кэш для getSystemConfig.
-// Раньше каждый вызов делал prisma.systemSetting.findMany({where: { key: { in: ~200_keys }}})
-// — на тяжёлых маршрутах (broadcast 50k сообщений × 2 вызова) это давало 100k+ DB roundtrips
-// и упирало throughput в ~0.5 msg/sec + забивало api контейнер так что бот лагал.
-// Применение изменений настроек теперь задерживается ≤30 сек (приемлемо).
-// invalidate() публично экспортирован — admin-routes дёргают его после PATCH /admin/settings.
+// TTL-кэш для getSystemConfig с поддержкой Stale-While-Revalidate.
+// Ни один входящий вебхук или клик пользователя не блокируется на перечитку базы:
+// при истечении TTL отдаётся закэшированное значение мгновенно (0мс), а фоновое
+// обновление запускается асинхронно без блокировки Event Loop.
+// При ручном изменении настроек в админке вызывается invalidateSystemConfigCache().
 let _systemConfigCache: { data: Awaited<ReturnType<typeof loadSystemConfigFromDb>>; ts: number } | null = null;
-const SYSTEM_CONFIG_TTL_MS = 30_000;
+let _systemConfigRefreshPromise: Promise<Awaited<ReturnType<typeof loadSystemConfigFromDb>>> | null = null;
+const SYSTEM_CONFIG_TTL_MS = 5 * 60_000;
 
 export function invalidateSystemConfigCache(): void {
   _systemConfigCache = null;
+  _systemConfigRefreshPromise = null;
 }
 
 export async function getSystemConfig() {
   const now = Date.now();
-  if (_systemConfigCache && (now - _systemConfigCache.ts) < SYSTEM_CONFIG_TTL_MS) {
+  if (_systemConfigCache) {
+    if (now - _systemConfigCache.ts < SYSTEM_CONFIG_TTL_MS) {
+      return _systemConfigCache.data;
+    }
+    if (!_systemConfigRefreshPromise) {
+      _systemConfigRefreshPromise = loadSystemConfigFromDb()
+        .then((data) => {
+          _systemConfigCache = { data, ts: Date.now() };
+          return data;
+        })
+        .catch((err) => {
+          console.error("[getSystemConfig] Background refresh failed:", err);
+          return _systemConfigCache ? _systemConfigCache.data : loadSystemConfigFromDb();
+        })
+        .finally(() => {
+          _systemConfigRefreshPromise = null;
+        });
+    }
     return _systemConfigCache.data;
   }
-  const data = await loadSystemConfigFromDb();
-  _systemConfigCache = { data, ts: now };
-  return data;
+
+  if (!_systemConfigRefreshPromise) {
+    _systemConfigRefreshPromise = loadSystemConfigFromDb()
+      .then((data) => {
+        _systemConfigCache = { data, ts: Date.now() };
+        return data;
+      })
+      .finally(() => {
+        _systemConfigRefreshPromise = null;
+      });
+  }
+  return _systemConfigRefreshPromise;
 }
 
 /**

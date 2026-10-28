@@ -3183,58 +3183,66 @@ export async function fetchClientSubscriptionsAll(clientId: string): Promise<{ i
     }
   }
 
-  const items: ClientSubInfo[] = [];
-  for (const sub of visible) {
-    let remnaPayload: unknown = null;
-    let isOfflineSnapshot = false;
-    let tariffName = (sub.trialId ? sub.trial?.name?.trim() : undefined) ?? sub.tariff?.name?.trim() ?? "";
-    if (sub.remnawaveUuid) {
-      let r: { data?: unknown; error?: string; status: number } | null = null;
-      try {
-        r = await remnaGetUser(sub.remnawaveUuid);
-      } catch {
-        r = null;
-      }
-      if (r?.data) {
-        if (cryptOn) await encryptSubscriptionUrlInPlace(r.data);
-        remnaPayload = r.data ?? null;
-        if (!tariffName) tariffName = await resolveTariffDisplayName(r.data ?? null);
-      } else if (!r || r.status >= 500 || r.status === 429) {
-        isOfflineSnapshot = true;
-        remnaPayload = offlineSubscriptionSnapshot(sub);
-      }
-    }
-    if (!tariffName) tariffName = "Тариф не выбран";
-
-    items.push({
-      type: sub.subscriptionIndex === 0 ? "root" : "secondary",
-      id: sub.id,
-      subscriptionIndex: sub.subscriptionIndex,
-      subscription: remnaPayload,
-      isOfflineSnapshot,
-      tariffDisplayName: tariffName,
-      remnawaveUuid: sub.remnawaveUuid,
-      tariffId: sub.tariff?.id ?? null,
-      trialId: sub.trialId ?? null,
-      autoRenewEnabled: sub.autoRenewEnabled === true,
-      tariffMenuEmoji: sub.tariff?.menuEmoji?.trim() || null,
-      extraDevices: sub.extraDevices ?? 0,
-      extraDevicesMonthlyPrice: sub.extraDevicesMonthlyPrice ?? 0,
-      isBanned: !!(sub.bannedUntil && sub.bannedUntil.getTime() > Date.now()),
-      banReason: sub.banReason ?? null,
-      bannedUntil: sub.bannedUntil?.toISOString() ?? null,
-      convertTariffIds: (() => {
-        if (!sub.trialId || !sub.trial?.convertTariffIds) return [];
+  const items: ClientSubInfo[] = await Promise.all(
+    visible.map(async (sub) => {
+      let remnaPayload: unknown = null;
+      let isOfflineSnapshot = false;
+      let tariffName = (sub.trialId ? sub.trial?.name?.trim() : undefined) ?? sub.tariff?.name?.trim() ?? "";
+      if (sub.remnawaveUuid) {
+        let r: { data?: unknown; error?: string; status: number } | null = null;
         try {
-          const parsed = JSON.parse(sub.trial.convertTariffIds) as unknown;
-          return Array.isArray(parsed) ? parsed.map((x) => String(x)) : [];
-        } catch { return []; }
-      })(),
-      trialName: sub.trialId ? (sub.trial?.name ?? null) : null,
-      trialConvertEnabled: sub.trialId ? (sub.trial?.convertEnabled ?? true) : true,
-      trialConvertAllTariffs: sub.trialId ? (sub.trial?.convertAllTariffs ?? false) : false,
-    });
-  }
+          // Таймаут 1500мс: если Remna не отвечает быстро, сразу отдаём снимок из БД,
+          // предотвращая 5-секундный таймаут вебхука в Telegram
+          r = await Promise.race([
+            remnaGetUser(sub.remnawaveUuid),
+            new Promise<{ data?: unknown; error?: string; status: number }>((resolve) =>
+              setTimeout(() => resolve({ status: 504, error: "Remna timeout" }), 1500)
+            ),
+          ]);
+        } catch {
+          r = null;
+        }
+        if (r?.data) {
+          if (cryptOn) await encryptSubscriptionUrlInPlace(r.data);
+          remnaPayload = r.data ?? null;
+          if (!tariffName) tariffName = await resolveTariffDisplayName(r.data ?? null);
+        } else if (!r || r.status >= 500 || r.status === 429) {
+          isOfflineSnapshot = true;
+          remnaPayload = offlineSubscriptionSnapshot(sub);
+        }
+      }
+      if (!tariffName) tariffName = "Тариф не выбран";
+
+      return {
+        type: sub.subscriptionIndex === 0 ? "root" : "secondary",
+        id: sub.id,
+        subscriptionIndex: sub.subscriptionIndex,
+        subscription: remnaPayload,
+        isOfflineSnapshot,
+        tariffDisplayName: tariffName,
+        remnawaveUuid: sub.remnawaveUuid,
+        tariffId: sub.tariff?.id ?? null,
+        trialId: sub.trialId ?? null,
+        autoRenewEnabled: sub.autoRenewEnabled === true,
+        tariffMenuEmoji: sub.tariff?.menuEmoji?.trim() || null,
+        extraDevices: sub.extraDevices ?? 0,
+        extraDevicesMonthlyPrice: sub.extraDevicesMonthlyPrice ?? 0,
+        isBanned: !!(sub.bannedUntil && sub.bannedUntil.getTime() > Date.now()),
+        banReason: sub.banReason ?? null,
+        bannedUntil: sub.bannedUntil?.toISOString() ?? null,
+        convertTariffIds: (() => {
+          if (!sub.trialId || !sub.trial?.convertTariffIds) return [];
+          try {
+            const parsed = JSON.parse(sub.trial.convertTariffIds) as unknown;
+            return Array.isArray(parsed) ? parsed.map((x) => String(x)) : [];
+          } catch { return []; }
+        })(),
+        trialName: sub.trialId ? (sub.trial?.name ?? null) : null,
+        trialConvertEnabled: sub.trialId ? (sub.trial?.convertEnabled ?? true) : true,
+        trialConvertAllTariffs: sub.trialId ? (sub.trial?.convertAllTariffs ?? false) : false,
+      };
+    })
+  );
 
   return { items };
 }

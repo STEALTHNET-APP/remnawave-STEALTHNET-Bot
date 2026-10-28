@@ -23,16 +23,30 @@ botWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
     // Forward update to the bot internal HTTP listener
     const botUrl = process.env.BOT_INTERNAL_URL || "http://bot:8080/webhook";
-    const forwardResponse = await fetch(botUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(req.headers["x-telegram-bot-api-secret-token"] && {
-          "X-Telegram-Bot-Api-Secret-Token": String(req.headers["x-telegram-bot-api-secret-token"]),
-        }),
-      },
-      body: JSON.stringify(req.body),
-    });
+    const forwardHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(req.headers["x-telegram-bot-api-secret-token"] && {
+        "X-Telegram-Bot-Api-Secret-Token": String(req.headers["x-telegram-bot-api-secret-token"]),
+      }),
+    };
+    const bodyStr = JSON.stringify(req.body);
+
+    let forwardResponse: globalThis.Response;
+    try {
+      forwardResponse = await fetch(botUrl, {
+        method: "POST",
+        headers: forwardHeaders,
+        body: bodyStr,
+      });
+    } catch {
+      // Быстрый retry при разрыве неактивного (idle) keep-alive сокета:
+      // открывает свежее соединение (<3мс), предотвращая потерю первого клика пользователя
+      forwardResponse = await fetch(botUrl, {
+        method: "POST",
+        headers: forwardHeaders,
+        body: bodyStr,
+      });
+    }
 
     // Check if bot returned a Webhook Reply (JSON payload)
     const contentType = forwardResponse.headers.get("content-type") || "";

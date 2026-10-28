@@ -132,7 +132,6 @@ async function createBotWithProxy(token: string): Promise<Bot> {
       "editMessageCaption",
       "editMessageReplyMarkup",
       "sendPhoto",
-      "deleteMessage",
     ].includes(method);
   };
 
