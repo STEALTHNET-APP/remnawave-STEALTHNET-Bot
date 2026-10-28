@@ -1473,6 +1473,40 @@ export const api = {
     return request("/admin/bot/reset-token", { method: "POST", token });
   },
 
+  async getBotWebhookStatus(token: string): Promise<{
+    ok: boolean;
+    enabled?: boolean;
+    configuredUrl?: string | null;
+    webhookInfo?: {
+      url?: string;
+      has_custom_certificate?: boolean;
+      pending_update_count?: number;
+      ip_address?: string;
+      last_error_date?: number;
+      last_error_message?: string;
+      last_synchronization_error_date?: number;
+      max_connections?: number;
+      allowed_updates?: string[];
+    };
+    error?: string;
+  }> {
+    return request("/admin/bot/webhook/status", { token });
+  },
+
+  async setBotWebhook(
+    token: string,
+    data: { url: string; secretToken?: string; dropPendingUpdates?: boolean }
+  ): Promise<{ ok: boolean; message?: string; error?: string }> {
+    return request("/admin/bot/webhook/set", { method: "POST", body: JSON.stringify(data), token });
+  },
+
+  async deleteBotWebhook(
+    token: string,
+    dropPendingUpdates?: boolean
+  ): Promise<{ ok: boolean; message?: string; error?: string }> {
+    return request("/admin/bot/webhook/delete", { method: "POST", body: JSON.stringify({ dropPendingUpdates }), token });
+  },
+
 
 
   async updateSettings(token: string, data: UpdateSettingsPayload): Promise<AdminSettings> {

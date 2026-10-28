@@ -1,8 +1,8 @@
-import cron from "node-cron";
+import cron, { type ScheduledTask } from "node-cron";
 import { getSystemConfig } from "../client/client.service.js";
 import { deleteTickets } from "./ticket-delete.service.js";
 
-let task: cron.ScheduledTask | null = null;
+let task: ScheduledTask | null = null;
 
 export { calculateRetentionCutoff } from "./ticket-retention.js";
 import { calculateRetentionCutoff } from "./ticket-retention.js";

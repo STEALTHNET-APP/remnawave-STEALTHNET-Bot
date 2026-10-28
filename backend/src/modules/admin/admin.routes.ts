@@ -3134,6 +3134,9 @@ const updateSettingsSchema = z.object({
   botWelcomeText: z.string().max(4000).nullable().optional(),
   botWelcomeImage: z.string().max(5_500_000).nullable().optional(), // data URL base64
   botWelcomeShowOnce: z.boolean().optional(),
+  botWebhookEnabled: z.boolean().optional(),
+  botWebhookUrl: z.string().max(2000).nullable().optional(),
+  botWebhookSecret: z.string().max(500).nullable().optional(),
   overpayApiUrl: z.string().max(500).nullable().optional(),
   overpayProjectId: z.string().max(100).nullable().optional(),
   overpayLogin: z.string().max(200).nullable().optional(),
@@ -3860,6 +3863,18 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.botWelcomeShowOnce !== undefined) {
     const val = updates.botWelcomeShowOnce ? "true" : "false";
     await prisma.systemSetting.upsert({ where: { key: "bot_welcome_show_once" }, create: { key: "bot_welcome_show_once", value: val }, update: { value: val } });
+  }
+  if (updates.botWebhookEnabled !== undefined) {
+    const val = updates.botWebhookEnabled ? "true" : "false";
+    await prisma.systemSetting.upsert({ where: { key: "bot_webhook_enabled" }, create: { key: "bot_webhook_enabled", value: val }, update: { value: val } });
+  }
+  if (updates.botWebhookUrl !== undefined) {
+    const val = updates.botWebhookUrl ?? "";
+    await prisma.systemSetting.upsert({ where: { key: "bot_webhook_url" }, create: { key: "bot_webhook_url", value: val }, update: { value: val } });
+  }
+  if (updates.botWebhookSecret !== undefined) {
+    const val = updates.botWebhookSecret ?? "";
+    await prisma.systemSetting.upsert({ where: { key: "bot_webhook_secret" }, create: { key: "bot_webhook_secret", value: val }, update: { value: val } });
   }
   if (updates.overpayApiUrl !== undefined) {
     const val = updates.overpayApiUrl ?? "";

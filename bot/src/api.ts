@@ -10,6 +10,11 @@ if (!API_URL) {
 let cachedConfig: any = null;
 let configCacheTime = 0;
 
+export function invalidateConfigCache() {
+  cachedConfig = null;
+  configCacheTime = 0;
+}
+
 let cachedTariffs: any = null;
 let tariffsCacheTime = 0;
 
@@ -129,6 +134,8 @@ export async function getPublicConfig(): Promise<{
   botWelcomeText?: string | null;
   botWelcomeImage?: string | null;
   botWelcomeShowOnce?: boolean;
+  botWebhookEnabled?: boolean;
+  botWebhookUrl?: string | null;
   botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; emojiKey?: string; url?: string }[] | null;
   liteMode?: boolean;
   botGroupCabinet?: boolean;
@@ -278,6 +285,49 @@ export async function getMe(token: string): Promise<{
   return fetchJson("/api/client/auth/me", { token });
 }
 
+export interface BotBootstrapData {
+  client: {
+    id: string;
+    email?: string | null;
+    telegramId?: string | null;
+    telegramUsername?: string | null;
+    preferredLang: string;
+    preferredCurrency: string;
+    balance: number;
+    referralCode?: string | null;
+    referralPercent?: number | null;
+    trialUsed?: boolean;
+    autoRenewEnabled?: boolean;
+    currentTariffId?: string | null;
+    currentTariff?: { id: string; name: string; categoryId: string | null } | null;
+    yookassaPaymentMethodTitle?: string | null;
+    personalDiscountPercent?: number | null;
+    onboardingCompleted?: boolean;
+  };
+  subscription: {
+    subscription: unknown;
+    tariffDisplayName?: string | null;
+    isTrial?: boolean;
+    trialName?: string | null;
+    trialConvertEnabled?: boolean;
+    isBanned?: boolean;
+    banReason?: string | null;
+    message?: string;
+  };
+  allSubscriptions: {
+    items: SubscriptionListItem[];
+  };
+  availableTrials: {
+    items: { id: string; name: string; price?: number; tariffId: string; tariffName: string | null; durationDays: number; description: string | null; sortOrder: number }[];
+    hasAnyEnabled: boolean;
+  };
+}
+
+/** Единый запрос для главного меню и старта: me + subscription + allSubscriptions + trials */
+export async function getBotBootstrap(token: string): Promise<BotBootstrapData> {
+  return fetchJson("/api/client/bot-bootstrap", { token });
+}
+
 /** Подписка Remna (для ссылки VPN, статус, трафик) + отображаемое имя тарифа с сайта */
 export async function getSubscription(token: string): Promise<{ subscription: unknown; tariffDisplayName?: string | null; message?: string }> {
   return fetchJson("/api/client/subscription", { token });
@@ -419,11 +469,23 @@ export async function postClientDeviceDelete(
   return fetchJson("/api/client/devices/delete", { method: "POST", body, token });
 }
 
-/** Публичный список тарифов прокси по категориям */
+let _cachedProxyTariffs: { items: { id: string; name: string; tariffs: { id: string; name: string; proxyCount: number; durationDays: number; price: number; currency: string }[] }[] } | null = null;
+let _cachedProxyTariffsAt = 0;
+
+/** Публичный список тарифов прокси по категориям (с in-memory кэшем 60с) */
 export async function getPublicProxyTariffs(): Promise<{
   items: { id: string; name: string; tariffs: { id: string; name: string; proxyCount: number; durationDays: number; price: number; currency: string }[] }[];
 }> {
-  return fetchJson("/api/public/proxy-tariffs");
+  const now = Date.now();
+  if (_cachedProxyTariffs && now - _cachedProxyTariffsAt < 60_000) {
+    return _cachedProxyTariffs;
+  }
+  const data = await fetchJson<{
+    items: { id: string; name: string; tariffs: { id: string; name: string; proxyCount: number; durationDays: number; price: number; currency: string }[] }[];
+  }>("/api/public/proxy-tariffs");
+  _cachedProxyTariffs = data;
+  _cachedProxyTariffsAt = now;
+  return data;
 }
 
 /** Активные прокси-слоты клиента */
@@ -433,11 +495,23 @@ export async function getProxySlots(token: string): Promise<{
   return fetchJson("/api/client/proxy-slots", { token });
 }
 
-/** Публичный список тарифов Sing-box по категориям */
+let _cachedSingboxTariffs: { items: { id: string; name: string; tariffs: { id: string; name: string; slotCount: number; durationDays: number; price: number; currency: string }[] }[] } | null = null;
+let _cachedSingboxTariffsAt = 0;
+
+/** Публичный список тарифов Sing-box по категориям (с in-memory кэшем 60с) */
 export async function getPublicSingboxTariffs(): Promise<{
   items: { id: string; name: string; tariffs: { id: string; name: string; slotCount: number; durationDays: number; price: number; currency: string }[] }[];
 }> {
-  return fetchJson("/api/public/singbox-tariffs");
+  const now = Date.now();
+  if (_cachedSingboxTariffs && now - _cachedSingboxTariffsAt < 60_000) {
+    return _cachedSingboxTariffs;
+  }
+  const data = await fetchJson<{
+    items: { id: string; name: string; tariffs: { id: string; name: string; slotCount: number; durationDays: number; price: number; currency: string }[] }[];
+  }>("/api/public/singbox-tariffs");
+  _cachedSingboxTariffs = data;
+  _cachedSingboxTariffsAt = now;
+  return data;
 }
 
 /** Активные Sing-box слоты клиента */

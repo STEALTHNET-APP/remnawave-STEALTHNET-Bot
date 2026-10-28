@@ -1,6 +1,7 @@
 import { isBotButtonUrl } from "@/lib/bot-button-url";
 import { SettingsNavigation, SETTINGS_TABS } from "@/components/admin/settings-navigation";
 import { MailTest } from "@/components/admin/mail-test";
+import { BotWebhookManager } from "@/components/admin/bot-webhook-manager";
 import { useSearchParams } from "react-router-dom";
 import { PanelUpdates } from "@/components/admin/panel-updates";
 import { useEffect, useState } from "react";
@@ -4701,6 +4702,8 @@ export function SettingsPage() {
                 </Button>
               </CardContent>
             </Card>
+
+            <BotWebhookManager token={token} />
           </TabsContent>
         </form>
 
@@ -6075,6 +6078,8 @@ export function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+
+            <BotWebhookManager token={token} />
 
             {/* Карточка 3: Публичный адрес */}
             <Card className="overflow-hidden border-border">

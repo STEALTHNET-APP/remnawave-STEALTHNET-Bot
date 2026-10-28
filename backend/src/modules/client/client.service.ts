@@ -96,7 +96,7 @@ export function generateReferralCode(): string {
   return "REF-" + randomBytes(4).toString("hex").toUpperCase();
 }
 
-const SYSTEM_CONFIG_KEYS = [
+export const SYSTEM_CONFIG_KEYS = [
   "lite_mode",
   "remna_auto_sync_enabled", "remna_auto_sync_interval_minutes",
   "remna_api_url", "remna_admin_token", "remna_secret_key",
@@ -112,6 +112,7 @@ const SYSTEM_CONFIG_KEYS = [
   "smtp_from_email", "smtp_from_name", "public_app_url",
   "mail_provider", "resend_api_key", "resend_from_email",
   "telegram_bot_token", "telegram_bot_username", "bot_admin_telegram_ids",
+  "bot_webhook_enabled", "bot_webhook_url", "bot_webhook_secret",
   "notification_telegram_group_id",
   "notification_managers_group_id",
   "notification_managers_topic_tickets",
@@ -751,6 +752,9 @@ async function loadSystemConfigFromDb() {
     lavatopDefaultOfferId: (map.lavatop_default_offer_id ?? "").trim() || null,
     /** Приветственное сообщение бота: показывать ли */
     botWelcomeEnabled: (map.bot_welcome_enabled ?? "").trim() === "true",
+    botWebhookEnabled: (map.bot_webhook_enabled ?? "").trim() === "true" || (process.env.BOT_WEBHOOK_ENABLED ?? "").trim() === "true",
+    botWebhookUrl: (map.bot_webhook_url ?? "").trim() || (process.env.BOT_WEBHOOK_URL ?? "").trim() || null,
+    botWebhookSecret: (map.bot_webhook_secret ?? "").trim() || (process.env.BOT_WEBHOOK_SECRET ?? "").trim() || null,
     /** Текст приветствия (поддерживает эмодзи и простые HTML-теги, как остальные тексты бота) */
     botWelcomeText: (map.bot_welcome_text ?? "") || null,
     /** Картинка-баннер (data URL base64 PNG/JPG) */
@@ -1363,6 +1367,8 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     publicAppUrl: full.publicAppUrl,
     telegramBotUsername: full.telegramBotUsername ?? null,
     telegramBotId: full.telegramBotToken?.split(":")[0] || null,
+    botWebhookEnabled: Boolean((full as { botWebhookEnabled?: boolean }).botWebhookEnabled),
+    botWebhookUrl: ((full as { botWebhookUrl?: string | null }).botWebhookUrl ?? null),
     botAdminTelegramIds: full.botAdminTelegramIds ?? [],
     plategaMethods: full.plategaMethods.filter((m) => m.enabled).map((m) => ({ id: m.id, label: m.label })),
     yoomoneyEnabled: Boolean(full.yoomoneyReceiverWallet?.trim()),

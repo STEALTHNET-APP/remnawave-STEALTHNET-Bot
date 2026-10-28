@@ -15,6 +15,7 @@
   "dependencies": {
     "dotenv": "^16.4.5",
     "grammy": "^1.21.1",
+    "@grammyjs/runner": "^2.0.3",
     "socks-proxy-agent": "^9.0.0",
     "undici": "^7.24.5"
   },
