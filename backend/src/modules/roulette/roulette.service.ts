@@ -1,3 +1,4 @@
+import { invalidateSystemConfigCache } from "../client/client.service.js";
 import { nextRouletteSpinAt } from "./roulette-cooldown.js";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
@@ -233,6 +234,7 @@ export async function updateRouletteSettings(params: {
       update: { value: val },
     });
   }
+  invalidateSystemConfigCache();
   return getRouletteSettings();
 }
 

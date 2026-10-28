@@ -183,6 +183,7 @@ const SYSTEM_CONFIG_KEYS = [
   "bot_welcome_enabled", "bot_welcome_text", "bot_welcome_image", "bot_welcome_show_once",
   // Применять выбранный дизайн (Stealth) и в обычном браузере, не только в Telegram Mini App
   "cabinet_design_apply_in_browser",
+  "roulette_enabled",
   "tickets_enabled", // Тикет-система: true/false
   "admin_front_notifications_enabled", // Всплывающие уведомления в админке: true/false
   "theme_accent", // Глобальная цветовая тема: default, blue, violet, rose, orange, green, emerald, cyan, amber, red, pink, indigo
@@ -895,6 +896,7 @@ async function loadSystemConfigFromDb() {
     videoInstructions: (() => {
       try { return JSON.parse(map.video_instructions || "[]") as { id: string; title: string; telegramFileId: string; sortOrder: number }[]; } catch { return []; }
     })(),
+    rouletteEnabled: map.roulette_enabled !== "false",
     ticketsEnabled: map.tickets_enabled === "true" || map.tickets_enabled === "1",
     themeAccent: (map.theme_accent ?? "").trim() || "default",
     allowUserThemeChange: map.allow_user_theme_change === "true" || map.allow_user_theme_change === "1" || map.allow_user_theme_change == null,
@@ -1397,7 +1399,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     smtpConfigured: isSystemSmtpConfigured(full),
     useRemnaSubscriptionPage: full.useRemnaSubscriptionPage ?? false,
     aiChatEnabled: full.aiChatEnabled ?? true,
-    rouletteEnabled: (full as any).rouletteEnabled !== "false" && (full as any).rouletteEnabled !== false,
+    rouletteEnabled: full.rouletteEnabled,
     trialEnabled,
     trialDays,
     botButtons: resolvedButtons,

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import gsap from "gsap";
 import { EASE_OUT, EASE_SPRING, reducedMotion } from "@/lib/gsap-utils";
@@ -651,6 +652,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
 }
 
 export function FloatingChat() {
+  const { t } = useTranslation();
   const { state } = useClientAuth();
   const config = useCabinetConfig();
   const token = state.token ?? null;
@@ -878,7 +880,7 @@ export function FloatingChat() {
   // Скрываем кнопку чата когда открыт любой Dialog (Radix)
   useEffect(() => {
     function checkDialogs() {
-      const overlay = document.querySelector("[data-radix-dialog-overlay]");
+      const overlay = document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]');
       setHasOpenDialog(!!overlay);
     }
     const observer = new MutationObserver(checkDialogs);
@@ -1093,6 +1095,8 @@ export function FloatingChat() {
         <div data-tour="floating-chat-button" className={cn("relative group", isOpen && "hidden sm:block")}>
           <button
             ref={fabRef}
+            aria-label={isOpen ? t("cabinet.workspace.close_chat") : t("cabinet.workspace.open_chat")}
+            aria-expanded={isOpen}
             onClick={() => setIsOpen((v) => !v)}
             className={cn(
               "relative flex h-9 w-9 sm:h-16 sm:w-16 items-center justify-center rounded-full z-10",

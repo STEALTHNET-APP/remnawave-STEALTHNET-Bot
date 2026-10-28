@@ -1,3 +1,4 @@
+import { cabinetSection } from "@/lib/cabinet-navigation";
 import { LiteLayout } from "./lite-layout";
 import { getPublicConfigCached } from "@/lib/public-config";
 import "./classic-cabinet.css";
@@ -11,8 +12,7 @@ import { useIsMiniapp } from "@/hooks/use-is-miniapp";
 import { useLanguageSync } from "@/i18n/use-language-sync";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { GlassSelect } from "@/components/ui/glass-select";
-import { LayoutDashboard, Package, User, LogOut, Shield, Users, Sun, Moon, PlusCircle, Globe, KeyRound, MessageSquare, Palette, Monitor, Check, Loader2, Settings, Layers, MoreHorizontal, ChevronDown, Wallet, Gift, Sparkles } from "lucide-react";
+import { LayoutDashboard, Package, User, LogOut, Shield, Users, Sun, Moon, PlusCircle, Globe, KeyRound, MessageSquare, Palette, Monitor, Check, Loader2, Settings, Layers, MoreHorizontal, Wallet, Gift, Sparkles } from "lucide-react";
 import { useTheme, ACCENT_PALETTES, type ThemeMode, type ThemeAccent } from "@/contexts/theme";
 import { cn } from "@/lib/utils";
 import { FloatingChat } from "@/components/floating-chat";
@@ -22,14 +22,7 @@ import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthLayout } from "@/pages/cabinet/stealth/stealth-layout";
 import { AuroraLayout } from "@/pages/cabinet/aurora/aurora-layout";
 
-function formatMoney(amount: number, currency: string) {
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: currency.toUpperCase() === "USD" ? "USD" : currency.toUpperCase() === "RUB" ? "RUB" : "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+import { formatCabinetMoney as formatMoney } from "@/lib/cabinet-format";
 
 function AnalyticsScripts() {
   useEffect(() => {
@@ -156,13 +149,15 @@ function useNavItems() {
   return useMemo(() => [
     { to: "/cabinet/dashboard", label: t("cabinet.nav.home"), icon: LayoutDashboard },
     { to: "/cabinet/tariffs", label: t("cabinet.nav.tariffs"), icon: Package },
+    { to: "/cabinet/wallet", label: t("cabinet.workspace.wallet"), icon: Wallet },
+    { to: "/cabinet/help", label: t("cabinet.workspace.help"), icon: MessageSquare },
     { to: "/cabinet/custom-build", label: t("cabinet.nav.custom_build"), icon: Layers },
     { to: "/cabinet/extra-options", label: t("cabinet.nav.options"), icon: PlusCircle },
     { to: "/cabinet/proxy", label: t("cabinet.nav.proxy"), icon: Globe },
     { to: "/cabinet/singbox", label: t("cabinet.nav.access"), icon: KeyRound },
     { to: "/cabinet/referral", label: t("cabinet.nav.referrals"), icon: Users },
     { to: "/cabinet/tickets", label: t("cabinet.nav.tickets"), icon: MessageSquare },
-    { to: "/cabinet/gifts", label: "Подарки", icon: Gift },
+    { to: "/cabinet/gifts", label: t("cabinet.workspace.gifts"), icon: Gift },
     { to: "/cabinet/roulette", label: t("cabinet.nav.roulette", "Рулетка"), icon: Sparkles },
     { to: "/cabinet/profile", label: t("cabinet.nav.profile"), icon: User },
   ], [t]);
@@ -216,10 +211,10 @@ function ThemePopover() {
 
   return (
     <div className="relative" ref={popoverRef} onKeyDown={(e) => { if (e.key === "Escape") { setShow(false); popoverRef.current?.querySelector("button")?.focus(); } }}>
-      <Button variant="ghost" size="sm" aria-label="Оформление" aria-expanded={show} aria-controls="cabinet-theme-panel" className="h-10 w-10 p-0 bg-background/20 hover:bg-background/40" onClick={() => setShow(!show)}>
+      <Button variant="ghost" size="sm" aria-label={t("cabinet.workspace.appearance_label")} aria-expanded={show} aria-controls="cabinet-theme-panel" className="h-10 w-10 p-0 bg-background/20 hover:bg-background/40" onClick={() => setShow(!show)}>
         <Palette className="h-3.5 w-3.5" />
       </Button>
-      <div id="cabinet-theme-panel"
+      <div id="cabinet-theme-panel" hidden={!show}
         className={cn(
           "absolute -right-2 sm:right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[320px] max-w-[320px] rounded-[2rem] border border-white/40 dark:border-white/10 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-[32px] p-5 shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)] transition-all duration-300 origin-top-right",
           show
@@ -298,11 +293,11 @@ function SettingsPopover() {
   const { t } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
 
-  const [activeLanguages, setActiveLanguages] = useState<string[]>([]);
-  const [activeCurrencies, setActiveCurrencies] = useState<string[]>([]);
+  const config = useCabinetConfig();
   const [preferredLang, setPreferredLang] = useState(state.client?.preferredLang ?? "ru");
   const [preferredCurrency, setPreferredCurrency] = useState(state.client?.preferredCurrency ?? "usd");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
 
   useEffect(() => {
     if (!show) {
@@ -312,13 +307,6 @@ function SettingsPopover() {
       }
       return;
     }
-
-    api.getPublicConfig()
-      .then((c) => {
-        setActiveLanguages(c.activeLanguages?.length ? c.activeLanguages : ["ru", "en"]);
-        setActiveCurrencies(c.activeCurrencies?.length ? c.activeCurrencies : ["usd", "rub"]);
-      })
-      .catch(() => { });
 
     function handleClick(e: MouseEvent) {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
@@ -332,26 +320,27 @@ function SettingsPopover() {
   async function handleSave() {
     if (!state.token) return;
     setSaving(true);
+    setSaveError(false);
     try {
       await api.clientUpdateProfile(state.token, { preferredLang, preferredCurrency });
       await refreshProfile();
       setShow(false);
     } catch {
-      // ignore
+      setSaveError(true);
     } finally {
       setSaving(false);
     }
   }
 
-  const langs = activeLanguages.length ? activeLanguages : ["ru", "en"];
-  const currencies = activeCurrencies.length ? activeCurrencies : ["usd", "rub"];
+  const langs = config?.activeLanguages?.length ? config.activeLanguages : [preferredLang];
+  const currencies = config?.activeCurrencies?.length ? config.activeCurrencies : [preferredCurrency];
 
   return (
-    <div className="relative" ref={popoverRef} data-tour="language-currency">
-      <Button aria-label="Настройки кабинета" aria-expanded={show} aria-controls="cabinet-settings-panel" variant="ghost" size="sm" className="gap-1.5 text-xs h-8 px-2 bg-background/20 hover:bg-background/40" onClick={() => setShow(!show)}>
+    <div className="relative" ref={popoverRef} data-tour="language-currency" onKeyDown={event => { if (event.key === "Escape") { setShow(false); popoverRef.current?.querySelector("button")?.focus(); } }}>
+      <Button aria-label={t("cabinet.workspace.settings_label")} aria-expanded={show} aria-controls="cabinet-settings-panel" variant="ghost" size="sm" className="gap-1.5 text-xs h-8 px-2 bg-background/20 hover:bg-background/40" onClick={() => setShow(!show)}>
         <Settings className="h-3.5 w-3.5" />
       </Button>
-      <div id="cabinet-settings-panel"
+      <div id="cabinet-settings-panel" hidden={!show}
         className={cn(
           "absolute -right-2 sm:right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[260px] max-w-[260px] rounded-[2rem] border border-border bg-card text-card-foreground p-5 shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)] transition-all duration-300 origin-top-right",
           show ? "visible opacity-100 scale-100 pointer-events-auto translate-y-0" : "invisible opacity-0 scale-95 pointer-events-none -translate-y-2"
@@ -370,23 +359,16 @@ function SettingsPopover() {
         <div className="space-y-4 mb-5">
           <div className="space-y-1.5">
             <label className="text-xs text-foreground font-medium pl-1 flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> {t("cabinet.layout.language")}</label>
-            <GlassSelect
-              value={preferredLang}
-              onChange={(v) => setPreferredLang(v)}
-              options={langs.map((l) => ({ value: l, label: l === "ru" ? "Русский" : l === "en" ? "English" : l.toUpperCase() }))}
-            />
+            <select aria-label={t("cabinet.layout.language")} value={preferredLang} onChange={event => setPreferredLang(event.target.value)} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm">{langs.map(language => <option key={language} value={language}>{language === "ru" ? "Русский" : language === "en" ? "English" : language.toUpperCase()}</option>)}</select>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs text-foreground font-medium pl-1 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {t("cabinet.layout.currency")}</label>
-            <GlassSelect
-              value={preferredCurrency}
-              onChange={(v) => setPreferredCurrency(v)}
-              options={currencies.map((c) => ({ value: c, label: c.toUpperCase() }))}
-            />
+            <select aria-label={t("cabinet.layout.currency")} value={preferredCurrency} onChange={event => setPreferredCurrency(event.target.value)} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm">{currencies.map(currency => <option key={currency} value={currency}>{currency.toUpperCase()}</option>)}</select>
           </div>
         </div>
 
-        <Button onClick={handleSave} disabled={saving} className="w-full h-10 rounded-xl shadow-md bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-semibold transition-all hover:scale-[1.02] active:scale-95">
+        {saveError && <p role="alert" className="mb-3 text-sm text-destructive">{t("cabinet.workspace.save_error")}</p>}
+        <Button onClick={handleSave} disabled={saving || !config} className="w-full h-10 rounded-xl shadow-md bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-semibold transition-all hover:scale-[1.02] active:scale-95">
           {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
           {t("cabinet.layout.save")}
         </Button>
@@ -410,8 +392,6 @@ function resolveNavItems(allNavItems: { to: string; label: string; icon: typeof 
   return items;
 }
 
-const MAX_VISIBLE_NAV = 4;
-const MAX_VISIBLE_DESKTOP = 5;
 
 /** Маппинг route → data-tour атрибут для тура */
 const ROUTE_TOUR_MAP: Record<string, string> = {
@@ -426,311 +406,69 @@ const ROUTE_TOUR_MAP: Record<string, string> = {
   "/cabinet/gifts": "gifts",
   "/cabinet/roulette": "roulette",
   "/cabinet/profile": "profile",
+  "/cabinet/wallet": "wallet",
+  "/cabinet/help": "support",
 };
-
-function MobileCabinetShell() {
-  const location = useLocation();
-  const { t } = useTranslation();
-  const { state, logout, refreshProfile } = useClientAuth();
-  const config = useCabinetConfig();
-  const allNavItems = useNavItems();
-  const navItems = useMemo(() => resolveNavItems(allNavItems, config), [allNavItems, config?.sellOptionsEnabled, config?.showProxyEnabled, config?.showSingboxEnabled, config?.ticketsEnabled, config?.customBuildConfig, config?.giftSubscriptionsEnabled, config?.rouletteEnabled]);
-  const [logoError, setLogoError] = useState(false);
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const visibleItems = navItems.slice(0, MAX_VISIBLE_NAV);
-  const hasMore = navItems.length > MAX_VISIBLE_NAV;
-
-  // Tour integration: open overflow menu programmatically
-  useEffect(() => {
-    const handler = () => setMoreMenuOpen(true);
-    window.addEventListener("tour:open-more-menu", handler);
-    return () => window.removeEventListener("tour:open-more-menu", handler);
-  }, []);
-  const isMiniapp = useIsMiniapp();
-
-  useEffect(() => { setLogoError(false); }, [config?.logo]);
-  useEffect(() => {
-    if (state.token) refreshProfile().catch(() => { });
-  }, [state.token, refreshProfile]);
-  const serviceName = config?.serviceName ?? "";
-  const logo = config?.logo && !logoError ? config.logo : null;
-
-  return (
-    <div className="classic-cabinet min-h-svh flex flex-col bg-transparent min-w-0 overflow-x-clip pb-36 relative">
-      <FloatingChat />
-      <header className="sticky top-0 z-50 border-b border-border shrink-0 transition-all duration-300" style={{ paddingTop: "var(--app-safe-top)", paddingLeft: "var(--app-safe-left)", paddingRight: "var(--app-safe-right)" }}>
-        <div className="absolute inset-0 bg-card/40 backdrop-blur-xl -z-10 pointer-events-none" />
-        <div className="relative flex h-14 items-center justify-between gap-3 px-4 min-w-0 w-full max-w-7xl mx-auto">
-          <Link to="/cabinet/dashboard" className="flex items-center gap-2.5 font-semibold text-base tracking-tight min-w-0">
-            {logo ? (
-              <span className="flex items-center justify-center h-8 px-1.5 rounded-lg shrink-0">
-                <img src={logo} alt="" className="h-6 max-w-[100px] object-contain" onError={() => setLogoError(true)} />
-              </span>
-            ) : (
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-primary shadow-sm">
-                <Shield className="h-4 w-4" />
-              </span>
-            )}
-            {serviceName ? <span className="truncate">{serviceName}</span> : null}
-          </Link>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <ThemePopover />
-            <SettingsPopover />
-            {!isMiniapp && (
-              <Button variant="ghost" size="icon" className="shrink-0 bg-background/20 hover:bg-background/40 text-muted-foreground hover:text-foreground" asChild>
-                <Link to="/cabinet/login" onClick={() => logout()} title={t("cabinet.nav.logout")}>
-                  <LogOut className="h-5 w-5" />
-                </Link>
-              </Button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-1 w-full min-w-0 px-4 py-6 max-w-7xl mx-auto transition-all duration-300">
-        <Outlet />
-      </main>
-
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/60 backdrop-blur-xl pb-[var(--app-safe-bottom)] transition-all duration-300">
-        <div className="flex items-center justify-around w-full h-[4.5rem] px-2 gap-0">
-          {visibleItems.map(({ to, label, icon: Icon }) => {
-            const active = location.pathname === to;
-            return (
-              <Link
-                key={to}
-                to={to}
-                data-tour={ROUTE_TOUR_MAP[to]}
-                className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 py-1 px-1 h-14 flex-1 min-w-0 max-w-[5rem] rounded-xl transition-all duration-300",
-                  active ? "bg-primary/20 text-primary shadow-sm scale-105" : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground hover:scale-105"
-                )}
-              >
-                <Icon className={cn("h-5 w-5 shrink-0 transition-transform duration-300", active && "scale-110 drop-shadow-md")} />
-                <span className="text-[10px] font-medium leading-none tracking-tight truncate w-full text-center">{label}</span>
-              </Link>
-            );
-          })}
-          {hasMore && (
-            <button
-              type="button"
-              onClick={() => setMoreMenuOpen(true)}
-              className={cn(
-                "flex flex-col items-center justify-center gap-0.5 py-1 px-1 h-14 flex-1 min-w-0 max-w-[5rem] rounded-xl transition-all duration-300",
-                "text-muted-foreground hover:bg-foreground/5 hover:text-foreground hover:scale-105"
-              )}
-              aria-label={t("cabinet.nav.more")}
-            >
-              <MoreHorizontal className="h-5 w-5 shrink-0" />
-              <span className="text-[10px] font-medium leading-none tracking-tight">{t("cabinet.nav.more")}</span>
-            </button>
-          )}
-        </div>
-      </nav>
-
-      <Dialog open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
-        <DialogContent className="max-w-sm mx-auto rounded-2xl" showCloseButton={true}>
-          <DialogHeader>
-            <DialogTitle>{t("cabinet.nav.menu")}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-1 py-2">
-            {navItems.map(({ to, label, icon: Icon }) => {
-              const active = location.pathname === to;
-              return (
-                <Link
-                  key={to}
-                  to={to}
-                  data-tour={ROUTE_TOUR_MAP[to]}
-                  onClick={() => setMoreMenuOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors",
-                    active ? "bg-primary/20 text-primary" : "hover:bg-muted/60"
-                  )}
-                >
-                  <Icon className="h-5 w-5 shrink-0" />
-                  <span className="font-medium">{label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function useIsMobile(breakpoint = 768) {
-  const [mobile, setMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < breakpoint);
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
-    const handler = (e: MediaQueryListEvent) => setMobile(e.matches);
-    setMobile(mq.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, [breakpoint]);
-  return mobile;
-}
 
 function CabinetShell() {
   const location = useLocation();
   const { t } = useTranslation();
   const { state, logout, refreshProfile } = useClientAuth();
   const config = useCabinetConfig();
-  const allNavItems = useNavItems();
-  const navItems = useMemo(() => resolveNavItems(allNavItems, config), [allNavItems, config?.sellOptionsEnabled, config?.showProxyEnabled, config?.showSingboxEnabled, config?.ticketsEnabled, config?.customBuildConfig, config?.giftSubscriptionsEnabled, config?.rouletteEnabled]);
-  const isMiniapp = useIsMiniapp();
-  const isMobile = useIsMobile();
-  const isNarrowDesktop = useIsMobile(1280);
+  const allItems = useNavItems();
+  const items = useMemo(() => resolveNavItems(allItems, config), [allItems, config]);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [logoError, setLogoError] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement>(null);
-  const visibleCount = isNarrowDesktop ? 3 : MAX_VISIBLE_DESKTOP;
-  const visibleNav = navItems.slice(0, visibleCount);
-  const moreNav = navItems.slice(visibleCount);
-
-  // Tour integration: open overflow menu programmatically
-  useEffect(() => {
-    const handler = () => setMoreOpen(true);
-    window.addEventListener("tour:open-more-menu", handler);
-    return () => window.removeEventListener("tour:open-more-menu", handler);
-  }, []);
-
+  const isMiniapp = useIsMiniapp();
+  const primary = items.filter(item => ["/cabinet/dashboard", "/cabinet/tariffs", "/cabinet/wallet", "/cabinet/help"].includes(item.to));
+  const groups = [
+    { label: t("cabinet.workspace.connection"), paths: ["dashboard", "tariffs", "custom-build", "extra-options", "proxy", "singbox"] },
+    { label: t("cabinet.workspace.account"), paths: ["wallet", "profile", "help"] },
+    { label: t("cabinet.workspace.benefits"), paths: ["referral", "gifts", "roulette"] },
+  ];
+  const section = cabinetSection(location.pathname);
+  const current = items.find(item => item.to === section);
   useEffect(() => { setLogoError(false); }, [config?.logo]);
   useEffect(() => {
-    const close = (e: MouseEvent) => {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
-    };
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
-  }, []);
+    setMenuOpen(false);
+    if (!location.hash) window.scrollTo({ top: 0, behavior: "instant" });
+  }, [location.pathname]);
   useEffect(() => {
-    if (state.token) refreshProfile().catch(() => { });
-  }, [state.token, refreshProfile]);
-  const serviceName = config?.serviceName ?? "";
-  const logo = config?.logo && !logoError ? config.logo : null;
-  const headerBalance = state.client ? formatMoney(state.client.balance, state.client.preferredCurrency) : null;
-
-  if (isMiniapp || isMobile) {
-    return <MobileCabinetShell />;
-  }
-
-  return (
-    <div className="classic-cabinet min-h-svh flex flex-col bg-transparent">
-      <FloatingChat />
-      {/* Navigation and page content share the same width. Theme styling is preserved. */}
-      <header className="sticky top-0 z-50 px-2 sm:px-4 transition-all duration-300" style={{ paddingTop: "calc(var(--app-safe-top) + 12px)" }}>
-        <div className="cabinet-desktop-bar relative w-full max-w-7xl mx-auto flex h-16 items-center justify-between gap-4 px-3 sm:px-5 rounded-2xl border border-border/60 bg-card/55 backdrop-blur-xl shadow-lg shadow-black/5">
-          <Link to="/cabinet/dashboard" className="flex items-center gap-2.5 font-semibold text-lg tracking-tight shrink-0 hover:opacity-80 transition-opacity">
-            {logo ? (
-              <span className="flex items-center justify-center h-9 px-2 rounded-lg shrink-0">
-                <img src={logo} alt="" className="h-6 max-w-[110px] object-contain" onError={() => setLogoError(true)} />
-              </span>
-            ) : (
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 text-primary shadow-sm">
-                <Shield className="h-5 w-5" />
-              </span>
-            )}
-            {serviceName ? <span className="hidden sm:inline max-w-[160px] truncate">{serviceName}</span> : null}
-          </Link>
-          <nav aria-label="Основная навигация" className="flex items-center gap-1 justify-center flex-1 min-w-0">
-            {visibleNav.map(({ to, label, icon: Icon }) => {
-              const active = location.pathname === to;
-              const dataTourMap = ROUTE_TOUR_MAP;
-              const tourAttr = dataTourMap[to];
-
-              return (
-                <Button key={to} asChild
-                    variant={active ? "secondary" : "ghost"}
-                    size="sm"
-                    className={cn(
-                      "inline-flex items-center gap-2 whitespace-nowrap transition-all duration-300",
-                      active ? "bg-primary/20 hover:bg-primary/30 text-primary shadow-sm scale-105" : "hover:scale-105 hover:bg-background/40"
-                    )}
-                  >
-                    <Link to={to} data-tour={tourAttr} aria-current={active ? "page" : undefined}>
-                      <Icon className="h-4 w-4 shrink-0" />
-                      {label}
-                    </Link>
-                  </Button>
-              );
-            })}
-            {moreNav.length > 0 && (
-              <div className="relative inline-block" ref={moreRef} onKeyDown={(e) => { if (e.key === "Escape") { setMoreOpen(false); moreRef.current?.querySelector("button")?.focus(); } }}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "inline-flex items-center gap-2 whitespace-nowrap transition-all duration-300 hover:scale-105 hover:bg-background/40",
-                    moreNav.some((i) => location.pathname === i.to) ? "bg-primary/20 text-primary" : ""
-                  )}
-                  aria-expanded={moreOpen}
-                  aria-controls="cabinet-more-links"
-                  onClick={() => setMoreOpen(!moreOpen)}
-                >
-                  {t("cabinet.nav.more")}
-                  <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", moreOpen && "rotate-180")} />
-                </Button>
-                {moreOpen && (
-                  <div id="cabinet-more-links" className="absolute left-0 top-full z-50 mt-1 min-w-[180px] rounded-xl border border-border bg-card py-1.5 shadow-lg">
-                    {moreNav.map(({ to, label, icon: Icon }) => {
-                      const active = location.pathname === to;
-                      return (
-                        <Link
-                          key={to}
-                          to={to}
-                          data-tour={ROUTE_TOUR_MAP[to]}
-                          onClick={() => setMoreOpen(false)}
-                          className={cn(
-                            "flex items-center gap-2 px-4 py-2.5 text-sm transition-colors",
-                            active ? "bg-primary/20 text-primary" : "hover:bg-muted/60"
-                          )}
-                        >
-                          <Icon className="h-4 w-4 shrink-0" />
-                          {label}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </nav>
-          <div className="flex items-center gap-2 shrink-0">
-            <ThemePopover />
-            <SettingsPopover />
-            <Link to="/cabinet/profile#topup" aria-label={`Баланс: ${headerBalance ?? "—"}. Пополнить баланс`} className="hidden xl:flex h-10 items-center gap-3 rounded-full border border-border/60 bg-background/35 px-4 shadow-sm backdrop-blur-xl transition-all hover:bg-background/50">
-              <span className="max-w-[120px] xl:max-w-[160px] truncate text-sm font-medium text-muted-foreground" title={state.client?.email?.trim() || (state.client?.telegramUsername ? `@${state.client.telegramUsername}` : "")}>
-                {state.client?.email?.trim() ? state.client.email : state.client?.telegramUsername ? `@${state.client.telegramUsername}` : "—"}
-              </span>
-              <div className="w-[1px] h-4 bg-border/80" />
-              <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground/90">
-                <Wallet className="h-4 w-4 text-primary" />
-                <span className="tabular-nums">{headerBalance ?? "—"}</span>
-              </div>
-            </Link>
-            <Button
-              variant="outline"
-              className="group h-9 rounded-full border-border/60 bg-background/35 p-0 shadow-sm backdrop-blur-xl transition-all duration-300 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive"
-              asChild
-            >
-              <Link to="/cabinet/login" onClick={() => logout()} aria-label={t("cabinet.nav.logout")} className="flex h-full items-center">
-                <div className="flex h-full w-9 shrink-0 items-center justify-center">
-                  <LogOut className="h-[18px] w-[18px]" />
-                </div>
-                <div className="grid grid-cols-[0fr] opacity-0 transition-all duration-300 group-hover:grid-cols-[1fr] group-hover:opacity-100">
-                  <span className="overflow-hidden whitespace-nowrap text-sm font-medium">
-                    <span className="pr-4">{t("cabinet.nav.logout")}</span>
-                  </span>
-                </div>
-              </Link>
-            </Button>
-          </div>
+    const open = () => setMenuOpen(true);
+    window.addEventListener("tour:open-more-menu", open);
+    return () => window.removeEventListener("tour:open-more-menu", open);
+  }, []);
+  useEffect(() => { if (state.token) refreshProfile().catch(() => {}); }, [state.token, refreshProfile]);
+  const identity = state.client?.email || (state.client?.telegramUsername ? `@${state.client.telegramUsername}` : t("cabinet.workspace.account"));
+  const brand = <Link to="/cabinet/dashboard" className="cabinet-brand">{config?.logo && !logoError ? <img src={config.logo} alt="" onError={() => setLogoError(true)} /> : <Shield size={24} />}<span>{config?.serviceName || "STEALTHNET"}</span></Link>;
+  const navigation = (mobile: boolean) => <nav aria-label={t("cabinet.workspace.navigation")} className="cabinet-navigation">{groups.map(group => {
+    const links = items.filter(item => group.paths.includes(item.to.split("/").pop()!));
+    return links.length > 0 && <div className="cabinet-nav-group" key={group.label}><p>{group.label}</p>{links.map(({ to, label, icon: Icon }) => <Link key={to} to={to} onClick={() => setMenuOpen(false)} aria-current={section === to ? "page" : undefined} data-tour={mobile ? undefined : ROUTE_TOUR_MAP[to]}><Icon size={18} /><span>{label}</span>{section === to && <span className="cabinet-nav-dot" aria-hidden="true" />}</Link>)}</div>;
+  })}</nav>;
+  return <div className="classic-cabinet cabinet-workspace">
+    <a className="cabinet-skip" href="#cabinet-content">{t("cabinet.workspace.skip")}</a>
+    <aside className="cabinet-sidebar">
+      {brand}
+      {navigation(false)}
+      <Link to="/cabinet/profile" className="cabinet-identity"><span className="cabinet-avatar"><User size={19} /></span><span><strong>{identity}</strong><small>{t("cabinet.workspace.account_settings")}</small></span></Link>
+    </aside>
+    <div className="cabinet-workspace-body">
+      <header className="cabinet-topbar">
+        <div className="cabinet-mobile-brand">{brand}</div>
+        <div className="cabinet-breadcrumb"><span>{t("cabinet.workspace.cabinet")}</span><span aria-hidden="true">/</span><strong>{current?.label || t("cabinet.workspace.connection")}</strong></div>
+        <div className="cabinet-toolbar">
+          <Link className="cabinet-header-balance" to="/cabinet/wallet" aria-label={t("cabinet.workspace.open_wallet")}><Wallet size={17} /><span>{state.client ? formatMoney(state.client.balance, state.client.preferredCurrency) : "—"}</span></Link>
+          <ThemePopover /><SettingsPopover />
+          {!isMiniapp && <Button variant="ghost" size="icon" asChild><Link to="/cabinet/login" onClick={logout} aria-label={t("cabinet.nav.logout")}><LogOut size={18} /></Link></Button>}
         </div>
       </header>
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-6 transition-all duration-300">
-        <Outlet />
-      </main>
+      <main id="cabinet-content" tabIndex={-1} className="cabinet-content"><Outlet /></main>
+      <footer className="cabinet-footer"><span>{config?.serviceName || "STEALTHNET"}</span><Link to="/cabinet/help">{t("cabinet.workspace.help")}</Link><Link to="/cabinet/documents/offer">{t("cabinet.workspace.terms")}</Link><Link to="/cabinet/documents/privacy">{t("cabinet.workspace.privacy")}</Link></footer>
     </div>
-  );
+    <nav className="cabinet-bottom-nav" aria-label={t("cabinet.workspace.quick_navigation")}>{primary.map(({ to, label, icon: Icon }) => <Link key={to} to={to} aria-current={section === to ? "page" : undefined}><Icon size={21} /><span>{label}</span></Link>)}<button aria-expanded={menuOpen} aria-label={t("cabinet.nav.menu")} onClick={() => setMenuOpen(true)}><MoreHorizontal size={21} /><span>{t("cabinet.nav.more")}</span></button></nav>
+    <Dialog open={menuOpen} onOpenChange={setMenuOpen}><DialogContent className="cabinet-menu-dialog"><DialogHeader><DialogTitle>{t("cabinet.nav.menu")}</DialogTitle></DialogHeader>{navigation(true)}</DialogContent></Dialog>
+    <FloatingChat />
+  </div>;
 }
 
 export function CabinetLayout() {
@@ -771,7 +509,7 @@ export function CabinetLayout() {
       {needs2FA ? (
         <Client2FAStepScreen />
       ) : isAuthPage || !isLoggedIn ? (
-        <Outlet />
+        <div className="classic-auth"><Outlet /></div>
       ) : (
         <CabinetConfigProvider>
           <CabinetShellWithMiniapp />
@@ -783,19 +521,19 @@ export function CabinetLayout() {
 
 function CabinetShellWithMiniapp() {
   const isMiniapp = useIsMiniapp();
-  const isMobile = useIsMobile();
   const { state } = useClientAuth();
   const [runTour, setRunTour] = useState(false);
 
   useEffect(() => {
     if (!state.token) return;
     if (!localStorage.getItem("stealthnet_tour_completed")) {
-      setTimeout(() => setRunTour(true), 500);
+      const timer = setTimeout(() => setRunTour(true), 500);
+      return () => clearTimeout(timer);
     }
   }, [state.token]);
 
   return (
-    <IsMiniappContext.Provider value={isMiniapp || isMobile}>
+    <IsMiniappContext.Provider value={isMiniapp}>
       <DashboardTour
         run={runTour}
         onComplete={() => {

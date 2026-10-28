@@ -1,6 +1,6 @@
+import { cabinetSubscriptionUnavailable } from "@/lib/cabinet-navigation";
 import { CopyLinkButton, SubscriptionQrButton } from "@/components/subscription-link-actions";
 import { PromoCodeForm } from "@/components/cabinet/promo-code-form";
-import { ReferralQrButton } from "@/components/referral-qr";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -22,7 +22,6 @@ import {
   ArrowRight,
   PlusCircle,
   
-  Copy,
   Check,
   Gift,
   Loader2,
@@ -35,11 +34,7 @@ import {
   X,
   RotateCcw,
   RefreshCw,
-  Globe,
   Send,
-  UserPlus,
-  Coins,
-  Percent,
   Sparkles,
 } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
@@ -70,14 +65,7 @@ function formatDate(s: string | null) {
   }
 }
 
-function formatMoney(amount: number, currency: string) {
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: currency.toUpperCase() === "USD" ? "USD" : currency.toUpperCase() === "RUB" ? "RUB" : "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+import { formatCabinetMoney as formatMoney } from "@/lib/cabinet-format";
 
 function formatBytes(bytes: number) {
   if (bytes >= 1024 ** 3) return (bytes / 1024 ** 3).toFixed(1) + " ГБ";
@@ -135,11 +123,12 @@ function parseSubscription(sub: unknown): {
  */
 export function ClientDashboardPage() {
   const design = useCabinetDesign();
+  const { t } = useTranslation();
   return (
     <>
       <LinkTelegramPrompt />
       {design === "stealth" ? <StealthDashboard /> : <ClassicDashboardPage compact={design === "aurora"} />}
-      {design !== "stealth" && <section className="mt-4 rounded-2xl border border-border bg-card p-4"><PromoCodeForm /></section>}
+      {design !== "stealth" && <details className="cabinet-promo-disclosure"><summary>{t("cabinet.journey.promo")}</summary><PromoCodeForm /></details>}
     </>
   );
 }
@@ -257,6 +246,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   }, {});
   const subscription = subQuery.data?.subscription ?? null;
   const subscriptionError = (subQuery.data?.message as string | undefined) ?? (subQuery.error instanceof Error ? subQuery.error.message : null);
+  const subscriptionUnavailable = cabinetSubscriptionUnavailable({ requestFailed: subQuery.isError || allSubQuery.isError, subscription, message: subscriptionError, offlineSnapshot: allSubQuery.data?.items.find(item => item.type === "root")?.isOfflineSnapshot });
   const tariffDisplayName = subQuery.data?.tariffDisplayName ?? null;
   const mainBan = {
     isBanned: subQuery.data?.isBanned === true,
@@ -456,8 +446,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   // показываем только когда нет активной подписки.
   const showMultiTrials = hasMultiTrials === true;
   const showLegacyTrial = !hasActiveSubscription && Boolean(config?.trialEnabled) && !client?.trialUsed && !showMultiTrials;
-  const showAnyTrial = showMultiTrials || showLegacyTrial;
-  const [referralCopied, setReferralCopied] = useState<"site" | "bot" | null>(null);
+  const showAnyTrial = !subscriptionUnavailable && (showMultiTrials || showLegacyTrial);
   const siteOrigin = config?.publicAppUrl?.replace(/\/$/, "") || (typeof window !== "undefined" ? window.location.origin : "");
   const referralLinkSite =
     client.referralCode && siteOrigin
@@ -468,14 +457,6 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
       ? `https://t.me/${config.telegramBotUsername.replace(/^@/, "")}?start=ref_${client.referralCode}`
       : "";
   const hasReferralLinks = Boolean(referralLinkSite || referralLinkBot);
-  const copyReferral = (which: "site" | "bot") => {
-    const url = which === "site" ? referralLinkSite : referralLinkBot;
-    if (url) {
-      navigator.clipboard.writeText(url);
-      setReferralCopied(which);
-      setTimeout(() => setReferralCopied(null), 2000);
-    }
-  };
   // ♻️ Автосписание по подпискам — общий узел для mobile/desktop карточки «Баланс».
   const anyAutoRenewOn = autoRenewSubs.some((s) => s.enabled);
   const autoRenewListNode = autoRenewSubs.length > 0 ? (
@@ -611,7 +592,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   // обычная → «Продлить» (модалка); триал → «Конвертировать» (выбор тарифа в каталоге);
   // триал с запрещённой конвертацией → кнопки нет вовсе.
   const rootActionNode = (cls: string, iconCls: string, txtCls: string, label = "Продлить") => {
-    if (!rootSubId || mainBan.isBanned) return null;
+    if (!rootSubId || mainBan.isBanned || subscriptionUnavailable) return null;
     if (rootTrial.isTrial) {
       if (!rootTrial.convertEnabled) return null;
       return (
@@ -747,7 +728,9 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-primary/50" />
             </div>
-          ) : subscriptionError || !subscription || typeof subscription !== "object" ? (
+          ) : subscriptionUnavailable ? (
+            <div role="alert" className="cabinet-empty"><AlertCircle size={26} /><h3>{t("cabinet.journey.error_title")}</h3><p>{t("cabinet.journey.error_hint")}</p><Button variant="outline" disabled={subQuery.isFetching || allSubQuery.isFetching} onClick={() => { subQuery.refetch(); allSubQuery.refetch(); }}>{t("cabinet.wallet.retry")}</Button></div>
+          ) : !subscription || typeof subscription !== "object" ? (
             <NoSubscriptionState />
           ) : (
             <div className="space-y-4 min-w-0">
@@ -858,6 +841,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
 
         {secondarySubscriptions.length > 0 && secondarySubscriptions.map((sec) => {
           const secParsed = parseSubscription(sec.subscription);
+          if (sec.isOfflineSnapshot) return <section key={sec.id} className="cabinet-surface"><h2>{sec.tariffDisplayName}</h2><div role="alert" className="cabinet-empty"><p>{t("cabinet.journey.error_hint")}</p><Button variant="outline" disabled={allSubQuery.isFetching} onClick={() => allSubQuery.refetch()}>{t("cabinet.wallet.retry")}</Button></div></section>;
           const secHasActive = sec.subscription && typeof sec.subscription === "object" && (secParsed.status === "ACTIVE" || secParsed.status === undefined);
           const secExpireDate = secParsed.expireAt ? new Date(secParsed.expireAt) : null;
           const secDaysLeft = secExpireDate && secExpireDate > new Date() ? Math.max(0, Math.ceil((secExpireDate.getTime() - Date.now()) / (24*60*60*1000))) : null;
@@ -1098,7 +1082,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
           </Button>
         </section>
 
-        {config?.rouletteEnabled !== false && (
+      {config?.rouletteEnabled !== false && (
           <Link
             to="/cabinet/roulette"
             className="order-3 group relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 via-purple-500/10 to-pink-500/10 p-4 transition-all duration-300 hover:border-primary/50 flex items-center justify-between gap-3 shadow-sm"
@@ -1151,7 +1135,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
               {t("cabinet.dashboard.welcome")}{client.email ? `, ${client.email.split("@")[0]}` : client.telegramUsername ? `, @${client.telegramUsername}` : ""}
             </h1>
             <p className="mt-3 text-[16px] text-muted-foreground max-w-xl leading-relaxed">
-              {hasActiveSubscription
+              {subscriptionUnavailable ? t("cabinet.journey.checking") : hasActiveSubscription
                 ? t("cabinet.dashboard.sub_active_desc")
                 : t("cabinet.dashboard.sub_inactive_desc")}
             </p>
@@ -1186,7 +1170,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                 <span className="inline-flex items-center text-base font-medium leading-none">{t("cabinet.dashboard.free_trial")}</span>
               </Button>
             )}
-            {!vpnUrl && !showAnyTrial && (
+            {!vpnUrl && !showAnyTrial && !subscriptionUnavailable && (
               <Button size="lg" variant="default" className="w-full gap-2 shadow-xl rounded-xl h-14 hover:scale-105 transition-transform [&_svg]:self-center [&_span]:leading-none" asChild>
                 <Link to="/cabinet/tariffs" className="inline-flex items-center justify-center gap-2 leading-none">
                   <Package className="h-5 w-5 shrink-0" />
@@ -1194,12 +1178,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                 </Link>
               </Button>
             )}
-            <Button variant="secondary" size="lg" className="w-full gap-2 rounded-xl h-14 hover:scale-105 transition-transform bg-background/50 hover:bg-background/80 border border-border/50 [&_svg]:self-center [&_span]:leading-none" asChild>
-              <Link to="/cabinet/profile#topup" className="inline-flex items-center justify-center gap-2 leading-none">
-                <PlusCircle className="h-5 w-5 shrink-0 text-foreground/70" />
-                <span className="inline-flex items-center text-base font-medium leading-none">{t("cabinet.dashboard.top_up")}</span>
-              </Link>
-            </Button>
+
           </div>
         </div>
       </motion.section>
@@ -1210,41 +1189,8 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
         </div>
       )}
 
-      {config?.rouletteEnabled !== false && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.1 }}
-        >
-          <Link
-            to="/cabinet/roulette"
-            className="group relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 via-purple-500/10 to-pink-500/10 p-5 transition-all duration-300 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 flex items-center justify-between gap-4 backdrop-blur-xl"
-          >
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-purple-600 text-2xl text-white shadow-md shadow-primary/25 group-hover:scale-105 transition-transform">
-                🎰
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-foreground">Рулетка удачи</h3>
-                  <span className="inline-flex items-center rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wide">
-                    Бесплатно
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Крутите колесо каждый день и получайте бонусы, дни подписки и скидки!
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 text-sm font-semibold text-primary shrink-0">
-              <span className="hidden sm:inline">Испытать удачу</span>
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </div>
-          </Link>
-        </motion.div>
-      )}
-
-      {/* Cards grid */}
+        {/* Cards grid */}
+      {!loading && !subscriptionUnavailable && !subscription && <section className="cabinet-start-guide" aria-label={t("cabinet.journey.title")}>{[1, 2, 3].map(step => <div key={step}><span>{String(step).padStart(2, "0")}</span><div><h2>{t(`cabinet.journey.step${step}`)}</h2><p>{t(`cabinet.journey.hint${step}`)}</p></div></div>)}</section>}
       <div className="dashboard-grid grid gap-6">
         {/* Подписка / тариф */}
         <Card data-tour="subscription" className="dashboard-card dashboard-subscription rounded-3xl border border-border/50 bg-card/40 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300 sm:col-span-2 lg:col-span-1 flex flex-col">
@@ -1266,7 +1212,9 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
           <CardContent className="dashboard-subscription-body flex-1 flex flex-col">
             {loading ? (
               <div className="flex justify-center py-6"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>
-            ) : subscriptionError || !subscription || typeof subscription !== "object" ? (
+            ) : subscriptionUnavailable ? (
+            <div role="alert" className="cabinet-empty"><AlertCircle size={26} /><h3>{t("cabinet.journey.error_title")}</h3><p>{t("cabinet.journey.error_hint")}</p><Button variant="outline" disabled={subQuery.isFetching || allSubQuery.isFetching} onClick={() => { subQuery.refetch(); allSubQuery.refetch(); }}>{t("cabinet.wallet.retry")}</Button></div>
+          ) : !subscription || typeof subscription !== "object" ? (
               <NoSubscriptionState />
             ) : (
               <div className="dashboard-subscription-details space-y-4">
@@ -1465,78 +1413,9 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
           <CardContent className="dashboard-referral-body relative flex-1 flex flex-col gap-5">
             {hasReferralLinks ? (
               <>
-                <p className="text-[14px] text-muted-foreground leading-relaxed">Делитесь ссылкой и получайте <strong className="bg-gradient-to-r from-primary to-violet-400 bg-clip-text text-transparent font-bold">бонус на баланс</strong> за каждого приглашённого друга!</p>
-                {referralStats && (
-                  <div className="dashboard-referral-stats grid grid-cols-3 gap-2">
-                    {[
-                      { label: "Приглашено", value: referralStats.referralCount.toLocaleString("ru-RU"), icon: UserPlus, tint: "text-primary", ring: "ring-primary/20", glow: "shadow-primary/25", bg: "from-primary/10" },
-                      { label: "Заработано", value: `${referralStats.totalEarnings.toLocaleString("ru-RU")} ₽`, icon: Coins, tint: "text-emerald-500 dark:text-emerald-400", ring: "ring-emerald-500/20", glow: "shadow-emerald-500/25", bg: "from-emerald-500/10" },
-                      { label: "Ваш %", value: `${referralStats.referralPercent}%`, icon: Percent, tint: "text-violet-500 dark:text-violet-400", ring: "ring-violet-500/20", glow: "shadow-violet-500/25", bg: "from-violet-500/10" },
-                    ].map((tile) => (
-                      <div key={tile.label} className={`rounded-2xl bg-gradient-to-b ${tile.bg} to-background/40 border border-border/40 ring-1 ${tile.ring} backdrop-blur-xl px-2 py-3.5 text-center shadow-[0_0_24px_-12px] ${tile.glow} hover:-translate-y-0.5 transition-transform duration-300`}>
-                        <tile.icon className={`h-4 w-4 mx-auto mb-1.5 ${tile.tint}`} />
-                        <p className="text-lg font-extrabold tracking-tight text-foreground leading-none tabular-nums">{tile.value}</p>
-                        <p className="text-xs text-muted-foreground mt-1.5">{tile.label}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="rounded-2xl border border-border/40 bg-background/30 backdrop-blur-xl divide-y divide-border/40 overflow-hidden">
-                  {referralLinkSite && (
-                    <div className="flex min-w-0 items-center gap-2 pr-3">
-                    <button
-                      type="button"
-                      onClick={() => copyReferral("site")}
-                      title={referralLinkSite}
-                      aria-label={referralCopied === "site" ? "Ссылка на сайт скопирована" : "Скопировать реферальную ссылку на сайт"}
-                      className="group/row min-w-0 flex-1 flex items-center gap-3 px-3.5 py-3 text-left hover:bg-primary/[0.06] transition-colors"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
-                        <Globe className="h-4 w-4 text-primary" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-xs font-semibold text-muted-foreground">Сайт</span>
-                        <span className="block truncate font-mono text-[13px] text-foreground/85">{referralLinkSite}</span>
-                      </span>
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-background/40 text-foreground/60 group-hover/row:text-primary group-hover/row:border-primary/30 group-hover/row:scale-105 transition-all">
-                        {referralCopied === "site" ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                      </span>
-                    </button>
-                    <ReferralQrButton code={client.referralCode!} links={[{ kind: "site", url: referralLinkSite }]} />
-                    </div>
-                  )}
-                  {referralLinkBot && (
-                    <div className="flex min-w-0 items-center gap-2 pr-3">
-                    <button
-                      type="button"
-                      onClick={() => copyReferral("bot")}
-                      title={referralLinkBot}
-                      aria-label={referralCopied === "bot" ? "Ссылка на бота скопирована" : "Скопировать реферальную ссылку на бота"}
-                      className="group/row min-w-0 flex-1 flex items-center gap-3 px-3.5 py-3 text-left hover:bg-violet-500/[0.06] transition-colors"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
-                        <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-xs font-semibold text-muted-foreground">Бот</span>
-                        <span className="block truncate font-mono text-[13px] text-foreground/85">{referralLinkBot}</span>
-                      </span>
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-background/40 text-foreground/60 group-hover/row:text-violet-400 group-hover/row:border-violet-500/30 group-hover/row:scale-105 transition-all">
-                        {referralCopied === "bot" ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                      </span>
-                    </button>
-                    <ReferralQrButton code={client.referralCode!} links={[{ kind: "bot", url: referralLinkBot }]} />
-                    </div>
-                  )}
-                </div>
-                <div className="mt-auto pt-1">
-                  <Button variant="outline" className="group/btn w-full rounded-2xl h-12 text-[15px] font-medium bg-background/30 hover:bg-gradient-to-r hover:from-primary/10 hover:to-violet-500/10 hover:border-primary/30 transition-all duration-300 border-border/50 [&_svg]:self-center [&_span]:leading-none" asChild>
-                     <Link to="/cabinet/referral" className="inline-flex items-center justify-center gap-2 leading-none">
-                       <span className="inline-flex items-center leading-none">Подробная статистика</span>
-                       <ArrowRight className="h-4 w-4 shrink-0 group-hover/btn:translate-x-1 transition-transform duration-300" />
-                     </Link>
-                  </Button>
-                </div>
+                <p className="text-sm text-muted-foreground">{t("cabinet.journey.referral_hint")}</p>
+                {referralStats && <div className="cabinet-referral-summary"><div><strong>{referralStats.referralCount}</strong><span>{t("cabinet.journey.invited")}</span></div><div><strong>{formatMoney(referralStats.totalEarnings, "RUB")}</strong><span>{t("cabinet.journey.earned")}</span></div></div>}
+                <Link className="cabinet-text-link" to="/cabinet/referral">{t("cabinet.journey.referral_details")}<ArrowRight size={16} /></Link>
               </>
             ) : vpnUrl ? (
               <div className="flex flex-col h-full justify-between space-y-6">
@@ -1583,6 +1462,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
           <div className="grid gap-6 sm:grid-cols-2">
             {secondarySubscriptions.map((sec) => {
               const secParsed = parseSubscription(sec.subscription);
+          if (sec.isOfflineSnapshot) return <section key={sec.id} className="cabinet-surface"><h2>{sec.tariffDisplayName}</h2><div role="alert" className="cabinet-empty"><p>{t("cabinet.journey.error_hint")}</p><Button variant="outline" disabled={allSubQuery.isFetching} onClick={() => allSubQuery.refetch()}>{t("cabinet.wallet.retry")}</Button></div></section>;
               const secHasActive = sec.subscription && typeof sec.subscription === "object" && (secParsed.status === "ACTIVE" || secParsed.status === undefined);
               const secExpireDate = secParsed.expireAt ? new Date(secParsed.expireAt) : null;
               const secDaysLeft = secExpireDate && secExpireDate > new Date() ? Math.max(0, Math.ceil((secExpireDate.getTime() - Date.now()) / (24*60*60*1000))) : null;
@@ -1720,6 +1600,40 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
           </div>
         </motion.section>
       )}
+      {config?.rouletteEnabled !== false && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.1 }}
+        >
+          <Link
+            to="/cabinet/roulette"
+            className="group relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 via-purple-500/10 to-pink-500/10 p-5 transition-all duration-300 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 flex items-center justify-between gap-4 backdrop-blur-xl"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-purple-600 text-2xl text-white shadow-md shadow-primary/25 group-hover:scale-105 transition-transform">
+                🎰
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-foreground">Рулетка удачи</h3>
+                  <span className="inline-flex items-center rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wide">
+                    Бесплатно
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Крутите колесо каждый день и получайте бонусы, дни подписки и скидки!
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-primary shrink-0">
+              <span className="hidden sm:inline">Испытать удачу</span>
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </div>
+          </Link>
+        </motion.div>
+      )}
+
     </div>
     {trialsPickerNode}
     {paySuccessModalNode}

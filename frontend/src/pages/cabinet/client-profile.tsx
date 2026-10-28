@@ -1,7 +1,7 @@
 import { PasswordHint } from "@/components/password-hint";
 import { ReferralQrButton } from "@/components/referral-qr";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import { User, Wallet, Copy, Check, CreditCard, Loader2, Link2, Mail, Fingerprint, CalendarDays, Shield, KeyRound, Monitor, Trash2, Zap, Send } from "lucide-react";
@@ -28,14 +28,7 @@ function formatDate(s: string | null) {
   }
 }
 
-function formatMoney(amount: number, currency: string) {
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: currency.toUpperCase() === "USD" ? "USD" : currency.toUpperCase() === "RUB" ? "RUB" : "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+import { formatCabinetMoney as formatMoney } from "@/lib/cabinet-format";
 
 function formatPaymentStatus(status: string, t: (key: string) => string): string {
   const s = (status || "").toLowerCase();
@@ -48,12 +41,14 @@ function formatPaymentStatus(status: string, t: (key: string) => string): string
 
 export function ClientProfilePage() {
   const design = useCabinetDesign();
+  const location = useLocation();
+  if (design === "classic" && location.hash === "#topup") return <Navigate to="/cabinet/wallet" replace />;
   if (design === "stealth") return <StealthProfile />;
   if (design === "aurora") return <AuroraProfile />;
-  return <ClassicProfilePage />;
+  return <ClassicProfilePage accountOnly />;
 }
 
-export function ClassicProfilePage({ aurora = false, topupOnly = false }: { aurora?: boolean; topupOnly?: boolean }) {
+export function ClassicProfilePage({ aurora = false, topupOnly = false, accountOnly = false }: { aurora?: boolean; topupOnly?: boolean; accountOnly?: boolean }) {
   const { t } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
   const [payments, setPayments] = useState<ClientPayment[]>([]);
@@ -69,6 +64,9 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false }: { auro
   const [lavaEnabled, setLavaEnabled] = useState(false);
   // Lava.top removed from balance top-up — оставлен только для тарифов (см. client-tariffs.tsx)
   const [overpayEnabled, setOverpayEnabled] = useState(false);
+  const [configLoading, setConfigLoading] = useState(true);
+  const [configError, setConfigError] = useState(false);
+  const [configAttempt, setConfigAttempt] = useState(0);
   const [paymentProviders, setPaymentProviders] = useState<{ id: string; label: string; sortOrder: number }[]>([]);
   const [publicAppUrl, setPublicAppUrl] = useState<string | null>(null);
   const [yookassaRecurringEnabled, setYookassaRecurringEnabled] = useState(false);
@@ -79,6 +77,10 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false }: { auro
   const [topUpLoading, setTopUpLoading] = useState(false);
   const [topUpError, setTopUpError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
+  useEffect(() => {
+    if (location.hash === "#devices") document.getElementById("devices")?.scrollIntoView({ block: "start" });
+  }, [location.hash, state.client]);
   const [readyUrl, setReadyUrl] = useState<{ url: string; provider: string; paymentId?: string } | null>(null);
   const [linkTelegramCode, setLinkTelegramCode] = useState<string | null>(null);
   const [linkTelegramLoading, setLinkTelegramLoading] = useState(false);
@@ -125,7 +127,7 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false }: { auro
   }, [token, refreshProfile]);
 
   useEffect(() => {
-    if (token) {
+    if (token && !topupOnly && !accountOnly) {
       api.clientPayments(token).then((r) => setPayments(r.items ?? [])).catch(() => { });
     }
   }, [token]);
@@ -133,7 +135,7 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false }: { auro
   // T-devices-multi (27.05.2026, WolfVPN): грузим устройства ВСЕХ подписок (root + secondary).
   // Бэк уже исключает дубли (root vs Subscription с тем же remnawaveUuid).
   useEffect(() => {
-    if (!token) return;
+    if (!token || topupOnly) return;
     setDevicesLoading(true);
     setDevicesError(null);
     api.getMyAllDevices(token)
@@ -312,7 +314,11 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false }: { auro
   }
 
   useEffect(() => {
+    let active = true;
+    setConfigLoading(true);
+    setConfigError(false);
     getPublicConfigCached().then((c) => {
+      if (!active) return;
       setPlategaMethods(c.plategaMethods ?? []);
       setYoomoneyEnabled(Boolean(c.yoomoneyEnabled));
       setYookassaEnabled(Boolean(c.yookassaEnabled));
@@ -327,8 +333,9 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false }: { auro
       setPublicAppUrl(c.publicAppUrl ?? null);
       setTelegramBotUsername(c.telegramBotUsername ?? null);
       setYookassaRecurringEnabled(Boolean(c.yookassaRecurringEnabled));
-    }).catch(() => { });
-  }, []);
+    }).catch(() => { if (active) setConfigError(true); }).finally(() => { if (active) setConfigLoading(false); });
+    return () => { active = false; };
+  }, [configAttempt]);
 
   useEffect(() => {
     const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
@@ -632,6 +639,7 @@ async function startTopUpParitypay() {
               <div className="space-y-6 mt-auto">
                 <div className="relative flex h-32 w-full items-center justify-center rounded-3xl border border-border/50 bg-background/50 shadow-sm transition-all focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20">
                   <Input
+                    aria-label={t("cabinet.wallet.amount_label")}
                     type="number"
                     min={1}
                     step={0.01}
@@ -834,10 +842,10 @@ async function startTopUpParitypay() {
           )}
         </DialogContent>
       </Dialog>);
-  if (topupOnly) return <div className="space-y-4">{topupCard || <p className="rounded-xl border border-border bg-card p-4">Пополнение баланса сейчас недоступно.</p>}{topupDialog}</div>;
+  if (topupOnly) return <div className="space-y-4">{configLoading ? <p role="status" className="cabinet-surface cabinet-empty">{t("cabinet.wallet.methods_loading")}</p> : configError ? <div role="alert" className="cabinet-surface cabinet-empty"><p>{t("cabinet.wallet.methods_error")}</p><Button variant="outline" onClick={() => setConfigAttempt(value => value + 1)}>{t("cabinet.wallet.retry")}</Button></div> : topupCard || <p className="cabinet-surface">{t("cabinet.wallet.methods_unavailable")}</p>}{topupDialog}</div>;
 
   return (
-    <div className="space-y-6 w-full min-w-0 pb-10">
+    <div className="cabinet-profile space-y-6 w-full min-w-0 pb-10">
       {aurora ? <div className="au-profile">
         <div className="au-profile-title"><div className="au-avatar"><User size={26}/></div><div><h1>Мой профиль</h1><p>{client.telegramUsername ? `@${client.telegramUsername}` : client.email || "Личный кабинет"}</p></div></div>
         <section id="topup" className="au-balance-card" aria-label="Баланс">
@@ -1014,7 +1022,8 @@ async function startTopUpParitypay() {
                 </div>
                 <Button variant="default" size="sm" className="bg-green-500 hover:bg-green-600 text-white shrink-0 shadow-lg shadow-green-500/20 px-5" onClick={() => {
                   const el = document.getElementById("topup");
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  if (accountOnly) navigate("/cabinet/wallet");
+                  else if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }}>
                   {t("cabinet.profile.top_up")}
                 </Button>
@@ -1032,7 +1041,7 @@ async function startTopUpParitypay() {
                 </div>
               )}
 
-              {hasReferralLinks && (
+              {hasReferralLinks && !accountOnly && (
                 <div className="pt-4 border-t border-border/20 space-y-4">
                   <div>
                     <h4 className="text-sm font-bold text-foreground">{t("cabinet.profile.referral_program")}</h4>
@@ -1160,15 +1169,15 @@ async function startTopUpParitypay() {
                 </div>
               )}
 
-              <div className="flex-1 flex flex-col rounded-2xl bg-muted/40 border border-border/50 overflow-hidden dark:bg-white/5 dark:border-white/5">
+              <div id="devices" className="flex-1 flex flex-col rounded-2xl bg-muted/40 border border-border/50 overflow-hidden dark:bg-white/5 dark:border-white/5">
                 <div className="p-4 border-b border-border/50 dark:border-white/5">
                   <div className="flex items-center gap-4 min-w-0">
                     <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-primary/10 text-primary">
                       <Monitor className="w-5 h-5" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground mb-0.5">{t("cabinet.profile.sessions_label")}</p>
-                      <p className="font-medium text-sm truncate">{t("cabinet.profile.sessions_desc")}</p>
+                      <p className="text-xs text-muted-foreground mb-0.5">{t("cabinet.workspace.vpn_devices")}</p>
+                      <p className="font-medium text-sm truncate">{t("cabinet.workspace.vpn_devices_hint")}</p>
                     </div>
                   </div>
                 </div>
@@ -1268,6 +1277,7 @@ async function startTopUpParitypay() {
         </div>
       </motion.div>
 
+      {!accountOnly && (
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1337,7 +1347,7 @@ async function startTopUpParitypay() {
             </div>
           </div>
         </div>
-      </motion.div>
+      </motion.div>)}
 
       </>}
 

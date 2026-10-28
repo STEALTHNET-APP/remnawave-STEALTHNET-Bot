@@ -1,3 +1,5 @@
+import { ClientWalletPage } from "@/pages/cabinet/client-wallet";
+import { ClientHelpPage } from "@/pages/cabinet/client-help";
 import { MaintenanceGate } from "@/components/maintenance-gate";
 import { clientMenuReturnTo } from "@/lib/client-menu-return";
 import { ClientBotMenuPage } from "@/pages/cabinet/client-bot-menu";
@@ -343,6 +345,8 @@ function AppRoutes() {
         }
       >
         <Route index element={<CabinetIndexRedirect />} />
+        <Route path="wallet" element={<RequireClientAuth><ClientWalletPage /></RequireClientAuth>} />
+        <Route path="help" element={<RequireClientAuth><ClientHelpPage /></RequireClientAuth>} />
         <Route path="login" element={<ClientLoginPage />} />
         <Route path="register" element={<ClientRegisterPage />} />
         <Route path="forgot-password" element={<ClientForgotPasswordPage />} />

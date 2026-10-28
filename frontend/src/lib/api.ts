@@ -2221,6 +2221,7 @@ export const api = {
       id: string;
       subscriptionIndex: number | null;
       subscription: unknown;
+      isOfflineSnapshot?: boolean;
       tariffDisplayName: string;
       remnawaveUuid: string | null;
       tariffId?: string | null;
