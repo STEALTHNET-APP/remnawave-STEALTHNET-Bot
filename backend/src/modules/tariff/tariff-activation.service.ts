@@ -21,6 +21,7 @@ import {
 import { createAdditionalSubscription, deleteSubscription } from "../gift/gift.service.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { upsertSubscriptionByRemnaUuid } from "../subscription/subscription.helpers.js";
+import { invalidateClientSubscriptions } from "../client/client-subs-cache.js";
 import { isMultiSubscriptionsEnabled } from "../client/multi-subscriptions.js";
 import { isLegacyTrialRecord, isOnTrialSquad, pickConvertibleSubscription } from "./subscription-target.js";
 
@@ -583,6 +584,7 @@ export async function activateTariffForClient(
     }
   }
 
+  invalidateClientSubscriptions(client.id);
   return { ok: true };
 }
 
@@ -635,10 +637,14 @@ export async function extendSecondarySubscription(
 ): Promise<ActivationResult> {
   const target = await prisma.subscription.findUnique({ where: { id: secondaryId }, select: { ownerId: true } });
   if (!target) return { ok: false, error: "Подписка не найдена", status: 404 };
-  return prisma.$transaction(async db => {
+  const res = await prisma.$transaction(async db => {
     await lockDevicePurchases(db, target.ownerId);
     return extendSecondarySubscriptionLocked(db, secondaryId, tariff, selectedOption, extraDevices, removeExtrasAfter, convertMode, hardReplace, legacyTrial);
   }, { maxWait: 15000, timeout: 45000 });
+  if (res.ok && target.ownerId) {
+    invalidateClientSubscriptions(target.ownerId);
+  }
+  return res;
 }
 
 async function extendSecondarySubscriptionLocked(

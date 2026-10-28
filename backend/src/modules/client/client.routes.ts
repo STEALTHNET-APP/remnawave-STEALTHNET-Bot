@@ -60,6 +60,15 @@ import { NO_PASSWORD_HASH, resolveRegisterRoute, clientPasswordHashFromPending, 
 import { createPlategaTransaction, isPlategaConfigured } from "../platega/platega.service.js";
 import { activateTariffForClient, activateTariffByPaymentId, findConvertibleSubscription, computeConvertedDays } from "../tariff/tariff-activation.service.js";
 import { upsertPrimarySubscription, upsertSubscriptionByRemnaUuid } from "../subscription/subscription.helpers.js";
+import {
+  getCachedClientSubscriptions,
+  setCachedClientSubscriptions,
+  getClientSubsInFlight,
+  setClientSubsInFlight,
+  clearClientSubsInFlight,
+  invalidateClientSubscriptions,
+} from "./client-subs-cache.js";
+export { invalidateClientSubscriptions };
 import { saveRedirectAndBuildUrl } from "../payment-redirect/payment-redirect.util.js";
 import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.service.js";
 import { createSingboxSlotsByPaymentId } from "../singbox/singbox-slots-activation.service.js";
@@ -1802,6 +1811,7 @@ clientRouter.patch("/auto-renew", async (req, res) => {
     data: updates,
     select: { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, autoRenewPromoCode: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
   });
+  invalidateClientSubscriptions(client.id);
   return res.json(toClientShape(updated));
 });
 
@@ -2547,6 +2557,7 @@ clientRouter.post("/trials/:id/activate", requireRemnaOnline, async (req, res) =
   const clientId = (req as unknown as { clientId: string }).clientId;
   const { activateTrial } = await import("../trial/trial.service.js");
   const result = await activateTrial(clientId, req.params.id, req.body?.expectedPrice);
+  invalidateClientSubscriptions(clientId);
   return res.status(result.status).json(result.body);
 });
 
@@ -3101,7 +3112,7 @@ export type ClientSubInfo = {
   isOfflineSnapshot?: boolean;
 };
 
-export async function fetchClientSubscriptionsAll(clientId: string): Promise<{ items: ClientSubInfo[] }> {
+async function doFetchClientSubscriptionsAll(clientId: string): Promise<{ items: ClientSubInfo[] }> {
   const subAllCfg = await getSystemConfig();
   const cryptOn = subAllCfg.happCryptEnabled;
 
@@ -3245,6 +3256,31 @@ export async function fetchClientSubscriptionsAll(clientId: string): Promise<{ i
   );
 
   return { items };
+}
+
+export async function fetchClientSubscriptionsAll(
+  clientId: string,
+  options?: { forceFresh?: boolean }
+): Promise<{ items: ClientSubInfo[] }> {
+  if (!options?.forceFresh) {
+    const cached = getCachedClientSubscriptions<{ items: ClientSubInfo[] }>(clientId);
+    if (cached) return cached;
+    const inFlight = getClientSubsInFlight<{ items: ClientSubInfo[] }>(clientId);
+    if (inFlight) return inFlight;
+  }
+
+  const p = (async () => {
+    try {
+      const result = await doFetchClientSubscriptionsAll(clientId);
+      setCachedClientSubscriptions(clientId, result);
+      return result;
+    } finally {
+      clearClientSubsInFlight(clientId);
+    }
+  })();
+
+  setClientSubsInFlight(clientId, p);
+  return p;
 }
 
 /**
@@ -3508,6 +3544,7 @@ clientRouter.post("/subscription/:type/:id/auto-renew", async (req, res) => {
     Object.assign(updates, autoRenewPrefsFromLastPayment(sub.tariffId, lastPaid, lastPaid?.tariffPriceOption?.tariffId ?? null));
   }
   await prisma.subscription.update({ where: { id: sub.id }, data: updates });
+  invalidateClientSubscriptions(clientId);
   return res.json({ ok: true, enabled, type: subType });
 });
 
@@ -3589,6 +3626,7 @@ clientRouter.post("/subscription/:type/:id/remove-extra-devices", requireRemnaOn
     where: { id: sub.id },
     data: { extraDevices: 0, extraDevicesMonthlyPrice: 0 },
   });
+  invalidateClientSubscriptions(clientId);
 
   return res.json({
     ok: true,

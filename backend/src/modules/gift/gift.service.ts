@@ -15,6 +15,7 @@
 import { randomBytes } from "crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../db.js";
+import { invalidateClientSubscriptions } from "../client/client-subs-cache.js";
 import { sendTelegramNotification } from "./telegram-notify.js";
 import {
   remnaCreateUser,
@@ -396,6 +397,8 @@ export async function createAdditionalSubscription(
       },
     });
 
+  invalidateClientSubscriptions(rootClientId);
+
   // если это primary-подписка (idx=0) — синкаем
   // legacy-поля Client.{remnawaveUuid,currentTariffId,currentPricePerDay} для обратной
   // совместимости старого кода (кабинет, mini-app, /api/client/me).
@@ -527,6 +530,8 @@ export async function deleteSubscription(
   await prisma.subscription.delete({
     where: { id: subscriptionId },
   });
+
+  invalidateClientSubscriptions(ownerId);
 
   return { ok: true, data: undefined };
 }

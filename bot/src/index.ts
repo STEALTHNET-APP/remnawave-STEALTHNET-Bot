@@ -1792,8 +1792,16 @@ async function editMessageContent(ctx: {
   const hasMediaWithCaption = hasPhoto || hasAnimation;
   const caption = text.length > TELEGRAM_CAPTION_MAX ? text.slice(0, TELEGRAM_CAPTION_MAX - 3) + "..." : text;
   const truncatedEntities = text.length > TELEGRAM_CAPTION_MAX && entities ? entities.filter((e) => e.offset + e.length <= TELEGRAM_CAPTION_MAX - 3) : entities;
-  if (hasMediaWithCaption) return ctx.editMessageCaption({ caption, caption_entities: truncatedEntities?.length ? truncatedEntities : undefined, reply_markup });
-  return ctx.editMessageText(text, { entities: entities?.length ? entities : undefined, reply_markup });
+  if (hasMediaWithCaption) {
+    return ctx.editMessageCaption({ caption, caption_entities: truncatedEntities?.length ? truncatedEntities : undefined, reply_markup }).catch((err) => {
+      if (String(err).includes("message is not modified")) return null;
+      throw err;
+    });
+  }
+  return ctx.editMessageText(text, { entities: entities?.length ? entities : undefined, reply_markup }).catch((err) => {
+    if (String(err).includes("message is not modified")) return null;
+    throw err;
+  });
 }
 
 /**
@@ -2793,12 +2801,27 @@ async function showGiftPaymentConfirm(ctx: any, userId: number, tariff: TariffIt
   ));
 }
 
+const inFlightCallbacks = new Map<string, number>();
+
 // ——— Callback: меню и действия
 composer.on("callback_query:data", async (ctx) => {
   const data = ctx.callbackQuery.data;
   const userId = ctx.from?.id;
   if (!userId) return;
   void ctx.answerCallbackQuery().catch(() => {});
+
+  const flightKey = `${userId}:${data}`;
+  const now = Date.now();
+  const lastTime = inFlightCallbacks.get(flightKey) ?? 0;
+  if (now - lastTime < 350) {
+    return;
+  }
+  inFlightCallbacks.set(flightKey, now);
+  if (inFlightCallbacks.size > 2000) {
+    for (const [k, v] of inFlightCallbacks.entries()) {
+      if (now - v > 5000) inFlightCallbacks.delete(k);
+    }
+  }
 
   // ─── 54-ФЗ-чек: prompt «нужен ли чек» перед ЮКасса-платежом ───
   // Каждый pay_*_yookassa-handler сохраняет builder+finalize в yk-receipt store и показывает

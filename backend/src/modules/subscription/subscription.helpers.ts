@@ -13,6 +13,7 @@
  */
 
 import { prisma } from "../../db.js";
+import { invalidateClientSubscriptions } from "../client/client-subs-cache.js";
 
 export type SubscriptionWithRelations = Awaited<ReturnType<typeof getPrimarySubscription>>;
 
@@ -146,64 +147,68 @@ export async function upsertPrimarySubscription(
     autoRenewEnabled?: boolean;
   },
 ): Promise<{ id: string; created: boolean }> {
-  const existing = await prisma.subscription.findUnique({
-    where: { ownerId_subscriptionIndex: { ownerId: clientId, subscriptionIndex: 0 } },
-    select: { id: true },
-  });
-
-  if (existing) {
-    await prisma.subscription.update({
-      where: { id: existing.id },
-      data: {
-        remnawaveUuid: data.remnawaveUuid,
-        // tariffId передаём только если явно указан (включая null → сброс).
-        // Trial не должен затирать tariffId предыдущей платной подписки клиента.
-        ...(data.tariffId !== undefined ? { tariffId: data.tariffId } : {}),
-        ...(data.trialId !== undefined ? { trialId: data.trialId } : {}),
-        ...(data.customPrice !== undefined ? { customPrice: data.customPrice } : {}),
-        ...(data.currentPricePerDay !== undefined ? { currentPricePerDay: data.currentPricePerDay } : {}),
-        ...(data.autoRenewTariffId !== undefined ? { autoRenewTariffId: data.autoRenewTariffId } : {}),
-        ...(data.autoRenewPriceOptionId !== undefined ? { autoRenewPriceOptionId: data.autoRenewPriceOptionId } : {}),
-        ...(data.autoRenewExtraDevices !== undefined ? { autoRenewExtraDevices: data.autoRenewExtraDevices } : {}),
-        ...(data.autoRenewEnabled !== undefined ? { autoRenewEnabled: data.autoRenewEnabled } : {}),
-      },
-    });
-    return { id: existing.id, created: false };
-  }
-
-  // Создаём ВСЕГДА как idx=0 — primary-слот может быть занят только одной записью.
-  // Если параллельный запрос успеет создать первой — поймаем ошибку уникальности и
-  // повторим как UPDATE.
   try {
-    const created = await prisma.subscription.create({
-      data: {
-        ownerId: clientId,
-        subscriptionIndex: 0,
-        remnawaveUuid: data.remnawaveUuid,
-        tariffId: data.tariffId ?? null,
-        trialId: data.trialId ?? null,
-        customPrice: data.customPrice ?? null,
-        currentPricePerDay: data.currentPricePerDay ?? null,
-        autoRenewTariffId: data.autoRenewTariffId ?? null,
-        autoRenewPriceOptionId: data.autoRenewPriceOptionId ?? null,
-        autoRenewExtraDevices: data.autoRenewExtraDevices ?? 0,
-        autoRenewEnabled: data.autoRenewEnabled ?? false,
-      },
-      select: { id: true },
-    });
-    return { id: created.id, created: true };
-  } catch (e) {
-    // Race condition: между findUnique и create кто-то ещё создал [0]. Делаем update.
-    const again = await prisma.subscription.findUnique({
+    const existing = await prisma.subscription.findUnique({
       where: { ownerId_subscriptionIndex: { ownerId: clientId, subscriptionIndex: 0 } },
       select: { id: true },
     });
-    if (!again) throw e;
-    await prisma.subscription.update({
-      where: { id: again.id },
-      data: { remnawaveUuid: data.remnawaveUuid },
-    });
-    return { id: again.id, created: false };
+
+    if (existing) {
+      await prisma.subscription.update({
+        where: { id: existing.id },
+        data: {
+          remnawaveUuid: data.remnawaveUuid,
+          // tariffId передаём только если явно указан (включая null → сброс).
+          // Trial не должен затирать tariffId предыдущей платной подписки клиента.
+          ...(data.tariffId !== undefined ? { tariffId: data.tariffId } : {}),
+          ...(data.trialId !== undefined ? { trialId: data.trialId } : {}),
+          ...(data.customPrice !== undefined ? { customPrice: data.customPrice } : {}),
+          ...(data.currentPricePerDay !== undefined ? { currentPricePerDay: data.currentPricePerDay } : {}),
+          ...(data.autoRenewTariffId !== undefined ? { autoRenewTariffId: data.autoRenewTariffId } : {}),
+          ...(data.autoRenewPriceOptionId !== undefined ? { autoRenewPriceOptionId: data.autoRenewPriceOptionId } : {}),
+          ...(data.autoRenewExtraDevices !== undefined ? { autoRenewExtraDevices: data.autoRenewExtraDevices } : {}),
+          ...(data.autoRenewEnabled !== undefined ? { autoRenewEnabled: data.autoRenewEnabled } : {}),
+        },
+      });
+      return { id: existing.id, created: false };
+    }
+
+    // Создаём ВСЕГДА как idx=0 — primary-слот может быть занят только одной записью.
+    // Если параллельный запрос успеет создать первой — поймаем ошибку уникальности и
+    // повторим как UPDATE.
+    try {
+      const created = await prisma.subscription.create({
+        data: {
+          ownerId: clientId,
+          subscriptionIndex: 0,
+          remnawaveUuid: data.remnawaveUuid,
+          tariffId: data.tariffId ?? null,
+          trialId: data.trialId ?? null,
+          customPrice: data.customPrice ?? null,
+          currentPricePerDay: data.currentPricePerDay ?? null,
+          autoRenewTariffId: data.autoRenewTariffId ?? null,
+          autoRenewPriceOptionId: data.autoRenewPriceOptionId ?? null,
+          autoRenewExtraDevices: data.autoRenewExtraDevices ?? 0,
+          autoRenewEnabled: data.autoRenewEnabled ?? false,
+        },
+        select: { id: true },
+      });
+      return { id: created.id, created: true };
+    } catch (e) {
+      // Race condition: между findUnique и create кто-то ещё создал [0]. Делаем update.
+      const again = await prisma.subscription.findUnique({
+        where: { ownerId_subscriptionIndex: { ownerId: clientId, subscriptionIndex: 0 } },
+        select: { id: true },
+      });
+      if (!again) throw e;
+      await prisma.subscription.update({
+        where: { id: again.id },
+        data: { remnawaveUuid: data.remnawaveUuid },
+      });
+      return { id: again.id, created: false };
+    }
+  } finally {
+    invalidateClientSubscriptions(clientId);
   }
 }
 
@@ -246,7 +251,7 @@ export async function upsertSubscriptionByRemnaUuid(
     expireAt?: Date | null;
   },
 ): Promise<{ id: string; subscriptionIndex: number; created: boolean }> {
-  return prisma.$transaction(async db => {
+  const res = await prisma.$transaction(async db => {
     await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"subscription-owner:" + clientId}, 0))`;
     await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"subscription-remna:" + data.remnawaveUuid}, 0))`;
     const byUuid = await db.subscription.findFirst({
@@ -273,4 +278,6 @@ export async function upsertSubscriptionByRemnaUuid(
     });
     return { ...created, created: true };
   });
+  invalidateClientSubscriptions(clientId);
+  return res;
 }
