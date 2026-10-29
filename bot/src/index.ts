@@ -10,8 +10,11 @@ import { titleEmojiPrefix } from "./title-emoji.js";
  */
 
 import "dotenv/config";
+import { createHash } from "node:crypto";
+import { createModeController, createBotServer, createUpdateProcessor, internalBotCredential } from "./webhook-runtime.js";
 import { Bot, Composer, Context, InputFile } from "grammy";
 import type { Api } from "grammy";
+import { run, sequentialize } from "@grammyjs/runner";
 import { ignoreNotModified } from "./ignore-not-modified.js";
 import { ProxyAgent as UndiciProxyAgent } from "undici";
 import { SocksProxyAgent } from "socks-proxy-agent";
@@ -1284,12 +1287,36 @@ function buildMainMenuText(opts: {
 
 const TELEGRAM_CAPTION_MAX = 1024;
 
-/** Логотип из настроек: data URL или URL → источник для sendPhoto/sendAnimation и признак GIF */
+const mediaFileIdCache = new Map<string, { fileId: string; expires: number }>();
+const mediaCacheKey = (value: string) => createHash("sha256").update(value.trim()).digest("hex");
+
+function rememberMediaFileId(key: string | null | undefined, message: unknown): void {
+  if (!key || !message || typeof message !== "object") return;
+  const msg = message as Record<string, unknown>;
+  if (Array.isArray(msg.photo) && msg.photo.length > 0) {
+    const largest = msg.photo[msg.photo.length - 1] as { file_id?: string };
+    if (largest?.file_id) {
+      mediaFileIdCache.set(mediaCacheKey(key), { fileId: largest.file_id, expires: Date.now() + 60_000 });
+    }
+  } else if (msg.animation && typeof msg.animation === "object") {
+    const anim = msg.animation as { file_id?: string };
+    if (anim?.file_id) {
+      mediaFileIdCache.set(mediaCacheKey(key), { fileId: anim.file_id, expires: Date.now() + 60_000 });
+    }
+  }
+  if (mediaFileIdCache.size > 8) mediaFileIdCache.delete(mediaFileIdCache.keys().next().value!);
+}
+
+/** Логотип из настроек: data URL или URL → источник для sendPhoto/sendAnimation и признак GIF (с поддержкой Telegram file_id кэша) */
 function logoToMediaSource(logo: string | null | undefined): { source: InputFile | string; isGif: boolean } | null {
   if (!logo || !logo.trim()) return null;
   const s = logo.trim();
+  const cachedFileId = mediaFileIdCache.get(mediaCacheKey(s));
+  const isGif = /\.gif(\?|$)/i.test(s) || /^data:image\/gif/i.test(s);
+  if (cachedFileId && cachedFileId.expires > Date.now()) {
+    return { source: cachedFileId.fileId, isGif };
+  }
   if (s.startsWith("http://") || s.startsWith("https://")) {
-    const isGif = /\.gif(\?|$)/i.test(s);
     return { source: s, isGif };
   }
   const base64Match = /^data:image\/([a-z]+);base64,(.+)$/i.exec(s);
@@ -1298,9 +1325,9 @@ function logoToMediaSource(logo: string | null | undefined): { source: InputFile
       const subtype = (base64Match[1] ?? "").toLowerCase();
       const buf = Buffer.from(base64Match[2]!, "base64");
       if (buf.length > 0) {
-        const isGif = subtype === "gif";
-        const name = isGif ? "logo.gif" : "logo.png";
-        return { source: new InputFile(buf, name), isGif };
+        const isGifSub = subtype === "gif";
+        const name = isGifSub ? "logo.gif" : "logo.png";
+        return { source: new InputFile(buf, name), isGif: isGifSub };
       }
     } catch {
       return null;
@@ -1740,8 +1767,16 @@ async function editMessageContent(ctx: {
   const hasMediaWithCaption = hasPhoto || hasAnimation;
   const caption = text.length > TELEGRAM_CAPTION_MAX ? text.slice(0, TELEGRAM_CAPTION_MAX - 3) + "..." : text;
   const truncatedEntities = text.length > TELEGRAM_CAPTION_MAX && entities ? entities.filter((e) => e.offset + e.length <= TELEGRAM_CAPTION_MAX - 3) : entities;
-  if (hasMediaWithCaption) return ctx.editMessageCaption({ caption, caption_entities: truncatedEntities?.length ? truncatedEntities : undefined, reply_markup });
-  return ctx.editMessageText(text, { entities: entities?.length ? entities : undefined, reply_markup });
+  if (hasMediaWithCaption) {
+    return ctx.editMessageCaption({ caption, caption_entities: truncatedEntities?.length ? truncatedEntities : undefined, reply_markup }).catch((err) => {
+      if (String(err).includes("message is not modified")) return null;
+      throw err;
+    });
+  }
+  return ctx.editMessageText(text, { entities: entities?.length ? entities : undefined, reply_markup }).catch((err) => {
+    if (String(err).includes("message is not modified")) return null;
+    throw err;
+  });
 }
 
 /**
@@ -2174,11 +2209,10 @@ async function handleStart(ctx: Context, payload: string) {
             const captionMax = TELEGRAM_CAPTION_MAX;
             const safeText = welcomeText.length > captionMax ? welcomeText.slice(0, captionMax - 3) + "..." : welcomeText;
             if (media) {
-              if (media.isGif) {
-                await ctx.replyWithAnimation(media.source, { caption: safeText || undefined, reply_markup: continueMarkup });
-              } else {
-                await ctx.replyWithPhoto(media.source, { caption: safeText || undefined, reply_markup: continueMarkup });
-              }
+              const sentMsg = media.isGif
+                ? await ctx.replyWithAnimation(media.source, { caption: safeText || undefined, reply_markup: continueMarkup })
+                : await ctx.replyWithPhoto(media.source, { caption: safeText || undefined, reply_markup: continueMarkup });
+              rememberMediaFileId(welcomeImage, sentMsg);
             } else {
               await ctx.reply(welcomeText, { reply_markup: continueMarkup });
             }
@@ -2192,19 +2226,16 @@ async function handleStart(ctx: Context, payload: string) {
       }
     }
 
-    const [subRes, proxyRes, singboxRes, allSubsRes] = await Promise.all([
-      api.getSubscription(auth.token).catch(() => ({ subscription: null })),
-      (async () => { const t = Date.now(); const r = await api.getPublicProxyTariffs().catch(() => ({ items: [] })); console.log(`[/start timing] __lap4 proxy: ${Date.now()-t}ms`); return r; })(),
-      (async () => { const t = Date.now(); const r = await api.getPublicSingboxTariffs().catch(() => ({ items: [] })); console.log(`[/start timing] __lap4 singbox: ${Date.now()-t}ms`); return r; })(),
-      // тянем все подписки клиента для блок подписок в welcome (нагрузка + список).
-      (async () => { const t = Date.now(); const r = await api.getAllSubscriptions(auth.token).catch(() => ({ items: [] })); console.log(`[/start timing] __lap4 allSubs: ${Date.now()-t}ms`); return r; })(),
+    const [bootstrap, proxyRes, singboxRes] = await Promise.all([
+      api.getBotBootstrap(auth.token),
+      api.getPublicProxyTariffs().catch(() => ({ items: [] })),
+      api.getPublicSingboxTariffs().catch(() => ({ items: [] })),
     ]);
-    __lap("subs+proxy+singbox+allSubs");
+    __lap("bootstrap+proxy+singbox");
+    const subRes = bootstrap?.subscription ?? { subscription: null };
+    const allSubsRes = bootstrap?.allSubscriptions ?? { items: [] };
+    const trialAvail = bootstrap?.availableTrials ?? { items: [], hasAnyEnabled: false };
     const vpnUrl = getSubscriptionUrl(subRes.subscription);
-    // если в админке настроены trials → используем их (скрываем
-    // кнопку когда юзер всё взял); иначе fallback на legacy single-trial.
-    const trialAvail = await api.getAvailableTrials(auth.token).catch(() => ({ items: [], hasAnyEnabled: false }));
-    __lap("getAvailableTrials");
     const showTrial = trialAvail.hasAnyEnabled
       ? trialAvail.items.length > 0
       : Boolean(config?.trialEnabled && !client?.trialUsed);
@@ -2300,11 +2331,10 @@ async function handleStart(ctx: Context, payload: string) {
       const media = logoToMediaSource(config?.logoBot);
       if (media) {
         const opts = { caption, caption_entities: captionEntities.length ? captionEntities : undefined, reply_markup: markup };
-        if (media.isGif) {
-          await ctx.replyWithAnimation(media.source, opts);
-        } else {
-          await ctx.replyWithPhoto(media.source, opts);
-        }
+        const sentMsg = media.isGif
+          ? await ctx.replyWithAnimation(media.source, opts)
+          : await ctx.replyWithPhoto(media.source, opts);
+        rememberMediaFileId(config?.logoBot, sentMsg);
       } else {
         await ctx.reply(text, { entities: entities.length ? entities : undefined, reply_markup: markup });
       }
@@ -2802,17 +2832,17 @@ composer.on("callback_query:data", async (ctx) => {
       await api.completeOnboarding(token).catch(() => {});
       const config = await api.getPublicConfig();
       if (config?.translations) setTranslations(config.translations);
-      const me = await api.getMe(token);
-      const [subRes, proxyRes, singboxRes, allSubsRes] = await Promise.all([
-        api.getSubscription(token).catch(() => ({ subscription: null })),
+      const [bootstrap, proxyRes, singboxRes] = await Promise.all([
+        api.getBotBootstrap(token),
         api.getPublicProxyTariffs().catch(() => ({ items: [] })),
         api.getPublicSingboxTariffs().catch(() => ({ items: [] })),
-        // для блок подписок в welcome.
-        api.getAllSubscriptions(token).catch(() => ({ items: [] })),
       ]);
+      const me = bootstrap?.client ?? (await api.getMe(token));
+      const subRes = bootstrap?.subscription ?? { subscription: null };
+      const allSubsRes = bootstrap?.allSubscriptions ?? { items: [] };
+      const trialAvail = bootstrap?.availableTrials ?? { items: [], hasAnyEnabled: false };
       const vpnUrl = getSubscriptionUrl(subRes.subscription);
       // T15: новый/legacy flow.
-      const trialAvail = await api.getAvailableTrials(token).catch(() => ({ items: [], hasAnyEnabled: false }));
       const showTrial = trialAvail.hasAnyEnabled
         ? trialAvail.items.length > 0
         : Boolean(config?.trialEnabled && !me.trialUsed);
@@ -2866,8 +2896,10 @@ composer.on("callback_query:data", async (ctx) => {
         const caption = text.length > TELEGRAM_CAPTION_MAX ? text.slice(0, TELEGRAM_CAPTION_MAX - 3) + "..." : text;
         const captionEntities = text.length > TELEGRAM_CAPTION_MAX && entities.length ? entities.filter((e) => e.offset + e.length <= TELEGRAM_CAPTION_MAX - 3) : entities;
         const opts = { caption, caption_entities: captionEntities.length ? captionEntities : undefined, reply_markup: markup };
-        if (media.isGif) await ctx.replyWithAnimation(media.source, opts);
-        else await ctx.replyWithPhoto(media.source, opts);
+        const sentMsg = media.isGif
+          ? await ctx.replyWithAnimation(media.source, opts)
+          : await ctx.replyWithPhoto(media.source, opts);
+        rememberMediaFileId(config?.logoBot, sentMsg);
       } else {
         await ctx.reply(text, { entities: entities.length ? entities : undefined, reply_markup: markup });
       }
@@ -3448,19 +3480,19 @@ composer.on("callback_query:data", async (ctx) => {
     if (data === "menu:main") {
       // defensive cleanup — выходя в главное меню сбрасываем addsub-флаг.
       addsubPending.delete(userId);
-      const [client, subRes, proxyRes, singboxRes, allSubsRes] = await Promise.all([
-        api.getMe(token),
-        api.getSubscription(token).catch(() => ({ subscription: null })),
+      const [bootstrap, proxyRes, singboxRes] = await Promise.all([
+        api.getBotBootstrap(token),
         api.getPublicProxyTariffs().catch(() => ({ items: [] })),
         api.getPublicSingboxTariffs().catch(() => ({ items: [] })),
-        // для блок подписок в welcome (нагрузка + список подписок).
-        api.getAllSubscriptions(token).catch(() => ({ items: [] })),
       ]);
+      const client = bootstrap?.client;
+      const subRes = bootstrap?.subscription ?? { subscription: null };
+      const allSubsRes = bootstrap?.allSubscriptions ?? { items: [] };
+      const trialAvail = bootstrap?.availableTrials ?? { items: [], hasAnyEnabled: false };
       if (client?.preferredLang) setUserLang(userId, client.preferredLang);
       const vpnUrl = getSubscriptionUrl(subRes.subscription);
       // если в админке настроены trials → используем их (скрываем
       // кнопку когда юзер всё взял); иначе fallback на legacy single-trial.
-      const trialAvail = await api.getAvailableTrials(token).catch(() => ({ items: [], hasAnyEnabled: false }));
       const showTrial = trialAvail.hasAnyEnabled
         ? trialAvail.items.length > 0
         : Boolean(config?.trialEnabled && !client?.trialUsed);
@@ -3520,11 +3552,10 @@ composer.on("callback_query:data", async (ctx) => {
         const caption = text.length > TELEGRAM_CAPTION_MAX ? text.slice(0, TELEGRAM_CAPTION_MAX - 3) + "..." : text;
         const captionEntities = text.length > TELEGRAM_CAPTION_MAX && entities ? entities.filter((e) => e.offset + e.length <= TELEGRAM_CAPTION_MAX - 3) : entities;
         const opts = { caption, caption_entities: captionEntities?.length ? captionEntities : undefined, reply_markup: backMarkup };
-        if (media.isGif) {
-          await ctx.api.sendAnimation(ctx.chat.id, media.source, opts);
-        } else {
-          await ctx.api.sendPhoto(ctx.chat.id, media.source, opts);
-        }
+        const sentMsg = media.isGif
+          ? await ctx.api.sendAnimation(ctx.chat.id, media.source, opts)
+          : await ctx.api.sendPhoto(ctx.chat.id, media.source, opts);
+        rememberMediaFileId(config?.logoBot, sentMsg);
         return;
       }
 
@@ -8875,55 +8906,85 @@ composer.on("message", async (ctx) => {
 // Дожидаемся API чтобы перед стартом получить публичный конфиг и translations.
 await waitForApi();
 
-const botInstances: Bot[] = [];
-{
-  const token = BOT_TOKEN.trim();
-  if (!token) {
-    throw new Error("BOT_TOKEN не задан в env");
-  }
-  const b = await createBotWithProxy(token);
-  b.api.config.use(ignoreNotModified);
-  b.use(composer);
-  b.catch((err) => console.error(`[Bot ${token.slice(0, 6)}…] error:`, err));
-  botInstances.push(b);
+const token = BOT_TOKEN.trim();
+if (!token) {
+  throw new Error("BOT_TOKEN не задан в env");
 }
-// start() для long polling не завершается — нельзя await, иначе после старта код не пойдёт дальше.
-for (const b of botInstances) {
-  const token = b.token;
-  void b.start({
-    onStart: async (info) => {
-      console.log(`Bot @${info.username ?? "?"} started`);
-      try {
-        const cfg = await api.getPublicConfig();
-        if (cfg?.translations) setTranslations(cfg.translations);
-      } catch {
-        /* ignore */
-      }
-      // ─── T8: установить меню команд в синей панельке Telegram ───
-      // /link и прочие хендлеры остаются работающими, но в меню НЕ выводятся.
-      try {
-        await b.api.setMyCommands([
-          { command: "start", description: "Главное меню" },
-          { command: "subscriptions", description: "Моя подписка / инструкции" },
-          { command: "referral", description: "Реферальная программа" },
-          { command: "support", description: "Поддержка" },
-          { command: "paysupport", description: "Помощь с оплатой Stars" },
-        ]);
-      } catch (e) {
-        console.error(`[Bot @${info.username}] setMyCommands failed:`, e);
-      }
-    },
-  });
+
+const b = await createBotWithProxy(token);
+b.api.config.use(ignoreNotModified);
+b.use(sequentialize((ctx) => [ctx.from?.id ? `user:${ctx.from.id}` : undefined, ctx.chat?.id ? `chat:${ctx.chat.id}` : undefined].filter((key): key is string => !!key)));
+b.use(composer);
+b.catch(() => console.error("[Bot] Update processing failed"));
+
+await b.init();
+console.log(`Bot @${b.botInfo.username ?? "?"} initialized`);
+
+try {
+  const cfg = await api.getPublicConfig();
+  if (cfg?.translations) setTranslations(cfg.translations);
+} catch {
+  /* ignore */
 }
+
+try {
+  await b.api.setMyCommands([
+    { command: "start", description: "Главное меню" },
+    { command: "subscriptions", description: "Моя подписка / инструкции" },
+    { command: "referral", description: "Реферальная программа" },
+    { command: "support", description: "Поддержка" },
+    { command: "paysupport", description: "Помощь с оплатой Stars" },
+  ]);
+} catch (e) {
+  console.error(`[Bot @${b.botInfo.username}] setMyCommands failed:`, e);
+}
+
+const modeController = createModeController({
+  config: () => api.getBotRuntimeConfig(),
+  setWebhook: (url, secret) => b.api.setWebhook(url, {
+    secret_token: secret,
+    allowed_updates: ["message", "callback_query", "pre_checkout_query", "my_chat_member"],
+    drop_pending_updates: false,
+  }),
+  deleteWebhook: () => b.api.deleteWebhook({ drop_pending_updates: false }),
+  startPolling: () => {
+    const runner = run(b, {
+      runner: { fetch: { allowed_updates: ["message", "callback_query", "pre_checkout_query", "my_chat_member"] } },
+      sink: { concurrency: 50 },
+    });
+    runner.task()?.catch(() => console.error("[Bot] Polling stopped; retrying on next reconciliation"));
+    return runner;
+  },
+});
+
+const internalServer = createBotServer({
+  credential: internalBotCredential(token),
+  mode: modeController.mode,
+  reload: () => modeController.reload(),
+  process: createUpdateProcessor(update => b.handleUpdate(update)),
+});
+const internalPort = Number(process.env.BOT_INTERNAL_PORT) || 8080;
+internalServer.listen(internalPort, "0.0.0.0");
+await modeController.reload().catch(() => console.error("[Bot] Delivery mode not confirmed; retrying"));
+const modeTimer = setInterval(() => {
+  void modeController.reload().catch(() => console.error("[Bot] Delivery mode reconciliation failed"));
+}, 30_000);
+for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => {
+  clearInterval(modeTimer);
+  const deadline = setTimeout(() => process.exit(1), 30_000);
+  deadline.unref();
+  internalServer.close(() => { void modeController.stop().finally(() => process.exit(0)); });
+});
 
 async function groupedProfileMenu(config: Awaited<ReturnType<typeof api.getPublicConfig>>, token: string, trialUsed: boolean): Promise<InlineMarkup | undefined> {
   if (!config?.botGroupCabinet) return undefined;
-  const [subscriptions, trials, proxy, singbox] = await Promise.all([
-    api.getAllSubscriptions(token).catch(() => ({ items: [] })),
-    api.getAvailableTrials(token).catch(() => ({ items: [], hasAnyEnabled: false })),
+  const [bootstrap, proxy, singbox] = await Promise.all([
+    api.getBotBootstrap(token),
     api.getPublicProxyTariffs().catch(() => ({ items: [] })),
     api.getPublicSingboxTariffs().catch(() => ({ items: [] })),
   ]);
+  const subscriptions = bootstrap?.allSubscriptions ?? { items: [] };
+  const trials = bootstrap?.availableTrials ?? { items: [], hasAnyEnabled: false };
   return mainMenu({
     liteMode: config.liteMode === true,
     section: "profile", groupCabinet: true,

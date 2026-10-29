@@ -56,3 +56,15 @@ test('CloudPayments public settings expose availability without terminal credent
   assert.equal(config.cloudpaymentsPublicId, undefined);
   assert.equal(JSON.stringify(config).includes('private-test-secret'), false);
 });
+
+
+test('webhook secret stays private and saved false overrides environment default', async () => {
+  process.env.BOT_WEBHOOK_ENABLED = 'true';
+  settings.set('bot_webhook_enabled', 'false');
+  settings.set('bot_webhook_secret', 'private-webhook-fixture');
+  invalidateSystemConfigCache();
+  const config = await getPublicConfig();
+  assert.equal(config.botWebhookEnabled, false);
+  assert.equal(JSON.stringify(config).includes('private-webhook-fixture'), false);
+  delete process.env.BOT_WEBHOOK_ENABLED;
+});

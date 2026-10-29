@@ -2895,7 +2895,7 @@ adminRouter.get("/clients/:id/remna/usage", async (req, res) => {
 // Настройки (языки, валюты, название сервиса) — для бота, mini app, сайта
 adminRouter.get("/settings", asyncRoute(async (_req, res) => {
   const config = await getSystemConfig();
-  return res.json({ ...config, cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
+  return res.json({ ...config, botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
 }));
 
 /** Версия панели — для мониторинга. Под auth, чтобы не светить наружу. */
@@ -4553,7 +4553,7 @@ adminRouter.patch("/settings", async (req, res) => {
   // invalidate cache до возврата свежего config'а.
   invalidateSystemConfigCache();
   const config = await getSystemConfig();
-  return res.json({ ...config, cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
+  return res.json({ ...config, botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
 });
 
 adminRouter.post("/nalog/test", asyncRoute(async (_req, res) => {
@@ -4598,7 +4598,7 @@ adminRouter.post("/settings/reset-landing-text", asyncRoute(async (req, res) => 
     });
   }
   const config = await getSystemConfig();
-  return res.json({ ...config, cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
+  return res.json({ ...config, botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
 }));
 
 // ——— Тикеты (админ: список, просмотр, закрытие, ответ, массовые действия)
