@@ -65,6 +65,7 @@ import { adminPermissionsRouter } from "./modules/admin-permissions/admin-permis
 import { emailTemplatesRouter } from "./modules/email-templates/email-templates.routes.js";
 import { botMessagesRouter } from "./modules/bot-messages/bot-messages.routes.js";
 import { botConversationsRouter } from "./modules/bot-conversations/bot-conversations.routes.js";
+import { botWebhookRouter, botWebhookAdminRouter } from "./modules/bot-webhook/bot-webhook.routes.js";
 import { requireAuth } from "./modules/auth/middleware.js";
 import { renderSpaIndex } from "./modules/branding/spa-html.js";
 
@@ -298,7 +299,16 @@ const limiter = rateLimit({
   message: { message: "Too many requests" },
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => isInternalIp(req.ip),
+  skip: async (req) => {
+    if (isInternalIp(req.ip)) return true;
+    if ((req.originalUrl || "").split("?")[0] !== "/api/bot/webhook") return false;
+    try {
+      const { getSystemConfig } = await import("./modules/client/client.service.js");
+      const { matchesSecret } = await import("./modules/bot-webhook/bot-webhook.transport.js");
+      const config = await getSystemConfig();
+      return config.botWebhookEnabled && matchesSecret(config.botWebhookSecret || "", req.headers["x-telegram-bot-api-secret-token"]);
+    } catch { return false; }
+  },
 });
 app.use("/api/", limiter);
 
@@ -411,9 +421,11 @@ app.use("/api/admin/admin-permissions", adminPermissionsRouter);
 app.use("/api/admin/email-templates", emailTemplatesRouter);
 app.use("/api/admin/bot-messages", botMessagesRouter);
 app.use("/api/admin/bot-conversations", botConversationsRouter);
+app.use("/api/admin/bot/webhook", botWebhookAdminRouter);
 app.use("/api/public/email-unsubscribe", rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false }), emailUnsubscribeRouter);
 app.use("/api/bot/terms", botTermsRouter);
 app.use("/api/bot/stars", starsBotRouter);
+app.use("/api/bot", botWebhookRouter);
 app.use("/api/public", publicConfigRouter);
 app.use("/api/public", botAssetsRouter);
 app.use("/api/public", contestPublicRouter);

@@ -2496,8 +2496,7 @@ clientRouter.post("/trial", requireRemnaOnline, async (req, res) => {
  * Если массив пустой → клиент использовал ВСЕ триалы (или их вообще нет) → кнопка
  * «Получить пробную» в главном меню скрывается.
  */
-clientRouter.get("/trials/available", async (req, res) => {
-  const clientId = (req as unknown as { clientId: string }).clientId;
+export async function fetchAvailableTrialsForClient(clientId: string) {
   const allEnabled = await prisma.trial.findMany({
     where: { enabled: true },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
@@ -2506,14 +2505,14 @@ clientRouter.get("/trials/available", async (req, res) => {
   // hasAnyEnabled — флаг для бота, чтобы при пустом items.length знать:
   //   нет триалов вообще (используй legacy single-trial flow) или
   //   все использованы (скрывай кнопку «Получить пробную»).
-  if (allEnabled.length === 0) return res.json({ items: [], hasAnyEnabled: false });
+  if (allEnabled.length === 0) return { items: [], hasAnyEnabled: false };
   const used = await prisma.clientTrialUsage.findMany({
     where: { clientId },
     select: { trialId: true },
   });
   const usedSet = new Set(used.map((u) => u.trialId));
   const available = allEnabled.filter((t) => !usedSet.has(t.id));
-  return res.json({
+  return {
     items: available.map((t) => {
       // trafficLimitBytes из триала (если задан) или из тарифа.
       // Отдаём как строку (BigInt JSON-safe). Клиенты конвертят в Number для отображения.
@@ -2533,7 +2532,13 @@ clientRouter.get("/trials/available", async (req, res) => {
       };
     }),
     hasAnyEnabled: true,
-  });
+  };
+}
+
+clientRouter.get("/trials/available", async (req, res) => {
+  const clientId = (req as unknown as { clientId: string }).clientId;
+  const result = await fetchAvailableTrialsForClient(clientId);
+  return res.json(result);
 });
 
 /**
@@ -3077,51 +3082,33 @@ clientRouter.get("/subscription/by-uuid/:uuid", async (req, res) => {
   return res.json({ subscription: result.data ?? null, tariffDisplayName });
 });
 
-/**
- * GET /api/client/subscription/all — Все подписки клиента (root + secondary).
- * Возвращает массив с Remnawave-данными для каждой подписки.
- */
-clientRouter.get("/subscription/all", async (req, res) => {
-  const clientId = (req as unknown as { clientId: string }).clientId;
+export type ClientSubInfo = {
+  type: "root" | "secondary";
+  id: string;
+  subscriptionIndex: number | null;
+  subscription: unknown;
+  tariffDisplayName: string;
+  customName: string | null;
+  remnawaveUuid: string | null;
+  tariffId: string | null;
+  trialId: string | null;
+  autoRenewEnabled: boolean;
+  tariffMenuEmoji: string | null;
+  extraDevices: number;
+  extraDevicesMonthlyPrice: number;
+  convertTariffIds: string[];
+  trialName: string | null;
+  trialConvertEnabled: boolean;
+  trialConvertAllTariffs: boolean;
+  isBanned: boolean;
+  banReason: string | null;
+  bannedUntil: string | null;
+  isOfflineSnapshot?: boolean;
+};
+
+async function doFetchClientSubscriptionsAll(clientId: string): Promise<{ items: ClientSubInfo[] }> {
   const subAllCfg = await getSystemConfig();
   const cryptOn = subAllCfg.happCryptEnabled;
-
-  // УНИФИЦИРОВАННАЯ выборка подписок — одна таблица, один запрос.
-  // type: "root" → subscriptionIndex=0, type: "secondary" → 1..N (сохраняем для бот-совместимости).
-  // Фильтр:
-  //   • Свои подписки (НЕ для подарка): ownerId=me + purchasedAsGift=false
-  //   • Полученные подарки: giftedToClientId=me + giftStatus=GIFTED
-  //   • Исключаем GIFT_RESERVED / GIFT_CODE_ACTIVE (это резерв под отправку подарка).
-  type SubInfo = {
-    type: "root" | "secondary";
-    id: string;
-    subscriptionIndex: number | null;
-    subscription: unknown;
-    tariffDisplayName: string;
-    customName: string | null;
-    remnawaveUuid: string | null;
-    tariffId: string | null;
-    trialId: string | null;
-    autoRenewEnabled: boolean;
-    tariffMenuEmoji: string | null;
-    /** кол-во докупленных доп. устройств. */
-    extraDevices: number;
-    /** суммарная цена за все доп. устройства на 30 дней. */
-    extraDevicesMonthlyPrice: number;
-    /** для триальных подписок — тарифы, в которые
-     *  можно конвертировать (помимо тарифа триала). UI показывает их при продлении. */
-    convertTariffIds: string[];
-    /** имя триала (карточка показывает «TRIAL: имя» вместо тарифа). */
-    trialName: string | null;
-    /** можно ли конвертировать триал (false → никаких кнопок продления/конвертации). */
-    trialConvertEnabled: boolean;
-    /** конвертация разрешена в любой тариф. */
-    trialConvertAllTariffs: boolean;
-    isBanned: boolean;
-    banReason: string | null;
-    bannedUntil: string | null;
-    isOfflineSnapshot?: boolean;
-  };
 
   const allSubs = await prisma.subscription.findMany({
     where: {
@@ -3153,13 +3140,11 @@ clientRouter.get("/subscription/all", async (req, res) => {
     orderBy: { subscriptionIndex: "asc" },
   });
 
-  // JS-фильтр для исключения GIFT_RESERVED / GIFT_CODE_ACTIVE (резерв под подарок).
   const visible = allSubs.filter((s) => {
     const gs = s.giftStatus ?? "";
     return gs !== "GIFT_RESERVED" && gs !== "GIFT_CODE_ACTIVE";
   });
 
-  // Self-heal: если у клиента есть remnawaveUuid (или профиль в Remna по TG), но в таблице subscriptions нет слота 0
   if (allSubs.length === 0) {
     const cl = await prisma.client.findUnique({
       where: { id: clientId },
@@ -3205,69 +3190,129 @@ clientRouter.get("/subscription/all", async (req, res) => {
     }
   }
 
-  const items: SubInfo[] = [];
-  for (const sub of visible) {
-    let remnaPayload: unknown = null;
-    let isOfflineSnapshot = false;
-    // триальная подписка показывает ИМЯ ТРИАЛА (standalone-триал
-    // вообще не имеет тарифа — без этого выводилось «Тариф не выбран»).
-    let tariffName = (sub.trialId ? sub.trial?.name?.trim() : undefined) ?? sub.tariff?.name?.trim() ?? "";
-    if (sub.remnawaveUuid) {
-      let r: { data?: unknown; error?: string; status: number } | null = null;
-      {
+  const items: ClientSubInfo[] = await Promise.all(
+    visible.map(async (sub) => {
+      let remnaPayload: unknown = null;
+      let isOfflineSnapshot = false;
+      let tariffName = (sub.trialId ? sub.trial?.name?.trim() : undefined) ?? sub.tariff?.name?.trim() ?? "";
+      if (sub.remnawaveUuid) {
+        let r: { data?: unknown; error?: string; status: number } | null = null;
         try {
           r = await remnaGetUser(sub.remnawaveUuid);
         } catch {
           r = null;
         }
+        if (r?.data) {
+          if (cryptOn) await encryptSubscriptionUrlInPlace(r.data);
+          remnaPayload = r.data ?? null;
+          if (!tariffName) tariffName = await resolveTariffDisplayName(r.data ?? null);
+        } else if (!r || r.status >= 500 || r.status === 429) {
+          isOfflineSnapshot = true;
+          remnaPayload = offlineSubscriptionSnapshot(sub);
+        }
       }
-      if (r?.data) {
-        if (cryptOn) await encryptSubscriptionUrlInPlace(r.data);
-        remnaPayload = r.data ?? null;
-        if (!tariffName) tariffName = await resolveTariffDisplayName(r.data ?? null);
-      } else if (!r || r.status >= 500 || r.status === 429) {
-        // Graceful Mirror Fallback из локальной БД при недоступности Remnawave
-        isOfflineSnapshot = true;
-        remnaPayload = offlineSubscriptionSnapshot(sub);
-      }
-    }
-    if (!tariffName) tariffName = "Тариф не выбран";
+      if (!tariffName) tariffName = "Тариф не выбран";
 
-    items.push({
-      // type сохраняем для back-compat с ботом / фронтом —
-      // index=0 → "root" (главная), иначе "secondary" (доп).
-      type: sub.subscriptionIndex === 0 ? "root" : "secondary",
-      id: sub.id,
-      subscriptionIndex: sub.subscriptionIndex,
-      subscription: remnaPayload,
-      isOfflineSnapshot,
-      tariffDisplayName: tariffName,
-      customName: sub.customName,
-      remnawaveUuid: sub.remnawaveUuid,
-      tariffId: sub.tariff?.id ?? null,
-      trialId: sub.trialId ?? null,
-      autoRenewEnabled: sub.autoRenewEnabled === true,
-      tariffMenuEmoji: sub.tariff?.menuEmoji?.trim() || null,
-      extraDevices: sub.extraDevices ?? 0,
-      extraDevicesMonthlyPrice: sub.extraDevicesMonthlyPrice ?? 0,
-      isBanned: !!(sub.bannedUntil && sub.bannedUntil.getTime() > Date.now()),
-      banReason: sub.banReason ?? null,
-      bannedUntil: sub.bannedUntil?.toISOString() ?? null,
-      convertTariffIds: (() => {
-        if (!sub.trialId || !sub.trial?.convertTariffIds) return [];
-        try {
-          const parsed = JSON.parse(sub.trial.convertTariffIds) as unknown;
-          return Array.isArray(parsed) ? parsed.map((x) => String(x)) : [];
-        } catch { return []; }
-      })(),
-      trialName: sub.trialId ? (sub.trial?.name ?? null) : null,
-      trialConvertEnabled: sub.trialId ? (sub.trial?.convertEnabled ?? true) : true,
-      trialConvertAllTariffs: sub.trialId ? (sub.trial?.convertAllTariffs ?? false) : false,
-    });
+      return {
+        type: sub.subscriptionIndex === 0 ? "root" : "secondary",
+        id: sub.id,
+        subscriptionIndex: sub.subscriptionIndex,
+        subscription: remnaPayload,
+        isOfflineSnapshot,
+        tariffDisplayName: tariffName,
+        customName: sub.customName,
+        remnawaveUuid: sub.remnawaveUuid,
+        tariffId: sub.tariff?.id ?? null,
+        trialId: sub.trialId ?? null,
+        autoRenewEnabled: sub.autoRenewEnabled === true,
+        tariffMenuEmoji: sub.tariff?.menuEmoji?.trim() || null,
+        extraDevices: sub.extraDevices ?? 0,
+        extraDevicesMonthlyPrice: sub.extraDevicesMonthlyPrice ?? 0,
+        isBanned: !!(sub.bannedUntil && sub.bannedUntil.getTime() > Date.now()),
+        banReason: sub.banReason ?? null,
+        bannedUntil: sub.bannedUntil?.toISOString() ?? null,
+        convertTariffIds: (() => {
+          if (!sub.trialId || !sub.trial?.convertTariffIds) return [];
+          try {
+            const parsed = JSON.parse(sub.trial.convertTariffIds) as unknown;
+            return Array.isArray(parsed) ? parsed.map((x) => String(x)) : [];
+          } catch { return []; }
+        })(),
+        trialName: sub.trialId ? (sub.trial?.name ?? null) : null,
+        trialConvertEnabled: sub.trialId ? (sub.trial?.convertEnabled ?? true) : true,
+        trialConvertAllTariffs: sub.trialId ? (sub.trial?.convertAllTariffs ?? false) : false,
+      };
+    })
+  );
+
+  return { items };
+}
+
+export async function fetchClientSubscriptionsAll(clientId: string): Promise<{ items: ClientSubInfo[] }> {
+  return doFetchClientSubscriptionsAll(clientId);
+}
+
+/**
+ * GET /api/client/subscription/all — Все подписки клиента (root + secondary).
+ * Возвращает массив с Remnawave-данными для каждой подписки.
+ */
+clientRouter.get("/subscription/all", async (req, res) => {
+  const clientId = (req as unknown as { clientId: string }).clientId;
+  const result = await fetchClientSubscriptionsAll(clientId);
+  console.log(`[subscription/all] client=${clientId} total=${result.items.length}`);
+  return res.json(result);
+});
+
+/**
+ * GET /api/client/bot-bootstrap — данные профиля, подписок и триалов для главного меню бота.
+ * Собирает профиль клиента, основную подписку, список всех подписок и доступные триалы за 1 вызов.
+ */
+clientRouter.get("/bot-bootstrap", async (req, res) => {
+  const clientId = (req as unknown as { clientId: string }).clientId;
+  const [full, subsResult, trialsResult] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id: clientId },
+      select: {
+        id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true,
+        balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true,
+        autoRenewEnabled: true, autoRenewTariffId: true, autoRenewPromoCode: true, yoomoneyAccessToken: true,
+        totpEnabled: true, createdAt: true, yookassaPaymentMethodTitle: true, onboardingCompleted: true, passwordHash: true,
+        currentTariffId: true,
+        currentTariff: { select: { id: true, name: true, categoryId: true } },
+        personalDiscountPercent: true,
+      },
+    }),
+    fetchClientSubscriptionsAll(clientId),
+    fetchAvailableTrialsForClient(clientId),
+  ]);
+
+  if (!full) {
+    return res.status(401).json({ message: "Client not found" });
   }
 
-  console.log(`[subscription/all] client=${clientId} total=${visible.length}`);
-  return res.json({ items });
+  const client = toClientShape(full);
+  const rootItem = subsResult.items.find((s) => s.subscriptionIndex === 0 || s.type === "root") ?? subsResult.items[0];
+  const primarySubscription = rootItem ? {
+    subscription: rootItem.subscription,
+    tariffDisplayName: rootItem.tariffDisplayName,
+    isTrial: Boolean(rootItem.trialId),
+    trialName: rootItem.trialName,
+    trialConvertEnabled: rootItem.trialConvertEnabled,
+    isBanned: rootItem.isBanned,
+    banReason: rootItem.banReason,
+  } : {
+    subscription: null,
+    tariffDisplayName: null,
+    currentPricePerDay: null,
+    message: "Подписка не привязана",
+  };
+
+  return res.json({
+    client,
+    subscription: primarySubscription,
+    allSubscriptions: subsResult,
+    availableTrials: trialsResult,
+  });
 });
 
 clientRouter.patch("/subscription/:id/name", async (req, res) => {

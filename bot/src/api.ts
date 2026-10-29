@@ -1,3 +1,4 @@
+import { internalBotCredential, type RuntimeConfig } from "./webhook-runtime.js";
 /**
  * STEALTHNET 3.0 - API клиент бота (вызовы бэкенда).
  */
@@ -1237,4 +1238,56 @@ export function starsPaid(body: StarsReceipt): Promise<{ ok: boolean; delivery: 
 
 export function starsRefunded(body: StarsReceipt): Promise<{ ok: boolean }> {
   return fetchJson("/api/bot/stars/refunded", { method: "POST", body });
+}
+
+export async function getBotRuntimeConfig(): Promise<RuntimeConfig> {
+  const response = await fetch(`${API_URL}/api/bot/runtime`, {
+    headers: { "X-Bot-Internal-Auth": internalBotCredential((process.env.BOT_TOKEN || "").trim()) },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error("Bot runtime configuration unavailable");
+  return response.json() as Promise<RuntimeConfig>;
+}
+
+export interface BotBootstrapData {
+  client: {
+    id: string;
+    email?: string | null;
+    telegramId?: string | null;
+    telegramUsername?: string | null;
+    preferredLang: string;
+    preferredCurrency: string;
+    balance: number;
+    referralCode?: string | null;
+    referralPercent?: number | null;
+    trialUsed?: boolean;
+    autoRenewEnabled?: boolean;
+    currentTariffId?: string | null;
+    currentTariff?: { id: string; name: string; categoryId: string | null } | null;
+    yookassaPaymentMethodTitle?: string | null;
+    personalDiscountPercent?: number | null;
+    onboardingCompleted?: boolean;
+  };
+  subscription: {
+    subscription: unknown;
+    tariffDisplayName?: string | null;
+    isTrial?: boolean;
+    trialName?: string | null;
+    trialConvertEnabled?: boolean;
+    isBanned?: boolean;
+    banReason?: string | null;
+    message?: string;
+  };
+  allSubscriptions: {
+    items: SubscriptionListItem[];
+  };
+  availableTrials: {
+    items: { id: string; name: string; price?: number; tariffId: string; tariffName: string | null; durationDays: number; description: string | null; sortOrder: number }[];
+    hasAnyEnabled: boolean;
+  };
+}
+
+/** Единый запрос для главного меню и старта: me + subscription + allSubscriptions + trials */
+export async function getBotBootstrap(token: string): Promise<BotBootstrapData> {
+  return fetchJson("/api/client/bot-bootstrap", { token });
 }
