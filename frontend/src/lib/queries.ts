@@ -84,8 +84,9 @@ export function useAvailableTrials(token: string | null) {
 /** Инвалидация всех клиентских данных (после оплаты/активации/редакта профиля). */
 export function useInvalidateClientData() {
   const qc = useQueryClient();
-  return () => {
-    void qc.invalidateQueries({ queryKey: ["client"], exact: false });
-    void qc.invalidateQueries({ queryKey: qk.client.publicTariffs() });
-  };
+  return () => Promise.all([
+    qc.invalidateQueries({ queryKey: ["client"], exact: false }),
+    qc.invalidateQueries({ queryKey: ["gifts"], exact: false }),
+    qc.invalidateQueries({ queryKey: qk.client.publicTariffs() }),
+  ]);
 }

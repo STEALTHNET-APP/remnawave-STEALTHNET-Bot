@@ -93,7 +93,7 @@ export function AuroraTopUpSheet({ open, onClose }: Props) {
       list.push({
         id: "yookassa",
         kind: "yookassa",
-        label: providerLabel("yookassa", "Банковские карты · СБП"),
+        label: providerLabel("yookassa", "Карта/СБП (Юкасса)"),
         subLabel: "МИР, Visa, Mastercard, СБП",
         icon: CreditCard,
       });

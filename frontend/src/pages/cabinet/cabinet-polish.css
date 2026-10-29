@@ -1,0 +1,170 @@
+body[data-cabinet-ui="minimal"] :is(.classic-cabinet,.classic-auth,[role="dialog"]) label:has(> svg) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+body[data-cabinet-ui="minimal"] :is(.classic-cabinet,.classic-auth,[role="dialog"]) label > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+body[data-cabinet-ui="minimal"] :is(.classic-cabinet,.classic-auth,[role="dialog"]) label:has(> input[type="checkbox"]) {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+body[data-cabinet-ui="minimal"] :is(.classic-cabinet,.classic-auth,[role="dialog"]) label > input[type="checkbox"] {
+  flex: none;
+  margin-top: 4px;
+}
+body[data-cabinet-ui="minimal"] .tariff-duration-picker label {
+  margin-bottom: 0;
+}
+body[data-cabinet-ui="minimal"] .tariff-plan-card {
+  padding: 24px;
+  gap: 20px;
+}
+body[data-cabinet-ui="minimal"] .tariff-plan-features {
+  gap: 16px 24px;
+  padding-top: 16px;
+}
+body[data-cabinet-ui="minimal"] .cabinet-gift-card {
+  min-width: 0;
+  padding: 24px;
+  gap: 20px;
+}
+body[data-cabinet-ui="minimal"] .cabinet-gift-card-heading {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+body[data-cabinet-ui="minimal"] .cabinet-gift-card-heading > div {
+  flex: 1 1 180px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+body[data-cabinet-ui="minimal"] .cabinet-gift-card-heading > span {
+  font-weight: 500;
+  line-height: 1.4;
+  max-width: 100%;
+  white-space: normal;
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+body[data-cabinet-ui="minimal"] .cabinet-gift-code {
+  padding: 12px;
+  gap: 8px;
+}
+body[data-cabinet-ui="minimal"] .cabinet-gift-code > code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  letter-spacing: .02em;
+}
+body[data-cabinet-ui="minimal"] .cabinet-gift-code > button {
+  flex: none;
+  min-width: 40px;
+  min-height: 40px;
+}
+body[data-cabinet-ui="minimal"] .cabinet-ticket-meta {
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+body[data-cabinet-ui="minimal"] .cabinet-ticket-message,
+body[data-cabinet-ui="minimal"] .cabinet-ticket-message > div {
+  min-width: 0;
+}
+body[data-cabinet-ui="minimal"] .cabinet-history-tabs {
+  gap: 8px 20px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+body[data-cabinet-ui="minimal"] .cabinet-history-tabs > button {
+  flex: none;
+  min-height: 44px;
+  white-space: nowrap;
+}
+body[data-cabinet-ui="minimal"] .cabinet-history-pagination > button {
+  min-height: 40px;
+}
+body[data-cabinet-ui="minimal"] .cabinet-setting-row > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+body[data-cabinet-ui="minimal"] .cabinet-setting-row > button {
+  flex-shrink: 0;
+}
+@media (max-width: 639px) {
+  body[data-cabinet-ui="minimal"] .tariff-plan-card,
+  body[data-cabinet-ui="minimal"] .cabinet-gift-card {
+    padding: 18px;
+    gap: 18px;
+  }
+  body[data-cabinet-ui="minimal"] .tariff-plan-heading h3 {
+    font-size: 20px;
+  }
+  body[data-cabinet-ui="minimal"] .tariff-price-amount {
+    font-size: 30px;
+  }
+  body[data-cabinet-ui="minimal"] .cabinet-gift-heading button {
+    min-height: 44px;
+    height: auto;
+    padding-block: 10px;
+    white-space: normal;
+  }
+  body[data-cabinet-ui="minimal"] .cabinet-gift-heading > div > div:last-child {
+    gap: 8px;
+  }
+  body[data-cabinet-ui="minimal"] .cabinet-section-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  body[data-cabinet-ui="minimal"] .cabinet-payment-list li {
+    display: grid;
+    grid-template-columns: minmax(0,1fr);
+    gap: 10px;
+  }
+  body[data-cabinet-ui="minimal"] .cabinet-payment-list li > div:last-child {
+    text-align: left;
+    align-items: flex-start;
+  }
+  body[data-cabinet-ui="minimal"] .cabinet-history-pagination {
+    justify-content: space-between;
+    gap: 8px;
+  }
+  body[data-cabinet-ui="minimal"] .cabinet-ticket-conversation {
+    min-height: 380px;
+    max-height: calc(100dvh - 170px - var(--app-safe-top,0px) - var(--app-safe-bottom,0px));
+  }
+  body[data-cabinet-ui="minimal"] .cabinet-ticket-message {
+    max-width: 94%;
+  }
+  body[data-cabinet-ui="minimal"] .cabinet-ticket-conversation textarea {
+    font-size: 16px;
+  }
+  body[data-cabinet-ui="minimal"] .cabinet-setting-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  body[data-cabinet-ui="minimal"] .classic-auth .cabinet-auth-page {
+    padding: 24px 16px;
+  }
+  body[data-cabinet-ui="minimal"] .classic-auth .cabinet-auth-card > div:last-child {
+    padding: 24px;
+  }
+  body[data-cabinet-ui="minimal"] .classic-auth .cabinet-auth-card h2 {
+    font-size: 26px;
+  }
+}
+body[data-cabinet-ui="minimal"] .classic-cabinet .tariff-category-list button.tariff-category-button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent !important;
+}
+body[data-cabinet-ui="minimal"] .classic-cabinet .tariff-category-list button.tariff-category-button[aria-pressed="true"] {
+  border-bottom-color: hsl(var(--foreground));
+}
+@media (max-width: 639px) {
+  body[data-cabinet-ui="minimal"] .cabinet-payment-list small { max-width: 100%; }
+}

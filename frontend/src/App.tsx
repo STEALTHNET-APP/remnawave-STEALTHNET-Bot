@@ -1,3 +1,4 @@
+import { ClientHistoryPage } from "@/pages/cabinet/client-history";
 import { ClientWalletPage } from "@/pages/cabinet/client-wallet";
 import { ClientHelpPage } from "@/pages/cabinet/client-help";
 import { MaintenanceGate } from "@/components/maintenance-gate";
@@ -345,6 +346,7 @@ function AppRoutes() {
         }
       >
         <Route index element={<CabinetIndexRedirect />} />
+        <Route path="history" element={<RequireClientAuth><ClientHistoryPage /></RequireClientAuth>} />
         <Route path="wallet" element={<RequireClientAuth><ClientWalletPage /></RequireClientAuth>} />
         <Route path="help" element={<RequireClientAuth><ClientHelpPage /></RequireClientAuth>} />
         <Route path="login" element={<ClientLoginPage />} />
@@ -603,16 +605,16 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider >
-        <AuthProvider>
-          <BrowserRouter future={routerFutureFlags}>
+      <BrowserRouter future={routerFutureFlags}>
+        <ThemeProvider>
+          <AuthProvider>
             <AnimatedBackground />
             <TitleAndThemeSync  />
             <AppRoutes />
             <PwaUpdatePrompt />
-          </BrowserRouter>
-        </AuthProvider>
-      </ThemeProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </BrowserRouter>
     </QueryClientProvider>
   );
 }

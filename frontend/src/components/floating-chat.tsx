@@ -1,3 +1,5 @@
+import { SupportMessage } from "@/components/support-message";
+import "@/pages/cabinet/cabinet-support.css";
 import { useTranslation } from "react-i18next";
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import gsap from "gsap";
@@ -50,7 +52,7 @@ function getInitialAiMessage(serviceName: string): Message[] {
       id: "a1",
       text: `Привет! Я AI-ассистент ${name}  Готов помочь с настройкой VPN, тарифами и любыми другими вопросами. Что вас интересует?`,
       from: "bot",
-      time: "10:00",
+      time: "",
     },
   ];
 }
@@ -65,7 +67,8 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
           : "bg-black/20 border border-border rounded-xl"
       )}>
         <button
-          onClick={() => setActiveChat("support")}
+          aria-pressed={activeChat === "support"}
+      onClick={() => setActiveChat("support")}
           className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold text-primary-foreground bg-primary relative z-10"
         >
           <Headset className="w-4 h-4" /> Поддержка
@@ -80,12 +83,13 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
   }
   return (
   <div className={cn(
-    "relative flex p-1 w-full sm:w-auto sm:min-w-[320px]",
+    "cabinet-chat-tabs relative flex p-1 w-full sm:w-auto sm:min-w-[320px]",
     isFloating 
       ? "bg-black/20 dark:bg-card rounded-xl border border-border pointer-events-auto" 
       : "bg-black/20 border border-border rounded-xl"
   )}>
     <button
+      aria-pressed={activeChat === "ai"}
       onClick={() => setActiveChat("ai")}
       className={cn(
         "flex-1 sm:flex-none sm:w-[160px] flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all duration-300 relative z-10",
@@ -100,6 +104,7 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
       )}
     </button>
     <button
+      aria-pressed={activeChat === "support"}
       onClick={() => setActiveChat("support")}
       className={cn(
         "flex-1 sm:flex-none sm:w-[160px] flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all duration-300 relative z-10",
@@ -139,22 +144,20 @@ const ChatHeader = ({ activeChat, setActiveChat, isExpanded, setIsExpanded, setI
               {activeChat === "ai" ? "AI Ассистент" : "Поддержка"}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5 font-medium flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-              </span>
-              {activeChat === "ai" ? "Бот онлайн" : "Операторы онлайн"}
+              {activeChat === "ai" ? "Ответы на вопросы" : "История обращений"}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-1 sm:gap-2">
           <button
+            aria-label={isExpanded ? "Свернуть чат" : "Развернуть чат"}
             onClick={() => setIsExpanded(!isExpanded)}
             className="hidden sm:flex rounded-full p-2 hover:bg-black/10 dark:hover:bg-card transition-colors text-muted-foreground hover:text-foreground"
           >
             {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
           <button
+            aria-label="Закрыть чат"
             onClick={() => setIsOpen(false)}
             className="rounded-full p-2 hover:bg-black/10 dark:hover:bg-card transition-colors text-muted-foreground hover:text-foreground"
           >
@@ -288,7 +291,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
   };
 
   const sendReply = () => {
-    if (!token || !detailId) return;
+    if (!token || !detailId || replySending) return;
     if (!replyText.trim() && replyFiles.length === 0) return;
     setReplySending(true);
     setUploadError(null);
@@ -341,12 +344,12 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
       <div className="flex flex-col flex-1 min-h-0 w-full">
         {/* Scrollable Area */}
         <div className="flex-1 overflow-y-auto min-h-0 bg-transparent scroll-smooth custom-scrollbar flex flex-col">
-          <ChatHeader {...headerProps} />
+          <div className="support-detail-toolbar"><span>Поддержка</span><div><button aria-label={headerProps.isExpanded ? "Свернуть чат" : "Развернуть чат"} onClick={() => headerProps.setIsExpanded(!headerProps.isExpanded)} className="hidden sm:inline-flex">{headerProps.isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button><button aria-label="Закрыть чат" onClick={() => headerProps.setIsOpen(false)}><X size={18} /></button></div></div>
           
           {/* Header */}
-          <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-black/5 dark:border-border bg-card shrink-0">
+          <div className="support-conversation-header sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-black/5 dark:border-border bg-card shrink-0">
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full" onClick={() => setDetailId(null)}>
+              <Button aria-label="К списку обращений" variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full" onClick={() => setDetailId(null)}>
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <div className="min-w-0 flex-1">
@@ -372,34 +375,14 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
           </div>
           
           {/* Messages */}
-          <div className="p-4 space-y-4 flex-1">
+          <div className="support-message-list flex-1">
             {detailLoading && !detail ? (
               <div className="flex justify-center items-center h-full"><Loader2 className="h-6 w-6 animate-spin text-primary/50" /></div>
             ) : detail?.messages?.length === 0 ? (
               <div className="flex h-full items-center justify-center text-muted-foreground text-sm font-medium">Нет сообщений</div>
             ) : (
               <div data-msg-list>
-                {detail?.messages?.map((m: any) => {
-                  const isSupport = m.authorType === "support";
-                  const isUser = !isSupport;
-                  return (
-                    <div
-                      key={m.id}
-                      className={cn("flex gap-3 max-w-[85%]", isUser ? "ml-auto flex-row-reverse" : "mr-auto")}
-                    >
-                      <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-sm mt-1", isUser ? "bg-primary/20 text-primary" : "bg-blue-500/20 text-blue-400")}>
-                        {isUser ? <User className="h-4 w-4" /> : <Headset className="h-4 w-4" />}
-                      </div>
-                      <div className={cn("rounded-xl px-4 py-2.5 text-[14px] leading-relaxed shadow-sm", isUser ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-card/60 border border-border text-foreground rounded-tl-sm")}>
-                        {m.content && <p className="whitespace-pre-wrap break-words">{m.content}</p>}
-                        <TicketAttachments items={m.attachments ?? []} />
-                        <p className={cn("text-[10px] mt-1.5 opacity-60 font-medium", isUser ? "text-right" : "text-left text-muted-foreground")}>
-                          {formatDate(m.createdAt)}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
+                {detail?.messages?.map((m: any) => <SupportMessage key={m.id} support={m.authorType === "support"} content={m.content} date={m.createdAt}><TicketAttachments items={m.attachments ?? []} /></SupportMessage>)}
               </div>
             )}
             <div ref={messagesEndRef} className="h-1" />
@@ -408,7 +391,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
 
         {/* Input area */}
         {detail?.status === "open" && (
-          <div className="p-3 sm:p-4 border-t border-black/5 dark:border-border bg-card sm:bg-card shrink-0 pb-[max(var(--app-safe-bottom),16px)] sm:pb-4">
+          <div className="support-composer-wrapper shrink-0">
             {replyFiles.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {replyFiles.map((f, i) => (
@@ -438,7 +421,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
             {uploadError && (
               <p className="mb-1.5 text-[10px] text-destructive text-center font-semibold">{uploadError}</p>
             )}
-            <div className="relative flex items-end gap-2 bg-black/5 dark:bg-black/20 p-1.5 rounded-xl border border-black/5 dark:border-border focus-within:border-border focus-within:ring-1 focus-within:ring-primary/50 transition-all">
+            <div className="support-composer">
               <input
                 ref={replyInputRef}
                 type="file"
@@ -461,11 +444,12 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
               </Button>
               <textarea
                 className="flex-1 max-h-32 min-h-[40px] w-full resize-none bg-transparent px-2 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none custom-scrollbar"
-                placeholder="Сообщение..."
+                aria-label="Сообщение в поддержку"
+                placeholder="Напишите сообщение…"
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     sendReply();
                   }
@@ -475,6 +459,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
               <Button
                 size="icon"
                 className="h-10 w-10 rounded-xl shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground transition-transform active:scale-95 mb-0.5"
+                aria-label="Отправить сообщение"
                 onClick={sendReply}
                 disabled={replySending || (!replyText.trim() && replyFiles.length === 0)}
               >
@@ -610,10 +595,9 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
             return (
               <div
                 key={t.id}
-                onClick={() => setDetailId(t.id)}
-                className="group relative flex items-center justify-between gap-3 p-3.5 rounded-xl border border-black/5 dark:border-border bg-card/60 hover:bg-card/80 transition-all cursor-pointer shadow-sm hover:shadow-md"
+                className="support-ticket-list-row group relative flex items-center justify-between gap-3 p-3.5 rounded-xl border border-black/5 dark:border-border bg-card/60 hover:bg-card/80 transition-all cursor-pointer shadow-sm hover:shadow-md"
               >
-                <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                <button onClick={() => setDetailId(t.id)} className="flex flex-col gap-1.5 min-w-0 flex-1 text-left py-2">
                   <div className="flex items-start gap-2">
                     <h4 className="font-semibold text-[13px] text-foreground line-clamp-2 leading-tight group-hover:text-primary transition-colors">{t.subject}</h4>
                     {isOpen ? (
@@ -629,7 +613,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
                   <span className="text-[10px] font-medium text-muted-foreground">
                     {formatDate(t.updatedAt)}
                   </span>
-                </div>
+                </button>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -651,7 +635,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
   );
 }
 
-export function FloatingChat() {
+export function FloatingChat({ placement = "floating" }: { placement?: "floating" | "toolbar" }) {
   const { t } = useTranslation();
   const { state } = useClientAuth();
   const config = useCabinetConfig();
@@ -660,7 +644,7 @@ export function FloatingChat() {
   const aiChatEnabled = config?.aiChatEnabled !== false;
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [activeChat, setActiveChat] = useState<ChatType>(() => (config?.aiChatEnabled !== false ? "ai" : "support"));
+  const [activeChat, setActiveChat] = useState<ChatType>("support");
   const [hasOpenDialog, setHasOpenDialog] = useState(false);
   // Panel visibility is driven manually: `isOpen` управляет анимацией,
   // `panelVisible` монтирует/размонтирует DOM (замена AnimatePresence).
@@ -974,14 +958,14 @@ export function FloatingChat() {
 
   return (
     <>
-      <div className={cn("fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-[100]", hasOpenDialog && !isOpen && "pointer-events-none opacity-0")}>
+      <div className={cn(placement === "toolbar" ? "cabinet-chat-toolbar relative z-[100]" : "fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-[100]", hasOpenDialog && !isOpen && "pointer-events-none opacity-0")}>
         {panelVisible && (
         <div
           ref={panelRef}
           data-tour="floating-chat"
           className={cn(
-            "cabinet-floating-chat fixed sm:absolute z-50",
-            "inset-0 sm:inset-auto sm:bottom-20 sm:right-0",
+            "cabinet-floating-chat fixed z-50",
+            placement === "toolbar" ? "inset-0 sm:inset-auto sm:top-20 sm:right-6" : "sm:absolute inset-0 sm:inset-auto sm:bottom-20 sm:right-0",
             "w-full h-[100dvh]",
             isExpanded
               ? "sm:w-[calc(100vw-48px)] sm:h-[calc(100dvh-120px)]"
@@ -1067,7 +1051,7 @@ export function FloatingChat() {
                         value={aiInput}
                         onChange={(e) => setAiInput(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
+                          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                             e.preventDefault();
                             handleSendAi();
                           }
@@ -1077,6 +1061,7 @@ export function FloatingChat() {
                       <Button
                         size="icon"
                         className="h-10 w-10 rounded-xl shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground transition-transform active:scale-95 mb-0.5"
+                        aria-label="Отправить сообщение AI"
                         onClick={handleSendAi}
                         disabled={!aiInput.trim() || aiLoading}
                       >

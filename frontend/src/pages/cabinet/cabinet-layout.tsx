@@ -1,7 +1,9 @@
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { cabinetSection } from "@/lib/cabinet-navigation";
 import { LiteLayout } from "./lite-layout";
 import { getPublicConfigCached } from "@/lib/public-config";
 import "./classic-cabinet.css";
+import "./cabinet-navigation.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -11,10 +13,9 @@ import { createContext, useContext } from "react";
 import { useIsMiniapp } from "@/hooks/use-is-miniapp";
 import { useLanguageSync } from "@/i18n/use-language-sync";
 import { api } from "@/lib/api";
+import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, User, LogOut, Shield, Users, Sun, Moon, PlusCircle, Globe, KeyRound, MessageSquare, Palette, Monitor, Check, Loader2, Settings, Layers, MoreHorizontal, Wallet, Gift, Sparkles } from "lucide-react";
-import { useTheme, ACCENT_PALETTES, type ThemeMode, type ThemeAccent } from "@/contexts/theme";
-import { cn } from "@/lib/utils";
+import { LayoutDashboard, Package, User, LogOut, Shield, Users, PanelLeftOpen, PanelLeftClose, PlusCircle, Globe, KeyRound, MessageSquare, Coins, Check, Loader2, Settings, Layers, MoreHorizontal, Wallet, Gift, Sparkles, History } from "lucide-react";
 import { FloatingChat } from "@/components/floating-chat";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DashboardTour } from "@/components/tour/dashboard-tour";
@@ -149,6 +150,7 @@ function useNavItems() {
   return useMemo(() => [
     { to: "/cabinet/dashboard", label: t("cabinet.nav.home"), icon: LayoutDashboard },
     { to: "/cabinet/tariffs", label: t("cabinet.nav.tariffs"), icon: Package },
+    { to: "/cabinet/history", label: t("cabinet.redesign.history"), icon: History },
     { to: "/cabinet/wallet", label: t("cabinet.workspace.wallet"), icon: Wallet },
     { to: "/cabinet/help", label: t("cabinet.workspace.help"), icon: MessageSquare },
     { to: "/cabinet/custom-build", label: t("cabinet.nav.custom_build"), icon: Layers },
@@ -163,131 +165,8 @@ function useNavItems() {
   ], [t]);
 }
 
-function useThemeModeOptions() {
-  const { t } = useTranslation();
-  return useMemo(() => [
-    { value: "light" as ThemeMode, icon: Sun, label: t("cabinet.layout.theme_light") },
-    { value: "dark" as ThemeMode, icon: Moon, label: t("cabinet.layout.theme_dark") },
-    { value: "system" as ThemeMode, icon: Monitor, label: t("cabinet.layout.theme_system") },
-  ], [t]);
-}
-
-function ThemePopover() {
-  const [show, setShow] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const { t } = useTranslation();
-  const { config: themeConfig, setMode, setAccent, resolvedMode, allowUserThemeChange } = useTheme();
-  const MODE_OPTIONS = useThemeModeOptions();
-
-  useEffect(() => {
-    if (!show) return;
-    function handleClick(e: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setShow(false);
-      }
-    }
-    // defer to next tick so the opening click doesn't immediately close
-    const timer = setTimeout(() => document.addEventListener("mousedown", handleClick), 0);
-    return () => { clearTimeout(timer); document.removeEventListener("mousedown", handleClick); };
-  }, [show]);
-
-  // Если смена темы запрещена — просто кнопка солнышко/луна без дропдауна
-  if (!allowUserThemeChange) {
-    return (
-      <Button
-        variant="ghost"
-        size="sm"
-        aria-label={resolvedMode === "dark" ? "Включить светлую тему" : "Включить тёмную тему"}
-        className="h-10 w-10 p-0 bg-background/20 hover:bg-background/40 transition-all duration-300"
-        onClick={() => setMode(resolvedMode === "dark" ? "light" : "dark")}
-      >
-        <span className="relative h-4 w-4">
-          <Sun className={cn("absolute inset-0 h-4 w-4 transition-all duration-500", resolvedMode === "dark" ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-0 opacity-0")} />
-          <Moon className={cn("absolute inset-0 h-4 w-4 transition-all duration-500", resolvedMode === "light" ? "rotate-0 scale-100 opacity-100" : "rotate-90 scale-0 opacity-0")} />
-        </span>
-      </Button>
-    );
-  }
-
-  return (
-    <div className="relative" ref={popoverRef} onKeyDown={(e) => { if (e.key === "Escape") { setShow(false); popoverRef.current?.querySelector("button")?.focus(); } }}>
-      <Button variant="ghost" size="sm" aria-label={t("cabinet.workspace.appearance_label")} aria-expanded={show} aria-controls="cabinet-theme-panel" className="h-10 w-10 p-0 bg-background/20 hover:bg-background/40" onClick={() => setShow(!show)}>
-        <Palette className="h-3.5 w-3.5" />
-      </Button>
-      <div id="cabinet-theme-panel" hidden={!show}
-        className={cn(
-          "absolute -right-2 sm:right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[320px] max-w-[320px] rounded-[2rem] border border-white/40 dark:border-white/10 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-[32px] p-5 shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)] transition-all duration-300 origin-top-right",
-          show
-            ? "visible opacity-100 scale-100 pointer-events-auto translate-y-0"
-            : "invisible opacity-0 scale-95 pointer-events-none -translate-y-2"
-        )}
-      >
-        <div className="mb-5">
-          <h4 className="mb-3 text-sm font-semibold tracking-tight text-foreground">{t("cabinet.layout.theme_heading")}</h4>
-          <div className="flex rounded-xl bg-muted/60 p-1 border border-border/50">
-            {MODE_OPTIONS.map((opt) => {
-              const isActive = themeConfig.mode === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  onClick={() => setMode(opt.value)}
-                  className={cn(
-                    "flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-xs font-medium transition-all duration-300",
-                    isActive
-                      ? "bg-background text-foreground shadow-sm ring-1 ring-border/50"
-                      : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
-                  )}
-                >
-                  <opt.icon className="h-3.5 w-3.5" />
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {allowUserThemeChange && (
-          <div>
-            <h4 className="mb-3 text-sm font-semibold tracking-tight text-foreground">{t("cabinet.layout.color_accent")}</h4>
-            <div className="grid grid-cols-4 gap-2">
-              {(Object.entries(ACCENT_PALETTES) as [ThemeAccent, typeof ACCENT_PALETTES["default"]][]).map(([key, palette]) => {
-                const isActive = themeConfig.accent === key;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => setAccent(key)}
-                    className={cn(
-                      "group flex flex-col items-center gap-2 rounded-xl p-2 transition-all duration-300",
-                      isActive ? "bg-primary/10" : "hover:bg-muted/60"
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "relative flex h-8 w-8 items-center justify-center rounded-full shadow-sm transition-transform duration-300",
-                        isActive ? "scale-110 ring-4 ring-primary/20" : "group-hover:scale-110"
-                      )}
-                      style={{ backgroundColor: palette.swatch }}
-                    >
-                      {isActive && <Check className="h-4 w-4 text-white drop-shadow-md" />}
-                    </div>
-                    <span className={cn(
-                      "text-[10px] font-medium tracking-tight truncate w-full text-center transition-colors",
-                      isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
-                    )}>
-                      {palette.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function SettingsPopover() {
+  const reduced = useReducedMotion();
   const [show, setShow] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const { t } = useTranslation();
@@ -324,6 +203,7 @@ function SettingsPopover() {
     try {
       await api.clientUpdateProfile(state.token, { preferredLang, preferredCurrency });
       await refreshProfile();
+      toast.success(t("cabinet.redesign.saved"));
       setShow(false);
     } catch {
       setSaveError(true);
@@ -340,12 +220,8 @@ function SettingsPopover() {
       <Button aria-label={t("cabinet.workspace.settings_label")} aria-expanded={show} aria-controls="cabinet-settings-panel" variant="ghost" size="sm" className="gap-1.5 text-xs h-8 px-2 bg-background/20 hover:bg-background/40" onClick={() => setShow(!show)}>
         <Settings className="h-3.5 w-3.5" />
       </Button>
-      <div id="cabinet-settings-panel" hidden={!show}
-        className={cn(
-          "absolute -right-2 sm:right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[260px] max-w-[260px] rounded-[2rem] border border-border bg-card text-card-foreground p-5 shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)] transition-all duration-300 origin-top-right",
-          show ? "visible opacity-100 scale-100 pointer-events-auto translate-y-0" : "invisible opacity-0 scale-95 pointer-events-none -translate-y-2"
-        )}
-      >
+      <AnimatePresence initial={false}>
+      {show && <motion.div id="cabinet-settings-panel" className="cabinet-settings-popover" initial={{ opacity: 0, y: -6, scale: .97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: .98 }} transition={{ duration: reduced ? 0 : .18, ease: [.22, 1, .36, 1] }} style={{ transformOrigin: "top right" }}>
         <div className="flex items-center gap-3 mb-5">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
             <Settings className="h-5 w-5" />
@@ -362,7 +238,7 @@ function SettingsPopover() {
             <select aria-label={t("cabinet.layout.language")} value={preferredLang} onChange={event => setPreferredLang(event.target.value)} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm">{langs.map(language => <option key={language} value={language}>{language === "ru" ? "Русский" : language === "en" ? "English" : language.toUpperCase()}</option>)}</select>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs text-foreground font-medium pl-1 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {t("cabinet.layout.currency")}</label>
+            <label className="text-xs text-foreground font-medium pl-1 flex items-center gap-1.5"><Coins className="w-3.5 h-3.5" /> {t("cabinet.layout.currency")}</label>
             <select aria-label={t("cabinet.layout.currency")} value={preferredCurrency} onChange={event => setPreferredCurrency(event.target.value)} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm">{currencies.map(currency => <option key={currency} value={currency}>{currency.toUpperCase()}</option>)}</select>
           </div>
         </div>
@@ -372,7 +248,8 @@ function SettingsPopover() {
           {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
           {t("cabinet.layout.save")}
         </Button>
-      </div>
+      </motion.div>}
+      </AnimatePresence>
     </div>
   );
 }
@@ -407,6 +284,7 @@ const ROUTE_TOUR_MAP: Record<string, string> = {
   "/cabinet/roulette": "roulette",
   "/cabinet/profile": "profile",
   "/cabinet/wallet": "wallet",
+  "/cabinet/history": "history",
   "/cabinet/help": "support",
 };
 
@@ -418,12 +296,18 @@ function CabinetShell() {
   const allItems = useNavItems();
   const items = useMemo(() => resolveNavItems(allItems, config), [allItems, config]);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [railHovered, setRailHovered] = useState(false);
+  const [railFocused, setRailFocused] = useState(false);
+  const [railPinned, setRailPinned] = useState(false);
+  const railLeaveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const railExpanded = railHovered || railFocused || railPinned;
+  useEffect(() => () => clearTimeout(railLeaveTimer.current), []);
   const [logoError, setLogoError] = useState(false);
   const isMiniapp = useIsMiniapp();
   const primary = items.filter(item => ["/cabinet/dashboard", "/cabinet/tariffs", "/cabinet/wallet", "/cabinet/help"].includes(item.to));
   const groups = [
     { label: t("cabinet.workspace.connection"), paths: ["dashboard", "tariffs", "custom-build", "extra-options", "proxy", "singbox"] },
-    { label: t("cabinet.workspace.account"), paths: ["wallet", "profile", "help"] },
+    { label: t("cabinet.workspace.account"), paths: ["wallet", "history", "profile", "help"] },
     { label: t("cabinet.workspace.benefits"), paths: ["referral", "gifts", "roulette"] },
   ];
   const section = cabinetSection(location.pathname);
@@ -443,14 +327,15 @@ function CabinetShell() {
   const brand = <Link to="/cabinet/dashboard" className="cabinet-brand">{config?.logo && !logoError ? <img src={config.logo} alt="" onError={() => setLogoError(true)} /> : <Shield size={24} />}<span>{config?.serviceName || "STEALTHNET"}</span></Link>;
   const navigation = (mobile: boolean) => <nav aria-label={t("cabinet.workspace.navigation")} className="cabinet-navigation">{groups.map(group => {
     const links = items.filter(item => group.paths.includes(item.to.split("/").pop()!));
-    return links.length > 0 && <div className="cabinet-nav-group" key={group.label}><p>{group.label}</p>{links.map(({ to, label, icon: Icon }) => <Link key={to} to={to} onClick={() => setMenuOpen(false)} aria-current={section === to ? "page" : undefined} data-tour={mobile ? undefined : ROUTE_TOUR_MAP[to]}><Icon size={18} /><span>{label}</span>{section === to && <span className="cabinet-nav-dot" aria-hidden="true" />}</Link>)}</div>;
+    return links.length > 0 && <div className="cabinet-nav-group" key={group.label}><p>{group.label}</p>{links.map(({ to, label, icon: Icon }) => <Link key={to} to={to} onClick={() => setMenuOpen(false)} aria-label={label} title={!mobile && !railExpanded ? label : undefined} aria-current={section === to ? "page" : undefined} data-tour={mobile ? undefined : ROUTE_TOUR_MAP[to]}><Icon size={18} /><span>{label}</span></Link>)}</div>;
   })}</nav>;
-  return <div className="classic-cabinet cabinet-workspace">
+  return <div className="classic-cabinet cabinet-workspace" data-menu-pinned={railPinned}>
     <a className="cabinet-skip" href="#cabinet-content">{t("cabinet.workspace.skip")}</a>
-    <aside className="cabinet-sidebar">
+    <aside className="cabinet-sidebar" data-expanded={railExpanded} onPointerEnter={event => { if (event.pointerType === "mouse") { clearTimeout(railLeaveTimer.current); setRailHovered(true); } }} onPointerLeave={() => { clearTimeout(railLeaveTimer.current); railLeaveTimer.current = setTimeout(() => setRailHovered(false), 180); }} onFocusCapture={event => setRailFocused(event.target.matches(":focus-visible"))} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setRailFocused(false); }}>
       {brand}
       {navigation(false)}
-      <Link to="/cabinet/profile" className="cabinet-identity"><span className="cabinet-avatar"><User size={19} /></span><span><strong>{identity}</strong><small>{t("cabinet.workspace.account_settings")}</small></span></Link>
+      <Link to="/cabinet/profile" className="cabinet-identity" aria-label={t("cabinet.workspace.account_settings")} title={!railExpanded ? identity : undefined}><span className="cabinet-avatar"><User size={19} /></span><span><strong>{identity}</strong><small>{t("cabinet.workspace.account_settings")}</small></span></Link>
+      <button className="cabinet-rail-toggle" aria-label={railPinned ? t("cabinet.workspace.collapse_menu", "Свернуть меню") : t("cabinet.workspace.pin_menu", "Закрепить меню")} aria-pressed={railPinned} onClick={() => { setRailPinned(!railPinned); if (railPinned) { setRailHovered(false); setRailFocused(false); } }}>{railPinned ? <PanelLeftClose size={19} /> : <PanelLeftOpen size={19} />}<span>{railPinned ? t("cabinet.workspace.collapse_menu", "Свернуть меню") : t("cabinet.workspace.pin_menu", "Закрепить меню")}</span></button>
     </aside>
     <div className="cabinet-workspace-body">
       <header className="cabinet-topbar">
@@ -458,16 +343,15 @@ function CabinetShell() {
         <div className="cabinet-breadcrumb"><span>{t("cabinet.workspace.cabinet")}</span><span aria-hidden="true">/</span><strong>{current?.label || t("cabinet.workspace.connection")}</strong></div>
         <div className="cabinet-toolbar">
           <Link className="cabinet-header-balance" to="/cabinet/wallet" aria-label={t("cabinet.workspace.open_wallet")}><Wallet size={17} /><span>{state.client ? formatMoney(state.client.balance, state.client.preferredCurrency) : "—"}</span></Link>
-          <ThemePopover /><SettingsPopover />
+          <FloatingChat placement="toolbar" /><SettingsPopover />
           {!isMiniapp && <Button variant="ghost" size="icon" asChild><Link to="/cabinet/login" onClick={logout} aria-label={t("cabinet.nav.logout")}><LogOut size={18} /></Link></Button>}
         </div>
       </header>
-      <main id="cabinet-content" tabIndex={-1} className="cabinet-content"><Outlet /></main>
+      <main id="cabinet-content" tabIndex={-1} className="cabinet-content"><div key={location.pathname} className="cabinet-route-enter"><Outlet /></div></main>
       <footer className="cabinet-footer"><span>{config?.serviceName || "STEALTHNET"}</span><Link to="/cabinet/help">{t("cabinet.workspace.help")}</Link><Link to="/cabinet/documents/offer">{t("cabinet.workspace.terms")}</Link><Link to="/cabinet/documents/privacy">{t("cabinet.workspace.privacy")}</Link></footer>
     </div>
     <nav className="cabinet-bottom-nav" aria-label={t("cabinet.workspace.quick_navigation")}>{primary.map(({ to, label, icon: Icon }) => <Link key={to} to={to} aria-current={section === to ? "page" : undefined}><Icon size={21} /><span>{label}</span></Link>)}<button aria-expanded={menuOpen} aria-label={t("cabinet.nav.menu")} onClick={() => setMenuOpen(true)}><MoreHorizontal size={21} /><span>{t("cabinet.nav.more")}</span></button></nav>
     <Dialog open={menuOpen} onOpenChange={setMenuOpen}><DialogContent className="cabinet-menu-dialog"><DialogHeader><DialogTitle>{t("cabinet.nav.menu")}</DialogTitle></DialogHeader>{navigation(true)}</DialogContent></Dialog>
-    <FloatingChat />
   </div>;
 }
 
@@ -485,6 +369,11 @@ export function CabinetLayout() {
   // рендер. Первое мгновение — classic (или то что в localStorage-кэше),
   // потом пере-рендер если в БД задано "stealth".
   const design = useCabinetDesign();
+  useEffect(() => {
+    if (design === "classic" && !liteMode) document.body.dataset.cabinetUi = "minimal";
+    else delete document.body.dataset.cabinetUi;
+    return () => { delete document.body.dataset.cabinetUi; };
+  }, [design, liteMode]);
 
   // Если выбран Stealth — отдаём управление новому layout'у. Он сам рендерит
   // chrome (network фон + bottom-tabs + header) и Outlet.

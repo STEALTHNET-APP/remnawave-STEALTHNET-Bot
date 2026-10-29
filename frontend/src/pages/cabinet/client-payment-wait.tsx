@@ -78,7 +78,7 @@ export function ClientPaymentWaitPage() {
   }, [paymentId, navigate]);
 
   return (
-    <div className="relative flex min-h-[80vh] items-center justify-center px-4 py-10">
+    <div className="cabinet-payment-status-page relative flex min-h-[80vh] items-center justify-center px-4 py-10">
       {/* Декоративные blobs (onboarding-стиль) — fixed на весь экран, чтобы не было прямоугольной обрезки */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <motion.div

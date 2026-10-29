@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
-import { LogIn, Shield, Loader2 } from "lucide-react";
+import { LogIn, Shield } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
-import { api } from "@/lib/api";
 import type { PublicConfig } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { TelegramSignIn } from "@/components/telegram-sign-in";
 import { getPublicConfigCached } from "@/lib/public-config";
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -40,14 +40,8 @@ export function ClientLoginPage() {
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
   const [publicAppUrl, setPublicAppUrl] = useState<string | null>(null);
   const [appleEnabled, setAppleEnabled] = useState(false);
-  const [tgAuthPending, setTgAuthPending] = useState(false);
-  const [showTgFallback, setShowTgFallback] = useState(false);
-  const [telegramBotId, setTelegramBotId] = useState<string | null>(null);
-  const [tgPreToken, setTgPreToken] = useState<string | null>(null);
-  const tgPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const tgFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [searchParams] = useSearchParams();
-  const { login, loginByGoogle, loginByApple, loginByTelegramDeepLink, registerByTelegram } = useClientAuth();
+  const { login, loginByGoogle, loginByApple } = useClientAuth();
   const navigate = useNavigate();
 
   function validateEmail(value: string): string {
@@ -94,7 +88,6 @@ export function ClientLoginPage() {
       .then((c: PublicConfig) => {
         setBrand({ serviceName: c.serviceName ?? "", logo: c.logo ?? null });
         setTelegramBotUsername(c.telegramBotUsername ?? null);
-        setTelegramBotId(c.telegramBotId ?? null);
         setGoogleEnabled(!!c.googleLoginEnabled);
         setPasswordResetEnabled(!!c.passwordResetEnabled);
         setGoogleClientId(c.googleClientId ?? null);
@@ -103,219 +96,6 @@ export function ClientLoginPage() {
       })
       .catch(() => {});
   }, []);
-
-  useEffect(() => {
-    return () => {
-      if (tgPollRef.current) clearInterval(tgPollRef.current);
-      if (tgFallbackTimerRef.current) clearTimeout(tgFallbackTimerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!telegramBotUsername) return;
-    if (tgPreToken) return;
-    if (tgAuthPending) return;
-    let cancelled = false;
-    let attempt = 0;
-    const maxRetries = 2;
-
-    const fetchToken = () => {
-      api
-        .clientTelegramLoginToken()
-        .then(({ token }) => {
-          if (!cancelled) setTgPreToken(token);
-        })
-        .catch(() => {
-          attempt++;
-          if (!cancelled && attempt <= maxRetries) {
-            setTimeout(fetchToken, 1500 * attempt);
-          }
-        });
-    };
-    fetchToken();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [telegramBotUsername, tgPreToken, tgAuthPending]);
-
-  // Запуск поллинга статуса подтверждения токена ботом.
-  const startTelegramPolling = useCallback(
-    (token: string) => {
-      setError("");
-      setTgAuthPending(true);
-      setShowTgFallback(false);
-
-      if (tgFallbackTimerRef.current) clearTimeout(tgFallbackTimerRef.current);
-      tgFallbackTimerRef.current = setTimeout(() => setShowTgFallback(true), 15_000);
-
-      if (tgPollRef.current) clearInterval(tgPollRef.current);
-      let attempts = 0;
-      const maxAttempts = 150; // 5 минут
-      tgPollRef.current = setInterval(async () => {
-        attempts++;
-        if (attempts > maxAttempts) {
-          if (tgPollRef.current) clearInterval(tgPollRef.current);
-          setTgAuthPending(false);
-          setError(t("cabinet.login.error_timeout"));
-          return;
-        }
-        try {
-          const res = await api.clientTelegramLoginCheck(token);
-          if (res.confirmed) {
-            if (tgPollRef.current) clearInterval(tgPollRef.current);
-            if (tgFallbackTimerRef.current) clearTimeout(tgFallbackTimerRef.current);
-            loginByTelegramDeepLink(res);
-            setTgAuthPending(false);
-            navigate("/cabinet", { replace: true });
-          }
-        } catch {
-          // Ошибка поллинга — продолжаем
-        }
-      }, 2000);
-    },
-    [loginByTelegramDeepLink, navigate, t],
-  );
-
-  const buildTelegramDeepLink = useCallback(
-    (token: string) => {
-      if (!telegramBotUsername) return null;
-      const bot = telegramBotUsername.replace(/^@/, "");
-      return `https://t.me/${encodeURIComponent(bot)}?start=auth_${encodeURIComponent(token)}`;
-    },
-    [telegramBotUsername],
-  );
-
-  const handleTelegramLogin = useCallback(() => {
-    if (loading || tgAuthPending || !telegramBotUsername) return;
-
-    if (tgPreToken) {
-      const url = buildTelegramDeepLink(tgPreToken);
-      if (!url) return;
-      const token = tgPreToken;
-      setTgPreToken(null);
-      startTelegramPolling(token);
-      window.open(url, "_blank");
-      return;
-    }
-
-    // Токен ещё не подгрузился — синхронно открываем пустую вкладку,
-    // затем async-получаем токен и навигируем.
-    const newTab = window.open("about:blank", "_blank");
-
-    (async () => {
-      try {
-        const { token } = await api.clientTelegramLoginToken();
-        const url = buildTelegramDeepLink(token);
-        if (!url) {
-          if (newTab && !newTab.closed) newTab.close();
-          setError(t("cabinet.login.error_telegram"));
-          return;
-        }
-        startTelegramPolling(token);
-        if (newTab && !newTab.closed) {
-          newTab.location.href = url;
-        } else {
-          window.open(url, "_blank");
-        }
-      } catch (err) {
-        if (newTab && !newTab.closed) newTab.close();
-        setError(err instanceof Error ? err.message : t("cabinet.login.error_telegram"));
-      }
-    })();
-  }, [loading, tgAuthPending, telegramBotUsername, tgPreToken, buildTelegramDeepLink, startTelegramPolling, t]);
-
-  // Обработка OAuth авторизации через Telegram (popup)
-  const tgOAuthPopupRef = useRef<Window | null>(null);
-  const tgOAuthDoneRef = useRef(false);
-
-  const handleTgOAuthResult = useCallback(
-    (authData: { id?: number; username?: string } | false | undefined) => {
-      if (!authData || !authData.id || tgOAuthDoneRef.current) return;
-      tgOAuthDoneRef.current = true;
-
-      if (tgPollRef.current) clearInterval(tgPollRef.current);
-      if (tgFallbackTimerRef.current) clearTimeout(tgFallbackTimerRef.current);
-      setTgAuthPending(false);
-      setShowTgFallback(false);
-
-      registerByTelegram({
-        telegramId: String(authData.id),
-        telegramUsername: authData.username,
-      })
-        .then(() => navigate("/cabinet", { replace: true }))
-        .catch((err: unknown) => setError(err instanceof Error ? err.message : t("cabinet.login.error_telegram")));
-    },
-    [registerByTelegram, navigate, t],
-  );
-
-  // Слушаем postMessage от попапа (Telegram шлёт JSON-строку с event:"auth_result")
-  useEffect(() => {
-    const handler = (event: MessageEvent) => {
-      if (!event.origin.includes("telegram.org")) return;
-      if (tgOAuthPopupRef.current && event.source !== tgOAuthPopupRef.current) return;
-      try {
-        const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-        if (data?.event === "auth_result") {
-          handleTgOAuthResult(data.result);
-        }
-      } catch {
-        // не JSON — игнорируем
-      }
-    };
-
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, [handleTgOAuthResult]);
-
-  const handleTelegramOAuthFallback = useCallback(() => {
-    if (!telegramBotId) return;
-    tgOAuthDoneRef.current = false;
-    const popupUrl =
-      `https://oauth.telegram.org/auth?bot_id=${encodeURIComponent(telegramBotId)}` +
-      `&origin=${encodeURIComponent(window.location.origin)}` +
-      `&request_access=write` +
-      `&return_to=${encodeURIComponent(window.location.href)}`;
-    const w = 550;
-    const h = 470;
-    const left = Math.max(0, (screen.width - w) / 2) + ((screen as unknown as Record<string, number>).availLeft || 0);
-    const top = Math.max(0, (screen.height - h) / 2) + ((screen as unknown as Record<string, number>).availTop || 0);
-    const popup = window.open(
-      popupUrl,
-      "telegram_oauth_bot" + telegramBotId,
-      `width=${w},height=${h},left=${left},top=${top},status=0,location=0,menubar=0,toolbar=0`,
-    );
-    tgOAuthPopupRef.current = popup;
-
-    // Мониторим закрытие попапа — если юзер уже залогинен, Telegram закроет окно
-    // и данные нужно получить через XHR fallback (как делает оригинальный виджет)
-    if (popup) {
-      const checkClosed = () => {
-        if (!popup || popup.closed) {
-          if (tgOAuthDoneRef.current) return;
-          // Попап закрылся без postMessage — пробуем получить данные через API
-          fetch("https://oauth.telegram.org/auth/get", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            credentials: "include",
-            body: `bot_id=${encodeURIComponent(telegramBotId)}`,
-          })
-            .then((r) => r.json())
-            .then((result: { user?: { id?: number; username?: string }; origin?: string }) => {
-              if (result.user) {
-                handleTgOAuthResult(result.user);
-              }
-            })
-            .catch(() => {
-              // XHR fallback тоже не сработал — ничего не делаем
-            });
-          return;
-        }
-        setTimeout(checkClosed, 100);
-      };
-      setTimeout(checkClosed, 100);
-    }
-  }, [telegramBotId, handleTgOAuthResult]);
 
   const handleGoogleLogin = useCallback(() => {
     if (!googleEnabled || !googleClientId) return;
@@ -517,28 +297,8 @@ export function ClientLoginPage() {
                         <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
                       </Button>
                     )}
-                    {telegramBotUsername && (
-                      <Button type="button" variant="outline" className="h-11 w-11 shrink-0 rounded-full p-0 flex items-center justify-center border border-border bg-muted/50 hover:bg-muted transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" onClick={handleTelegramLogin} disabled={loading || tgAuthPending} title={t("cabinet.login.telegram")} aria-label={t("cabinet.login.telegram")} aria-busy={tgAuthPending}>
-                        {tgAuthPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>}
-                      </Button>
-                    )}
                   </div>
-                  {tgAuthPending && <p role="status" className="text-center text-xs text-muted-foreground">{t("cabinet.login.telegram_pending")}</p>}
-                  {telegramBotUsername && (
-                    <div>
-                      {showTgFallback && telegramBotId && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="w-full h-9 gap-2 text-xs text-muted-foreground hover:text-foreground"
-                          onClick={handleTelegramOAuthFallback}
-                        >
-                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
-                          {t("cabinet.login.telegram_fallback")}
-                        </Button>
-                      )}
-                    </div>
-                  )}
+                  {telegramBotUsername && <TelegramSignIn botUsername={telegramBotUsername} disabled={loading} />}
                 </div>
               )}
               <p className="text-center text-sm text-muted-foreground">

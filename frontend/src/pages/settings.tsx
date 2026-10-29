@@ -1089,6 +1089,7 @@ export function SettingsPage() {
         adminFrontNotificationsEnabled: settings.adminFrontNotificationsEnabled ?? true,
         aiChatEnabled: settings.aiChatEnabled !== false,
         themeAccent: settings.themeAccent ?? "default",
+        themeMode: settings.themeMode ?? "dark",
         forceSubscribeEnabled: settings.forceSubscribeEnabled ?? false,
         forceSubscribeChannelId: settings.forceSubscribeChannelId ?? null,
         forceSubscribeMessage: settings.forceSubscribeMessage ?? null,
@@ -1099,7 +1100,7 @@ export function SettingsPage() {
         botTariffsShowExtraDevicesButton: settings.botTariffsShowExtraDevicesButton !== false,
         botTariffsShowBalanceButton: settings.botTariffsShowBalanceButton !== false,
         botShowTariffCategories: settings.botShowTariffCategories !== false,
-        allowUserThemeChange: (settings as any).allowUserThemeChange ?? true,
+        allowUserThemeChange: false,
         sellOptionsEnabled: settings.sellOptionsEnabled ?? false,
         sellOptionsTrafficEnabled: settings.sellOptionsTrafficEnabled ?? false,
         sellOptionsTrafficProducts: settings.sellOptionsTrafficProducts?.length ? JSON.stringify(settings.sellOptionsTrafficProducts) : null,
@@ -4718,15 +4719,22 @@ export function SettingsPage() {
               </div>
             </div>
             <CardContent className="space-y-6 p-4 sm:p-4">
-              <div className="flex items-center justify-between rounded-xl border border-border p-4 bg-card/40">
-                <div className="space-y-0.5">
-                  <Label className="text-base font-medium">{t("admin.settings.theme_user_choice")}</Label>
-                  <p className="text-xs text-muted-foreground">{t("admin.settings.theme_user_choice_hint")}</p>
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">{t("admin.settings.theme_mode")}</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["system", "dark", "light"] as const).map(mode => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={(settings.themeMode ?? "dark") === mode}
+                      onClick={() => setSettings({ ...settings, themeMode: mode })}
+                      className={`rounded-lg border px-3 py-3 text-sm transition-colors ${(settings.themeMode ?? "dark") === mode ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-muted"}`}
+                    >
+                      {t(`cabinet.layout.theme_${mode}`)}
+                    </button>
+                  ))}
                 </div>
-                <Switch
-                  checked={Boolean((settings as any)?.allowUserThemeChange ?? true)}
-                  onCheckedChange={(c: boolean) => setSettings((s) => s ? { ...s, allowUserThemeChange: c } : s)}
-                />
+                <p className="text-xs text-muted-foreground">{t("admin.settings.theme_mode_hint")}</p>
               </div>
               <div>
                 <Label className="text-sm font-medium mb-3 block">{t("admin.settings.theme_accent")}</Label>
@@ -4765,7 +4773,7 @@ export function SettingsPage() {
                   onClick={() => {
                     setMessage("");
                     saveSettingsMut.mutate(
-                      { themeAccent: settings.themeAccent ?? "default", allowUserThemeChange: (settings as any).allowUserThemeChange ?? true },
+                      { themeAccent: settings.themeAccent ?? "default", themeMode: settings.themeMode ?? "dark", allowUserThemeChange: false },
                       { onSuccess: () => setMessage(t("admin.settings.theme_saved")) }
                     );
                   }}

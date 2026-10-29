@@ -1,3 +1,4 @@
+import { AnimatedMoney } from "@/components/animated-money";
 import { useLocation } from "react-router-dom";
 import { ClassicTariffCatalog } from "./classic-tariff-catalog";
 import "./classic-payment.css";
@@ -1580,7 +1581,7 @@ function UnifiedPurchaseModal({
 
   return (
     <Dialog open={!!modal} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-background/85 backdrop-blur-3xl border-white/10 rounded-[2rem] sm:max-w-lg max-h-[92vh] overflow-y-auto overflow-x-hidden">
+      <DialogContent className="cabinet-tariff-config bg-background/85 backdrop-blur-3xl border-white/10 rounded-[2rem] sm:max-w-lg max-h-[92vh] overflow-y-auto overflow-x-hidden">
         <div className="absolute -top-20 -right-20 h-56 w-56 rounded-full bg-gradient-to-br from-primary/30 via-fuchsia-500/15 to-purple-500/20 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-16 h-52 w-52 rounded-full bg-gradient-to-tr from-cyan-500/15 to-primary/15 blur-3xl pointer-events-none" />
 
@@ -1625,6 +1626,7 @@ function UnifiedPurchaseModal({
                     <button
                       key={opt.id}
                       type="button"
+                      aria-pressed={isActive}
                       onClick={() => setSelectedPriceOptionId(opt.id)}
                       className={cn(
                         "relative overflow-hidden rounded-2xl border p-3 transition-all text-center",
@@ -1675,6 +1677,7 @@ function UnifiedPurchaseModal({
                     <motion.button
                       key={tile.extras}
                       type="button"
+                      aria-pressed={isActive}
                       onClick={() => setSelectedExtraDevices(tile.extras)}
                       whileTap={{ scale: 0.96 }}
                       className={cn(
@@ -1762,17 +1765,7 @@ function UnifiedPurchaseModal({
             )}
             <div className="border-t border-primary/20 mt-2 pt-2 flex items-baseline justify-between">
               <span className="text-sm font-medium">К оплате</span>
-              <AnimatePresence mode="popLayout">
-                <motion.span
-                  key={finalTotal}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-primary to-fuchsia-500 tabular-nums"
-                >
-                  {formatMoney(finalTotal, tariff.currency)}
-                </motion.span>
-              </AnimatePresence>
+              <span className="text-2xl font-semibold tabular-nums"><AnimatedMoney amount={finalTotal} currency={tariff.currency} /></span>
             </div>
           </section>
         </div>

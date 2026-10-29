@@ -34,11 +34,11 @@ export function ClientForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-svh flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="cabinet-auth-page min-h-svh flex flex-col items-center justify-center p-4 relative overflow-hidden">
       <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-primary/20 blur-[120px] pointer-events-none" />
       <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-primary/10 blur-[120px] pointer-events-none" />
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="w-full max-w-md">
-        <div className="relative rounded-[2.5rem] border border-white/10 dark:border-white/5 bg-background/40 backdrop-blur-2xl shadow-2xl overflow-hidden">
+        <div className="cabinet-auth-card relative rounded-[2.5rem] border border-white/10 dark:border-white/5 bg-background/40 backdrop-blur-2xl shadow-2xl overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
           <div className="p-8 sm:p-10 relative z-10">
             <div className="flex justify-center mb-4">

@@ -1,15 +1,9 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 import { getPublicConfigCached } from "@/lib/public-config";
 
-export type ThemeMode = "light" | "dark" | "system";
-export type ThemeAccent =
-  | "default" | "blue" | "violet" | "rose" | "orange" | "green" | "emerald"
-  | "cyan" | "amber" | "red" | "pink" | "indigo";
-
-export interface ThemeConfig {
-  mode: ThemeMode;
-  accent: ThemeAccent;
-}
+import { useLocation } from "react-router-dom";
+import { normalizeTheme, readStoredTheme, resolveThemePolicy, type ThemeConfig, type ThemeMode, type ThemeAccent } from "@/lib/theme-policy";
+export type { ThemeConfig, ThemeMode, ThemeAccent } from "@/lib/theme-policy";
 
 interface AccentPalette {
   label: string;
@@ -48,28 +42,25 @@ const ThemeContext = createContext<ThemeContextValue>({
   setMode: () => {},
   setAccent: () => {},
   setConfig: () => {},
-  allowUserThemeChange: true,
+  allowUserThemeChange: false,
 });
 
 export function useTheme() {
   return useContext(ThemeContext);
 }
 
-const STORAGE_KEY = "stealthnet-theme";
+const STORAGE_KEY = "stealthnet-admin-theme";
 
 function getSystemDark() {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches;
 }
 
-function loadTheme(): ThemeConfig {
+function loadTheme(): ThemeConfig | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed.mode && parsed.accent) return parsed;
-    }
-  } catch {}
-  return { mode: "dark", accent: "default" };
+    return readStoredTheme(localStorage.getItem(STORAGE_KEY)) ?? readStoredTheme(localStorage.getItem("stealthnet-theme"));
+  } catch {
+    return null;
+  }
 }
 
 function saveTheme(cfg: ThemeConfig) {
@@ -79,20 +70,18 @@ function saveTheme(cfg: ThemeConfig) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [config, setConfigState] = useState<ThemeConfig>(loadTheme);
+  const { pathname } = useLocation();
+  const [personalConfig, setPersonalConfig] = useState<ThemeConfig | null>(loadTheme);
   const [systemDark, setSystemDark] = useState(getSystemDark);
-  const [serverAccent, setServerAccent] = useState<ThemeAccent | null>(null);
-  const [allowUserThemeChange, setAllowUserThemeChange] = useState<boolean>(true);
-  
-  // Юзер нажимал на кнопку смены темы? (есть в localStorage)
-  const hasLocalAccent = !!(typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_KEY) && JSON.parse(localStorage.getItem(STORAGE_KEY)!).accent);
+  const [serverConfig, setServerConfig] = useState<ThemeConfig>(() => normalizeTheme(null));
+  const { config, editable } = resolveThemePolicy(pathname, personalConfig, serverConfig);
 
   useEffect(() => {
-    // Один общий /public/config (кеш в lib/public-config) — не свой HTTP-запрос.
+    let active = true;
     getPublicConfigCached().then((cfg) => {
-      if ("themeAccent" in cfg && cfg.themeAccent) setServerAccent(cfg.themeAccent as ThemeAccent);
-      if ("allowUserThemeChange" in cfg) setAllowUserThemeChange(Boolean(cfg.allowUserThemeChange));
+      if (active) setServerConfig(normalizeTheme({ mode: cfg.themeMode, accent: cfg.themeAccent }));
     }).catch(() => {});
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -103,62 +92,40 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resolvedMode = config.mode === "system" ? (systemDark ? "dark" : "light") : config.mode;
-  
-  // Логика приоритета:
-  // Если админ запретил менять тему -> жестко серверная тема (или дефолт).
-  // Если админ разрешил менять тему -> если юзер сам не выбирал (нет локальной), применяем серверную. Иначе локальную.
-  const effectiveAccent = allowUserThemeChange 
-    ? (hasLocalAccent ? config.accent : (serverAccent || "default"))
-    : (serverAccent || "default");
 
   useEffect(() => {
     const root = document.documentElement;
-
     root.classList.remove("light", "dark");
     root.classList.add(resolvedMode);
     root.style.colorScheme = resolvedMode;
-
     const allVars = new Set<string>();
     for (const p of Object.values(ACCENT_PALETTES)) {
       for (const k of Object.keys(p.light)) allVars.add(k);
       for (const k of Object.keys(p.dark)) allVars.add(k);
     }
     for (const v of allVars) root.style.removeProperty(v);
-
-    if (effectiveAccent !== "default") {
-      const palette = ACCENT_PALETTES[effectiveAccent];
-      if (palette) {
-        const vars = resolvedMode === "dark" ? palette.dark : palette.light;
-        for (const [k, v] of Object.entries(vars)) {
-          root.style.setProperty(k, v);
-        }
-      }
-    }
-  }, [resolvedMode, effectiveAccent]);
+    const palette = ACCENT_PALETTES[config.accent];
+    const vars = resolvedMode === "dark" ? palette.dark : palette.light;
+    for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
+  }, [resolvedMode, config.accent]);
 
   const setConfig = useCallback((cfg: ThemeConfig) => {
-    setConfigState(cfg);
-    saveTheme(cfg);
-  }, []);
+    if (!editable) return;
+    const next = normalizeTheme(cfg);
+    setPersonalConfig(next);
+    saveTheme(next);
+  }, [editable]);
 
   const setMode = useCallback((mode: ThemeMode) => {
-    setConfigState((prev) => {
-      const next = { ...prev, mode };
-      saveTheme(next);
-      return next;
-    });
-  }, []);
+    setConfig({ ...config, mode });
+  }, [config, setConfig]);
 
   const setAccent = useCallback((accent: ThemeAccent) => {
-    setConfigState((prev) => {
-      const next = { ...prev, accent };
-      saveTheme(next); // Теперь точно сохраняем выбор юзера
-      return next;
-    });
-  }, []);
+    setConfig({ ...config, accent });
+  }, [config, setConfig]);
 
   return (
-    <ThemeContext.Provider value={{ config: { ...config, accent: effectiveAccent }, resolvedMode, setMode, setAccent, setConfig, allowUserThemeChange }}>
+    <ThemeContext.Provider value={{ config, resolvedMode, setMode, setAccent, setConfig, allowUserThemeChange: editable }}>
       {children}
     </ThemeContext.Provider>
   );

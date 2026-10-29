@@ -613,9 +613,9 @@ async function startParitypayPayment(option: PublicSellOption) {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
             transition={{ duration: 0.2 }}
-            className="space-y-8 max-w-7xl mx-auto pb-24"
+            className="cabinet-extras space-y-8 max-w-7xl mx-auto pb-24"
           >
-            <div className="relative overflow-hidden rounded-3xl glass-card border border-border/50 p-8 sm:p-10 shadow-xl">
+            <div className="cabinet-page-heading">
               <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full bg-primary/20 blur-[80px] pointer-events-none" />
               <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
                 <div className="flex-1">

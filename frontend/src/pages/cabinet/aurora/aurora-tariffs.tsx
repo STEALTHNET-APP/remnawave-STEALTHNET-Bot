@@ -230,7 +230,7 @@ export function AuroraTariffs() {
     (config.plategaMethods ?? []).forEach((m) => {
       list.push({ kind: "platega", id: m.id, label: m.label, icon: Wallet });
     });
-    if (config.yookassaEnabled) list.push({ kind: "yookassa", label: "YooKassa", icon: Wallet });
+    if (config.yookassaEnabled) list.push({ kind: "yookassa", label: "Карта/СБП (Юкасса)", icon: Wallet });
     if (config.yoomoneyEnabled) list.push({ kind: "yoomoney", label: "YooMoney", icon: Wallet });
     if (config.telegramStarsEnabled && currency.toUpperCase() === "RUB") list.push({ kind: "telegram_stars", label: "⭐ Telegram Stars", icon: Wallet });
     if (config.cryptopayEnabled) list.push({ kind: "cryptopay", label: "Crypto Pay", icon: Bitcoin });

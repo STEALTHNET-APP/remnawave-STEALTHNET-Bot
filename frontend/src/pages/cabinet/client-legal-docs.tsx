@@ -53,7 +53,7 @@ export function ClientLegalDocsPage({ kind }: { kind: DocKind }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-10">
+    <div className="cabinet-legal-page flex items-start px-0 py-8">
       <Card className="w-full max-w-md">
         <CardContent className="flex flex-col items-center text-center gap-4 py-10 px-6">
           <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center">

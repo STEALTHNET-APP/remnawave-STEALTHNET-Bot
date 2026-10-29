@@ -40,7 +40,7 @@ export function ClientVerifyEmailPage() {
   }, [token, verifyEmail, navigate]);
 
   return (
-    <div className="min-h-svh flex flex-col items-center justify-center bg-gradient-to-b from-background to-muted/20 p-4">
+    <div className="cabinet-auth-page min-h-svh flex flex-col items-center justify-center bg-gradient-to-b from-background to-muted/20 p-4">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}

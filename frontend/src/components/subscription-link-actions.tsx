@@ -4,6 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
 import { copyText } from "@/lib/clipboard";
 import { canvasPng, qrImage, saveDownload } from "@/lib/qr-download";
 
@@ -22,6 +23,7 @@ export function CopyLinkButton({ url, className, showLabel = false }: { url: str
       try {
         await copyText(url);
         setCopied(true);
+        toast.success(t("subscriptionLink.copied"));
         clearTimeout(timer.current);
         timer.current = setTimeout(() => setCopied(false), 2500);
       } catch { setManual(true); } finally { setBusy(false); }

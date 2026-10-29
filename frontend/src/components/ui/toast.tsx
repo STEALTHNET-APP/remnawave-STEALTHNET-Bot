@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { CheckCircle2, XCircle, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -95,14 +95,16 @@ const VARIANT_STYLE: Record<ToastVariant, { icon: typeof CheckCircle2; ring: str
 };
 
 function ToastCard({ item }: { item: ToastItem }) {
+  const reducedMotion = useReducedMotion();
   const style = VARIANT_STYLE[item.variant];
   const Icon = style.icon;
   return (
     <motion.div
-      layout
-      initial={{ opacity: 0, y: -24, scale: 0.92 }}
+      data-cabinet-toast={item.variant}
+      layout={!reducedMotion}
+      initial={{ opacity: 0, y: reducedMotion ? 0 : 8, scale: 1 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -16, scale: 0.92, transition: { duration: 0.18 } }}
+      exit={{ opacity: 0, y: reducedMotion ? 0 : 4, transition: { duration: 0.15 } }}
       transition={{ type: "spring", stiffness: 380, damping: 30 }}
       className={cn(
         "pointer-events-auto relative flex w-[calc(100vw-2rem)] max-w-sm items-start gap-3 overflow-hidden rounded-xl border bg-card/95 backdrop-blur-2xl px-4 py-3.5",
@@ -136,6 +138,7 @@ export function Toaster() {
   if (typeof document === "undefined") return null;
   return createPortal(
     <div
+      data-cabinet-toaster
       className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex flex-col items-center gap-2 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)]"
       role="region"
       aria-live="polite"

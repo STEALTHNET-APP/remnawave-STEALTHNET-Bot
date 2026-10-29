@@ -187,6 +187,7 @@ const SYSTEM_CONFIG_KEYS = [
   "tickets_enabled", // Тикет-система: true/false
   "admin_front_notifications_enabled", // Всплывающие уведомления в админке: true/false
   "theme_accent", // Глобальная цветовая тема: default, blue, violet, rose, orange, green, emerald, cyan, amber, red, pink, indigo
+  "theme_mode",
   "allow_user_theme_change", // Разрешить пользователям менять тему: true/false
   "force_subscribe_enabled", "force_subscribe_channel_id", "force_subscribe_message", // Принудительная подписка на канал/группу
   "blacklist_enabled", // Блокировка пользователей из Community Blacklist
@@ -899,6 +900,7 @@ async function loadSystemConfigFromDb() {
     rouletteEnabled: map.roulette_enabled !== "false",
     ticketsEnabled: map.tickets_enabled === "true" || map.tickets_enabled === "1",
     themeAccent: (map.theme_accent ?? "").trim() || "default",
+    themeMode: map.theme_mode === "light" || map.theme_mode === "system" ? map.theme_mode : "dark",
     allowUserThemeChange: map.allow_user_theme_change === "true" || map.allow_user_theme_change === "1" || map.allow_user_theme_change == null,
     forceSubscribeEnabled: map.force_subscribe_enabled === "true" || map.force_subscribe_enabled === "1",
     forceSubscribeChannelId: (map.force_subscribe_channel_id ?? "").trim() || null,
@@ -1469,6 +1471,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     videoInstructions: full.videoInstructionsEnabled ? (full.videoInstructions ?? []) : [],
     ticketsEnabled: (full as { ticketsEnabled?: boolean }).ticketsEnabled ?? false,
     themeAccent: full.themeAccent ?? "default",
+    themeMode: full.themeMode ?? "dark",
     allowUserThemeChange: (full as any).allowUserThemeChange ?? true,
     googleAnalyticsId: full.googleAnalyticsId ?? null,
     yandexMetrikaId: full.yandexMetrikaId ?? null,

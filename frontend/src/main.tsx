@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./i18n/init";
 import "./index.css";
+import "./pages/cabinet/cabinet-polish.css";
 import { initTelegramViewport } from "./lib/telegram-viewport";
 
 // До первого рендера: иначе мини-апп успевает нарисоваться «половинкой».

@@ -1350,7 +1350,8 @@ clientAuthRouter.get("/telegram-login-check", async (req, res) => {
     const telegramUsername = record.confirmedUsername ?? null;
 
     // Удаляем использованный токен
-    await prisma.telegramAuthToken.delete({ where: { id: record.id } }).catch(() => {});
+    const consumed = await prisma.telegramAuthToken.deleteMany({ where: { id: record.id, expiresAt: { gt: new Date() } } });
+    if (consumed.count !== 1) return res.status(410).json({ message: "Токен уже использован или устарел" });
 
     const clientSelect = { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true };
 
@@ -1425,8 +1426,8 @@ clientAuthRouter.post("/telegram-login-confirm", async (req, res) => {
   if (typeof token !== "string" || !token.trim()) {
     return res.status(400).json({ message: "Отсутствует токен" });
   }
-  if (telegramId == null) {
-    return res.status(400).json({ message: "Отсутствует Telegram ID" });
+  if (!/^[1-9]\d{0,15}$/.test(String(telegramId ?? ""))) {
+    return res.status(400).json({ message: "Некорректный Telegram ID" });
   }
 
   try {
@@ -1447,13 +1448,14 @@ clientAuthRouter.post("/telegram-login-confirm", async (req, res) => {
       return res.status(409).json({ message: "Токен уже подтверждён" });
     }
 
-    await prisma.telegramAuthToken.update({
-      where: { id: record.id },
+    const confirmed = await prisma.telegramAuthToken.updateMany({
+      where: { id: record.id, confirmedTelegramId: null, expiresAt: { gt: new Date() } },
       data: asTelegramAuthUpdate({
         confirmedTelegramId: String(telegramId),
         confirmedUsername: telegramUsername ? String(telegramUsername) : null,
       }),
     });
+    if (confirmed.count !== 1) return res.status(409).json({ message: "Токен уже подтверждён или устарел" });
 
     return res.json({ ok: true });
   } catch (err) {
@@ -3094,6 +3096,7 @@ clientRouter.get("/subscription/all", async (req, res) => {
     subscriptionIndex: number | null;
     subscription: unknown;
     tariffDisplayName: string;
+    customName: string | null;
     remnawaveUuid: string | null;
     tariffId: string | null;
     trialId: string | null;
@@ -3127,6 +3130,7 @@ clientRouter.get("/subscription/all", async (req, res) => {
     },
     select: {
       id: true,
+      customName: true,
       remnawaveUuid: true,
       subscriptionIndex: true,
       trialId: true,
@@ -3176,6 +3180,7 @@ clientRouter.get("/subscription/all", async (req, res) => {
         where: { id: healed?.id ?? "", ownerId: clientId, purchasedAsGift: false, giftStatus: null },
         select: {
           id: true,
+          customName: true,
           remnawaveUuid: true,
           subscriptionIndex: true,
           trialId: true,
@@ -3235,6 +3240,7 @@ clientRouter.get("/subscription/all", async (req, res) => {
       subscription: remnaPayload,
       isOfflineSnapshot,
       tariffDisplayName: tariffName,
+      customName: sub.customName,
       remnawaveUuid: sub.remnawaveUuid,
       tariffId: sub.tariff?.id ?? null,
       trialId: sub.trialId ?? null,
@@ -3260,6 +3266,22 @@ clientRouter.get("/subscription/all", async (req, res) => {
 
   console.log(`[subscription/all] client=${clientId} total=${visible.length}`);
   return res.json({ items });
+});
+
+clientRouter.patch("/subscription/:id/name", async (req, res) => {
+  const clientId = (req as unknown as { clientId: string }).clientId;
+  const body = z.object({ name: z.string().trim().min(1).max(60).refine(value => !/[\u0000-\u001f\u007f]/.test(value)) }).strict().safeParse(req.body);
+  if (!body.success) return res.status(400).json({ message: "Название должно содержать от 1 до 60 символов" });
+  const result = await prisma.subscription.updateMany({
+    where: { id: req.params.id, OR: [
+      { ownerId: clientId, purchasedAsGift: false, giftedToClientId: null, giftStatus: { notIn: ["GIFT_RESERVED", "GIFT_CODE_ACTIVE", "GIFTED"] } },
+      { ownerId: clientId, purchasedAsGift: false, giftedToClientId: null, giftStatus: null },
+      { giftedToClientId: clientId, giftStatus: "GIFTED" },
+    ] },
+    data: { customName: body.data.name },
+  });
+  if (!result.count) return res.status(404).json({ message: "Подписка не найдена" });
+  return res.json({ customName: body.data.name });
 });
 
 /**

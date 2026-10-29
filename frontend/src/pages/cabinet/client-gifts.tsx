@@ -2,8 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Gift, Package, Copy, Check, Loader2, Plus, X, Calendar, Clock,
-  Send, Link as LinkIcon, CheckCircle2, Play, ShoppingCart, Mail,
-  XCircle, Trash, History, ChevronDown, ChevronUp, User, Sparkles, Smartphone
+  Send, Link as LinkIcon, CheckCircle2, Play,
+  XCircle, Sparkles, Smartphone
 } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { toast } from "@/components/ui/toast";
@@ -11,42 +11,12 @@ import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { useQuery } from "@tanstack/react-query";
 import { useInvalidateClientData, usePublicTariffs } from "@/lib/queries";
 import { api, type PublicTariff } from "@/lib/api";
+import { formatCabinetMoney } from "@/lib/cabinet-format";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
-function formatMoney(amount: number, currency: string = "usd") {
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: currency.toUpperCase() === "USD" ? "USD" : currency.toUpperCase() === "RUB" ? "RUB" : "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-function formatTimeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "только что";
-  if (mins < 60) return `${mins} мин назад`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} ч назад`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "вчера";
-  if (days < 7) return `${days} дн назад`;
-  return new Date(dateStr).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-
-const HISTORY_EVENT_MAP: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
-  PURCHASED: { icon: <ShoppingCart className="w-5 h-5" />, label: "Подписка куплена", color: "text-blue-500 border-blue-500/20 bg-blue-500/10" },
-  ACTIVATED_SELF: { icon: <CheckCircle2 className="w-5 h-5" />, label: "Добавлена в профиль", color: "text-green-500 border-green-500/20 bg-green-500/10" },
-  CODE_CREATED: { icon: <Gift className="w-5 h-5" />, label: "Подарочный код создан", color: "text-purple-500 border-purple-500/20 bg-purple-500/10" },
-  GIFT_SENT: { icon: <Send className="w-5 h-5" />, label: "Подарок отправлен", color: "text-indigo-500 border-indigo-500/20 bg-indigo-500/10" },
-  GIFT_RECEIVED: { icon: <Mail className="w-5 h-5" />, label: "Подарок получен", color: "text-emerald-500 border-emerald-500/20 bg-emerald-500/10" },
-  CODE_CANCELLED: { icon: <XCircle className="w-5 h-5" />, label: "Код отменён", color: "text-red-500 border-red-500/20 bg-red-500/10" },
-  CODE_EXPIRED: { icon: <Clock className="w-5 h-5" />, label: "Код истёк", color: "text-yellow-600 dark:text-yellow-400 border-yellow-500/20 bg-yellow-500/10" },
-  DELETED: { icon: <Trash className="w-5 h-5" />, label: "Подписка удалена", color: "text-red-500 border-red-500/20 bg-red-500/10" },
-};
+const formatMoney = formatCabinetMoney;
 
 export function ClientGiftsPage() {
   const { state, refreshProfile } = useClientAuth();
@@ -132,38 +102,10 @@ export function ClientGiftsPage() {
   const [redeemCode, setRedeemCode] = useState("");
   const [redeemLoading, setRedeemLoading] = useState(false);
   const [redeemError, setRedeemError] = useState<string | null>(null);
-  const [redeemSuccess, setRedeemSuccess] = useState<string | null>(null);
 
   // Interaction states
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  // T-unify-cabinet (30.05.2026, WolfVPN): уведомление об успехе (паритет с ботом).
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-
-  // History states
-  const [historyItems, setHistoryItems] = useState<Array<{ id: string; eventType: string; metadata: unknown; createdAt: string; subscriptionId: string | null }>>([]);
-  const [historyTotal, setHistoryTotal] = useState(0);
-  const [historyPage, setHistoryPage] = useState(1);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [showFullHistory, setShowFullHistory] = useState(false);
-
-  const fetchHistory = useCallback(async (page: number = 1) => {
-    if (!token) return;
-    setHistoryLoading(true);
-    try {
-      const res = await api.giftGetHistory(token, page);
-      setHistoryItems(res.items ?? []);
-      setHistoryTotal(res.total ?? 0);
-      // ignore
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    fetchHistory(historyPage);
-  }, [historyPage, fetchHistory]);
-
 
   const handleOpenBuy = () => {
     setBuyError(null);
@@ -198,10 +140,11 @@ export function ClientGiftsPage() {
         extraDevices: pickerExtras,
       });
       await fetchData();
-      fetchHistory(1);
+
       refreshProfile().catch(() => {});
       closePicker();
       setBuyDialogOpen(false);
+      toast.success("Подарок куплен", "Он появился ниже. Создайте код, чтобы передать подписку другу.");
     } catch (err) {
       setBuyError(err instanceof Error ? err.message : "Ошибка покупки");
     } finally {
@@ -225,8 +168,9 @@ export function ClientGiftsPage() {
     setActionLoading(`create-${subscriptionId}`);
     try {
       await api.giftCreateCode(token, subscriptionId);
+      toast.success("Подарочный код создан");
       await fetchData();
-      fetchHistory(1);
+
     } catch (err) {
       toast.error("Ошибка", err instanceof Error ? err.message : "Не удалось создать код");
     } finally {
@@ -240,8 +184,9 @@ export function ClientGiftsPage() {
     setActionLoading(`cancel-${codeId}`);
     try {
       await api.giftCancelCode(token, codeId);
+      toast.success("Подарочный код отменён");
       await fetchData();
-      fetchHistory(1);
+
     } catch (err) {
       toast.error("Ошибка", err instanceof Error ? err.message : "Не удалось отменить код");
     } finally {
@@ -254,13 +199,12 @@ export function ClientGiftsPage() {
     if (!token || !redeemCode.trim()) return;
     setRedeemLoading(true);
     setRedeemError(null);
-    setRedeemSuccess(null);
     try {
       await api.giftRedeemCode(token, redeemCode.trim());
-      setRedeemSuccess("Код успешно активирован!");
+      toast.success("Подарок активирован", "Подписка доступна на главной странице.");
       setRedeemCode("");
       await fetchData();
-      fetchHistory(1);
+
       refreshProfile().catch(() => {});
     } catch (err) {
       setRedeemError(err instanceof Error ? err.message : "Ошибка активации");
@@ -280,7 +224,7 @@ export function ClientGiftsPage() {
         if (subscription.giftStatus === "GIFTED") {
           toast.error("Недоступно", "Эта подписка уже подарена.");
         } else {
-          toast.info("Нужен код", "Сначала создайте подарочный код кнопкой «Подарить».");
+          toast.info("Нужен код", "Сначала создайте подарочный код кнопкой «Создать код».");
         }
         return;
       }
@@ -289,8 +233,11 @@ export function ClientGiftsPage() {
         (typeof window !== "undefined" ? window.location.origin : "");
       const link = `${appUrl}/gift/${activeCode.code}`;
       await navigator.clipboard.writeText(link);
+      toast.success("Ссылка скопирована", "Отправьте её получателю подарка.");
       setCopiedId(`url-${subscriptionId}`);
       setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      toast.error("Не удалось скопировать ссылку", "Попробуйте скопировать подарочный код.");
     } finally {
       setActionLoading(null);
     }
@@ -299,14 +246,12 @@ export function ClientGiftsPage() {
   const handleActivateForSelf = async (subscriptionId: string) => {
     if (!token) return;
     setActionLoading(`activate-${subscriptionId}`);
-    setActionSuccess(null);
     try {
       await api.giftActivateForSelf(token, subscriptionId);
       await fetchData();
-      fetchHistory(1);
+
       refreshProfile().catch(() => {});
-      // Текст идентичен боту (gift:take_self) — подписка переехала в «Мои подписки».
-      setActionSuccess("Подписка перенесена в «Мои подписки»! Подключите её на главной странице кабинета.");
+      toast.success("Подписка активирована", "Подключите её на главной странице кабинета.");
     } catch (err) {
       toast.error("Ошибка активации", err instanceof Error ? err.message : "Не удалось активировать");
     } finally {
@@ -315,9 +260,14 @@ export function ClientGiftsPage() {
   };
 
   const copyCode = async (code: string, id: string) => {
-    await navigator.clipboard.writeText(code);
-    setCopiedId(`code-${id}`);
-    setTimeout(() => setCopiedId(null), 2000);
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success("Код скопирован");
+      setCopiedId(`code-${id}`);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      toast.error("Не удалось скопировать код", "Выделите код и скопируйте вручную.");
+    }
   };
 
   const maxSubs = config?.maxAdditionalSubscriptions ?? 5;
@@ -335,24 +285,18 @@ export function ClientGiftsPage() {
     );
   }
 
+  if (error && !giftsQuery.data) {
+    return <section className="space-y-4"><h1>Подарки</h1><p role="alert">Не удалось загрузить подарки. Покупки сохранены — попробуйте ещё раз.</p><Button onClick={() => giftsQuery.refetch()} disabled={giftsQuery.isFetching}>Повторить</Button></section>;
+  }
+
   return (
-    <div className="space-y-8 w-full min-w-0 pb-12">
-      {/* T-unify-cabinet (30.05.2026, WolfVPN): уведомление об успешном переносе подписки себе */}
-      {actionSuccess && (
-        <div className="rounded-2xl bg-green-500/10 border border-green-500/30 px-4 py-3.5 flex items-start gap-3 shadow-sm">
-          <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
-          <p className="text-sm font-medium text-green-700 dark:text-green-400 leading-relaxed flex-1">{actionSuccess}</p>
-          <button onClick={() => setActionSuccess(null)} className="text-green-600/60 hover:text-green-600 transition-colors shrink-0">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+    <div className="cabinet-gifts space-y-8 w-full min-w-0 pb-12">
       {/* SECTION 1: HERO */}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="relative overflow-hidden rounded-3xl bg-card/40 backdrop-blur-2xl border border-border/50 p-8 sm:p-10 shadow-xl"
+        className="cabinet-gift-heading"
       >
         <div className="absolute top-0 right-0 w-64 h-64 rounded-full bg-primary/20 blur-[80px] pointer-events-none -mr-20 -mt-20" />
         <div className="absolute bottom-0 left-0 w-64 h-64 rounded-full bg-blue-500/10 blur-[80px] pointer-events-none -ml-20 -mb-20" />
@@ -366,17 +310,17 @@ export function ClientGiftsPage() {
               <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-foreground">Подарки</h1>
             </div>
             <p className="text-[16px] text-muted-foreground max-w-xl leading-relaxed">
-              Покупайте подписки VPN для друзей или активируйте вторую подписку для себя
+              Купите подписку, создайте подарочный код и отправьте его другу. Для себя выбирайте тарифы в разделе «Тарифы».
             </p>
           </div>
           <div className="flex flex-col items-start sm:items-end gap-3 shrink-0 sm:min-w-[240px]">
             <Button data-tour="gifts-buy-button" onClick={handleOpenBuy} disabled={!canBuyMore} className="w-full sm:w-auto h-14 px-8 rounded-2xl shadow-lg hover:shadow-primary/25 transition-all text-base font-bold gap-2">
               <Plus className="w-5 h-5" />
-              Купить подписку
+              Купить в подарок
             </Button>
             <div className="flex items-center justify-center sm:justify-end gap-2 text-sm text-muted-foreground font-medium px-4 py-2.5 rounded-xl bg-background/30 backdrop-blur-md border border-border/40 shadow-sm w-full sm:w-auto">
               <Package className="w-4 h-4 opacity-70" />
-              <span>Доступно слотов: <strong className="text-foreground">{currentSubs} из {maxSubs}</strong></span>
+              <span>Подарков: <strong className="text-foreground">{currentSubs}</strong></span>
             </div>
           </div>
         </div>
@@ -389,8 +333,8 @@ export function ClientGiftsPage() {
       </motion.section>
 
       {/* SECTION 2: ACTION CARDS ROW */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-5 flex flex-col gap-6">
+      <div className="cabinet-gift-intro">
+        <div className="flex flex-col gap-6">
           {/* Card 1: Redeem Code */}
           <motion.div 
             data-tour="gifts-redeem"
@@ -412,6 +356,7 @@ export function ClientGiftsPage() {
             
             <form onSubmit={handleRedeem} className="flex flex-col gap-3 mt-auto relative z-10">
               <Input 
+                aria-label="Подарочный код"
                 value={redeemCode}
                 onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
                 placeholder="CODE-XXXX-XXXX"
@@ -429,182 +374,17 @@ export function ClientGiftsPage() {
                     </div>
                   </motion.div>
                 )}
-                {redeemSuccess && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-                    <div className="mt-2 p-3 rounded-xl bg-green-500/10 text-green-500 text-sm font-medium text-center flex items-center justify-center gap-2">
-                      <CheckCircle2 className="w-4 h-4" /> {redeemSuccess}
-                    </div>
-                  </motion.div>
-                )}
               </AnimatePresence>
             </form>
           </motion.div>
 
-          {/* Card 3: Stats */}
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="rounded-3xl glass-card-hover border border-border/50 shadow-lg p-6 sm:p-8"
-          >
-            <h2 className="text-xl font-bold mb-6">Статистика</h2>
-            <div className="space-y-3">
-              <div className="flex items-center gap-4 bg-background/40 p-4 rounded-2xl border border-border/50">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-500">
-                  <Package className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Всего подписок</p>
-                  <p className="text-[15px] font-semibold text-foreground">{subscriptions.length}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 bg-background/40 p-4 rounded-2xl border border-border/50">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500">
-                  <Send className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Подарено</p>
-                  <p className="text-[15px] font-semibold text-foreground">{giftedCount}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 bg-background/40 p-4 rounded-2xl border border-border/50">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-500/10 text-green-500">
-                  <CheckCircle2 className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Активные коды</p>
-                  <p className="text-[15px] font-semibold text-foreground">{activeCodesCount}</p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
+          <dl className="cabinet-gift-stats">
+            <div><dt>Всего подписок</dt><dd>{subscriptions.length}</dd></div>
+            <div><dt>Подарено</dt><dd>{giftedCount}</dd></div>
+            <div><dt>Активные коды</dt><dd>{activeCodesCount}</dd></div>
+          </dl>
         </div>
 
-        {/* Card 2: History Timeline */}
-        <motion.div 
-          data-tour="gifts-history"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="lg:col-span-7 rounded-3xl glass-card-hover border border-border/50 shadow-lg p-6 sm:p-8 flex flex-col"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <History className="h-6 w-6" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold">История</h2>
-                <p className="text-sm text-muted-foreground">Последние действия</p>
-              </div>
-            </div>
-            {historyTotal > 4 && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setShowFullHistory(!showFullHistory)}
-                className="rounded-xl text-primary hover:text-primary hover:bg-primary/10"
-              >
-                {showFullHistory ? "Скрыть" : "Показать всё"}
-                {showFullHistory ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
-              </Button>
-            )}
-          </div>
-          
-          <div className="flex-1">
-            {historyLoading && historyItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full min-h-[200px] gap-3">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Загрузка истории…</p>
-              </div>
-            ) : historyItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-center gap-3 border border-dashed border-border/50 rounded-2xl bg-muted/20">
-                <History className="w-8 h-8 text-muted-foreground/50" />
-                <p className="text-sm text-muted-foreground">История пуста</p>
-              </div>
-            ) : (
-              <>
-                <div className="space-y-4">
-                  <AnimatePresence mode="popLayout">
-                    {historyItems.slice(0, showFullHistory ? undefined : 4).map((item, i) => {
-                      const ev = HISTORY_EVENT_MAP[item.eventType] ?? { icon: <Clock className="w-5 h-5" />, label: item.eventType, color: "text-muted-foreground bg-muted/20 border-muted/30" };
-                      const meta = item.metadata as Record<string, string> | null;
-                      const timeAgo = formatTimeAgo(item.createdAt);
-
-                      return (
-                        <motion.div
-                          key={item.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.95 }}
-                          transition={{ duration: 0.3, delay: i * 0.05 }}
-                          className="group relative flex flex-col sm:flex-row gap-4 p-4 sm:p-5 rounded-[1.5rem] bg-background/50 backdrop-blur-xl border border-border/50 shadow-sm transition-all duration-300 hover:bg-card hover:shadow-md hover:border-border/80"
-                        >
-                          <div className={`flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-[1rem] sm:rounded-[1.25rem] bg-background shadow-inner transition-transform group-hover:scale-105 duration-300 border ${ev.color}`}>
-                            {ev.icon}
-                          </div>
-                          
-                          <div className="flex-1 min-w-0 flex flex-col justify-center">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
-                              <span className="text-[16px] sm:text-[17px] font-bold text-foreground tracking-tight">{ev.label}</span>
-                              <span className="text-[12px] font-semibold text-muted-foreground/80 bg-background/50 px-2.5 py-1 rounded-lg whitespace-nowrap self-start sm:self-auto border border-border/30">{timeAgo}</span>
-                            </div>
-                            
-                            {meta && Object.keys(meta).length > 0 && (
-                              <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
-                                {meta.code && (
-                                  <span className="font-mono bg-primary/10 text-primary px-2.5 py-1.5 rounded-xl border border-primary/20 shadow-sm">{meta.code}</span>
-                                )}
-                                {meta.tariffName && (
-                                  <span className="flex items-center bg-muted/40 text-muted-foreground px-2.5 py-1.5 rounded-xl border border-border/30">
-                                    <Package className="w-3.5 h-3.5 mr-1.5 opacity-70" />
-                                    {meta.tariffName}
-                                  </span>
-                                )}
-                                {meta.recipientUsername && (
-                                  <span className="flex items-center bg-blue-500/10 text-blue-500 dark:text-blue-400 px-2.5 py-1.5 rounded-xl border border-blue-500/20">
-                                    <User className="w-3.5 h-3.5 mr-1.5 opacity-70" />
-                                    → @{meta.recipientUsername}
-                                  </span>
-                                )}
-                                {meta.senderUsername && (
-                                  <span className="flex items-center bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 px-2.5 py-1.5 rounded-xl border border-emerald-500/20">
-                                    <User className="w-3.5 h-3.5 mr-1.5 opacity-70" />
-                                    от @{meta.senderUsername}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            
-                            {meta?.giftMessage && (
-                              <div className="mt-3.5 relative pl-4 py-2.5 pr-3 rounded-r-2xl bg-muted/30 border border-l-0 border-border/30 text-muted-foreground/90 italic text-[13px] leading-relaxed">
-                                <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-full bg-primary/40"></div>
-                                "{meta.giftMessage}"
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
-                </div>
-                {showFullHistory && historyTotal > 10 && (
-                  <div className="flex items-center justify-center gap-3 pt-6">
-                    <Button variant="outline" size="sm" className="rounded-xl border-border/50" disabled={historyPage <= 1 || historyLoading} onClick={() => setHistoryPage((p) => p - 1)}>
-                      ← Назад
-                    </Button>
-                    <span className="text-xs font-medium text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-lg">
-                      {historyPage} / {Math.ceil(historyTotal / 10)}
-                    </span>
-                    <Button variant="outline" size="sm" className="rounded-xl border-border/50" disabled={historyPage >= Math.ceil(historyTotal / 10) || historyLoading} onClick={() => setHistoryPage((p) => p + 1)}>
-                      Вперед →
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </motion.div>
       </div>
 
       {/* SECTION 3: SUBSCRIPTIONS */}
@@ -644,11 +424,11 @@ export function ClientGiftsPage() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ delay: i * 0.05 }}
-                    className="rounded-3xl glass-card-hover border border-border/50 shadow-lg p-6 sm:p-8 flex flex-col gap-6 relative overflow-hidden"
+                    className="cabinet-gift-card rounded-3xl glass-card-hover border border-border/50 shadow-lg p-6 sm:p-8 flex flex-col gap-6 relative overflow-hidden"
                   >
-                    <div className="flex justify-between items-start gap-4">
+                    <div className="cabinet-gift-card-heading flex justify-between items-start gap-4">
                       <div>
-                        <h3 className="text-xl font-bold text-foreground">Подписка #{sub.subscriptionIndex}</h3>
+                        <h3 className="text-xl font-bold text-foreground">{tariffs.find(tariff => tariff.id === sub.tariffId)?.name ?? `Подарок №${sub.subscriptionIndex}`}</h3>
                         <p className="text-sm text-muted-foreground mt-1 max-w-[240px]">
                           {isGifted ? "Эта подписка была подарена вам." : isActivatedSelf ? "Эта подписка была активирована вами." : isReserved ? "Для подписки создан код." : "Доступна для подарка или активации себе."}
                         </p>
@@ -659,9 +439,9 @@ export function ClientGiftsPage() {
                     </div>
 
                     {!isFinalized && activeCode && (
-                      <div className="bg-background/40 p-4 rounded-2xl border border-border/50 flex items-center justify-between gap-3">
+                      <div className="cabinet-gift-code bg-background/40 p-4 rounded-2xl border border-border/50 flex items-center justify-between gap-3">
                         <code className="text-lg font-mono font-bold tracking-wider text-foreground">{activeCode.code}</code>
-                        <Button variant="ghost" size="icon" onClick={() => copyCode(activeCode.code, activeCode.id)} className="h-9 w-9 rounded-xl hover:bg-muted">
+                        <Button aria-label="Скопировать код" variant="ghost" size="icon" onClick={() => copyCode(activeCode.code, activeCode.id)} className="h-9 w-9 rounded-xl hover:bg-muted">
                           {copiedId === `code-${activeCode.id}` ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
                         </Button>
                       </div>
@@ -680,7 +460,7 @@ export function ClientGiftsPage() {
                         disabled={isReserved || actionLoading === `create-${sub.id}`}
                       >
                         {actionLoading === `create-${sub.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Gift className="w-4 h-4" />}
-                        Подарить
+                        Создать код
                       </Button>
                       <Button 
                         variant="secondary" 
@@ -689,7 +469,7 @@ export function ClientGiftsPage() {
                         disabled={!activeCode || actionLoading === `url-${sub.id}`}
                       >
                         {actionLoading === `url-${sub.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : copiedId === `url-${sub.id}` ? <Check className="w-4 h-4" /> : <LinkIcon className="w-4 h-4" />}
-                        Ссылка
+                        Скопировать ссылку
                       </Button>
                       <Button 
                         variant="secondary" 
@@ -792,7 +572,7 @@ export function ClientGiftsPage() {
               <div className="mx-auto w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-2 shadow-inner border border-primary/20">
                 <Plus className="w-6 h-6" />
               </div>
-              <DialogTitle className="text-xl font-bold">Купить подписку в подарок</DialogTitle>
+              <DialogTitle className="text-xl font-bold">Купить в подарок</DialogTitle>
               <DialogDescription className="text-center">
                 Выберите тариф для новой подписки. Она будет оплачена с вашего баланса.
               </DialogDescription>
@@ -819,7 +599,7 @@ export function ClientGiftsPage() {
                     <div key={t.id} className="flex flex-col p-4 rounded-2xl border border-border/50 bg-background/50 hover:bg-muted/50 transition-colors">
                       <div className="font-bold text-foreground text-base mb-1 break-words">{t.name}</div>
                       <div className="font-bold text-primary text-lg mb-2 tabular-nums">
-                        {showFromPrefix ? "от " : ""}{formatMoney(minOptPrice, currency)}
+                        {showFromPrefix ? "от " : ""}{formatMoney(minOptPrice, t.currency)}
                       </div>
                       <div className="flex items-center gap-3 text-xs font-medium text-muted-foreground mb-4 flex-wrap">
                         <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {t.durationDays} дн.</span>
@@ -855,9 +635,10 @@ export function ClientGiftsPage() {
 
       {/* Picker длительности + доп. устройств — оформлен в стиле UnifiedPurchaseModal (без warn-модалки и pro-rata). */}
       <Dialog open={!!pickerTariff} onOpenChange={(v) => !v && closePicker()}>
-        <DialogContent className="bg-background/85 backdrop-blur-3xl border-white/10 rounded-[2rem] sm:max-w-lg w-[calc(100vw-1rem)] max-h-[92vh] overflow-y-auto overflow-x-hidden">
+        <DialogContent className="cabinet-gift-picker bg-background/85 backdrop-blur-3xl border-white/10 rounded-[2rem] sm:max-w-lg w-[calc(100vw-1rem)] max-h-[92vh] overflow-y-auto overflow-x-hidden">
           {pickerTariff && (() => {
             const t = pickerTariff;
+            const currency = t.currency;
             const opts = [...(t.priceOptions ?? [])].sort((a, b) =>
               a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.durationDays - b.durationDays
             );
@@ -907,7 +688,7 @@ export function ClientGiftsPage() {
                 <DialogHeader className="relative">
                   <div className="flex items-center gap-3">
                     <motion.div
-                      animate={{ rotate: [0, -6, 6, 0] }}
+                      animate={{ rotate: 0 }}
                       transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 4 }}
                       className="h-14 w-14 rounded-3xl bg-gradient-to-br from-primary/30 via-fuchsia-500/20 to-purple-500/30 border border-white/15 flex items-center justify-center shadow-xl shrink-0"
                     >
@@ -940,6 +721,7 @@ export function ClientGiftsPage() {
                             <button
                               key={opt.id}
                               type="button"
+                              aria-pressed={isActive}
                               onClick={() => setPickerOptionId(opt.id)}
                               className={`relative overflow-hidden rounded-2xl border p-3 transition-all text-center hover:scale-[1.03] hover:shadow-lg ${isActive
                                 ? "bg-gradient-to-br from-primary/25 via-fuchsia-500/10 to-purple-500/15 border-primary/50 ring-2 ring-primary/40 shadow-lg shadow-primary/20"
@@ -981,6 +763,7 @@ export function ClientGiftsPage() {
                             <motion.button
                               key={tile.extras}
                               type="button"
+                              aria-pressed={isActive}
                               onClick={() => setPickerExtras(tile.extras)}
                               whileTap={{ scale: 0.96 }}
                               className={`relative overflow-hidden rounded-2xl border p-3 transition-all hover:scale-[1.04] hover:shadow-lg ${isActive

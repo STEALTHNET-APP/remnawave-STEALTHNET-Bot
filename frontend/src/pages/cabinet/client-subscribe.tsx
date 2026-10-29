@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthSubscribe } from "@/pages/cabinet/stealth/stealth-subscribe";
 import {
@@ -12,12 +12,9 @@ import {
   Loader2,
   Smartphone,
   ArrowLeft,
-  Monitor,
   Info,
   QrCode,
   ShieldCheck,
-  Zap,
-  Globe
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -477,140 +474,24 @@ function ClassicSubscribePage() {
   );
 
   const linkCard = (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95, y: 10 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ delay: isMiniapp ? 0.1 : 0, duration: 0.4, ease: "easeOut" }}
-      className="relative group"
-    >
-      <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/30 to-primary/10 rounded-2xl blur opacity-50 group-hover:opacity-75 transition duration-500" />
-      <div className="relative rounded-2xl border border-slate-200/50 dark:border-white/10 bg-white/60 dark:bg-black/40 backdrop-blur-2xl p-5 sm:p-6 shadow-2xl overflow-hidden transition-all duration-300 hover:shadow-primary/5">
-        {/* Decorative background elements */}
-        <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-primary/20 rounded-full blur-2xl" />
-        <div className="absolute bottom-0 left-0 -mb-4 -ml-4 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl" />
-        
-        <div className="relative z-10">
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
-            <div>
-              <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground flex items-center gap-2.5 mb-1.5 text-slate-900 dark:text-white">
-                <div className="p-1.5 rounded-md bg-primary/20 text-primary">
-                  <Zap className="h-5 w-5" />
-                </div>
-                Ваша подписка
-              </h1>
-              {!isMiniapp && (
-                <p className="text-sm text-slate-600 dark:text-muted-foreground/80">
-                  Единая ссылка для всех ваших устройств
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100/80 dark:bg-white/10 border border-slate-200/50 dark:border-white/5 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-white/90 shadow-inner">
-                <Monitor className="h-3.5 w-3.5 text-primary" />
-                {platformLabel}
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-slate-700 dark:text-white/80">Ссылка конфигурации</h2>
-              <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-muted-foreground font-semibold">
-                Auto-update
-              </p>
-            </div>
-            
-            <div className="relative flex items-center">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Globe className="h-4 w-4 text-slate-400 dark:text-muted-foreground/50" />
-              </div>
-              <code className="flex-1 block w-full truncate rounded-xl border border-slate-200/50 dark:border-white/10 bg-slate-50/50 dark:bg-black/50 py-3 pl-10 pr-4 text-sm font-mono text-slate-800 dark:text-white/90 shadow-inner" title={subscriptionUrl || ""}>
-                {subscriptionUrl}
-              </code>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
-              <motion.div whileTap={{ scale: 0.95 }} className="flex-1">
-                <Button 
-                  variant="default" 
-                  onClick={copyLink} 
-                  className={cn(
-                    "w-full gap-2 h-11 text-sm font-medium transition-all duration-300",
-                    copied ? "bg-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500/30" : "shadow-lg shadow-primary/20 hover:shadow-primary/30 hover:scale-[1.02]"
-                  )}
-                >
-                  <AnimatePresence mode="wait" initial={false}>
-                    {copied ? (
-                      <motion.div
-                        key="check"
-                        initial={{ opacity: 0, scale: 0.5 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.5 }}
-                        className="flex items-center gap-2"
-                      >
-                        <Check className="h-4 w-4" />
-                        Скопировано
-                      </motion.div>
-                    ) : (
-                      <motion.div
-                        key="copy"
-                        initial={{ opacity: 0, scale: 0.5 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.5 }}
-                        className="flex items-center gap-2"
-                      >
-                        <Copy className="h-4 w-4" />
-                        Копировать ссылку
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </Button>
-              </motion.div>
-              
-              {!showQrNextToAddButton && (
-                <Button 
-                  variant="outline" 
-                  onClick={() => setQrModalOpen(true)} 
-                  className="sm:w-auto w-full gap-2 h-11 border-slate-200/50 dark:border-white/10 bg-white/50 dark:bg-white/5 hover:bg-white/80 dark:hover:bg-white/10 transition-colors"
-                >
-                  <QrCode className="h-4 w-4" />
-                  Показать QR
-                </Button>
-              )}
-            </div>
-            
-            <p className="text-xs text-slate-500 dark:text-muted-foreground/70 text-center sm:text-left pt-2">
-              {isMiniapp ? linkCardRefMiniapp : linkCardRef}
-            </p>
-          </div>
-        </div>
+    <section className="cabinet-connection-link">
+      <header className="cabinet-page-heading"><h1>Подключение к VPN</h1><p>Одна ссылка для ваших устройств. Текущая платформа: {platformLabel}.</p></header>
+      <label htmlFor="connection-url">Ссылка подписки</label>
+      <input id="connection-url" readOnly value={subscriptionUrl || ""} />
+      <div className="cabinet-connection-buttons">
+        <Button onClick={copyLink}>{copied ? <Check size={16}/> : <Copy size={16}/>} {copied ? "Скопировано" : "Копировать ссылку"}</Button>
+        <Button variant="outline" onClick={()=>setQrModalOpen(true)}><QrCode size={16}/>Показать QR-код</Button>
       </div>
-    </motion.div>
+      <p>{isMiniapp ? linkCardRefMiniapp : linkCardRef}</p>
+    </section>
   );
 
   const instructionSection = !isMiniapp && (
-    <motion.section
-      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ delay: 0.1, duration: 0.4, ease: "easeOut" }}
-      className="rounded-xl border border-slate-200/50 dark:border-white/5 bg-white/40 dark:bg-white/5 p-4 flex gap-4 items-start backdrop-blur-sm"
-    >
-      <div className="p-2 rounded-full bg-primary/10 text-primary shrink-0 mt-0.5">
-        <ShieldCheck className="h-5 w-5" />
-      </div>
-      <div className="space-y-1">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-white/90">
-          Как подключиться?
-        </h2>
-        <p className="text-sm text-slate-600 dark:text-muted-foreground leading-relaxed">
-          Ниже представлены приложения для вашей платформы ({platformLabel}). Сначала скачайте приложение по ссылке, затем нажмите «Добавить подписку» — откроется диплинк с вашей ссылкой подписки.
-        </p>
-      </div>
-    </motion.section>
+    <section className="cabinet-connection-guide"><h2>Как подключиться</h2><ol><li>Установите приложение для {platformLabel} из списка ниже.</li><li>Нажмите «Добавить подписку». Ссылка откроется в приложении.</li><li>Включите VPN в приложении. Если подписка не добавилась автоматически, вставьте скопированную ссылку вручную.</li></ol></section>
   );
 
   return (
-    <div className="space-y-8 max-w-2xl mx-auto pb-12 px-2 sm:px-0">
+    <div className="cabinet-connect-page space-y-8 max-w-3xl pb-12">
       <motion.div 
         initial={{ opacity: 0, x: -10 }}
         animate={{ opacity: 1, x: 0 }}

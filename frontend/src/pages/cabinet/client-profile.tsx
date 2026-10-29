@@ -1,10 +1,9 @@
 import { PasswordHint } from "@/components/password-hint";
-import { ReferralQrButton } from "@/components/referral-qr";
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation, Navigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
-import { User, Wallet, Copy, Check, CreditCard, Loader2, Link2, Mail, Fingerprint, CalendarDays, Shield, KeyRound, Monitor, Trash2, Zap, Send } from "lucide-react";
+import { User, Wallet, Copy, Check, CreditCard, Loader2, Shield, KeyRound, Monitor, Trash2, Zap } from "lucide-react";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthProfile } from "@/pages/cabinet/stealth/stealth-profile";
 import { AuroraProfile } from "@/pages/cabinet/aurora/aurora-profile";
@@ -49,10 +48,9 @@ export function ClientProfilePage() {
 }
 
 export function ClassicProfilePage({ aurora = false, topupOnly = false, accountOnly = false }: { aurora?: boolean; topupOnly?: boolean; accountOnly?: boolean }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
   const [payments, setPayments] = useState<ClientPayment[]>([]);
-  const [copiedRef, setCopiedRef] = useState<"site" | "bot" | null>(null);
   const [plategaMethods, setPlategaMethods] = useState<{ id: number; label: string }[]>([]);
   const [yoomoneyEnabled, setYoomoneyEnabled] = useState(false);
   const [yookassaEnabled, setYookassaEnabled] = useState(false);
@@ -604,20 +602,10 @@ async function startTopUpParitypay() {
       ? `https://t.me/${telegramBotUsername.replace(/^@/, "")}?start=ref_${client.referralCode}`
       : "";
   const hasReferralLinks = Boolean(referralLinkSite || referralLinkBot);
-  function copyReferral(which: "site" | "bot") {
-    const url = which === "site" ? referralLinkSite : referralLinkBot;
-    if (url) {
-      navigator.clipboard.writeText(url);
-      setCopiedRef(which);
-      setTimeout(() => setCopiedRef(null), 2000);
-    }
-  }
-
-  if (!client) return null;
   const isMiniapp = useCabinetMiniapp();
+  if (!client) return null;
   // Реальный miniapp (TG WebApp) — только если доступен initData
   const isTgMiniapp = isMiniapp && Boolean((window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData?.trim());
-  const cardClass = isMiniapp ? "min-w-0 overflow-hidden" : "";
 
   const topupCard = (plategaMethods.length > 0 || yoomoneyEnabled || yookassaEnabled || telegramStarsEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled || overpayEnabled) && (
           <div id="topup" className="relative flex flex-col rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)]">
@@ -650,7 +638,7 @@ async function startTopUpParitypay() {
                     style={{ WebkitAppearance: "none", MozAppearance: "textfield" }}
                   />
                   <span className="pointer-events-none absolute right-[12%] top-1/2 -translate-y-1/2 text-2xl sm:text-3xl font-bold text-muted-foreground uppercase opacity-80">
-                    {currency}
+                    {currency.toUpperCase()}
                   </span>
                 </div>
 
@@ -661,6 +649,7 @@ async function startTopUpParitypay() {
                       <button
                         key={n}
                         type="button"
+                        aria-pressed={isActive}
                         onClick={() => setTopUpAmount(String(n))}
                         className={cn(
                           "flex items-center justify-center rounded-2xl py-3 text-sm font-bold transition-all duration-300",
@@ -868,414 +857,42 @@ async function startTopUpParitypay() {
         </section>
         <section className="au-profile-section"><h2>Безопасность</h2><button className="au-profile-action" onClick={client.totpEnabled?openTwoFaDisable:openTwoFaEnable}><Shield size={20}/><span>Двухэтапная защита<small>{client.totpEnabled?"Включена · отключить":"Отключена · включить"}</small></span><span aria-hidden="true">→</span></button><button className="au-profile-action" onClick={()=>client.hasPassword===false&&client.email?setSetPasswordOpen(true):setChangePasswordOpen(true)}><KeyRound size={20}/><span>{client.hasPassword===false&&client.email?"Установить пароль":"Изменить пароль"}</span><span aria-hidden="true">→</span></button>{yookassaRecurringEnabled&&client.yookassaPaymentMethodTitle&&<button className="au-profile-action" disabled={unlinkingPayment} onClick={handleUnlinkPaymentMethod}><CreditCard size={20}/><span>Отвязать способ оплаты<small>{client.yookassaPaymentMethodTitle}</small></span></button>}</section>
       </div> : <>
-      <div className="min-w-0">
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">{t("cabinet.profile.title")}</h1>
-        <p className="text-muted-foreground text-sm mt-1 truncate">{t("cabinet.profile.subtitle")}</p>
-      </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className={`grid gap-6 items-stretch ${isMiniapp ? "grid-cols-1" : "lg:grid-cols-2"} min-w-0`}
-      >
-        <div data-tour="profile-settings" className={cn("relative flex flex-col h-full rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)]", cardClass)}>
-          <div className="absolute inset-0 overflow-hidden rounded-[2rem] border border-white/10 dark:border-white/5 bg-background/40 backdrop-blur-2xl">
-            <div className="absolute -top-32 -right-32 h-64 w-64 rounded-full bg-primary/10 blur-[80px] pointer-events-none" />
+      <header className="cabinet-page-heading"><h1>{t("cabinet.profile.title")}</h1><p>{t("cabinet.profile.subtitle")}</p></header>
+      <section className="cabinet-settings-section" data-tour="profile-settings">
+        <header><h2>{t("cabinet.profile.data_heading")}</h2><p>{t("cabinet.profile.contact_info")}</p></header>
+        <div className="cabinet-settings-rows">
+          <div className="cabinet-setting-row"><div><span>{t("cabinet.profile.account_id")}</span><p className="font-mono">{client.id}</p></div></div>
+          <div className="cabinet-setting-row"><div><span>Email</span><p>{client.email || t("cabinet.profile.email_not_linked")}</p></div>
+            {!client.email && <form onSubmit={sendLinkEmailRequest} className="cabinet-inline-form"><Input aria-label="Email" type="email" placeholder="email@example.com" value={linkEmailValue} onChange={e => setLinkEmailValue(e.target.value)} disabled={linkEmailLoading} /><Button type="submit" variant="outline" disabled={linkEmailLoading || !linkEmailValue.trim()}>{t("cabinet.profile.link_email")}</Button></form>}
           </div>
-
-          <div className="relative p-6 sm:p-8 flex flex-col flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
-                <User className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="text-lg font-bold tracking-tight text-foreground truncate">{t("cabinet.profile.data_heading")}</h3>
-                <p className="text-xs text-muted-foreground mt-[1px] truncate">{t("cabinet.profile.contact_info")}</p>
-              </div>
-            </div>
-
-            <div className="space-y-4 flex-1 min-w-0">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-muted/40 border border-border/50 transition-colors hover:bg-muted/60 dark:bg-white/5 dark:border-white/5 dark:hover:bg-white/10">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-primary/10 text-primary">
-                    <Fingerprint className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground mb-0.5">{t("cabinet.profile.account_id")}</p>
-                    <p className="font-medium text-sm truncate font-mono select-all">{client.id}</p>
-                  </div>
-                </div>
-              </div>
-
-              {client.email != null && client.email !== "" ? (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-muted/40 border border-border/50 transition-colors hover:bg-muted/60 dark:bg-white/5 dark:border-white/5 dark:hover:bg-white/10">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-primary/10 text-primary">
-                      <Mail className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground mb-0.5">Email</p>
-                      <p className="font-medium text-sm truncate">{client.email}</p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3 p-4 rounded-2xl bg-muted/40 border border-border/50 transition-colors hover:bg-muted/60 dark:bg-white/5 dark:border-white/5 dark:hover:bg-white/10">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-orange-500/10 text-orange-500">
-                      <Mail className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground mb-0.5">Email</p>
-                      <p className="font-medium text-sm truncate text-orange-500">{t("cabinet.profile.email_not_linked")}</p>
-                    </div>
-                  </div>
-                  <form onSubmit={sendLinkEmailRequest} className="flex gap-2 mt-2">
-                    <Input
-                      type="email"
-                      placeholder="email@example.com"
-                      value={linkEmailValue}
-                      onChange={(e) => setLinkEmailValue(e.target.value)}
-                      className="h-9 bg-background/50 border-white/10 text-sm"
-                      disabled={linkEmailLoading}
-                    />
-                    <Button type="submit" size="sm" className="h-9 shrink-0 gap-2 px-4 shadow-sm" disabled={linkEmailLoading || !linkEmailValue.trim()}>
-                      {linkEmailLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-                      <span className="hidden sm:inline">{t("cabinet.profile.link_email")}</span>
-                    </Button>
-                  </form>
-                  {linkEmailSent && <p className="text-xs font-medium text-green-500 mt-1">{t("cabinet.profile.link_email_sent")}</p>}
-                  {linkEmailError && <p className="text-xs font-medium text-destructive mt-1">{linkEmailError}</p>}
-                </div>
-              )}
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-muted/40 border border-border/50 transition-colors hover:bg-muted/60 dark:bg-white/5 dark:border-white/5 dark:hover:bg-white/10">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-[#0088cc]/10 text-[#0088cc]">
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.888-.667 3.475-1.512 5.79-2.511 6.945-2.993 3.303-1.385 3.99-1.623 4.43-1.63z" />
-                    </svg>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground mb-0.5">Telegram</p>
-                    {client.telegramId ? (
-                      <p className="font-medium text-sm truncate">
-                        {client.telegramUsername ? `@${client.telegramUsername}` : `ID ${client.telegramId}`}
-                      </p>
-                    ) : (
-                      <p className="font-medium text-sm truncate text-orange-500">{t("cabinet.profile.telegram_not_linked")}</p>
-                    )}
-                  </div>
-                </div>
-                {!client.telegramId && (
-                  <div className="shrink-0">
-                    {isTgMiniapp ? (
-                      <Button variant="outline" size="sm" onClick={linkTelegramFromMiniapp} disabled={linkTelegramLoading} className="shadow-sm">
-                        {linkTelegramLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("cabinet.profile.link_current")}
-                      </Button>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={requestLinkTelegramCode} disabled={linkTelegramLoading || !!linkTelegramCode} className="shadow-sm">
-                        {linkTelegramLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t("cabinet.profile.get_code")}
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </div>
-              {!isTgMiniapp && !client.telegramId && linkTelegramCode && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium">{t("cabinet.profile.link_code")}</p>
-                    <p className="font-mono text-xl tracking-wider font-bold text-primary">{linkTelegramCode}</p>
-                  </div>
-                  {telegramBotUsername && (
-                    <a
-                      href={`https://t.me/${telegramBotUsername.replace(/^@/, "")}?start=link_${linkTelegramCode}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-                    >
-                      <Send className="w-4 h-4" />
-                      {t("cabinet.profile.link_open_bot")}
-                    </a>
-                  )}
-                  <p className="text-xs text-muted-foreground/80">
-                    {t("cabinet.profile.link_code_hint")} <code className="bg-primary/10 text-primary font-mono px-1.5 py-0.5 rounded">/link {linkTelegramCode}</code><br />{t("cabinet.profile.link_code_expires")}
-                  </p>
-                </motion.div>
-              )}
-              {linkTelegramError && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs font-medium text-destructive px-1">
-                  {linkTelegramError}
-                </motion.p>
-              )}
-
-              <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-muted/40 border border-border/50 transition-colors hover:bg-muted/60 dark:bg-white/5 dark:border-white/5 dark:hover:bg-white/10">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-green-500/10 text-green-500">
-                    <Wallet className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground mb-0.5">{t("cabinet.profile.balance_label")}</p>
-                    <p className="font-bold text-lg truncate tracking-tight">{formatMoney(client.balance, client.preferredCurrency)}</p>
-                  </div>
-                </div>
-                <Button variant="default" size="sm" className="bg-green-500 hover:bg-green-600 text-white shrink-0 shadow-lg shadow-green-500/20 px-5" onClick={() => {
-                  const el = document.getElementById("topup");
-                  if (accountOnly) navigate("/cabinet/wallet");
-                  else if (el) el.scrollIntoView({ behavior: 'smooth' });
-                }}>
-                  {t("cabinet.profile.top_up")}
-                </Button>
-              </div>
-
-              {client.createdAt && (
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-muted/40 border border-border/50 transition-colors hover:bg-muted/60 dark:bg-white/5 dark:border-white/5 dark:hover:bg-white/10">
-                  <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-primary/10 text-primary">
-                    <CalendarDays className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground mb-0.5">{t("cabinet.profile.registration_date")}</p>
-                    <p className="text-sm font-medium">{new Date(client.createdAt).toLocaleDateString("ru-RU", { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                  </div>
-                </div>
-              )}
-
-              {hasReferralLinks && !accountOnly && (
-                <div className="pt-4 border-t border-border/20 space-y-4">
-                  <div>
-                    <h4 className="text-sm font-bold text-foreground">{t("cabinet.profile.referral_program")}</h4>
-                    <p className="text-xs text-muted-foreground mt-1">{t("cabinet.profile.referral_invite_hint")}</p>
-                  </div>
-                  <div className="space-y-2">
-                    {referralLinkSite && (
-                      <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-background/80 border border-border/30 dark:bg-white/5 dark:border-white/5">
-                        <div className="shrink-0 w-12 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t("cabinet.profile.site_label")}</div>
-                        <code className="flex-1 min-w-[140px] truncate text-xs font-mono text-primary/80 select-all">{referralLinkSite}</code>
-                        <ReferralQrButton code={client!.referralCode!} links={[{ kind: "site", url: referralLinkSite }]} />
-                        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 hover:bg-black/5 dark:hover:bg-white/10 rounded-lg ml-auto" onClick={() => copyReferral("site")}>
-                          {copiedRef === "site" ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                        </Button>
-                      </div>
-                    )}
-                    {referralLinkBot && (
-                      <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-background/80 border border-border/30 dark:bg-white/5 dark:border-white/5">
-                        <div className="shrink-0 w-12 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{t("cabinet.profile.bot_label")}</div>
-                        <code className="flex-1 min-w-[140px] truncate text-xs font-mono text-primary/80 select-all">{referralLinkBot}</code>
-                        <ReferralQrButton code={client!.referralCode!} links={[{ kind: "bot", url: referralLinkBot }]} />
-                        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 hover:bg-black/5 dark:hover:bg-white/10 rounded-lg ml-auto" onClick={() => copyReferral("bot")}>
-                          {copiedRef === "bot" ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+          {linkEmailSent && <p role="status">{t("cabinet.profile.link_email_sent")}</p>}{linkEmailError && <p role="alert">{linkEmailError}</p>}
+          <div className="cabinet-setting-row"><div><span>Telegram</span><p>{client.telegramUsername ? `@${client.telegramUsername}` : client.telegramId || t("cabinet.profile.telegram_not_linked")}</p></div>
+            {!client.telegramId && <Button variant="outline" disabled={linkTelegramLoading || !!linkTelegramCode} onClick={isTgMiniapp ? linkTelegramFromMiniapp : requestLinkTelegramCode}>{linkTelegramLoading ? <Loader2 size={16} className="animate-spin" /> : t(isTgMiniapp ? "cabinet.profile.link_current" : "cabinet.profile.get_code")}</Button>}
           </div>
+          {linkTelegramCode && <div className="cabinet-setting-detail"><p>{t("cabinet.profile.link_code")}: <strong className="font-mono">{linkTelegramCode}</strong></p>{telegramBotUsername && <a className="cabinet-text-link" href={`https://t.me/${telegramBotUsername.replace(/^@/, "")}?start=link_${linkTelegramCode}`} target="_blank" rel="noopener noreferrer">{t("cabinet.profile.link_open_bot")}</a>}<p>{t("cabinet.profile.link_code_hint")} <code>/link {linkTelegramCode}</code></p><p>{t("cabinet.profile.link_code_expires")}</p></div>}
+          {linkTelegramError && <p role="alert">{linkTelegramError}</p>}
+          {client.createdAt && <div className="cabinet-setting-row"><div><span>{t("cabinet.profile.registration_date")}</span><p>{new Date(client.createdAt).toLocaleDateString(i18n.language, {day:"numeric",month:"long",year:"numeric"})}</p></div></div>}
+          <div className="cabinet-setting-row"><div><span>{t("cabinet.profile.balance_label")}</span><p>{formatMoney(client.balance, client.preferredCurrency)}</p></div><Button variant="outline" onClick={() => accountOnly ? navigate("/cabinet/wallet") : document.getElementById("topup")?.scrollIntoView({behavior:"smooth"})}>{t("cabinet.profile.top_up")}</Button></div>
+          {hasReferralLinks && !accountOnly && <div className="cabinet-setting-row"><div><span>{t("cabinet.profile.referral_program")}</span><p>{t("cabinet.profile.referral_invite_hint")}</p></div><Button variant="outline" onClick={()=>navigate("/cabinet/referral")}>{t("cabinet.journey.referral_details")}</Button></div>}
         </div>
-
-        <div data-tour="password-change" className={cn("relative flex flex-col h-full rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)]", cardClass)}>
-          <div className="absolute inset-0 overflow-hidden rounded-[2rem] border border-white/10 dark:border-white/5 bg-background/40 backdrop-blur-2xl">
-            <div className="absolute -bottom-32 -left-32 h-64 w-64 rounded-full bg-primary/10 blur-[80px] pointer-events-none" />
-          </div>
-
-          <div className="relative p-6 sm:p-8 flex flex-col flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10 text-orange-500 shrink-0">
-                <Shield className="h-5 w-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="text-lg font-bold tracking-tight text-foreground truncate">{t("cabinet.profile.security_heading")}</h3>
-                <p className="text-xs text-muted-foreground mt-[1px] truncate">{t("cabinet.profile.security_subtitle")}</p>
-              </div>
-            </div>
-
-            <div className="flex-1 flex flex-col gap-4 min-w-0">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-muted/40 border border-border/50 transition-colors hover:bg-muted/60 dark:bg-white/5 dark:border-white/5 dark:hover:bg-white/10">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-primary/10 text-primary">
-                    <KeyRound className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground mb-0.5">{t("cabinet.profile.2fa_label")}</p>
-                    <p className="font-medium text-sm truncate">{t("cabinet.profile.2fa_multi_level")}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {client.totpEnabled ? (
-                    <>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-green-500/20 text-green-700 dark:text-green-400 dark:bg-green-500/20">{t("cabinet.profile.2fa_enabled")}</span>
-                      <Button variant="outline" size="sm" className="shadow-sm border-red-500/50 text-red-600 hover:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/20" onClick={openTwoFaDisable}>{t("cabinet.profile.2fa_disable")}</Button>
-                    </>
-                  ) : (
-                    <Button variant="outline" size="sm" className="shadow-sm" onClick={openTwoFaEnable}>{t("cabinet.profile.2fa_enable")}</Button>
-                  )}
-                </div>
-              </div>
-
-              {client.hasPassword === false && client.email ? (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-muted/40 border border-border/50 transition-colors hover:bg-muted/60 dark:bg-white/5 dark:border-white/5 dark:hover:bg-white/10">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-orange-500/10 text-orange-500">
-                      <KeyRound className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground mb-0.5">{t("cabinet.profile.password_label")}</p>
-                      <p className="font-medium text-sm truncate text-orange-500">{t("cabinet.profile.password_not_set")}</p>
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm" className="shadow-sm shrink-0" onClick={() => setSetPasswordOpen(true)}>
-                    {t("cabinet.profile.password_set")}
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-muted/40 border border-border/50 transition-colors hover:bg-muted/60 dark:bg-white/5 dark:border-white/5 dark:hover:bg-white/10">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-primary/10 text-primary">
-                      <KeyRound className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground mb-0.5">{t("cabinet.profile.password_label")}</p>
-                      <p className="font-medium text-sm truncate">{t("cabinet.profile.password_change_account")}</p>
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm" className="shadow-sm shrink-0" onClick={() => setChangePasswordOpen(true)}>
-                    {t("cabinet.profile.password_change")}
-                  </Button>
-                </div>
-              )}
-
-              {yookassaRecurringEnabled && client.yookassaPaymentMethodTitle && (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-muted/40 border border-border/50 transition-colors hover:bg-muted/60 dark:bg-white/5 dark:border-white/5 dark:hover:bg-white/10">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-primary/10 text-primary">
-                      <CreditCard className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground mb-0.5">{t("cabinet.profile.payment_method")}</p>
-                      <p className="font-medium text-sm truncate">{client.yookassaPaymentMethodTitle}</p>
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shadow-sm shrink-0 border-red-500/50 text-red-600 hover:bg-red-500/15 dark:text-red-400 dark:hover:bg-red-500/20"
-                    disabled={unlinkingPayment}
-                    onClick={handleUnlinkPaymentMethod}
-                  >
-                    {unlinkingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : t("cabinet.profile.unlink")}
-                  </Button>
-                </div>
-              )}
-
-              <div id="devices" className="flex-1 flex flex-col rounded-2xl bg-muted/40 border border-border/50 overflow-hidden dark:bg-white/5 dark:border-white/5">
-                <div className="p-4 border-b border-border/50 dark:border-white/5">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-xl bg-primary/10 text-primary">
-                      <Monitor className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground mb-0.5">{t("cabinet.workspace.vpn_devices")}</p>
-                      <p className="font-medium text-sm truncate">{t("cabinet.workspace.vpn_devices_hint")}</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex-1 p-4 space-y-3 flex flex-col justify-center">
-                  {devicesLoading ? (
-                    <div className="flex items-center justify-center py-8 text-primary/60">
-                      <Loader2 className="h-8 w-8 animate-spin" />
-                    </div>
-                  ) : devicesError === "NO_SUBSCRIPTION" ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-center px-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/50 text-muted-foreground mb-3 border border-border/50">
-                        <Monitor className="h-6 w-6 opacity-60" />
-                      </div>
-                      <p className="text-sm font-medium text-foreground">{t("cabinet.profile.no_devices_title")}</p>
-                      <p className="text-xs text-muted-foreground mt-1 text-center max-w-[280px]">{t("cabinet.profile.devices_no_sub_hint")}</p>
-                    </div>
-                  ) : devicesError ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-center px-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive mb-3">
-                        <Monitor className="h-6 w-6 opacity-80" />
-                      </div>
-                      <p className="text-sm font-medium text-destructive">{devicesError}</p>
-                      <p className="text-xs text-muted-foreground mt-1 text-center max-w-[250px]">{t("cabinet.profile.devices_error_hint")}</p>
-                    </div>
-                  ) : devices.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-center px-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/50 text-muted-foreground mb-3 border border-border/50">
-                        <Monitor className="h-6 w-6 opacity-60" />
-                      </div>
-                      <p className="text-sm font-medium text-foreground">{t("cabinet.profile.no_devices_title")}</p>
-                      <p className="text-xs text-muted-foreground mt-1 text-center max-w-[280px]">{t("cabinet.profile.devices_empty_hint")}</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col h-full">
-                      <p className="text-xs text-muted-foreground mb-3">{t("cabinet.profile.devices_disconnect_hint")}</p>
-                      {/* T-devices-multi (27.05.2026, WolfVPN): группируем устройства по подпискам.
-                          Заголовок группы — «Подписка #N …» (root тоже #0 для единообразия).
-                          Ключ группы — subscriptionId, чтобы корректно прокидывать удаление. */}
-                      {(() => {
-                        const groups = new Map<string, { label: string; items: typeof devices }>();
-                        for (const d of devices) {
-                          const groupKey = d.subscriptionId;
-                          const groupLabel = `Подписка #${d.subscriptionIndex}${d.tariffName ? ` — ${d.tariffName}` : ""}`;
-                          if (!groups.has(groupKey)) groups.set(groupKey, { label: groupLabel, items: [] });
-                          groups.get(groupKey)!.items.push(d);
-                        }
-                        return (
-                          <div className="flex flex-col gap-4">
-                            {Array.from(groups.entries()).map(([groupKey, group]) => (
-                              <div key={groupKey} className="flex flex-col gap-2">
-                                <div className="flex items-center gap-2 px-1">
-                                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">{group.label}</span>
-                                  <span className="text-[11px] text-muted-foreground/70">· {group.items.length}</span>
-                                </div>
-                                <div className="grid grid-cols-1 gap-2">
-                                  {group.items.map((d) => {
-                                    const label = [d.platform, d.deviceModel].filter(Boolean).join(" · ") || (d.hwid.slice(0, 12) + (d.hwid.length > 12 ? "…" : ""));
-                                    // Ключ строки = hwid + subscriptionId (hwid может встретиться в разных подписках).
-                                    const rowKey = `${d.subscriptionId}:${d.hwid}`;
-                                    const isDeleting = deletingHwid === d.hwid;
-                                    return (
-                                      <div key={rowKey} className="group flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-2xl bg-background/50 border border-border/50 transition-all hover:bg-muted/30 dark:bg-white/5 dark:border-white/5 dark:hover:bg-white/10">
-                                        <div className="flex items-center gap-3 min-w-0">
-                                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                                            <Monitor className="h-5 w-5" />
-                                          </div>
-                                          <div className="min-w-0">
-                                            <span className="text-sm font-bold truncate block text-foreground" title={label}>{label}</span>
-                                            {/* T-device-app (27.05.2026, WolfVPN): приложение рядом с устройством. */}
-                                            {d.appName && (
-                                              <span className="text-[11px] inline-block bg-violet-500/15 text-violet-500 dark:text-violet-300 rounded-md px-1.5 py-0.5 mt-0.5 font-medium">
-                                                {d.appName}
-                                              </span>
-                                            )}
-                                            <span className="text-[10px] sm:text-xs text-muted-foreground truncate block font-mono mt-0.5">{d.hwid.slice(0, 16)}…</span>
-                                          </div>
-                                        </div>
-                                        <Button variant="outline" size="sm" className="shrink-0 w-full sm:w-auto rounded-xl h-9 px-3 sm:px-4 shadow-sm border-destructive/20 text-destructive bg-destructive/5 hover:bg-destructive hover:text-white hover:border-destructive dark:bg-destructive/10 transition-all" disabled={isDeleting} onClick={() => deleteDevice(d.hwid, d.subscriptionType, d.subscriptionId)}>
-                                          {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2 opacity-80" />}
-                                          <span>{isDeleting ? t("cabinet.profile.devices_deleting") : t("cabinet.profile.device_disconnect")}</span>
-                                        </Button>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+      </section>
+      <section className="cabinet-settings-section" data-tour="password-change">
+        <header><h2>{t("cabinet.profile.security_heading")}</h2><p>{t("cabinet.profile.security_subtitle")}</p></header>
+        <div className="cabinet-settings-rows">
+          <div className="cabinet-setting-row"><div><span>{t("cabinet.profile.2fa_label")}</span><p>{t(client.totpEnabled ? "cabinet.profile.2fa_enabled" : "cabinet.profile.2fa_multi_level")}</p></div><Button variant="outline" onClick={client.totpEnabled ? openTwoFaDisable : openTwoFaEnable}>{t(client.totpEnabled ? "cabinet.profile.2fa_disable" : "cabinet.profile.2fa_enable")}</Button></div>
+          <div className="cabinet-setting-row"><div><span>{t("cabinet.profile.password_label")}</span><p>{t(client.hasPassword === false ? "cabinet.profile.password_not_set" : "cabinet.profile.password_change_account")}</p></div><Button variant="outline" onClick={()=>client.hasPassword === false && client.email ? setSetPasswordOpen(true) : setChangePasswordOpen(true)}>{t(client.hasPassword === false && client.email ? "cabinet.profile.password_set" : "cabinet.profile.password_change")}</Button></div>
+          {yookassaRecurringEnabled && client.yookassaPaymentMethodTitle && <div className="cabinet-setting-row"><div><span>{t("cabinet.profile.payment_method")}</span><p>{client.yookassaPaymentMethodTitle}</p></div><Button variant="outline" disabled={unlinkingPayment} onClick={handleUnlinkPaymentMethod}>{unlinkingPayment ? <Loader2 size={16} className="animate-spin" /> : t("cabinet.profile.unlink")}</Button></div>}
         </div>
-      </motion.div>
+      </section>
+      <section className="cabinet-settings-section" id="devices">
+        <header><h2>{t("cabinet.workspace.vpn_devices")}</h2><p>{t("cabinet.workspace.vpn_devices_hint")}</p></header>
+        <div className="cabinet-settings-rows">
+          {devicesLoading ? <Loader2 aria-label={t("cabinet.redesign.loading_subscription")} className="animate-spin" size={20} /> : devicesError && devicesError !== "NO_SUBSCRIPTION" ? <div role="alert"><p>{devicesError}</p><p>{t("cabinet.profile.devices_error_hint")}</p></div> : !devices.length ? <div className="cabinet-setting-empty"><p>{t("cabinet.profile.no_devices_title")}</p><small>{t(devicesError === "NO_SUBSCRIPTION" ? "cabinet.profile.devices_no_sub_hint" : "cabinet.profile.devices_empty_hint")}</small></div> : <>
+            <p className="text-sm text-muted-foreground">{t("cabinet.profile.devices_disconnect_hint")}</p>
+            {devices.map(d => <div className="cabinet-setting-row" key={`${d.subscriptionId}:${d.hwid}`}><div><span>{d.tariffName || t("cabinet.redesign.numbered_subscription", {number:d.subscriptionIndex + 1})}</span><p>{[d.platform,d.deviceModel].filter(Boolean).join(" / ") || d.hwid.slice(0,12)}</p><small>{d.appName}{d.appName && " / "}{d.hwid.slice(0,16)}</small></div><Button variant="outline" disabled={deletingHwid === d.hwid} onClick={()=>deleteDevice(d.hwid,d.subscriptionType,d.subscriptionId)}>{deletingHwid === d.hwid ? <Loader2 size={16} className="animate-spin" /> : t("cabinet.profile.device_disconnect")}</Button></div>)}
+          </>}
+        </div>
+      </section>
 
       {!accountOnly && (
       <motion.div
@@ -1404,7 +1021,7 @@ async function startTopUpParitypay() {
       {topupDialog}
 
       <Dialog open={twoFaEnableOpen} onOpenChange={(open) => !open && closeTwoFaEnable()}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-border/50 backdrop-blur-3xl" showCloseButton={!twoFaLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
+        <DialogContent className="cabinet-account-dialog sm:max-w-md p-0 overflow-hidden border-border/50 backdrop-blur-3xl" showCloseButton={!twoFaLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
           <div className="p-6 sm:p-8 flex flex-col items-center text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-primary/10 text-primary mb-6 shadow-inner border border-primary/20">
               <KeyRound className="h-8 w-8" />
@@ -1479,7 +1096,7 @@ async function startTopUpParitypay() {
       </Dialog>
 
       <Dialog open={twoFaDisableOpen} onOpenChange={(open) => !open && setTwoFaDisableOpen(false)}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-border/50 backdrop-blur-3xl" showCloseButton={!twoFaLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
+        <DialogContent className="cabinet-account-dialog sm:max-w-md p-0 overflow-hidden border-border/50 backdrop-blur-3xl" showCloseButton={!twoFaLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
           <div className="p-6 sm:p-8 flex flex-col items-center text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-red-500/10 text-red-500 mb-6 shadow-inner border border-red-500/20">
               <Shield className="h-8 w-8" />
@@ -1513,7 +1130,7 @@ async function startTopUpParitypay() {
       </Dialog>
 
       <Dialog open={changePasswordOpen} onOpenChange={(open) => !open && closeChangePassword()}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-border/50 backdrop-blur-3xl" showCloseButton={!changePasswordLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
+        <DialogContent className="cabinet-account-dialog sm:max-w-md p-0 overflow-hidden border-border/50 backdrop-blur-3xl" showCloseButton={!changePasswordLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
           <div className="p-6 sm:p-8 flex flex-col items-center text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-primary/10 text-primary mb-6 shadow-inner border border-primary/20">
               <KeyRound className="h-8 w-8" />
@@ -1535,17 +1152,19 @@ async function startTopUpParitypay() {
             ) : (
               <div className="flex flex-col gap-4 w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="space-y-3">
+                  <label htmlFor="cabinet-password-current" className="text-sm">{t("cabinet.profile.current_password")}</label>
                   <Input
+                    id="cabinet-password-current"
                     type="password"
-                    placeholder={t("cabinet.profile.current_password")}
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
                     className="h-12 rounded-xl"
                     autoFocus
                   />
+                  <label htmlFor="cabinet-password-new" className="text-sm">{t("cabinet.profile.new_password")}</label>
                   <Input
+                    id="cabinet-password-new"
                     type="password"
-                    placeholder={t("cabinet.profile.new_password")}
                     aria-describedby="change-password-hint"
                     autoComplete="new-password"
                     minLength={6}
@@ -1554,9 +1173,10 @@ async function startTopUpParitypay() {
                     className="h-12 rounded-xl"
                   />
                   <PasswordHint id="change-password-hint" minLength={6} />
+                  <label htmlFor="cabinet-password-confirm" className="text-sm">{t("cabinet.profile.confirm_password")}</label>
                   <Input
+                    id="cabinet-password-confirm"
                     type="password"
-                    placeholder={t("cabinet.profile.confirm_password")}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="h-12 rounded-xl"
@@ -1577,7 +1197,7 @@ async function startTopUpParitypay() {
 
       {/* Установка пароля — для юзеров без пароля (Telegram/Google/Apple) */}
       <Dialog open={setPasswordOpen} onOpenChange={(open) => !open && closeSetPassword()}>
-        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-border/50 backdrop-blur-3xl" showCloseButton={!setPasswordLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
+        <DialogContent className="cabinet-account-dialog sm:max-w-md p-0 overflow-hidden border-border/50 backdrop-blur-3xl" showCloseButton={!setPasswordLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
           <div className="p-6 sm:p-8 flex flex-col items-center text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-primary/10 text-primary mb-6 shadow-inner border border-primary/20">
               <KeyRound className="h-8 w-8" />

@@ -3184,6 +3184,7 @@ const updateSettingsSchema = z.object({
   helpIntroText: z.string().max(8000).nullable().optional(),
   ticketsEnabled: z.boolean().optional(),
   themeAccent: z.string().max(50).optional(),
+  themeMode: z.enum(["light", "dark", "system"]).optional(),
   allowUserThemeChange: z.boolean().optional(),
   forceSubscribeEnabled: z.boolean().optional(),
   forceSubscribeChannelId: z.string().max(200).nullable().optional(),
@@ -4012,6 +4013,13 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.allowUserThemeChange !== undefined) {
     const val = updates.allowUserThemeChange ? "true" : "false";
     await prisma.systemSetting.upsert({ where: { key: "allow_user_theme_change" }, create: { key: "allow_user_theme_change", value: val }, update: { value: val } });
+  }
+  if (updates.themeMode !== undefined) {
+    await prisma.systemSetting.upsert({
+      where: { key: "theme_mode" },
+      create: { key: "theme_mode", value: updates.themeMode },
+      update: { value: updates.themeMode },
+    });
   }
   if (updates.themeAccent !== undefined) {
     await prisma.systemSetting.upsert({

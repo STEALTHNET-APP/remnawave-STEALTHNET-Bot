@@ -2214,6 +2214,10 @@ export const api = {
     return request(`/client/subscription/by-uuid/${encodeURIComponent(uuid)}`, { token });
   },
 
+  async clientRenameSubscription(token: string, id: string, name: string): Promise<{ customName: string }> {
+    return request(`/client/subscription/${encodeURIComponent(id)}/name`, { token, method: "PATCH", body: JSON.stringify({ name }) });
+  },
+
   /** Все подписки клиента (root + secondary) с Remnawave-данными */
   async clientAllSubscriptions(token: string): Promise<{
     items: Array<{
@@ -2223,6 +2227,7 @@ export const api = {
       subscription: unknown;
       isOfflineSnapshot?: boolean;
       tariffDisplayName: string;
+      customName?: string | null;
       remnawaveUuid: string | null;
       tariffId?: string | null;
       trialId?: string | null;
@@ -3627,6 +3632,7 @@ export type UpdateSettingsPayload = {
   botDevicesText?: string | null;
   ticketsEnabled?: boolean;
   themeAccent?: string;
+  themeMode?: "light" | "dark" | "system";
   forceSubscribeEnabled?: boolean;
   forceSubscribeChannelId?: string | null;
   forceSubscribeMessage?: string | null;
@@ -4169,6 +4175,7 @@ export interface AdminSettings {
   ticketsEnabled?: boolean;
   /** Глобальная цветовая тема */
   themeAccent?: string;
+  themeMode?: "light" | "dark" | "system";
   /** Принудительная подписка на канал/группу */
   forceSubscribeEnabled?: boolean;
   forceSubscribeChannelId?: string | null;
@@ -5619,6 +5626,7 @@ export interface PublicConfig {
   trialEnabled?: boolean;
   trialDays?: number;
   themeAccent?: string;
+  themeMode?: "light" | "dark" | "system";
   ticketsEnabled?: boolean;
   sellOptionsEnabled?: boolean;
   sellOptions?: PublicSellOption[];

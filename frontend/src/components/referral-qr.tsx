@@ -19,7 +19,7 @@ function saveFile(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-export function ReferralQrButton({ code, links }: { code: string; links: ReferralLink[] }) {
+export function ReferralQrButton({ code, links, iconOnly = false }: { code: string; links: ReferralLink[]; iconOnly?: boolean }) {
   const { t } = useTranslation();
   const [selected, setSelected] = useState<"site" | "bot">(links[0]?.kind ?? "site");
   const [busy, setBusy] = useState(false);
@@ -72,8 +72,8 @@ export function ReferralQrButton({ code, links }: { code: string; links: Referra
   return (
     <Dialog onOpenChange={() => setError(false)}>
       <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="shrink-0 gap-1.5" aria-label={`${t("referralQr.open")} · ${links.length > 1 ? code : t(`referralQr.${link.kind}`)}`}>
-          <QrCode className="h-4 w-4" />{t("referralQr.open")}
+        <Button type="button" variant="outline" size={iconOnly ? "icon" : "sm"} className="shrink-0 gap-1.5" aria-label={`${t("referralQr.open")} · ${links.length > 1 ? code : t(`referralQr.${link.kind}`)}`}>
+          <QrCode className="h-4 w-4" />{!iconOnly && t("referralQr.open")}
         </Button>
       </DialogTrigger>
       <DialogContent className="w-[calc(100%_-_2rem)] max-w-sm max-h-[90dvh] overflow-y-auto">

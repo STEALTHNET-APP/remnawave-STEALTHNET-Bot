@@ -1,41 +1,28 @@
-/* Use the cabinet's existing theme surfaces and buttons; only catalogue
-   composition is scoped here. Admin gradients and elevation remain in charge. */
-.classic-tariff-catalog { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 28px; align-items: start; }
-.tariff-category-rail { min-width: 0; }
-.tariff-category-list { display: flex; gap: 8px; overflow-x: auto; padding: 3px 3px 8px; }
-.tariff-category-button { display: flex; align-items: center; gap: 12px; padding: 14px; min-width: 200px; max-width: 280px; flex-shrink: 0; }
-.tariff-plan-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
-.tariff-plan-card { display: flex; flex-direction: column; min-width: 0; padding: 28px; }
-.tariff-plan-heading { min-height: 32px; }
-.tariff-plan-price { padding-block: 24px; }
-.tariff-price-amount { font-size: clamp(36px, 3.5vw, 48px); line-height: 1.1; overflow-wrap: anywhere; }
-.tariff-duration-picker { min-width: 0; margin-bottom: 24px; }
-.tariff-plan-features { display: grid; gap: 20px; padding-top: 24px; margin-bottom: 28px; }
-.tariff-plan-action { margin-top: auto; }
-@media (min-width: 640px) {
-  .tariff-plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tariff-plan-grid[data-count="1"] { grid-template-columns: minmax(0, 520px); }
-}
-@media (min-width: 1024px) {
-  .classic-tariff-catalog { grid-template-columns: 224px minmax(0, 1fr); gap: 32px; }
-  .tariff-category-rail { position: sticky; top: 104px; }
-  .tariff-category-list { flex-direction: column; overflow: visible; }
-  .tariff-category-button { min-width: 0; max-width: none; width: 100%; }
-}
-@media (min-width: 1440px) {
-  .tariff-plan-grid[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .tariff-plan-grid[data-count="3"] .tariff-plan-card { padding: 24px; }
-}
-@media (max-width: 639px) {
-  .classic-tariff-catalog { gap: 20px; }
-  .tariff-plan-card { padding: 24px; }
-  .tariff-category-button { padding: 12px; }
-}
-
-/* Shared tracks align prices and included features when descriptions or the
-   number of duration options differ. Older browsers keep the flex layout. */
+.classic-tariff-catalog { display: grid; min-width: 0; gap: 32px; }
+.tariff-category-list { display: flex; gap: 6px; overflow-x: auto; padding-block: 4px; border-bottom: 1px solid hsl(var(--border)); }
+.tariff-category-button { display: flex; align-items: center; gap: 8px; padding: 12px 16px; flex-shrink: 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: hsl(var(--muted-foreground)); background: transparent; }
+.tariff-category-button[aria-pressed="true"] { color: hsl(var(--foreground)); border-bottom-color: hsl(var(--foreground)); }
+.tariff-category-button:hover { background: hsl(var(--muted)); }
+.tariff-category-count { font-size: 12px; color: hsl(var(--muted-foreground)); }
+.tariff-plan-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+.tariff-plan-grid[data-count="1"] { grid-template-columns: minmax(0,640px); }
+.tariff-plan-card { display: grid; grid-template-rows: auto auto auto 1fr auto; gap: 24px; min-width: 0; padding: 28px; border-radius: 8px; background: hsl(var(--card)); }
+.tariff-plan-heading h3 { font-size: 22px; font-weight: 600; }
+.tariff-plan-price { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 16px; }
+.tariff-price-amount { font-size: 36px; line-height: 1.15; letter-spacing: -.04em; font-weight: 550; overflow-wrap: anywhere; }
+.tariff-duration-picker { min-width: 0; }
+.tariff-plan-features { display: flex; flex-wrap: wrap; gap: 24px; padding-top: 20px; }
+.tariff-plan-action { align-self: end; }
 @supports (grid-template-rows: subgrid) {
-  @media (min-width: 640px) {
-    .tariff-plan-card { display: grid; grid-template-rows: subgrid; grid-row: span 5; row-gap: 0; }
-  }
+  .tariff-plan-card { grid-template-rows: subgrid; grid-row: span 5; }
 }
+@media (max-width:767px) {
+ .classic-tariff-catalog { gap: 24px; }
+ .tariff-plan-grid { grid-template-columns: minmax(0,1fr); }
+ .tariff-plan-card { padding: 22px; gap: 20px; }
+ .tariff-category-button { padding-inline: 12px; }
+}
+body[data-cabinet-ui="minimal"] .classic-cabinet .tariff-duration-highlight { position: absolute; inset: 0; border: 1px solid hsl(var(--foreground)); background: hsl(var(--muted)); border-radius: 7px; pointer-events: none; }
+body[data-cabinet-ui="minimal"] .classic-cabinet .tariff-duration-picker .tariff-duration-label { position: relative; z-index: 1; background: transparent !important; border: 1px solid hsl(var(--border)); border-radius: 7px; }
+body[data-cabinet-ui="minimal"] .classic-cabinet .tariff-duration-picker input:checked ~ .tariff-duration-label { border-color: transparent; background: transparent !important; }
+.cabinet-animated-money { font-variant-numeric: tabular-nums; }
