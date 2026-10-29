@@ -4741,19 +4741,19 @@ adminRouter.post("/tickets/bulk-status", asyncRoute(async (req, res) => {
     // Закрываем только открытые тикеты (чтобы не сбрасывать таймер retention у уже закрытых)
     const updateOpen = await prisma.ticket.updateMany({
       where: { id: { in: ticketIds }, status: { not: "closed" } },
-      data: { status: "closed", closedAt: new Date() },
+      data: { status: "closed", closedAt: new Date(), updatedAt: new Date() },
     });
     // Если среди закрытых были легаси тикеты с closedAt == null, дозаполняем
     await prisma.ticket.updateMany({
       where: { id: { in: ticketIds }, status: "closed", closedAt: null },
-      data: { closedAt: new Date() },
+      data: { closedAt: new Date(), updatedAt: new Date() },
     });
     return res.json({ success: true, count: ticketIds.length, updatedCount: updateOpen.count, status });
   } else {
     // Открываем все выбранные тикеты со сбросом closedAt
     const result = await prisma.ticket.updateMany({
       where: { id: { in: ticketIds } },
-      data: { status: "open", closedAt: null },
+      data: { status: "open", closedAt: null, updatedAt: new Date() },
     });
     return res.json({ success: true, count: result.count, status });
   }
@@ -4762,8 +4762,12 @@ adminRouter.post("/tickets/bulk-status", asyncRoute(async (req, res) => {
 // Массовый ответ выбранным тикетам (с поддержкой фото-вложений и опции автозакрытия)
 adminRouter.post("/tickets/bulk-reply", uploadTicketAttachment.array("files", 5), asyncRoute(async (req, res) => {
   const content = pickTicketField(req, "content");
-  const closeAfterReplyRaw = pickTicketField(req, "closeAfterReply");
-  const closeAfterReply = closeAfterReplyRaw === "true" || closeAfterReplyRaw === "1";
+  const rawClose = (req.body as Record<string, unknown> | undefined)?.closeAfterReply;
+  const closeAfterReply =
+    rawClose === true ||
+    rawClose === "true" ||
+    rawClose === "1" ||
+    rawClose === 1;
 
   let ticketIds: string[] = [];
   const rawTicketIds = (req.body as Record<string, unknown> | undefined)?.ticketIds;

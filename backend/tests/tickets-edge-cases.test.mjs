@@ -27,6 +27,9 @@ try {
     assert.equal(result.status, 200);
     const after = await prisma.ticket.findUniqueOrThrow({ where: { id: ids[1] } });
     assert.equal(after.closedAt.getTime(), before.closedAt.getTime());
+    const openAfter = await prisma.ticket.findUniqueOrThrow({ where: { id: ids[0] } });
+    assert.equal(openAfter.status, 'closed');
+    assert.ok(openAfter.closedAt instanceof Date);
   });
   await test('bulk reply reopens all recipients and creates one message per ticket', async () => {
     const form = new FormData();
@@ -41,6 +44,20 @@ try {
       assert.equal(ticket.status, 'open');
       assert.equal(ticket.closedAt, null);
       assert.equal(ticket.messages.length, 1);
+    }
+  });
+  await test('bulk reply with boolean closeAfterReply in JSON closes all tickets and records closedAt', async () => {
+    const result = await request('/admin/tickets/bulk-reply', {
+      ticketIds: ids,
+      content: 'Mass response with closing',
+      closeAfterReply: true,
+    });
+    assert.equal(result.status, 200, JSON.stringify(result.data));
+    assert.equal(result.data.closedAfterReply, true);
+    for (const id of ids) {
+      const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id } });
+      assert.equal(ticket.status, 'closed');
+      assert.ok(ticket.closedAt instanceof Date);
     }
   });
   await test('client reply atomically reopens a closed ticket; another client cannot delete it', async () => {

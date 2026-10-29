@@ -62,6 +62,7 @@ export function parseAttachments(raw: string | null | undefined): TicketAttachme
 export function pickField(req: Request, key: string): string {
   const v = (req.body as Record<string, unknown> | undefined)?.[key];
   if (typeof v === "string") return v;
+  if (typeof v === "boolean" || typeof v === "number") return String(v);
   if (Array.isArray(v) && typeof v[0] === "string") return v[0];
   return "";
 }
