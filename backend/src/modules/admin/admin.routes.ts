@@ -3053,7 +3053,7 @@ const updateSettingsSchema = z.object({
   logoBot: z.string().max(5_500_000).nullable().optional(),
   favicon: z.string().max(5_500_000).nullable().optional(),
   ogImage: z.string().max(5_500_000).nullable().optional(),
-  cabinetDesign: z.enum(["classic", "stealth", "aurora"]).optional(),
+  cabinetDesign: z.enum(["classic", "modern", "stealth", "aurora"]).optional(),
   cabinetDesignApplyInBrowser: z.boolean().optional(),
   remnaApiUrl: z.string().trim().max(1000).refine(value => !value || /^https?:\/\//.test(value) && URL.canParse(value)).nullable().optional(),
   remnaAdminToken: z.string().trim().max(2000).nullable().optional(),

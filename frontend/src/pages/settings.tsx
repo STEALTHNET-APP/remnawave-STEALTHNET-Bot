@@ -79,6 +79,7 @@ const DEFAULT_BOT_BUTTONS: BotButtonItem[] = [
   { id: "topup", visible: true, label: " Пополнить баланс", order: 2, style: "success", emojiKey: "CARD" },
   { id: "referral", visible: true, label: " Реферальная программа", order: 3, style: "primary", emojiKey: "LINK" },
   { id: "trial", visible: true, label: " Попробовать бесплатно", order: 4, style: "success", emojiKey: "TRIAL" },
+  { id: "renew", visible: true, label: "🔄 Продлить подписку", order: 4.5, style: "primary" },
   { id: "vpn", visible: true, label: " Подключиться к VPN", order: 5, style: "danger", emojiKey: "SERVERS", onePerRow: true },
   { id: "cabinet", visible: true, label: " Web Кабинет", order: 6, style: "primary", emojiKey: "SERVERS" },
   { id: "tickets", visible: true, label: " Тикеты", order: 6.5, style: "primary", emojiKey: "NOTE" },
@@ -261,6 +262,7 @@ const BOT_BUTTON_HUMAN_NAMES: Record<string, string> = {
   referral: "Реферальная программа",
   trial: "Бесплатный триал",
   vpn: "Подключение к VPN",
+  renew: "Продление существующей подписки",
   cabinet: "Открыть веб-кабинет",
   tickets: "Тикеты поддержки",
   support: "Связь с поддержкой",
@@ -1854,12 +1856,12 @@ export function SettingsPage() {
                   </p>
                 </div>
 
-                {/* Cabinet design selector — переключение между Classic и Stealth UI кабинета */}
                 <div className="space-y-2">
-                  <Label>Дизайн мини-аппа клиента</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <Label>Дизайн клиентского Mini App</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {([
-                      { v: "classic", title: "Classic", desc: "Текущий glass-дизайн с настройкой темы и акцента", swatch: "bg-muted" },
+                      { v: "modern", title: "Новый кабинет", desc: "Новый интерфейс: компактные подписки, тарифы, баланс и поддержка. Оформление настраивается в редакторе кабинета.", swatch: "bg-muted" },
+                      { v: "classic", title: "Classic", desc: "Совместимый вариант стандартного кабинета", swatch: "bg-muted" },
                       { v: "stealth", title: "Stealth", desc: "Тёмный неон с red-акцентом, network-фоном и stadium-кнопками", swatch: "bg-muted" },
                       { v: "aurora", title: "Aurora", desc: "Светлый: крупная градиентная карточка подписки, плитки-метрики и плавающее меню из 4 вкладок", swatch: "bg-muted" },
                     ] as const).map((d) => {
@@ -1892,8 +1894,8 @@ export function SettingsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium">Применять также в обычном браузере</div>
                       <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                        По умолчанию выбранный дизайн используется только в Telegram Mini App. В обычном браузере (web кабинет) клиенты видят Classic.
-                        Включи если хочешь чтобы Stealth применялся и на сайте.
+                        По умолчанию выбранный дизайн используется только в Telegram Mini App. В обычном браузере (web кабинет) клиенты видят новый стандартный кабинет.
+                        Включите, чтобы выбранный вариант применялся и на сайте.
                       </p>
                     </div>
                   </label>

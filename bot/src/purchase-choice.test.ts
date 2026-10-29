@@ -15,6 +15,7 @@ test("shows renew-or-new choice before a multi-period tariff already owned by th
       subscriptions,
       isBypass: false,
       isSingleCategory: false,
+      multiSubscriptionsEnabled: true,
     }),
     true,
   );
@@ -27,6 +28,7 @@ test("does not reopen the choice after the client explicitly selected a purchase
       subscriptions,
       isBypass: true,
       isSingleCategory: false,
+      multiSubscriptionsEnabled: true,
     }),
     false,
   );
@@ -39,6 +41,7 @@ test("does not offer renewal when the client has no subscription with the tariff
       subscriptions,
       isBypass: false,
       isSingleCategory: false,
+      multiSubscriptionsEnabled: true,
     }),
     false,
   );

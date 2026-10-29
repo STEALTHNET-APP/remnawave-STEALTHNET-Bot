@@ -10,11 +10,12 @@ test("classic remains the default and switching back restores callbacks", () => 
   assert.ok(defaultMenu.inline_keyboard.flat().some(b => "callback_data" in b && b.callback_data === "menu:tariffs"));
 });
 
-test("web menu sends every built-in section to HTTPS Mini App without callbacks", () => {
+test("web menu opens sections in Mini App and retains the VPN picker without a direct target", () => {
   const buttons = mainMenu({ ...opts, menuMode: "web" }).inline_keyboard.flat();
   assert.ok(buttons.length >= 20);
-  assert.ok(buttons.every(b => "web_app" in b || "url" in b));
-  for (const route of ["tariffs", "menu/devices", "menu/topup", "menu/trial", "menu/promocode", "menu/support", "menu/tg-proxy", "subscribe", "gifts", "proxy", "singbox", "extra-options"]) {
+  assert.ok(buttons.every(b => "web_app" in b || "url" in b || ("callback_data" in b && b.callback_data === "menu:vpn")));
+  assert.ok(buttons.some(b => "callback_data" in b && b.callback_data === "menu:vpn"));
+  for (const route of ["tariffs", "menu/devices", "menu/topup", "menu/trial", "menu/promocode", "menu/support", "menu/tg-proxy", "gifts", "proxy", "singbox", "extra-options"]) {
     assert.ok(buttons.some(b => "web_app" in b && b.web_app.url === `https://panel.example/cabinet/${route}`), route);
   }
 });

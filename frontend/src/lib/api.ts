@@ -3507,7 +3507,7 @@ export type UpdateSettingsPayload = {
   logoBot?: string | null;
   favicon?: string | null;
   ogImage?: string | null;
-  cabinetDesign?: "classic" | "stealth" | "aurora";
+  cabinetDesign?: "classic" | "modern" | "stealth" | "aurora";
   rouletteEnabled?: boolean;
   remnaClientUrl?: string | null;
   smtpHost?: string | null;
@@ -4027,7 +4027,7 @@ export interface AdminSettings {
   logoBot?: string | null;
   favicon?: string | null;
   ogImage?: string | null;
-  cabinetDesign?: "classic" | "stealth" | "aurora";
+  cabinetDesign?: "classic" | "modern" | "stealth" | "aurora";
   remnaClientUrl?: string | null;
   smtpHost?: string | null;
   smtpPort?: number;
@@ -5605,7 +5605,7 @@ export interface PublicConfig {
   logo?: string | null;
   favicon?: string | null;
   ogImage?: string | null;
-  cabinetDesign?: "classic" | "stealth" | "aurora";
+  cabinetDesign?: "classic" | "modern" | "stealth" | "aurora";
   remnaClientUrl?: string | null;
   publicAppUrl?: string | null;
   telegramBotUsername?: string | null;

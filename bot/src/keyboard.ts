@@ -154,6 +154,7 @@ const MENU_IDS: Record<string, string> = {
   referral: "menu:referral",
   trial: "menu:trial",
   vpn: "menu:vpn",
+  renew: "menu:renew",
   support: "menu:support",
   promocode: "menu:promocode",
   extra_options: "menu:extra_options",
@@ -179,6 +180,7 @@ const DEFAULT_BUTTONS: BotButtonConfig[] = [
   // T11 (11.05.2026): эмодзи ↔️ → 👥 по эталону скрина 1.
   { id: "referral", visible: true, label: "👥 Реферальная программа", order: 3, style: "primary" },
   { id: "trial", visible: true, label: "🎁 Бесплатный Тест", order: 4, style: "success" },
+  { id: "renew", visible: true, label: "🔄 Продлить подписку", order: 4.5, style: "primary" },
   { id: "vpn", visible: true, label: "🌐 Подключиться к VPN", order: 5, style: "danger", onePerRow: true },
   { id: "cabinet", visible: true, label: "🌐 Web Кабинет", order: 6, style: "primary" },
   { id: "tickets", visible: true, label: "🎫 Тикеты", order: 6.5, style: "primary" },
@@ -223,6 +225,8 @@ export function mainMenu(opts: {
   liteMode?: boolean;
   showTrial: boolean;
   showVpn: boolean;
+  showRenew?: boolean;
+  connectTarget?: { url: string } | { web_app: { url: string } };
   showProxy?: boolean;
   showSingbox?: boolean;
   appUrl: string | null;
@@ -243,6 +247,9 @@ export function mainMenu(opts: {
   const configButtons = opts.botButtons ?? [];
   const fromConfig = configButtons.length > 0;
   let list = (fromConfig ? configButtons : DEFAULT_BUTTONS).map(b => ({ ...b }));
+  if (fromConfig && !list.some((b) => b.id === "renew")) {
+    list.push({ ...DEFAULT_BUTTONS.find(b => b.id === "renew")! });
+  }
   if (fromConfig && !list.some((b) => b.id === "devices")) {
     list.push({ id: "devices", visible: true, label: "📱 Устройства", order: 1.5, style: "primary" });
   }
@@ -279,6 +286,7 @@ export function mainMenu(opts: {
     .filter((b) => {
       if (b.id === "trial") return opts.showTrial;
       if (b.id === "vpn") return opts.showVpn;
+      if (b.id === "renew") return opts.showRenew === true;
       if (b.id === "proxy" || b.id === "my_proxy") return opts.showProxy === true;
       if (b.id === "singbox" || b.id === "my_singbox") return opts.showSingbox === true;
       if (b.id === "cabinet") return !!opts.appUrl?.trim();
@@ -289,7 +297,7 @@ export function mainMenu(opts: {
       return true;
     })
     .sort((a, b) => a.order - b.order);
-  if (opts.liteMode) list = list.filter(b => ["tariffs", "my_subs", "vpn", "cabinet", "topup", "trial", "support"].includes(b.id));
+  if (opts.liteMode) list = list.filter(b => ["tariffs", "my_subs", "vpn", "renew", "cabinet", "topup", "trial", "support"].includes(b.id));
   const base = opts.appUrl?.replace(/\/$/, "") ?? "";
   const perRow = opts.buttonsPerRow === 2 ? 2 : 1;
   const items: { node: InlineButton | WebAppButton | UrlButton; onePerRow: boolean }[] = [];
@@ -308,7 +316,12 @@ export function mainMenu(opts: {
       if (iconId) node.icon_custom_emoji_id = iconId;
       if (styleForBtn) node.style = styleForBtn;
       items.push({ node, onePerRow });
-    } else if (opts.menuMode === "web" && !(!opts.liteMode && opts.groupCabinet && b.id === "profile") && menuWebAppUrl(base, b.id)) {
+    } else if (b.id === "vpn" && opts.connectTarget) {
+      const node: WebAppButton | UrlButton = { text: labelForIcon, ...opts.connectTarget };
+      if (iconId) node.icon_custom_emoji_id = iconId;
+      if (styleForBtn) node.style = styleForBtn;
+      items.push({ node, onePerRow });
+    } else if (opts.menuMode === "web" && b.id !== "vpn" && !(!opts.liteMode && opts.groupCabinet && b.id === "profile") && menuWebAppUrl(base, b.id)) {
       const node: WebAppButton = { text: labelForIcon, web_app: { url: menuWebAppUrl(base, b.id)! } };
       if (iconId) node.icon_custom_emoji_id = iconId;
       if (styleForBtn) node.style = styleForBtn;
@@ -331,10 +344,6 @@ export function mainMenu(opts: {
         items.push({ node: u, onePerRow });
       }
     } else if (b.id === "vpn") {
-      // кнопка «🔌 Подключиться» теперь ВСЕГДА callback `menu:vpn`,
-      // а не прямой URL/WebApp. Внутри handler решает: 1 подписка → выдача ссылки,
-      // 2+ подписок → picker. Раньше была URL/WebApp напрямую → handler не отрабатывал →
-      // у юзеров с несколькими подписками не было выбора.
       items.push({ node: btn(b.label, MENU_IDS[b.id], styleForBtn, iconId), onePerRow });
     } else if (b.id === "tickets" && base) {
       const w: WebAppButton = { text: labelForIcon, web_app: { url: `${base}/cabinet/tickets` } };

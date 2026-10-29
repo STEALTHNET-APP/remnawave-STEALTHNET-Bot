@@ -16,6 +16,7 @@ import { ignoreNotModified } from "./ignore-not-modified.js";
 import { ProxyAgent as UndiciProxyAgent } from "undici";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import * as api from "./api.js";
+import { renewableSubscriptions, connectableSubscriptions, directConnectionTarget } from "./subscription-actions.js";
 import { shouldShowPurchaseChoice } from "./purchase-choice.js";
 import {
   mainMenu,
@@ -2233,10 +2234,9 @@ async function handleStart(ctx: Context, payload: string) {
     const markup = mainMenu({
       liteMode: config?.liteMode === true,
       showTrial,
-      // кнопка «🔌 Подключиться автоматически» показывается
-      // если есть ХОТЯ БЫ ОДНА подписка (root ИЛИ secondary, включая триал). Раньше зависела
-      // только от vpnUrl (root), и юзеры с одним триалом не видели кнопку.
-      showVpn: Boolean(vpnUrl) || (allSubsRes.items?.length ?? 0) > 0,
+      showVpn: connectableSubscriptions(allSubsRes.items ?? []).length > 0,
+      showRenew: renewableSubscriptions(allSubsRes.items ?? []).length > 0,
+      connectTarget: directConnectionTarget(allSubsRes.items ?? [], config?.publicAppUrl, config?.useRemnaSubscriptionPage === true),
       showProxy,
       showSingbox,
       showGift: config?.giftSubscriptionsEnabled === true,
@@ -2837,8 +2837,9 @@ composer.on("callback_query:data", async (ctx) => {
       const markup = mainMenu({
       liteMode: config?.liteMode === true,
         showTrial,
-        // T-fix (11.05.2026): кнопка vpn доступна если есть ЛЮБАЯ подписка (включая secondary/триал).
-        showVpn: Boolean(vpnUrl) || (allSubsRes.items?.length ?? 0) > 0,
+        showVpn: connectableSubscriptions(allSubsRes.items ?? []).length > 0,
+        showRenew: renewableSubscriptions(allSubsRes.items ?? []).length > 0,
+        connectTarget: directConnectionTarget(allSubsRes.items ?? [], config?.publicAppUrl, config?.useRemnaSubscriptionPage === true),
         showProxy,
         showSingbox,
         showGift: config?.giftSubscriptionsEnabled === true,
@@ -3483,8 +3484,9 @@ composer.on("callback_query:data", async (ctx) => {
       const backMarkup = mainMenu({
       liteMode: config?.liteMode === true,
         showTrial,
-        // T-fix (11.05.2026): кнопка vpn доступна если есть ЛЮБАЯ подписка (включая secondary/триал).
-        showVpn: Boolean(vpnUrl) || (allSubsRes.items?.length ?? 0) > 0,
+        showVpn: connectableSubscriptions(allSubsRes.items ?? []).length > 0,
+        showRenew: renewableSubscriptions(allSubsRes.items ?? []).length > 0,
+        connectTarget: directConnectionTarget(allSubsRes.items ?? [], config?.publicAppUrl, config?.useRemnaSubscriptionPage === true),
         showProxy,
         showSingbox,
         showGift: config?.giftSubscriptionsEnabled === true,
@@ -5892,13 +5894,12 @@ if (data.startsWith("pay_tariff_paritypay:")) {
     // Короткий callback (только subscriptionId) — пара tariffId+subId не влезает в 64-байтовый
     // Telegram callback_data. Резолвим tariffId из подписки на стороне бота.
     // Backend: metadata.extendsSecondarySubId → extendSecondarySubscription (работает для любой Subscription).
-    if (data.startsWith("pay_tariff_ext:")) {
-      const sid = data.slice("pay_tariff_ext:".length);
+    const startSubscriptionRenewal = async (sid: string) => {
       try {
         const subs = await api.getAllSubscriptions(token);
         // Раньше: фильтр type === "secondary". Теперь — любая подписка с этим id (root тоже).
         const sec = subs.items?.find((it) => it.id === sid);
-        if (!sec || !sec.tariffId) {
+        if (!sec || renewableSubscriptions([sec]).length === 0) {
           await editMessageContent(ctx, "❌ Подписка или тариф не найдены.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
           return;
         }
@@ -6038,20 +6039,27 @@ if (data.startsWith("pay_tariff_paritypay:")) {
         const msg = e instanceof Error ? e.message : "Ошибка загрузки";
         await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
       }
+    };
+
+    if (data.startsWith("pay_tariff_ext:")) {
+      await startSubscriptionRenewal(data.slice("pay_tariff_ext:".length));
       return;
     }
 
     // picker подписок клиента с этим tariffId для продления.
     // После выбора подписки → переход на pay_tariff_ext:<sid> (готовый flow продления secondary).
-    if (data.startsWith("renew_pick:")) {
-      const tariffId = data.slice("renew_pick:".length);
+    const showRenewalChoice = async (tariffId?: string) => {
       try {
         const all = await api.getAllSubscriptions(token);
-        const matching = (all.items ?? []).filter((it) => it.tariffId === tariffId);
+        const matching = renewableSubscriptions(all.items ?? [], tariffId);
         if (matching.length === 0) {
-          await editMessageContent(ctx, "❌ У вас нет подписок с этим тарифом — нечего продлевать.", {
+          await editMessageContent(ctx, "У вас нет подписок, доступных для продления.", {
             inline_keyboard: [[{ text: "🏠 Главное меню", callback_data: "menu:main" }]],
           });
+          return;
+        }
+        if (matching.length === 1) {
+          await startSubscriptionRenewal(matching[0].id);
           return;
         }
         // сортируем по subscriptionIndex —
@@ -6077,19 +6085,23 @@ if (data.startsWith("pay_tariff_paritypay:")) {
           const typeText = idx === 0 ? "🌟 Главная" : `Подписка #${idx}`;
           const isBlocked = blockedSet.has(s.id);
           const blockedPrefix = isBlocked ? "🚫 " : "";
-          bodyLines.push(`${blockedPrefix}${info.statusEmojiSmall} ${typeText} — ${info.daysStr} до ${info.dateStr}${info.trafficSuffix}`);
+          bodyLines.push(`${blockedPrefix}${info.statusEmojiSmall} ${typeText} · ${s.tariffDisplayName} — ${info.daysStr} до ${info.dateStr}${info.trafficSuffix}`);
           // ВСЕ подписки идут через pay_tariff_ext:<id> — единый flow продления.
           // Заблокированные тоже ведут в pay_tariff_ext — там pre-check покажет сообщение.
           const callback = `pay_tariff_ext:${s.id}`;
-          const btnLabel = `${blockedPrefix}${idx === 0 ? "🌟 Главная" : "#" + idx} ${info.daysStr}`;
+          const btnLabel = `${blockedPrefix}${idx === 0 ? "🌟 Главная" : "#" + idx} · ${s.tariffDisplayName} · ${info.daysStr}`;
           rows.push([{ text: btnLabel.slice(0, 60), callback_data: callback.slice(0, 64) }]);
         }
-        { const bk = backButton(config?.botEmojis ?? null); rows.push([{ text: bk.text, callback_data: `pay_tariff:${tariffId}` }]); }
+        { const bk = backButton(config?.botEmojis ?? null); rows.push([{ text: bk.text, callback_data: tariffId ? "menu:tariffs" : "menu:main" }]); }
         await editMessageContent(ctx, bodyLines.join("\n"), { inline_keyboard: rows });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Ошибка";
         await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
       }
+    };
+
+    if (data === "menu:renew" || data.startsWith("renew_pick:")) {
+      await showRenewalChoice(data === "menu:renew" ? undefined : data.slice("renew_pick:".length));
       return;
     }
 
@@ -6114,6 +6126,11 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       //            extendSecondarySubscription (продлевает существующую, НЕ создаёт новую).
       const isBurnBypass = parts[1] === "burn";
       const isAddBypass = parts[1] === "add";
+      if (isAddBypass && config?.multiSubscriptionsEnabled !== true) {
+        addsubPending.delete(userId);
+        await editMessageContent(ctx, "Покупка дополнительных подписок отключена. Выберите тариф заново.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
       const isExtsec = parts[1] === "extsec" && parts.length >= 3;
       const extsecSecondaryId = isExtsec ? parts.slice(2).join(":") : null;
       // r — маркер «продление root» из renew_pick.
@@ -6156,12 +6173,25 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       // конвертирует/продлевает существующую подписку (бэк делает это сам), поэтому
       // сразу ведём на экран оплаты, где convNote разложит «подписка будет продлена».
       const isSingleCategory = items?.find((c: TariffCategory) => c.tariffs.some((t) => t.id === tariffId))?.singleSubscriptionMode === true;
+      const canOfferNewSubscription = config?.multiSubscriptionsEnabled === true && !isSingleCategory;
+      if (methodIdFromBtn == null && !isBypass && config?.multiSubscriptionsEnabled !== true) {
+        try {
+          const all = await api.getAllSubscriptions(token);
+          if (renewableSubscriptions(all.items ?? [], tariff.id).length > 0) {
+            await showRenewalChoice(tariff.id);
+            return;
+          }
+        } catch {
+          await editMessageContent(ctx, "Не удалось проверить подписки. Повторите попытку.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+          return;
+        }
+      }
 
       // диалог «Покупка тарифа из другой категории» УБРАН.
       // Раньше при клике на тариф другой категории показывался диалог-промежуток. Юзер не хотел
       // лишнего шага → теперь сразу автоматически идём на «купить как новую подписку» (addsubPending),
       // флоу длительности/устройств/оплаты не меняется, на webhook'е создастся параллельная sub.
-      if (methodIdFromBtn == null && !isBypass) {
+      if (methodIdFromBtn == null && !isBypass && config?.multiSubscriptionsEnabled === true) {
         try {
           const me = await api.getMe(token);
           const newCategory = items?.find((c) => c.tariffs.some((t) => t.id === tariffId));
@@ -6189,7 +6219,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
           // Сначала явно фиксируем намерение: продлить существующую подписку или
           // оформить новую. Без этого много-срочный тариф сразу открывал длительности,
           // и пользователь мог случайно создать параллельную подписку.
-          if (!isBypass && !isSingleCategory) {
+          if (!isBypass && canOfferNewSubscription) {
             try {
               const all = await api.getAllSubscriptions(token);
               if (shouldShowPurchaseChoice({
@@ -6197,6 +6227,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
                 subscriptions: all.items ?? [],
                 isBypass,
                 isSingleCategory,
+                multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
               })) {
                 const desc = ((tariff as TariffItem & { description?: string | null }).description ?? "").trim();
                 await editMessageContent(ctx, `${desc || tariff.name}\n\nУ вас уже есть подписка с этим тарифом. Что хотите сделать?`, {
@@ -6248,7 +6279,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
           // single-режим: пропускаем выбор «Продлить / Купить новую» —
           // покупка и так конвертирует/продлит существующую подписку, экран оплаты ниже
           // (showPaymentMethodsForTariff) сам покажет пояснение через convNote.
-          if (!isBypass && !isSingleCategory) {
+          if (!isBypass && canOfferNewSubscription) {
             try {
               const all = await api.getAllSubscriptions(token);
               const hasMine = (all.items ?? []).some((it) => it.tariffId === tariff.id);
@@ -7126,7 +7157,7 @@ if (data.startsWith("topup_paritypay:")) {
       //   • 2+ подписок                   → picker подписок → каждая ведёт на sub:connect:
       try {
         const all = await api.getAllSubscriptions(token);
-        const items = all.items ?? [];
+        const items = connectableSubscriptions(all.items ?? []);
         if (items.length === 0) {
           await editMessageContent(ctx, _t("vpn.link_unavailable", lang), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
           return;
@@ -8793,7 +8824,9 @@ async function groupedProfileMenu(config: Awaited<ReturnType<typeof api.getPubli
     liteMode: config.liteMode === true,
     section: "profile", groupCabinet: true,
     showTrial: trials.hasAnyEnabled ? trials.items.length > 0 : Boolean(config.trialEnabled && !trialUsed),
-    showVpn: subscriptions.items.length > 0,
+    showVpn: connectableSubscriptions(subscriptions.items).length > 0,
+    showRenew: renewableSubscriptions(subscriptions.items).length > 0,
+    connectTarget: directConnectionTarget(subscriptions.items, config.publicAppUrl, config.useRemnaSubscriptionPage === true),
     showProxy: proxy.items.some(c => c.tariffs.length > 0),
     showSingbox: singbox.items.some(c => c.tariffs.length > 0),
     appUrl: config.publicAppUrl ?? null,

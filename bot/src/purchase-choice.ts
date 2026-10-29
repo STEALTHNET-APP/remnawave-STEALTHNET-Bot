@@ -7,7 +7,8 @@ export function shouldShowPurchaseChoice(input: {
   subscriptions: SubscriptionPurchaseCandidate[];
   isBypass: boolean;
   isSingleCategory: boolean;
+  multiSubscriptionsEnabled: boolean;
 }): boolean {
-  if (input.isBypass || input.isSingleCategory) return false;
+  if (!input.multiSubscriptionsEnabled || input.isBypass || input.isSingleCategory) return false;
   return input.subscriptions.some((subscription) => subscription.tariffId === input.tariffId);
 }

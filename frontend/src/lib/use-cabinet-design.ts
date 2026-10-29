@@ -1,26 +1,8 @@
-/**
- * Хук для чтения текущего дизайна кабинета (classic | stealth) из публичного
- * конфига.
- *
- * ─────────────────────────────────────────────────────────────────────
- *  ПРАВИЛО: дизайн `stealth` — это **дизайн мини-аппы Telegram**.
- *  В обычном браузере (web cabinet) принудительно классический дизайн,
- *  даже если оператор выбрал Stealth в настройках. Stealth применяется
- *  только если страница открыта внутри Telegram WebApp.
- *
- *  Это разделение нужно потому что Stealth UI (тёмная неоновая тема,
- *  bottom-tabs навигация, full-height layout) рассчитан на мобильный
- *  вьюпорт мини-аппы и плохо смотрится в desktop-браузере.
- * ─────────────────────────────────────────────────────────────────────
- *
- * Кэшируется в localStorage чтобы при следующем открытии не было
- * мерцания дефолтного classic перед загрузкой.
- */
-
 import { useEffect, useState } from "react";
 import { getPublicConfigCached } from "./public-config";
 
-export type CabinetDesign = "classic" | "stealth" | "aurora";
+import { normalizeCabinetAppearance, resolveCabinetRenderer, type CabinetAppearance, type CabinetRenderer } from "./cabinet-design-policy";
+export type CabinetDesign = CabinetRenderer;
 
 const CACHE_KEY = "cabinet_design_cache";
 
@@ -37,16 +19,16 @@ function isInsideTelegramMiniApp(): boolean {
   }
 }
 
-type DesignCache = { design: CabinetDesign; applyInBrowser: boolean };
+type DesignCache = { design: CabinetAppearance; applyInBrowser: boolean };
 
 function readCache(): DesignCache {
   try {
     const v = localStorage.getItem(CACHE_KEY);
     if (!v) return { design: "classic", applyInBrowser: false };
     // Поддерживаем legacy-формат: значение строкой "stealth"|"classic"
-    if (v === "stealth" || v === "classic" || v === "aurora") return { design: v, applyInBrowser: false };
+    if (v === "stealth" || v === "classic" || v === "aurora" || v === "modern") return { design: v, applyInBrowser: false };
     const parsed = JSON.parse(v) as Partial<DesignCache>;
-    const design: CabinetDesign = parsed.design === "stealth" || parsed.design === "aurora" ? parsed.design : "classic";
+    const design = normalizeCabinetAppearance(parsed.design);
     const applyInBrowser = parsed.applyInBrowser === true;
     return { design, applyInBrowser };
   } catch {
@@ -58,24 +40,10 @@ function writeCache(c: DesignCache): void {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(c)); } catch { /* ignore */ }
 }
 
-/**
- * Хук для чтения текущего дизайна кабинета.
- *
- *  ─── Логика ───
- *  Оператор в админке выбирает:
- *    • `cabinetDesign` — какой дизайн использовать (Classic / Stealth / Aurora)
- *    • `cabinetDesignApplyInBrowser` — применять ли его и в обычном браузере
- *
- *  Поведение:
- *    1) Внутри Telegram Mini App — всегда `cabinetDesign` (как админ выбрал)
- *    2) В обычном браузере:
- *        • если `applyInBrowser=true` → `cabinetDesign`
- *        • если `applyInBrowser=false` (по умолчанию) → принудительно `classic`
- */
 export function useCabinetDesign(): CabinetDesign {
   const inMiniapp = isInsideTelegramMiniApp();
   const cache = readCache();
-  const initial: CabinetDesign = inMiniapp || cache.applyInBrowser ? cache.design : "classic";
+  const initial: CabinetDesign = resolveCabinetRenderer(cache.design, inMiniapp, cache.applyInBrowser);
   const [design, setDesign] = useState<CabinetDesign>(initial);
 
   useEffect(() => {
@@ -84,15 +52,11 @@ export function useCabinetDesign(): CabinetDesign {
       .then((cfg) => {
         if (!alive) return;
         if (cfg.liteMode) { setDesign("classic"); return; }
-        // ⚠️ Здесь раньше проверялось только "stealth" — любой новый дизайн
-        // (например aurora) молча схлопывался в classic, и переключатель
-        // в админке «не работал». Список должен расширяться вместе с CabinetDesign.
-        const rawDesign = (cfg as { cabinetDesign?: CabinetDesign }).cabinetDesign;
-        const adminDesign: CabinetDesign =
-          rawDesign === "stealth" || rawDesign === "aurora" ? rawDesign : "classic";
+        const rawDesign = (cfg as { cabinetDesign?: CabinetAppearance }).cabinetDesign;
+        const adminDesign = normalizeCabinetAppearance(rawDesign);
         const applyInBrowser = Boolean((cfg as { cabinetDesignApplyInBrowser?: boolean }).cabinetDesignApplyInBrowser);
         writeCache({ design: adminDesign, applyInBrowser });
-        const next: CabinetDesign = inMiniapp || applyInBrowser ? adminDesign : "classic";
+        const next: CabinetDesign = resolveCabinetRenderer(adminDesign, inMiniapp, applyInBrowser);
         setDesign(next);
       })
       .catch(() => { /* ignore — keep cached */ });
