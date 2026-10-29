@@ -2597,6 +2597,36 @@ export const api = {
   ): Promise<{ paymentId: string; payUrl: string }> {
     return request("/client/paritypay/create-payment", { method: "POST", body: JSON.stringify(data), token });
   },
+  cloudpaymentsStatus: (token: string) => request<{ agreements: { id: string; clientId: string; state: string; amount: number; nextChargeAt: string | null; lastError: string | null }[]; jobs: { paymentId: string; state: string; error: string | null }[]; pendingEvents: number; eventErrors: { id: string; kind: string; error: string | null }[] }>("/admin/settings/cloudpayments-status", { token }),
+  async cloudpaymentsSubscriptions(token: string): Promise<{ subscriptions: { id: string; state: string; amount: number; currency: string; periodDays: number; nextChargeAt: string | null; trialEndsAt: string | null }[] }> {
+    return request("/client/cloudpayments/subscriptions", { token });
+  },
+  async cloudpaymentsCancel(token: string, id: string): Promise<{ ok: boolean }> {
+    return request(`/client/cloudpayments/subscriptions/${encodeURIComponent(id)}/cancel`, { method: "POST", token });
+  },
+  async cloudpaymentsCreatePayment(
+    token: string,
+    data: {
+      paidTrial?: boolean;
+      amount?: number;
+      currency?: string;
+      tariffId?: string;
+      tariffPriceOptionId?: string;
+      deviceCount?: number;
+      proxyTariffId?: string;
+      singboxTariffId?: string;
+      promoCode?: string;
+      extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string; targetSubscriptionId?: string };
+      customBuild?: { days: number; devices: number; trafficGb?: number };
+      extendsSecondarySubId?: string;
+      asAdditional?: boolean;
+      asGift?: boolean;
+      removeExtrasOnActivate?: boolean;
+      replaceTrialSubId?: string;
+    }
+  ): Promise<{ paymentId: string; payUrl: string }> {
+    return request("/client/cloudpayments/create-payment", { method: "POST", body: JSON.stringify(data), token });
+  },
 
   /** LAVA Business — создание счёта (RUB: СБП / Карты / СберPay), возвращает ссылку на оплату */
   async lavaCreatePayment(
@@ -3568,6 +3598,14 @@ export type UpdateSettingsPayload = {
   heleketApiKey?: string | null;
   rollypayApiKey?: string | null;
   paritypayShopId?: string | null;
+  cloudpaymentsEnabled?: boolean;
+  cloudpaymentsPublicId?: string;
+  cloudpaymentsApiSecret?: string;
+  cloudpaymentsTestMode?: boolean;
+  cloudpaymentsTrialDays?: number;
+  cloudpaymentsTrialAmount?: number;
+  cloudpaymentsTrialTariffId?: string | null;
+  cloudpaymentsGraceDays?: number;
   paritypayEnabled?: boolean;
   paritypayApiKey?: string | null;
   rollypaySigningSecret?: string | null;
@@ -4097,6 +4135,14 @@ export interface AdminSettings {
   heleketApiKey?: string | null;
   rollypayApiKey?: string | null;
   paritypayShopId?: string | null;
+  cloudpaymentsEnabled?: boolean;
+  cloudpaymentsPublicId?: string;
+  cloudpaymentsApiSecret?: string;
+  cloudpaymentsTestMode?: boolean;
+  cloudpaymentsTrialDays?: number;
+  cloudpaymentsTrialAmount?: number;
+  cloudpaymentsTrialTariffId?: string | null;
+  cloudpaymentsGraceDays?: number;
   paritypayEnabled?: boolean;
   paritypayApiKey?: string | null;
   rollypaySigningSecret?: string | null;
@@ -5618,6 +5664,10 @@ export interface PublicConfig {
   cryptopayEnabled?: boolean;
   heleketEnabled?: boolean;
   rollypayEnabled?: boolean;
+  cloudpaymentsEnabled?: boolean;
+  cloudpaymentsTrialDays?: number;
+  cloudpaymentsTrialAmount?: number;
+  cloudpaymentsTrialTariffId?: string | null;
   paritypayEnabled?: boolean;
   lavaEnabled?: boolean;
   lavatopEnabled?: boolean;

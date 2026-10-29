@@ -224,6 +224,7 @@ export type InnerEmojiIds = {
 export function mainMenu(opts: {
   liteMode?: boolean;
   showTrial: boolean;
+  paidTrial?: { amount: number; days: number } | null;
   showVpn: boolean;
   showRenew?: boolean;
   connectTarget?: { url: string } | { web_app: { url: string } };
@@ -377,6 +378,7 @@ export function mainMenu(opts: {
     }
   }
   if (currentRow.length > 0) rows.push(currentRow);
+  if (opts.paidTrial) rows.unshift([btn(`Пробный доступ: ${opts.paidTrial.days} дн. за ${opts.paidTrial.amount} ₽`, "menu:cloudtrial")]);
   return { inline_keyboard: rows };
 }
 
@@ -735,6 +737,7 @@ export function tariffPaymentMethodButtons(
   // bot_emojis для backButton (text "← Назад" + premium icon).
   botEmojis?: Record<string, { unicode?: string | null; tgEmojiId?: string | null }> | null,
   paritypayEnabled?: boolean,
+  cloudpaymentsEnabled?: boolean,
 ): InlineMarkup {
   // backLabel оставлен в сигнатуре для back-compat,
   // но в этом экране (выбор способа оплаты) кнопка теперь ВСЕГДА «← Назад» → menu:tariffs.
@@ -774,6 +777,9 @@ export function tariffPaymentMethodButtons(
   }
   if (paritypayEnabled && (!tariffCurrency || tariffCurrency.toUpperCase() === "RUB")) {
     rows.push([btn(providerLabel("paritypay", "💳 ParityPay — СБП, карта"), `pay_tariff_paritypay:${tariffId}`, undefined, cardId)]);
+  }
+  if (cloudpaymentsEnabled && (!tariffCurrency || tariffCurrency.toUpperCase() === "RUB")) {
+    rows.push([btn(providerLabel("cloudpayments", "💳 Карта (CloudPayments)"), `pay_tariff_cloudpayments:${tariffId}`, undefined, cardId)]);
   }
   for (const m of methods) {
     rows.push([btn(m.label, `pay_tariff:${tariffId}:${m.id}`, undefined, cardId)]);
@@ -1014,10 +1020,11 @@ export function topupPaymentMethodButtons(
     heleketEnabled?: boolean;
     rollypayEnabled?: boolean;
     paritypayEnabled?: boolean;
+    cloudpaymentsEnabled?: boolean;
     lavaEnabled?: boolean;
   } = {},
 ): InlineMarkup {
-  const { yoomoneyEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, rollypayEnabled, paritypayEnabled, lavaEnabled } = providers;
+  const { yoomoneyEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, rollypayEnabled, paritypayEnabled, cloudpaymentsEnabled, lavaEnabled } = providers;
   const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
   const backSty = resolveStyle(toStyle(backStyle), "danger");
   const cardId = emojiIds?.card;
@@ -1044,6 +1051,9 @@ export function topupPaymentMethodButtons(
   }
   if (paritypayEnabled) {
     rows.push([btn(providerLabel("paritypay", "💳 ParityPay — СБП, карта"), `topup_paritypay:${amount}`, "primary", cardId)]);
+  }
+  if (cloudpaymentsEnabled) {
+    rows.push([btn(providerLabel("cloudpayments", "💳 Карта (CloudPayments)"), `topup_cloudpayments:${amount}`, "primary", cardId)]);
   }
   for (const m of methods) {
     rows.push([btn(m.label, `topup:${amount}:${m.id}`, "primary", cardId)]);
@@ -1485,6 +1495,7 @@ export function giftPaymentButtons(
   lavaEnabled?: boolean,
   tariffCurrency?: string,
   paritypayEnabled?: boolean,
+  cloudpaymentsEnabled?: boolean,
 ): InlineMarkup {
   const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
   const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
@@ -1506,6 +1517,9 @@ export function giftPaymentButtons(
   }
   if (paritypayEnabled && isRub) {
     rows.push([btn(providerLabel("paritypay", "💳 ParityPay — СБП / Карты"), `gift_pay_paritypay:${tariffId}`, undefined, cardId)]);
+  }
+  if (cloudpaymentsEnabled && isRub) {
+    rows.push([btn(providerLabel("cloudpayments", "💳 Карта (CloudPayments)"), `gift_pay_cloudpayments:${tariffId}`, undefined, cardId)]);
   }
   if (cryptopayEnabled) {
     rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `gift_pay_cryptopay:${tariffId}`, undefined, cardId)]);

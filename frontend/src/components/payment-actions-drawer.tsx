@@ -106,6 +106,7 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
         reason: reason || undefined,
       });
       setActionResult(
+        data?.payment.provider === "cloudpayments" ? "Запрос возврата отправлен в CloudPayments. Статус обновится после подтверждения банка." :
         data?.payment.provider === "telegram_stars" ? "Звёзды возвращены покупателю в Telegram." :
         `Возврат выполнен. На баланс: ${r.summary.creditedToBalance.toFixed(2)}; ` +
         `откатано referral-наград: ${r.summary.reversedReferralCount} (на сумму ${r.summary.reversedReferralAmount.toFixed(2)}).`
@@ -331,7 +332,9 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
                 {/* Refund — для PAID */}
                 {isPaid && (
                   <>
-                    {p?.provider === "telegram_stars" ? (
+                    {p?.provider === "cloudpayments" ? (
+                      <p className="text-xs text-muted-foreground">Возврат будет отправлен на карту через CloudPayments. Начисления за пополнение и денежные реферальные бонусы будут отменены после подтверждения банка. Выданный доступ при необходимости отключите отдельно.</p>
+                    ) : p?.provider === "telegram_stars" ? (
                       <p className="text-xs text-muted-foreground">Звёзды вернутся на счёт Telegram покупателя. Пополнение баланса и денежные реферальные начисления будут отменены. Выданную подписку и бонусные дни при необходимости отключите отдельно.</p>
                     ) : (
                     <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3 space-y-2.5">

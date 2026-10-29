@@ -62,6 +62,7 @@ paymentActionsRouter.post(
 
     const payment = await prisma.payment.findUnique({ where: { id } });
     if (!payment) return res.status(404).json({ message: "Платёж не найден" });
+    if (payment.provider === "cloudpayments" && payment.externalId) return res.status(409).json({ message: "Статус CloudPayments меняется только по подтверждению банка. Используйте возврат после сверки транзакции." });
     if (payment.provider === "telegram_stars" && payment.externalId) return res.status(400).json({ message: "Подтверждённую оплату Stars можно только вернуть через Telegram" });
     if (payment.status === "FAILED") return res.status(400).json({ message: "Платёж уже в FAILED" });
     if (payment.status === "REFUNDED") return res.status(400).json({ message: "Платёж уже возвращён" });
@@ -115,6 +116,12 @@ paymentActionsRouter.post(
       return res.json(result);
     }
 
+    if (payment.provider === "cloudpayments") {
+      const { requestCloudRefund } = await import("../cloudpayments/cloudpayments-refund.js");
+      const result = await requestCloudRefund(id);
+      await logAdmin(req, "payment.refund_requested", { type: "payment", id }, { provider: "cloudpayments", amount: payment.amount, reason: reason ?? null });
+      return res.json(result);
+    }
     if (payment.provider === "telegram_stars") {
       const updated = await refundStarsPayment(id);
       await logAdmin(req, "payment.refund", { type: "payment", id }, { provider: "telegram_stars", amount: payment.amount, reason: reason ?? null });
@@ -213,6 +220,13 @@ paymentActionsRouter.post(
     if (!payment) return res.status(404).json({ message: "Платёж не найден" });
     if (payment.status !== "PAID") return res.status(400).json({ message: `Активацию можно повторить только для PAID платежей. Текущий статус: ${payment.status}` });
 
+    if (payment.provider === "cloudpayments") {
+      const job = await prisma.cloudPaymentJob.findUnique({ where: { paymentId: id } });
+      if (job?.state === "REVIEW") return res.status(409).json({ message: "Сначала сверьте результат выдачи с VPN-сервером. Автоматический повтор может выдать покупку дважды." });
+      const { processCloudPayments } = await import("../cloudpayments/cloudpayments.worker.js");
+      await processCloudPayments();
+      return res.json({ ok: true, result: await prisma.cloudPaymentJob.findUnique({ where: { paymentId: id }, select: { state: true, error: true } }) });
+    }
     if (payment.provider === "telegram_stars") return res.status(409).json({ message: "Проверьте результат выдачи Stars перед повторной активацией. Если покупка не выдана, верните звёзды и создайте новый счёт." });
 
     let activationResult: unknown = null;

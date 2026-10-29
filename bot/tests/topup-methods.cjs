@@ -4,7 +4,7 @@ const source=fs.readFileSync('src/keyboard.ts','utf8');
 const box={exports:{},require:()=>({t:k=>k})};
 vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,box);
 const kb=box.exports.topupPaymentMethodButtons;
-const providers=['yoomoney','yookassa','cryptopay','heleket','rollypay','lava'];
+const providers=['yoomoney','yookassa','cryptopay','heleket','rollypay','lava','cloudpayments'];
 for(const provider of providers){
  const result=kb('500',[],null,undefined,undefined,{[provider+'Enabled']:true});
  const callbacks=result.inline_keyboard.flat().map(x=>x.callback_data);

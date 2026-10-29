@@ -1,3 +1,4 @@
+import { CloudPaymentsTrial } from "@/components/cabinet/cloudpayments-trial";
 import { toast } from "@/components/ui/toast";
 import "./cabinet-subscription.css";
 import { useCabinetMiniapp } from "./cabinet-layout";
@@ -127,6 +128,7 @@ export function ClientDashboardPage() {
   return (
     <>
       <LinkTelegramPrompt />
+      <CloudPaymentsTrial />
       {design === "stealth" ? <StealthDashboard /> : <ClassicDashboardPage compact={design === "aurora"} />}
       {design !== "stealth" && <details className="cabinet-promo-disclosure"><summary>{t("cabinet.journey.promo")}</summary><PromoCodeForm /></details>}
     </>

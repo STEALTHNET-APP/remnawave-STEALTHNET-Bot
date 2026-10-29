@@ -19,7 +19,7 @@ for (const match of source.matchAll(/(?:from\s+|import\s*)["']([^"']+)["']/g)) {
 }
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 
-function setup({ count = 1, periods = 1, multi = false, blocked = false, extras = 0, expired = false, failRead = false, standaloneTrial = false } = {}) {
+function setup({ count = 1, periods = 1, multi = false, blocked = false, extras = 0, expired = false, failRead = false, standaloneTrial = false, cloudpayments = false } = {}) {
   let callback;
   const payments = [], messages = [], cooldownIds = [];
   const subscriptions = Array.from({ length: count }, (_, i) => ({
@@ -31,7 +31,7 @@ function setup({ count = 1, periods = 1, multi = false, blocked = false, extras 
   const tariff = { id: 'standard', name: 'Standard', currency: 'RUB', price: 100, durationDays: 30, includedDevices: 1,
     priceOptions: Array.from({ length: periods }, (_, i) => ({ id: `period-${i}`, price: 100 * (i + 1), durationDays: 30 * (i + 1), sortOrder: i })) };
   const api = {
-    getPublicConfig: async () => ({ multiSubscriptionsEnabled: multi, defaultCurrency: 'RUB', defaultLanguage: 'ru', publicAppUrl: 'https://panel.example' }),
+    getPublicConfig: async () => ({ cloudpaymentsEnabled: cloudpayments, cloudpaymentsTrialTariffId: cloudpayments ? "standard" : null, cloudpaymentsTrialDays: 3, cloudpaymentsTrialAmount: 1, multiSubscriptionsEnabled: multi, defaultCurrency: 'RUB', defaultLanguage: 'ru', publicAppUrl: 'https://panel.example' }),
     registerByTelegram: async () => ({ token: 'fixture-token', client: { preferredLang: 'ru' } }),
     getAllSubscriptions: async () => { if (failRead) throw new Error('unavailable'); return { items: subscriptions }; },
     getPublicTariffs: async () => ({ items: [{ id: 'category', tariffs: [tariff], singleSubscriptionMode: false }] }),
@@ -39,6 +39,7 @@ function setup({ count = 1, periods = 1, multi = false, blocked = false, extras 
     checkSubscriptionsCooldownBatch: async () => ({ items: [] }),
     getMe: async () => ({ balance: 5000, preferredCurrency: 'RUB' }),
     tariffConversionPreview: async () => ({ willConvert: false }),
+    createCloudpaymentsPayment: async (_, purchase) => { payments.push(purchase); return { payUrl: "https://panel.example/api/cloudpayments/checkout/test" }; },
     payByBalance: async (_, purchase) => { payments.push(purchase); return { message: 'paid' }; },
   };
   class Composer {
@@ -143,4 +144,21 @@ test('convertible standalone trial keeps its target through tariff selection', a
   await t.click('pay_ext_pickt:0');
   await t.click('pay_tariff_balance:standard');
   assert.equal(t.payments[0].extendsSecondarySubId, 'subscription-0');
+});
+
+test('CloudPayments renewal keeps the chosen subscription and extra-device policy', async () => {
+  const t = setup({ cloudpayments: true, extras: 2 });
+  await t.click('menu:renew');
+  await t.click('pay_ext_drop:0');
+  await t.click('pay_tariff_cloudpayments:standard');
+  assert.equal(t.payments.length, 1);
+  assert.equal(t.payments[0].extendsSecondarySubId, 'subscription-0');
+  assert.equal(t.payments[0].removeExtrasOnActivate, true);
+});
+test('CloudPayments paid trial opens consent checkout with explicit paidTrial intent', async () => {
+  const t = setup({ cloudpayments: true });
+  await t.click('menu:cloudtrial');
+  assert.equal(t.payments.length, 1);
+  assert.equal(t.payments[0].paidTrial, true);
+  assert.equal(t.payments[0].tariffId, 'standard');
 });

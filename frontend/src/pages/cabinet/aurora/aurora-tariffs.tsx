@@ -29,6 +29,7 @@ type PayMethod =
   | { kind: "heleket"; label: string; icon: typeof Bitcoin }
   | { kind: "rollypay"; label: string; icon: typeof Wallet }
   | { kind: "paritypay"; label: string; icon: typeof Wallet }
+  | { kind: "cloudpayments"; label: string; icon: typeof Wallet }
   | { kind: "lava"; label: string; icon: typeof Wallet }
   | { kind: "overpay"; label: string; icon: typeof Wallet }
   | { kind: "lavatop"; label: string; icon: typeof Wallet }
@@ -236,7 +237,8 @@ export function AuroraTariffs() {
     if (config.cryptopayEnabled) list.push({ kind: "cryptopay", label: "Crypto Pay", icon: Bitcoin });
     if (config.heleketEnabled) list.push({ kind: "heleket", label: "Heleket", icon: Bitcoin });
     if ((config as { rollypayEnabled?: boolean }).rollypayEnabled) list.push({ kind: "rollypay", label: "RollyPay", icon: Wallet });
-    if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kind: "paritypay", label: "ParityPay", icon: Wallet });
+    if ((config as { cloudpaymentsEnabled?: boolean }).cloudpaymentsEnabled) list.push({ kind: "cloudpayments", label: "CloudPayments", icon: Wallet });
+if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kind: "paritypay", label: "ParityPay", icon: Wallet });
     if (config.lavaEnabled) list.push({ kind: "lava", label: "Lava", icon: Wallet });
     if (config.lavatopEnabled) list.push({ kind: "lavatop", label: "Lava.top", icon: Wallet });
     if (config.overpayEnabled) list.push({ kind: "overpay", label: "Overpay", icon: Wallet });
@@ -428,6 +430,9 @@ export function AuroraTariffs() {
         url = r.miniAppPayUrl ?? r.webAppPayUrl ?? r.payUrl;
       } else if (selectedMethod.kind === "heleket") {
         const r = await api.heleketCreatePayment(state.token, base);
+        url = r.payUrl;
+      } else if (selectedMethod.kind === "cloudpayments") {
+        const r = await api.cloudpaymentsCreatePayment(state.token, base);
         url = r.payUrl;
       } else if (selectedMethod.kind === "paritypay") {
         const r = await api.paritypayCreatePayment(state.token, base);
