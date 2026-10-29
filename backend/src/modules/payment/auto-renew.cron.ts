@@ -157,9 +157,9 @@ export async function processAutoRenewals() {
     // Дедуп: если subscription[0] управляется новым циклом подписок, пропускаем клиентский цикл
     const primaryHasAutoRenew = await prisma.subscription.findUnique({
       where: { ownerId_subscriptionIndex: { ownerId: client.id, subscriptionIndex: 0 } },
-      select: { autoRenewEnabled: true },
+      select: { autoRenewEnabled: true, cloudAgreements: { where: { state: { in: ["PENDING", "ACTIVE", "PAST_DUE", "CANCEL_PENDING"] } }, select: { id: true } } },
     });
-    if (primaryHasAutoRenew?.autoRenewEnabled === true) {
+    if (primaryHasAutoRenew?.autoRenewEnabled === true || primaryHasAutoRenew?.cloudAgreements?.length) {
       continue;
     }
 
@@ -605,8 +605,9 @@ async function processSecondaryAutoRenewals(): Promise<void> {
   const secondaries = await prisma.subscription.findMany({
     where: {
       autoRenewEnabled: true,
+      cloudAgreements: { none: { state: { in: ["PENDING", "ACTIVE", "PAST_DUE", "CANCEL_PENDING"] } } },
       remnawaveUuid: { not: null },
-      OR: [{ tariffId: { not: null } }, { autoRenewTariffId: { not: null } }],
+      AND: [{ OR: [{ tariffId: { not: null } }, { autoRenewTariffId: { not: null } }] }],
     },
     include: {
       tariff: true,

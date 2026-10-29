@@ -83,6 +83,7 @@ export async function mergeClients(
       const movedPayments = (
         await tx.payment.updateMany({ where: { clientId: absorbedId }, data: { clientId: primaryId } })
       ).count;
+      await tx.cloudPaymentAgreement.updateMany({ where: { clientId: absorbedId }, data: { clientId: primaryId } });
       await tx.ticket.updateMany({ where: { clientId: absorbedId }, data: { clientId: primaryId } });
       await tx.withdrawalRequest.updateMany({ where: { clientId: absorbedId }, data: { clientId: primaryId } });
       await tx.referralCredit.updateMany({ where: { referrerId: absorbedId }, data: { referrerId: primaryId } });

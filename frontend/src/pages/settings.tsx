@@ -1,3 +1,4 @@
+import { CloudPaymentsSettings } from "@/components/admin/cloudpayments-settings";
 import { adminAlert } from "@/lib/admin-dialogs";
 import { isBotButtonUrl } from "@/lib/bot-button-url";
 import { SettingsNavigation, SETTINGS_TABS } from "@/components/admin/settings-navigation";
@@ -393,6 +394,8 @@ function isPaymentProviderActive(id: string, s: AdminSettings | null): boolean {
       return Boolean(s.cryptopayApiToken?.trim());
     case "heleket":
       return Boolean(s.heleketMerchantId?.trim() && s.heleketApiKey?.trim());
+    case "cloudpayments":
+      return Boolean(s.cloudpaymentsEnabled && s.cloudpaymentsPublicId && s.cloudpaymentsApiSecret);
     case "paritypay":
       return Boolean(
         s.paritypayEnabled &&
@@ -1027,6 +1030,14 @@ export function SettingsPage() {
         cryptopayTestnet: settings.cryptopayTestnet ?? false,
         heleketMerchantId: settings.heleketMerchantId ?? null,
         heleketApiKey: settings.heleketApiKey === "********" ? undefined : (settings.heleketApiKey || null),
+        cloudpaymentsPublicId: settings.cloudpaymentsPublicId ?? "",
+        cloudpaymentsApiSecret: settings.cloudpaymentsApiSecret === "********" ? undefined : settings.cloudpaymentsApiSecret,
+        cloudpaymentsEnabled: settings.cloudpaymentsEnabled === true,
+        cloudpaymentsTestMode: settings.cloudpaymentsTestMode !== false,
+        cloudpaymentsTrialDays: settings.cloudpaymentsTrialDays ?? 0,
+        cloudpaymentsTrialAmount: settings.cloudpaymentsTrialAmount ?? 1,
+        cloudpaymentsTrialTariffId: settings.cloudpaymentsTrialTariffId ?? null,
+        cloudpaymentsGraceDays: settings.cloudpaymentsGraceDays ?? 0,
         paritypayShopId: settings.paritypayShopId ?? null,
         paritypayApiKey: settings.paritypayApiKey === "********" ? undefined : (settings.paritypayApiKey || null),
         paritypaySigningSecret: settings.paritypaySigningSecret === "********" ? undefined : (settings.paritypaySigningSecret || null),
@@ -3058,6 +3069,7 @@ export function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="payments" className="space-y-4">
+            <CloudPaymentsSettings settings={settings} token={token!} saving={saving} onChange={patch => setSettings(s => s ? { ...s, ...patch } : s)}/>
             <Card><CardContent className="space-y-2 pt-6">
               <Label htmlFor="payment-description">Описание платежа</Label>
               <Input id="payment-description" maxLength={128} value={settings.paymentDescription ?? ""} onChange={e => setSettings(s => s ? { ...s, paymentDescription: e.target.value } : s)} placeholder="По умолчанию — название тарифа или пополнение баланса" />

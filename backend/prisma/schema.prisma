@@ -62,6 +62,7 @@ model AdminNotificationPreference {
 // Клиент панели (покупатель подписок): сайт, бот, mini app
 // Дополнительные подписки хранятся в отдельной таблице SecondarySubscription
 model Client {
+  cloudAgreements CloudPaymentAgreement[]
   id                         String    @id @default(cuid())
   email                      String?   @unique
   passwordHash               String?   @map("password_hash")
@@ -258,6 +259,7 @@ model PendingEmailRegistration {
 }
 
 model Payment {
+  cloudJob CloudPaymentJob?
   id                    String    @id @default(cuid())
   clientId              String    @map("client_id")
   orderId               String    @unique @map("order_id")
@@ -987,6 +989,7 @@ model ContestWinner {
 // Теперь: ВСЕ подписки клиента живут в одной таблице. subscriptionIndex=0 — главная.
 // Поля Client.remnawaveUuid / currentTariffId / autoRenew* помечены deprecated (читаются для совместимости кабинета).
 model Subscription {
+  cloudAgreements CloudPaymentAgreement[]
   customName               String?   @map("custom_name") @db.VarChar(60)
   /// Created by a free-days promo; the first paid purchase/grant upgrades this same subscription.
   promoGranted Boolean @default(false) @map("promo_granted")
@@ -1688,4 +1691,59 @@ model SingboxRenewal {
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   @@index([slotId])
   @@map("singbox_renewals")
+}
+
+model CloudPaymentAgreement {
+  id String @id @default(cuid())
+  clientId String @map("client_id")
+  subscriptionId String? @map("subscription_id")
+  providerId String? @unique @map("provider_id")
+  terminalId String @map("terminal_id")
+  tariffId String @map("tariff_id")
+  priceOptionId String? @map("price_option_id")
+  tokenEncrypted String? @map("token_encrypted") @db.Text
+  state String @default("PENDING")
+  trialDays Int @default(0) @map("trial_days")
+  trialEndsAt DateTime? @map("trial_ends_at")
+  graceEndsAt DateTime? @map("grace_ends_at")
+  nextChargeAt DateTime? @map("next_charge_at")
+  amount Float
+  currency String
+  periodDays Int @map("period_days")
+  consentAt DateTime @default(now()) @map("consent_at")
+  consentText String @map("consent_text") @db.Text
+  createRequestedAt DateTime? @map("create_requested_at")
+  lastError String? @map("last_error")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  @@index([state])
+  @@map("cloudpayment_agreements")
+}
+
+model CloudPaymentEvent {
+  id String @id
+  kind String
+  body Json
+  receivedAt DateTime @default(now()) @map("received_at")
+  processedAt DateTime? @map("processed_at")
+  error String?
+  @@index([processedAt])
+  @@map("cloudpayment_events")
+}
+
+model CloudPaymentJob {
+  id String @id @default(cuid())
+  paymentId String @unique @map("payment_id")
+  transactionId String @unique @map("transaction_id")
+  agreementId String? @map("agreement_id")
+  state String @default("PENDING")
+  plan Json?
+  error String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  @@index([state])
+  @@map("cloudpayment_jobs")
 }

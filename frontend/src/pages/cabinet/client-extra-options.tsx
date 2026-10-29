@@ -59,6 +59,7 @@ export function ClientExtraOptionsPage() {
   const [heleketEnabled, setHeleketEnabled] = useState(false);
   const [rollypayEnabled, setRollypayEnabled] = useState(false);
   const [paritypayEnabled, setParitypayEnabled] = useState(false);
+  const [cloudpaymentsEnabled, setCloudpaymentsEnabled] = useState(false);
   const [lavaEnabled, setLavaEnabled] = useState(false);
   const [overpayEnabled, setOverpayEnabled] = useState(false);
   const [paymentProviders, setPaymentProviders] = useState<{ id: string; label: string; sortOrder: number }[]>([]);
@@ -88,6 +89,7 @@ export function ClientExtraOptionsPage() {
       setHeleketEnabled(Boolean(c.heleketEnabled));
       setRollypayEnabled(Boolean(c.rollypayEnabled));
       setParitypayEnabled(Boolean(c.paritypayEnabled));
+      setCloudpaymentsEnabled(Boolean(c.cloudpaymentsEnabled));
       setLavaEnabled(Boolean(c.lavaEnabled));
       setOverpayEnabled(Boolean(c.overpayEnabled));
       setPaymentProviders(c.paymentProviders ?? []);
@@ -218,6 +220,21 @@ async function startParitypayPayment(option: PublicSellOption) {
         extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId: selectedSubId ?? undefined },
       });
       if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "ParityPay", paymentId: res.paymentId });
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
+    } finally {
+      setPayLoading(false);
+    }
+  }
+async function startCloudpaymentsPayment(option: PublicSellOption) {
+    if (!token) return;
+    setPayError(null);
+    setPayLoading(true);
+    try {
+      const res = await api.cloudpaymentsCreatePayment(token, {
+        extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId: selectedSubId ?? undefined },
+      });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "CloudPayments", paymentId: res.paymentId });
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {
@@ -470,6 +487,7 @@ async function startParitypayPayment(option: PublicSellOption) {
                 heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
                 rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 paritypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                cloudpayments: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 yookassa: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
                 yoomoney: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
                 lava: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
@@ -483,6 +501,7 @@ async function startParitypayPayment(option: PublicSellOption) {
                 { id: "heleket", enabled: heleketEnabled, onClick: () => startHeleketPayment(payModal!), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
                 { id: "rollypay", enabled: rollypayEnabled, onClick: () => startRollypayPayment(payModal!), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
                 { id: "paritypay", enabled: paritypayEnabled, onClick: () => startParitypayPayment(payModal!), label: providerLabel("paritypay", "ParityPay"), icon: "card" },
+                { id: "cloudpayments", enabled: cloudpaymentsEnabled, onClick: () => startCloudpaymentsPayment(payModal!), label: providerLabel("cloudpayments", "CloudPayments"), icon: "card" },
                 { id: "yookassa", enabled: yookassaEnabled && payModal?.currency.toUpperCase() === "RUB", onClick: () => startYookassaPayment(payModal!), label: providerLabel("yookassa", "СБП / Карты РФ"), icon: "card" },
                 { id: "yoomoney", enabled: yoomoneyEnabled && payModal?.currency.toUpperCase() === "RUB", onClick: () => startYoomoneyPayment(payModal!), label: providerLabel("yoomoney", "ЮMoney / Карты"), icon: "card" },
                 { id: "lava", enabled: lavaEnabled && payModal?.currency.toUpperCase() === "RUB", onClick: () => startLavaPayment(payModal!), label: providerLabel("lava", "LAVA"), icon: "card" },

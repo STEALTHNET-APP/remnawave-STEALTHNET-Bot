@@ -42,3 +42,17 @@ test('Mini App appearance exposes the administrator selection and browser opt-in
   invalidateSystemConfigCache();
   assert.equal((await getPublicConfig()).cabinetDesign, 'classic');
 });
+
+test('CloudPayments public settings expose availability without terminal credentials', async () => {
+  settings.set('cloudpayments_enabled', 'true');
+  settings.set('cloudpayments_public_id', 'test-terminal');
+  settings.set('cloudpayments_api_secret', 'private-test-secret');
+  settings.set('cloudpayments_trial_days', '3');
+  invalidateSystemConfigCache();
+  const config = await getPublicConfig();
+  assert.equal(config.cloudpaymentsEnabled, true);
+  assert.equal(config.cloudpaymentsTrialDays, 3);
+  assert.equal(config.cloudpaymentsApiSecret, undefined);
+  assert.equal(config.cloudpaymentsPublicId, undefined);
+  assert.equal(JSON.stringify(config).includes('private-test-secret'), false);
+});

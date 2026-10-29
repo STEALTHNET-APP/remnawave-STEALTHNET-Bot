@@ -27,7 +27,7 @@ interface Props {
 
 interface PaymentMethodItem {
   id: string;
-  kind: "yookassa" | "yoomoney" | "cryptopay" | "telegram_stars" | "platega" | "heleket" | "rollypay" | "paritypay" | "lava" | "overpay";
+  kind: "yookassa" | "yoomoney" | "cryptopay" | "telegram_stars" | "platega" | "heleket" | "rollypay" | "paritypay" | "cloudpayments" | "lava" | "overpay";
   label: string;
   subLabel?: string;
   plategaId?: number;
@@ -133,7 +133,16 @@ export function AuroraTopUpSheet({ open, onClose }: Props) {
     }
 
     // ParityPay
-    if (Boolean(config.paritypayEnabled) && isRub) {
+    if (Boolean(config.cloudpaymentsEnabled) && isRub) {
+      list.push({
+        id: "cloudpayments",
+        kind: "cloudpayments",
+        label: providerLabel("cloudpayments", "CloudPayments"),
+        subLabel: "Банковские карты",
+        icon: CreditCard,
+      });
+    }
+if (Boolean(config.paritypayEnabled) && isRub) {
       list.push({
         id: "paritypay",
         kind: "paritypay",
@@ -261,6 +270,11 @@ export function AuroraTopUpSheet({ open, onClose }: Props) {
         const res = await api.rollypayCreatePayment(token, { amount: num, currency });
         if (res.payUrl) {
           setReadyUrl({ url: res.payUrl, provider: "RollyPay", paymentId: res.paymentId });
+        }
+      } else if (method.kind === "cloudpayments") {
+        const res = await api.cloudpaymentsCreatePayment(token, { amount: num, currency });
+        if (res.payUrl) {
+          setReadyUrl({ url: res.payUrl, provider: "CloudPayments", paymentId: res.paymentId });
         }
       } else if (method.kind === "paritypay") {
         const res = await api.paritypayCreatePayment(token, { amount: num, currency });

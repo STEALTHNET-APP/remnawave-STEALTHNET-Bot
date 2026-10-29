@@ -2234,6 +2234,7 @@ async function handleStart(ctx: Context, payload: string) {
     const markup = mainMenu({
       liteMode: config?.liteMode === true,
       showTrial,
+      paidTrial: config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
       showVpn: connectableSubscriptions(allSubsRes.items ?? []).length > 0,
       showRenew: renewableSubscriptions(allSubsRes.items ?? []).length > 0,
       connectTarget: directConnectionTarget(allSubsRes.items ?? [], config?.publicAppUrl, config?.useRemnaSubscriptionPage === true),
@@ -2662,7 +2663,7 @@ async function showPaymentMethodsForTariff(ctx: any, userId: number, tariff: Tar
   if (trialsCount <= 1) trialReplaceChoice.delete(userId);
   // convNote добавляется СУФФИКСОМ: префикс сместил бы offsets pay.entities (custom emoji).
   const finalText = `${desc && opts.length === 1 ? `${desc}\n\n${pay.text}` : pay.text}${convNote}`;
-  const markup = tariffPaymentMethodButtons(tariff.id, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, balanceLabel, !!config?.yoomoneyEnabled, !!config?.yookassaEnabled, !!config?.cryptopayEnabled, tariff.currency, !!config?.heleketEnabled, !!config?.rollypayEnabled, !!config?.lavaEnabled, !!config?.lavatopEnabled, config?.botEmojis ?? null, !!config?.paritypayEnabled);
+  const markup = tariffPaymentMethodButtons(tariff.id, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, balanceLabel, !!config?.yoomoneyEnabled, !!config?.yookassaEnabled, !!config?.cryptopayEnabled, tariff.currency, !!config?.heleketEnabled, !!config?.rollypayEnabled, !!config?.lavaEnabled, !!config?.lavatopEnabled, config?.botEmojis ?? null, !!config?.paritypayEnabled, !!config?.cloudpaymentsEnabled);
   for (let i = extraRows.length - 1; i >= 0; i--) markup.inline_keyboard.unshift(extraRows[i]!);
   await editMessageContent(ctx, finalText, markup, pay.entities);
 }
@@ -2742,6 +2743,7 @@ async function showGiftPaymentConfirm(ctx: any, userId: number, tariff: TariffIt
     !!config?.lavaEnabled,
     tariff.currency,
     !!config?.paritypayEnabled,
+    !!config?.cloudpaymentsEnabled,
   ));
 }
 
@@ -2837,6 +2839,7 @@ composer.on("callback_query:data", async (ctx) => {
       const markup = mainMenu({
       liteMode: config?.liteMode === true,
         showTrial,
+      paidTrial: config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
         showVpn: connectableSubscriptions(allSubsRes.items ?? []).length > 0,
         showRenew: renewableSubscriptions(allSubsRes.items ?? []).length > 0,
         connectTarget: directConnectionTarget(allSubsRes.items ?? [], config?.publicAppUrl, config?.useRemnaSubscriptionPage === true),
@@ -3484,6 +3487,7 @@ composer.on("callback_query:data", async (ctx) => {
       const backMarkup = mainMenu({
       liteMode: config?.liteMode === true,
         showTrial,
+      paidTrial: config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
         showVpn: connectableSubscriptions(allSubsRes.items ?? []).length > 0,
         showRenew: renewableSubscriptions(allSubsRes.items ?? []).length > 0,
         connectTarget: directConnectionTarget(allSubsRes.items ?? [], config?.publicAppUrl, config?.useRemnaSubscriptionPage === true),
@@ -4946,7 +4950,76 @@ if (data.startsWith("pay_tariff_rollypay:")) {
       }
       return;
     }
-if (data.startsWith("pay_tariff_paritypay:")) {
+    if (data.startsWith("pay_tariff_cloudpayments:")) {
+      const tariffId = data.slice("pay_tariff_cloudpayments:".length);
+      const { items } = await api.getPublicTariffs();
+      const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
+      if (!tariff) {
+        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      try {
+        const discountInfo = activeDiscountCode.get(userId);
+        const promoCode = discountInfo?.code;
+        const sel = selectedTariffOption.get(userId);
+        const opts = sortedPriceOptions(tariff.priceOptions);
+        const eff = sel?.tariffId === tariff.id ? sel.option : (opts.length === 1 ? opts[0]! : null);
+        const unitPrice = eff?.price ?? tariff.price;
+        const effectiveDays = eff?.durationDays ?? tariff.durationDays;
+        const extraDevices = sel?.tariffId === tariff.id ? sel.extraDevices : 0;
+        const { extrasTotal } = applyExtraDevicesPriceBot(tariff.pricePerExtraDevice ?? 0, extraDevices, tariff.deviceDiscountTiers, effectiveDays);
+        const effectivePrice = unitPrice + extrasTotal;
+        const asAdditional = addsubPending.get(userId) === tariff.id;
+        const extPairT = extendingSecondaryPending.get(userId);
+        const extendsSecondarySubId = extPairT && extPairT.tariffId === tariff.id ? extPairT.secondaryId : undefined;
+        const removeExtrasOnActivate = !!(extendsSecondarySubId && pendingDropExtras.get(userId) === extendsSecondarySubId) || (!extendsSecondarySubId && convDropExtras.has(userId));
+        const replaceTrialSubId = !extendsSecondarySubId ? trialReplaceChoice.get(userId) : undefined;
+        let subExtrasForPeriod = 0;
+        if (extendsSecondarySubId && !removeExtrasOnActivate) {
+          try {
+            const allSubs = await api.getAllSubscriptions(token);
+            const target = allSubs.items?.find((it) => it.id === extendsSecondarySubId);
+            const monthly = target?.extraDevicesMonthlyPrice ?? 0;
+            if (monthly > 0 && effectiveDays > 0) {
+              subExtrasForPeriod = Math.round(monthly * (effectiveDays / 30) * 100) / 100;
+            }
+          } catch {}
+        }
+        const totalPrice = effectivePrice + subExtrasForPeriod;
+        const meHeleket = await api.getMe(token);
+        const pdHeleket = meHeleket?.personalDiscountPercent ?? 0;
+        const { discountArg, finalPrice: priceWithDiscountHeleket } = buildTariffDiscountArg(totalPrice, pdHeleket, discountInfo, tariff.currency);
+        const payment = await api.createCloudpaymentsPayment(token, {
+          amount: totalPrice,
+          currency: tariff.currency,
+          tariffId: tariff.id,
+          tariffPriceOptionId: eff?.id,
+          deviceCount: extraDevices,
+          promoCode,
+          asAdditional: asAdditional || undefined,
+          extendsSecondarySubId,
+          removeExtrasOnActivate,
+          replaceTrialSubId,
+        });
+        if (promoCode) activeDiscountCode.delete(userId);
+        selectedTariffOption.delete(userId);
+        if (extendsSecondarySubId && removeExtrasOnActivate) extendingSecondaryPending.delete(userId);
+        if (asAdditional) addsubPending.delete(userId);
+        if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
+        convDropExtras.delete(userId);
+        trialReplaceChoice.delete(userId);
+        const nameWithDays = (opts.length > 1 || (sel?.tariffId === tariff.id))
+          ? `${tariff.name} · ${formatRuDays(effectiveDays)}`
+          : tariff.name;
+        const msg = buildPaymentMessage(config, { name: nameWithDays, price: formatMoney(priceWithDiscountHeleket, tariff.currency), amount: String(priceWithDiscountHeleket), currency: tariff.currency, action: "Нажмите кнопку ниже для оплаты:" }, discountArg);
+        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
+      } catch (e: unknown) {
+        const m = e instanceof Error ? e.message : "Ошибка создания платежа CloudPayments";
+        await editMessageContent(ctx, `❌ ${m}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
+    if (data.startsWith("pay_tariff_paritypay:")) {
       const tariffId = data.slice("pay_tariff_paritypay:".length);
       const { items } = await api.getPublicTariffs();
       const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
@@ -6708,6 +6781,24 @@ if (data.startsWith("topup_rollypay:")) {
       }
       return;
     }
+if (data.startsWith("topup_cloudpayments:")) {
+      const amountStr = data.slice("topup_cloudpayments:".length);
+      const amount = Number(amountStr);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      const client = await api.getMe(token);
+      try {
+        const payment = await api.createCloudpaymentsPayment(token, { amount, currency: client.preferredCurrency ?? "RUB" });
+        const rpTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
+        await editMessageContent(ctx, rpTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), rpTopup.entities);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка создания платежа CloudPayments";
+        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
+      }
+      return;
+    }
 if (data.startsWith("topup_paritypay:")) {
       const amountStr = data.slice("topup_paritypay:".length);
       const amount = Number(amountStr);
@@ -6769,10 +6860,10 @@ if (data.startsWith("topup_paritypay:")) {
       const paritypayEnabled = !!config?.paritypayEnabled;
       const lavaEnabled = !!config?.lavaEnabled;
       // Если есть >1 способа любого типа — показываем выбор
-      const anyOnline = config?.telegramStarsEnabled || yooEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled;
+      const anyOnline = config?.telegramStarsEnabled || yooEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || config?.cloudpaymentsEnabled || lavaEnabled;
       if (methods.length > 1 || anyOnline) {
         const topupPay2 = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency)}\n\nВыберите способ оплаты:`, config?.botEmojis);
-        await editMessageContent(ctx, topupPay2.text, topupPaymentMethodButtons(amountStr, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, { currency: client.preferredCurrency, yoomoneyEnabled: yooEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, rollypayEnabled, paritypayEnabled, lavaEnabled }), topupPay2.entities);
+        await editMessageContent(ctx, topupPay2.text, topupPaymentMethodButtons(amountStr, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, { currency: client.preferredCurrency, yoomoneyEnabled: yooEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, rollypayEnabled, paritypayEnabled, cloudpaymentsEnabled: !!config?.cloudpaymentsEnabled, lavaEnabled }), topupPay2.entities);
         return;
       }
       if (methods.length === 0 && !anyOnline) {
@@ -7016,6 +7107,14 @@ if (data.startsWith("topup_paritypay:")) {
     // - Если 1 → автоактивация (как раньше — без выбора).
     // - Если 2+ → показать список с кнопками.
     // Старый callback `trial:confirm` оставлен как back-compat (legacy single-trial flow).
+    if (data === "menu:cloudtrial") {
+      if (!config?.cloudpaymentsEnabled || !config.cloudpaymentsTrialTariffId || !config.cloudpaymentsTrialDays) return;
+      try {
+        const payment = await api.createCloudpaymentsPayment(token, { tariffId: config.cloudpaymentsTrialTariffId, paidTrial: true });
+        await editMessageContent(ctx, `Пробный доступ: ${config.cloudpaymentsTrialDays} дн. за ${config.cloudpaymentsTrialAmount ?? 1} ₽.\nПосле пробного периода — регулярная оплата тарифа. Перед оплатой вы увидите сумму и сможете подтвердить условия.`, { inline_keyboard: [[{ text: "Посмотреть условия и оплатить", url: payment.payUrl }], [{ text: "Назад", callback_data: "menu:main" }]] });
+      } catch (e) { await editMessageContent(ctx, e instanceof Error ? e.message : "Не удалось создать счёт", backToMenu()); }
+      return;
+    }
     if (data === "menu:trial") {
       try {
         const { items } = await api.getAvailableTrials(token);
@@ -7928,11 +8027,12 @@ if (data.startsWith("topup_paritypay:")) {
     // покупка подарочной через внешние платёжки.
     // Создаём обычный pay_tariff* платёж с флагом asGift=true. Webhook при оплате
     // создаст Subscription с purchasedAsGift=true (попадёт в «🎁 Мои подарки» юзера).
-    if (data.startsWith("gift_pay_stars:") || data.startsWith("gift_pay_yookassa:") || data.startsWith("gift_pay_yoomoney:") || data.startsWith("gift_pay_cryptopay:") || data.startsWith("gift_pay_heleket:") || data.startsWith("gift_pay_lava:") || data.startsWith("gift_pay_paritypay:")) {
+    if (data.startsWith("gift_pay_stars:") || data.startsWith("gift_pay_yookassa:") || data.startsWith("gift_pay_yoomoney:") || data.startsWith("gift_pay_cryptopay:") || data.startsWith("gift_pay_heleket:") || data.startsWith("gift_pay_lava:") || data.startsWith("gift_pay_paritypay:") || data.startsWith("gift_pay_cloudpayments:")) {
       const provider = data.startsWith("gift_pay_stars:") ? "telegram_stars" : data.startsWith("gift_pay_yookassa:") ? "yookassa"
         : data.startsWith("gift_pay_yoomoney:") ? "yoomoney"
         : data.startsWith("gift_pay_cryptopay:") ? "cryptopay"
         : data.startsWith("gift_pay_heleket:") ? "heleket"
+        : data.startsWith("gift_pay_cloudpayments:") ? "cloudpayments"
         : data.startsWith("gift_pay_paritypay:") ? "paritypay"
         : "lava";
       const tariffId = data.slice(data.indexOf(":") + 1);
@@ -7998,6 +8098,9 @@ if (data.startsWith("topup_paritypay:")) {
           payUrl = p.payUrl;
         } else if (provider === "heleket") {
           const p = await api.createHeleketPayment(token, { amount: effectivePrice, currency: tariff.currency, tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
+          payUrl = p.payUrl;
+        } else if (provider === "cloudpayments") {
+          const p = await api.createCloudpaymentsPayment(token, { amount: effectivePrice, currency: "RUB", tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
           payUrl = p.payUrl;
         } else if (provider === "paritypay") {
           const p = await api.createParitypayPayment(token, { amount: effectivePrice, currency: "RUB", tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
@@ -8572,6 +8675,7 @@ composer.on("message:text", async (ctx) => {
           heleketEnabled: !!cfgT?.heleketEnabled,
           rollypayEnabled: !!cfgT?.rollypayEnabled,
           paritypayEnabled: !!cfgT?.paritypayEnabled,
+          cloudpaymentsEnabled: !!cfgT?.cloudpaymentsEnabled,
           lavaEnabled: !!cfgT?.lavaEnabled,
         },
       ),
@@ -8688,7 +8792,7 @@ composer.on("message:text", async (ctx) => {
     const rollypayEnabledMsg = !!config?.rollypayEnabled;
     const paritypayEnabledMsg = !!config?.paritypayEnabled;
     const lavaEnabledMsg = !!config?.lavaEnabled;
-    if (!methods.length && !yooEnabled && !yookassaEnabledMsg && !cryptopayEnabledMsg && !heleketEnabledMsg && !rollypayEnabledMsg && !paritypayEnabledMsg && !lavaEnabledMsg && !config?.telegramStarsEnabled) {
+    if (!methods.length && !yooEnabled && !yookassaEnabledMsg && !cryptopayEnabledMsg && !heleketEnabledMsg && !rollypayEnabledMsg && !paritypayEnabledMsg && !config?.cloudpaymentsEnabled && !lavaEnabledMsg && !config?.telegramStarsEnabled) {
       await ctx.reply("Пополнение временно недоступно.");
       return;
     }
@@ -8712,7 +8816,7 @@ composer.on("message:text", async (ctx) => {
       const topupMsg1 = titleWithEmoji("CARD", `Пополнение на ${formatMoney(num, client.preferredCurrency)}\n\nВыберите способ оплаты:`, config?.botEmojis);
       await ctx.reply(topupMsg1.text, {
         entities: topupMsg1.entities.length ? topupMsg1.entities : undefined,
-        reply_markup: topupPaymentMethodButtons(String(num), methods, config?.botBackLabel ?? null, backStyle, msgEmojiIds, { currency: client.preferredCurrency, yoomoneyEnabled: yooEnabled, yookassaEnabled: yookassaEnabledMsg, cryptopayEnabled: cryptopayEnabledMsg, heleketEnabled: heleketEnabledMsg, rollypayEnabled: rollypayEnabledMsg, paritypayEnabled: paritypayEnabledMsg, lavaEnabled: lavaEnabledMsg }),
+        reply_markup: topupPaymentMethodButtons(String(num), methods, config?.botBackLabel ?? null, backStyle, msgEmojiIds, { currency: client.preferredCurrency, yoomoneyEnabled: yooEnabled, yookassaEnabled: yookassaEnabledMsg, cryptopayEnabled: cryptopayEnabledMsg, heleketEnabled: heleketEnabledMsg, rollypayEnabled: rollypayEnabledMsg, paritypayEnabled: paritypayEnabledMsg, cloudpaymentsEnabled: !!config?.cloudpaymentsEnabled, lavaEnabled: lavaEnabledMsg }),
       });
       return;
     }
@@ -8823,6 +8927,7 @@ async function groupedProfileMenu(config: Awaited<ReturnType<typeof api.getPubli
   return mainMenu({
     liteMode: config.liteMode === true,
     section: "profile", groupCabinet: true,
+    paidTrial: config.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
     showTrial: trials.hasAnyEnabled ? trials.items.length > 0 : Boolean(config.trialEnabled && !trialUsed),
     showVpn: connectableSubscriptions(subscriptions.items).length > 0,
     showRenew: renewableSubscriptions(subscriptions.items).length > 0,

@@ -1,3 +1,5 @@
+import { cloudWebhooksRouter } from "./modules/cloudpayments/cloudpayments.webhooks.js";
+import { cloudPublicRouter } from "./modules/cloudpayments/cloudpayments.routes.js";
 import { cabinetDesignAdminRouter, cabinetDesignPublicRouter } from "./modules/cabinet-design/routes.js";
 import { starsBotRouter } from "./modules/telegram-stars/stars.routes.js";
 import { maintenanceGuard } from "./modules/client/maintenance.js";
@@ -158,7 +160,9 @@ app.use("/api/webhooks/lava", express.raw({ type: "application/json" }), lavaWeb
 app.use("/api/webhooks/platega", express.raw({ type: "application/json" }));
 
 // Лимит 5MB для настроек с логотипом и favicon (data URL)
+app.use("/api/webhooks/cloudpayments", express.raw({ type: ["application/json", "application/x-www-form-urlencoded"], limit: "64kb" }), cloudWebhooksRouter);
 app.use(express.json({ limit: "200mb" }));
+app.use("/api/cloudpayments", cloudPublicRouter);
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // ——— Защита от накрутки аккаунтов и перебора ———

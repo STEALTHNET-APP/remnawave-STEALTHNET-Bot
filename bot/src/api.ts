@@ -122,6 +122,10 @@ export async function getPublicConfig(): Promise<{
   cryptopayEnabled?: boolean;
   heleketEnabled?: boolean;
   rollypayEnabled?: boolean;
+  cloudpaymentsEnabled?: boolean;
+  cloudpaymentsTrialDays?: number;
+  cloudpaymentsTrialAmount?: number;
+  cloudpaymentsTrialTariffId?: string | null;
   paritypayEnabled?: boolean;
   lavaEnabled?: boolean;
   lavatopEnabled?: boolean;
@@ -571,6 +575,12 @@ export async function createParitypayPayment(
   body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
 ): Promise<{ paymentId: string; payUrl: string }> {
   return fetchJson("/api/client/paritypay/create-payment", { method: "POST", body, token });
+}
+export async function createCloudpaymentsPayment(
+  token: string,
+  body: { paidTrial?: boolean; amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
+): Promise<{ paymentId: string; payUrl: string }> {
+  return fetchJson("/api/client/cloudpayments/create-payment", { method: "POST", body, token });
 }
 
 /** LAVA Business */

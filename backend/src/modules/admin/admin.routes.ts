@@ -148,6 +148,15 @@ adminRouter.use(requireAuth);
 // 🔒 SECURITY: секционный RBAC ДОЛЖЕН стоять ДО регистрации под-роутеров — иначе backup
 // (pg_dump/restore БД) и /languages обходят requireAdminSection (менеджер дампит/перезаписывает БД).
 adminRouter.use(requireAdminSection);
+adminRouter.get("/settings/cloudpayments-status", asyncRoute(async (_req, res) => {
+  const [agreements, jobs, events, eventErrors] = await Promise.all([
+    prisma.cloudPaymentAgreement.findMany({ orderBy: { updatedAt: "desc" }, take: 50, select: { id: true, clientId: true, state: true, amount: true, nextChargeAt: true, lastError: true } }),
+    prisma.cloudPaymentJob.findMany({ where: { state: { not: "DONE" } }, orderBy: { createdAt: "asc" }, take: 50, select: { paymentId: true, state: true, error: true } }),
+    prisma.cloudPaymentEvent.count({ where: { processedAt: null } }),
+    prisma.cloudPaymentEvent.findMany({ where: { processedAt: null, error: { not: null } }, orderBy: { receivedAt: "asc" }, take: 50, select: { id: true, kind: true, error: true } }),
+  ]);
+  res.json({ agreements, jobs, pendingEvents: events, eventErrors });
+}));
 adminRouter.use("/updates", updateRouter);
 adminRouter.use("/settings/mail-test", mailTestRouter);
 
@@ -1890,6 +1899,10 @@ adminRouter.delete("/clients/:id", async (req, res) => {
   const client = await prisma.client.findUnique({ where: { id: parsed.data.id }, select: { id: true, remnawaveUuid: true, telegramId: true, email: true } });
   if (!client) return res.status(404).json({ message: "Клиент не найден" });
 
+  if (await prisma.cloudPaymentAgreement.count({ where: { clientId: parsed.data.id } }) || await prisma.payment.count({ where: { clientId: parsed.data.id, provider: "cloudpayments" } })) {
+    return res.status(409).json({ message: "У клиента есть история CloudPayments. Отмените автоплатежи и заблокируйте аккаунт; удаление платёжной истории недоступно." });
+  }
+
   // T (11.05.2026): удалять ВСЕ Remna-юзеры клиента,
   // включая дополнительные подписки (secondary_subscriptions с собственным remnawave_uuid).
   // Раньше удалялся только primary, secondary висели в Remna навсегда.
@@ -2882,7 +2895,7 @@ adminRouter.get("/clients/:id/remna/usage", async (req, res) => {
 // Настройки (языки, валюты, название сервиса) — для бота, mini app, сайта
 adminRouter.get("/settings", asyncRoute(async (_req, res) => {
   const config = await getSystemConfig();
-  return res.json(config);
+  return res.json({ ...config, cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
 }));
 
 /** Версия панели — для мониторинга. Под auth, чтобы не светить наружу. */
@@ -3116,6 +3129,14 @@ const updateSettingsSchema = z.object({
   cryptopayTestnet: z.boolean().optional(),
   heleketMerchantId: z.string().max(500).nullable().optional(),
   heleketApiKey: z.string().max(500).nullable().optional(),
+  cloudpaymentsPublicId: z.string().max(150).optional(),
+  cloudpaymentsApiSecret: z.string().max(500).optional(),
+  cloudpaymentsEnabled: z.boolean().optional(),
+  cloudpaymentsTestMode: z.boolean().optional(),
+  cloudpaymentsTrialDays: z.number().int().min(0).max(365).optional(),
+  cloudpaymentsTrialAmount: z.number().min(1).max(1000000).optional(),
+  cloudpaymentsTrialTariffId: z.string().nullable().optional(),
+  cloudpaymentsGraceDays: z.number().int().min(0).max(30).optional(),
   paritypayShopId: z.string().max(100).nullable().optional(),
   paritypayApiKey: z.string().max(500).nullable().optional(),
   paritypaySigningSecret: z.string().max(500).nullable().optional(),
@@ -3789,6 +3810,38 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.heleketMerchantId !== undefined) {
     const val = updates.heleketMerchantId ?? "";
     await prisma.systemSetting.upsert({ where: { key: "heleket_merchant_id" }, create: { key: "heleket_merchant_id", value: val }, update: { value: val } });
+  }
+  if (updates.cloudpaymentsPublicId !== undefined && String(updates.cloudpaymentsPublicId) !== "********") {
+    const value = String(updates.cloudpaymentsPublicId ?? "");
+    await prisma.systemSetting.upsert({ where: { key: "cloudpayments_public_id" }, create: { key: "cloudpayments_public_id", value }, update: { value } });
+  }
+  if (updates.cloudpaymentsApiSecret !== undefined && String(updates.cloudpaymentsApiSecret) !== "********") {
+    const value = String(updates.cloudpaymentsApiSecret ?? "");
+    await prisma.systemSetting.upsert({ where: { key: "cloudpayments_api_secret" }, create: { key: "cloudpayments_api_secret", value }, update: { value } });
+  }
+  if (updates.cloudpaymentsEnabled !== undefined && String(updates.cloudpaymentsEnabled) !== "********") {
+    const value = String(updates.cloudpaymentsEnabled ?? "");
+    await prisma.systemSetting.upsert({ where: { key: "cloudpayments_enabled" }, create: { key: "cloudpayments_enabled", value }, update: { value } });
+  }
+  if (updates.cloudpaymentsTestMode !== undefined && String(updates.cloudpaymentsTestMode) !== "********") {
+    const value = String(updates.cloudpaymentsTestMode ?? "");
+    await prisma.systemSetting.upsert({ where: { key: "cloudpayments_test_mode" }, create: { key: "cloudpayments_test_mode", value }, update: { value } });
+  }
+  if (updates.cloudpaymentsTrialDays !== undefined && String(updates.cloudpaymentsTrialDays) !== "********") {
+    const value = String(updates.cloudpaymentsTrialDays ?? "");
+    await prisma.systemSetting.upsert({ where: { key: "cloudpayments_trial_days" }, create: { key: "cloudpayments_trial_days", value }, update: { value } });
+  }
+  if (updates.cloudpaymentsTrialAmount !== undefined && String(updates.cloudpaymentsTrialAmount) !== "********") {
+    const value = String(updates.cloudpaymentsTrialAmount ?? "");
+    await prisma.systemSetting.upsert({ where: { key: "cloudpayments_trial_amount" }, create: { key: "cloudpayments_trial_amount", value }, update: { value } });
+  }
+  if (updates.cloudpaymentsTrialTariffId !== undefined && String(updates.cloudpaymentsTrialTariffId) !== "********") {
+    const value = String(updates.cloudpaymentsTrialTariffId ?? "");
+    await prisma.systemSetting.upsert({ where: { key: "cloudpayments_trial_tariff_id" }, create: { key: "cloudpayments_trial_tariff_id", value }, update: { value } });
+  }
+  if (updates.cloudpaymentsGraceDays !== undefined && String(updates.cloudpaymentsGraceDays) !== "********") {
+    const value = String(updates.cloudpaymentsGraceDays ?? "");
+    await prisma.systemSetting.upsert({ where: { key: "cloudpayments_grace_days" }, create: { key: "cloudpayments_grace_days", value }, update: { value } });
   }
   if (updates.paritypayShopId !== undefined && updates.paritypayShopId !== "********") {
     const val = updates.paritypayShopId ?? "";
@@ -4500,7 +4553,7 @@ adminRouter.patch("/settings", async (req, res) => {
   // invalidate cache до возврата свежего config'а.
   invalidateSystemConfigCache();
   const config = await getSystemConfig();
-  return res.json(config);
+  return res.json({ ...config, cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
 });
 
 adminRouter.post("/nalog/test", asyncRoute(async (_req, res) => {
@@ -4545,7 +4598,7 @@ adminRouter.post("/settings/reset-landing-text", asyncRoute(async (req, res) => 
     });
   }
   const config = await getSystemConfig();
-  return res.json(config);
+  return res.json({ ...config, cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
 }));
 
 // ——— Тикеты (админ: список, просмотр, закрытие, ответ, массовые действия)

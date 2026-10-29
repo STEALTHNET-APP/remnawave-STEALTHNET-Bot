@@ -1,3 +1,4 @@
+import { prepareCloudCheckout, cloudClientRouter } from "../cloudpayments/cloudpayments.routes.js";
 import { deleteTickets } from "../ticket/ticket-delete.service.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { webClientRouter } from "../amnezia-web/client.routes.js";
@@ -1560,6 +1561,7 @@ clientRouter.get("/tour-steps", async (_req, res) => {
 });
 
 clientRouter.use(requireClientAuth);
+clientRouter.use("/cloudpayments", cloudClientRouter);
 
 // ——— 2FA (TOTP) ———
 const twoFaConfirmSchema = z.object({ code: z.string().length(6, "Код должен быть 6 цифр").regex(/^\d+$/) });
@@ -3457,6 +3459,9 @@ clientRouter.post("/subscription/:type/:id/auto-renew", async (req, res) => {
       });
   if (!sub || (sub.ownerId !== clientId && sub.giftedToClientId !== clientId)) {
     return res.status(404).json({ message: "Подписка не найдена" });
+  }
+  if (enabled && await prisma.cloudPaymentAgreement.count({ where: { subscriptionId: sub.id, state: { in: ["PENDING", "ACTIVE", "PAST_DUE", "CANCEL_PENDING"] } } })) {
+    return res.status(409).json({ message: "Для подписки настроен CloudPayments. Управление автоплатежом доступно в профиле." });
   }
   if (enabled && !sub.tariffId) {
     return res.status(400).json({ message: "К подписке не привязан тариф — автосписание невозможно" });
@@ -6820,6 +6825,216 @@ clientRouter.post("/paritypay/create-payment", requireRemnaPaymentOnline, asyncH
     return res.status(500).json({ message: message || "Ошибка создания платежа" });
   }
 }));
+
+clientRouter.post("/cloudpayments/create-payment", asyncHandler(async (req, res) => {
+  try {
+    const clientId = (req as unknown as { clientId: string }).clientId;
+    const parsed = heleketCreatePaymentSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Неверные параметры", errors: parsed.error.flatten() });
+    const config = await getSystemConfig();
+    if (!config.cloudpaymentsEnabled || !config.cloudpaymentsPublicId || !config.cloudpaymentsApiSecret) return res.status(503).json({ message: "CloudPayments не настроен" });
+    const { extendsSecondarySubId, removeExtrasOnActivate, asGift, asAdditional } = parsed.data;
+
+    const { amount: amountBody, currency: currencyBody, tariffId: tariffIdBody, proxyTariffId: proxyTariffIdBody, singboxTariffId: singboxTariffIdBody, promoCode: promoCodeStr, extraOption, customBuild: customBuildBody } = parsed.data;
+    let amountRounded: number;
+    let currencyUpper: string;
+    let tariffIdToStore: string | null = null;
+    let proxyTariffIdToStore: string | null = null;
+    let singboxTariffIdToStore: string | null = null;
+    let metadataObj: Record<string, unknown> = promoCodeStr ? { promoCode: promoCodeStr } : {};
+
+    if (customBuildBody) {
+      const cfg = getCustomBuildConfig(config);
+      if (!cfg) return res.status(400).json({ message: "Гибкий тариф отключён" });
+      let { days, devices, trafficGb } = customBuildBody;
+      if (days > cfg.maxDays || devices > cfg.maxDevices) {
+        return res.status(400).json({ message: `Дни: 1–${cfg.maxDays}, устройств: 1–${cfg.maxDevices}` });
+      }
+      const trafficLimitBytes =
+        cfg.trafficMode === "per_gb" && trafficGb != null && trafficGb >= 0
+          ? Math.round(trafficGb * 1024 ** 3)
+          : null;
+      amountRounded = days * cfg.pricePerDay + devices * cfg.pricePerDevice;
+      if (cfg.trafficMode === "per_gb" && trafficGb != null && trafficGb > 0) amountRounded += trafficGb * cfg.pricePerGb;
+      amountRounded = Math.round(amountRounded * 100) / 100;
+      currencyUpper = cfg.currency.toUpperCase();
+      metadataObj = {
+        customBuild: {
+          durationDays: days,
+          deviceLimit: devices,
+          trafficLimitBytes,
+          internalSquadUuids: [cfg.squadUuid],
+        },
+      };
+    } else if (extraOption) {
+      const cfg = config as { sellOptionsEnabled?: boolean; sellOptionsTrafficEnabled?: boolean; sellOptionsTrafficProducts?: SellOptionTrafficProduct[]; sellOptionsDevicesEnabled?: boolean; sellOptionsDevicesProducts?: SellOptionDeviceProduct[]; sellOptionsServersEnabled?: boolean; sellOptionsServersProducts?: SellOptionServerProduct[] };
+      if (extraOption.targetSubscriptionId) {
+        const owned = await prisma.subscription.findFirst({ where: { id: extraOption.targetSubscriptionId, ownerId: clientId } });
+        if (!owned) return res.status(404).json({ message: "Подписка не найдена" });
+      }
+      if (!cfg.sellOptionsEnabled) return res.status(400).json({ message: "Продажа опций отключена" });
+      if (extraOption.kind === "traffic") {
+        const product = cfg.sellOptionsTrafficEnabled && cfg.sellOptionsTrafficProducts?.find((p) => p.id === extraOption.productId);
+        if (!product) return res.status(400).json({ message: "Опция не найдена" });
+        amountRounded = Math.round(product.price * 100) / 100;
+        currencyUpper = product.currency.toUpperCase();
+        metadataObj = { extraOption: { kind: "traffic", trafficBytes: Math.round(product.trafficGb * 1024 ** 3) } };
+      } else if (extraOption.kind === "devices") {
+        const product = cfg.sellOptionsDevicesEnabled && cfg.sellOptionsDevicesProducts?.find((p) => p.id === extraOption.productId);
+        if (!product) return res.status(400).json({ message: "Опция не найдена" });
+        const prorataCoef = extraOption.targetSubscriptionId ? await calculateDevicesProrataPriceCoefficient(extraOption.targetSubscriptionId) : await calculateDevicesProrataPriceCoefficientForPrimary(clientId);
+        amountRounded = Math.round(product.price * prorataCoef * 100) / 100;
+        currencyUpper = product.currency.toUpperCase();
+        metadataObj = { extraOption: { kind: "devices", deviceCount: product.deviceCount, productPriceMonthly: product.price } };
+      } else {
+        const product = cfg.sellOptionsServersEnabled && cfg.sellOptionsServersProducts?.find((p) => p.id === extraOption.productId);
+        if (!product) return res.status(400).json({ message: "Опция не найдена" });
+        amountRounded = Math.round(product.price * 100) / 100;
+        currencyUpper = product.currency.toUpperCase();
+        metadataObj = { extraOption: { kind: "servers", squadUuid: product.squadUuid, ...((product.trafficGb ?? 0) > 0 && { trafficBytes: Math.round((product.trafficGb ?? 0) * 1024 ** 3) }) } };
+      }
+    } else {
+      currencyUpper = (currencyBody ?? "RUB").toUpperCase();
+      if (tariffIdBody) {
+        const tariff = await prisma.tariff.findUnique({
+          where: { id: tariffIdBody },
+          include: { priceOptions: true },
+        });
+        if (!tariff) return res.status(400).json({ message: "Тариф не найден" });
+        currencyUpper = (tariff.currency ?? currencyUpper).toUpperCase();
+        if ("extendsSecondarySubId" in parsed.data && parsed.data.extendsSecondarySubId) {
+          const { checkSubscriptionRenewalCooldown } = await import("../tariff/tariff-cooldown.service.js");
+          const cd = await checkSubscriptionRenewalCooldown(parsed.data.extendsSecondarySubId!);
+          if (!cd.ok) return res.status(429).json({ message: cd.message, code: "TARIFF_COOLDOWN", daysLeft: cd.daysLeft });
+        }
+        tariffIdToStore = tariffIdBody;
+        let unitPriceCalc = tariff.price;
+        let effectiveDaysCalc = tariff.durationDays;
+        if (parsed.data.tariffPriceOptionId) {
+          const opt = (tariff.priceOptions ?? []).find((p) => p.id === parsed.data.tariffPriceOptionId);
+          if (opt) {
+            unitPriceCalc = opt.price;
+            effectiveDaysCalc = opt.durationDays;
+          }
+        }
+        if (parsed.data.extendsSecondarySubId && parsed.data.removeExtrasOnActivate !== true) {
+          const sub = await prisma.subscription.findUnique({
+            where: { id: parsed.data.extendsSecondarySubId },
+            select: { extraDevicesMonthlyPrice: true },
+          });
+          const monthlyPrice = sub?.extraDevicesMonthlyPrice ?? 0;
+          if (monthlyPrice > 0 && effectiveDaysCalc > 0) {
+            unitPriceCalc += Math.round(monthlyPrice * (effectiveDaysCalc / 30) * 100) / 100;
+          }
+        }
+        {
+          const newExtrasCalc = Math.max(0, parsed.data.deviceCount ?? 0);
+          if (newExtrasCalc > 0) {
+            const { calcExtrasPrice } = await import("../tariff/extras-pricing.js");
+            const r = calcExtrasPrice(
+              tariff.pricePerExtraDevice ?? 0,
+              newExtrasCalc,
+              tariff.deviceDiscountTiers,
+              effectiveDaysCalc,
+            );
+            unitPriceCalc += r.extrasTotal;
+          }
+        }
+        amountRounded = Math.round(unitPriceCalc * 100) / 100;
+      } else if (proxyTariffIdBody) {
+        const proxyTariff = await prisma.proxyTariff.findUnique({ where: { id: proxyTariffIdBody } });
+        if (!proxyTariff || !proxyTariff.enabled) return res.status(400).json({ message: "Прокси-тариф не найден" });
+        proxyTariffIdToStore = proxyTariffIdBody;
+        currencyUpper = proxyTariff.currency.toUpperCase();
+        amountRounded = Math.round((proxyTariff.price) * 100) / 100;
+      } else if (singboxTariffIdBody) {
+        const singboxTariff = await prisma.singboxTariff.findUnique({ where: { id: singboxTariffIdBody } });
+        if (!singboxTariff || !singboxTariff.enabled) return res.status(400).json({ message: "Тариф Sing-box не найден" });
+        singboxTariffIdToStore = singboxTariffIdBody;
+        currencyUpper = singboxTariff.currency.toUpperCase();
+        amountRounded = Math.round((singboxTariff.price) * 100) / 100;
+      } else {
+        if (amountBody == null) return res.status(400).json({ message: "Укажите сумму" });
+        amountRounded = Math.round(amountBody * 100) / 100;
+      }
+    }
+
+    if (amountRounded < 1) return res.status(400).json({ message: "Минимальная сумма платежа — 1" });
+
+    const cloudpaymentsIsTopup = !tariffIdToStore && !proxyTariffIdToStore && !singboxTariffIdToStore && !customBuildBody && !extraOption;
+    if (!cloudpaymentsIsTopup) {
+      const originalBeforePersonal = amountRounded;
+      const pd = await applyPersonalDiscount(amountRounded, clientId);
+      if (pd.personalDiscountPercent > 0) {
+        amountRounded = pd.amount;
+        metadataObj = { ...metadataObj, personalDiscountPercent: pd.personalDiscountPercent, originalAmount: originalBeforePersonal };
+      }
+    }
+
+    if (promoCodeStr?.trim() && !extraOption && !customBuildBody) {
+      const result = await validatePromoCode(promoCodeStr.trim(), clientId);
+      if (!result.ok) return res.status(result.status).json({ message: result.error });
+      const promo = result.promo;
+      if (promo.type !== "DISCOUNT") return res.status(400).json({ message: "Этот промокод не даёт скидку на оплату" });
+      const originalAmount = (metadataObj as { originalAmount?: number }).originalAmount ?? amountRounded;
+      if (promo.discountPercent && promo.discountPercent > 0) {
+        amountRounded = Math.max(0, amountRounded - amountRounded * promo.discountPercent / 100);
+      }
+      if (promo.discountFixed && promo.discountFixed > 0) {
+        amountRounded = Math.max(0, amountRounded - promo.discountFixed);
+      }
+      amountRounded = Math.round(amountRounded * 100) / 100;
+      if (amountRounded <= 0) return res.status(400).json({ message: "Итоговая сумма не может быть 0" });
+      metadataObj = { ...metadataObj, promoCodeId: promo.id, originalAmount };
+    }
+
+    if (extraOption?.targetSubscriptionId) metadataObj.targetSubscriptionId = extraOption.targetSubscriptionId;
+    const rpSnap = cloudpaymentsIsTopup ? await paymentSnapshotTopup(clientId, amountRounded) : await paymentSnapshotProduct(clientId, amountRounded);
+
+    const orderId = randomUUID();
+    const payment = await createPayment({
+      data: asPaymentUncheckedCreate({
+        clientId,
+        orderId,
+        amount: rpSnap.amount,
+        currency: currencyUpper,
+        status: "PENDING",
+        provider: "cloudpayments",
+        tariffId: tariffIdToStore,
+        tariffPriceOptionId: parsed.data.tariffPriceOptionId ?? null,
+        deviceCount: parsed.data.deviceCount ?? null,
+        proxyTariffId: proxyTariffIdToStore,
+        singboxTariffId: singboxTariffIdToStore,
+        metadata: (() => {
+          const meta = { ...metadataObj };
+          if (asAdditional && tariffIdToStore) {
+            meta.isAdditionalSubscription = true;
+          }
+          if (asGift) {
+            meta.purchasedAsGift = true;
+          }
+          if (extendsSecondarySubId) {
+            meta.extendsSecondarySubId = extendsSecondarySubId;
+            if (removeExtrasOnActivate === true) {
+              meta.removeExtrasOnActivate = true;
+            }
+          }
+          if (parsed.data.replaceTrialSubId) meta.replaceTrialSubId = parsed.data.replaceTrialSubId;
+          if (removeExtrasOnActivate === true) meta.removeExtrasOnActivate = true;
+          return Object.keys(meta).length > 0 ? JSON.stringify(meta) : null;
+        })(),
+      }),
+    });
+
+    const payUrl = await prepareCloudCheckout(payment.id, req.body?.paidTrial === true);
+    return res.status(201).json({ paymentId: payment.id, payUrl });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[cloudpayments/create-payment]", message, err);
+    return res.status(500).json({ message: message || "Ошибка создания платежа" });
+  }
+}));
+
 
 // ═════════════════════════════════════════════════════════════════
 // LAVA Business — счета (карты / СБП / СберPay) в рублях.
