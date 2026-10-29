@@ -25,3 +25,20 @@ test('public cabinet config honors a disabled roulette and refreshes after admin
   await updateRouletteSettings({enabled:true});
   assert.equal((await getPublicConfig()).rouletteEnabled,true);
 });
+
+test('Mini App appearance exposes the administrator selection and browser opt-in', async () => {
+  for (const design of ['classic', 'modern', 'stealth', 'aurora']) {
+    settings.set('cabinet_design', design);
+    settings.set('cabinet_design_apply_in_browser', 'false');
+    invalidateSystemConfigCache();
+    assert.equal((await getPublicConfig()).cabinetDesign, design);
+    assert.equal((await getPublicConfig()).cabinetDesignApplyInBrowser, false);
+  }
+  settings.set('cabinet_design', 'modern');
+  settings.set('cabinet_design_apply_in_browser', 'true');
+  invalidateSystemConfigCache();
+  assert.equal((await getPublicConfig()).cabinetDesignApplyInBrowser, true);
+  settings.set('cabinet_design', 'unsupported');
+  invalidateSystemConfigCache();
+  assert.equal((await getPublicConfig()).cabinetDesign, 'classic');
+});
