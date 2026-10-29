@@ -1,3 +1,4 @@
+import { CabinetConfigProvider } from "@/contexts/cabinet-config";
 import { ClientHistoryPage } from "@/pages/cabinet/client-history";
 import { ClientWalletPage } from "@/pages/cabinet/client-wallet";
 import { ClientHelpPage } from "@/pages/cabinet/client-help";
@@ -320,7 +321,7 @@ function AppRoutes() {
           <ClientAuthProvider>
             <RequireClientAuth>
               <RequireOnboarding>
-                <ClientOnboardingPage />
+                <CabinetConfigProvider><ClientOnboardingPage /></CabinetConfigProvider>
               </RequireOnboarding>
             </RequireClientAuth>
           </ClientAuthProvider>
