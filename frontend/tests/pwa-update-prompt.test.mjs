@@ -10,7 +10,7 @@ const bundled = await build({
   absWorkingDir: root,
   tsconfig: root + "tsconfig.app.json",
   stdin: {
-    contents: `import React from 'react';import {createRoot} from 'react-dom/client';import {PwaUpdatePrompt} from './src/components/pwa/pwa-update-prompt';createRoot(document.getElementById('root')).render(<PwaUpdatePrompt/>);`,
+    contents: `import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {PwaUpdatePrompt} from './src/components/pwa/pwa-update-prompt';function App(){const [value,setValue]=useState('initial');return <><input id="controlled" value={value} onChange={e=>setValue(e.target.value)}/><select id="select"><option>A</option><option>B</option></select><div id="rich" contentEditable suppressContentEditableWarning>initial</div><PwaUpdatePrompt/></>};createRoot(document.getElementById('root')).render(<App/>);`,
     resolveDir: root, loader: "tsx",
   },
   bundle: true, write: false, jsx: "automatic", define: { "process.env.NODE_ENV": '"production"' },
@@ -42,8 +42,10 @@ async function scenario(path, run) {
 }
 
 try {
-  await test("idle dashboard updates once and preserves URL", () => scenario("/cabinet/dashboard", async page => {
-    await page.clock.runFor(70000);
+  await test("idle dashboard updates once after 7s idle threshold and preserves URL", () => scenario("/cabinet/dashboard", async page => {
+    await page.clock.runFor(6000);
+    assert.equal(await page.evaluate(() => window.updates || 0), 0);
+    await page.clock.runFor(7000);
     assert.equal(await page.evaluate(() => window.updates), 1);
     assert.equal(page.url(), base + "/cabinet/dashboard");
     await page.clock.runFor(70000);
@@ -79,6 +81,36 @@ try {
     await page.clock.runFor(120000);
     assert.equal(await page.evaluate(() => window.updates || 0), 0);
   }));
+  await test("controlled React value remains protected when defaultValue follows state", () => scenario("/admin", async page => {
+    await page.locator("#controlled").fill("unsaved React state");
+    await page.locator("#controlled").blur();
+    assert.equal(await page.locator("#controlled").evaluate(el => el.value === el.defaultValue), true);
+    await page.clock.runFor(120000);
+    assert.equal(await page.evaluate(() => window.updates || 0), 0);
+  }));
+  await test("select and rich text edits remain protected after blur", async () => {
+    for (const id of ["select", "rich"]) {
+      await scenario("/admin", async page => {
+        if (id === "select") await page.locator("#select").selectOption("B");
+        else await page.locator("#rich").fill("edited document");
+        await page.locator(`#${id}`).blur();
+        await page.clock.runFor(120000);
+        assert.equal(await page.evaluate(() => window.updates || 0), 0);
+      });
+    }
+  });
+  await test("reverted and unmounted edits stop blocking automatic updates", async () => {
+    for (const action of ["revert", "remove"]) {
+      await scenario("/admin", async page => {
+        await page.locator("#controlled").fill("unsaved");
+        if (action === "revert") await page.locator("#controlled").fill("initial");
+        else await page.locator("#controlled").evaluate(el => el.remove());
+        if (action === "revert") await page.locator("#controlled").blur();
+        await page.clock.runFor(30000);
+        assert.equal(await page.evaluate(() => window.updates), 1);
+      });
+    }
+  });
   await test("Aurora sheet prevents reload", () => scenario("/cabinet/dashboard", async page => {
     await page.evaluate(() => { const sheet = document.createElement("div"); sheet.className = "au-sheet-overlay"; sheet.textContent = "payment"; document.body.append(sheet); });
     await page.clock.runFor(120000);

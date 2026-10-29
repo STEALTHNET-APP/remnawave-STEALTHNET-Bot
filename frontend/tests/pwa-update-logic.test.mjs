@@ -13,15 +13,14 @@ test('a hanging worker promise cannot leave the button spinning forever', async 
   assert.equal(reloads, 1);
 });
 
-test('an unactivated worker times out without reloading stale assets', async t => {
+test('fallback reload fires after 1500ms even when controllerchange is not dispatched in webviews', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   let reloads = 0;
   const registration = { waiting: { state: 'installed', postMessage() {} } };
   const pending = applyWorkerUpdate(async () => {}, registration, new EventTarget(), () => reloads++);
-  const rejected = assert.rejects(pending, /не ответило/);
-  t.mock.timers.tick(8000);
-  await rejected;
-  assert.equal(reloads, 0);
+  t.mock.timers.tick(1500);
+  await pending;
+  assert.equal(reloads, 1);
 });
 
 test('activation reloads exactly once and clears pending timers', async t => {

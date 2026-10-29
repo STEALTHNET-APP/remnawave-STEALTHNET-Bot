@@ -16,6 +16,61 @@ export function isUserActivelyEditing(): boolean {
   return active instanceof HTMLElement && (active.matches("input, textarea, select") || active.isContentEditable);
 }
 
+const editableSelector = 'input:not([type=hidden]), textarea, select, [contenteditable="true"], [contenteditable=""]';
+
+function editableValue(element: Element): string {
+  if (element instanceof HTMLInputElement) {
+    return element.type === "checkbox" || element.type === "radio" ? String(element.checked) : element.value;
+  }
+  if (element instanceof HTMLTextAreaElement) return element.value;
+  if (element instanceof HTMLSelectElement) return JSON.stringify(Array.from(element.selectedOptions, option => option.value));
+  return element.innerHTML;
+}
+
+function defaultEditableValue(element: Element): string | undefined {
+  if (element instanceof HTMLInputElement) {
+    return element.type === "checkbox" || element.type === "radio" ? String(element.defaultChecked) : element.defaultValue;
+  }
+  if (element instanceof HTMLTextAreaElement) return element.defaultValue;
+  if (element instanceof HTMLSelectElement) {
+    const selected = Array.from(element.options).filter(option => option.defaultSelected);
+    return JSON.stringify((selected.length || element.multiple ? selected : Array.from(element.options).slice(0, 1)).map(option => option.value));
+  }
+  return undefined;
+}
+
+function createEditTracker() {
+  const baseline = new WeakMap<Element, string | undefined>();
+  const changed = new Set<Element>();
+  const target = (event: Event) => event.target instanceof Element ? event.target.closest(editableSelector) : null;
+  return {
+    focus(event: Event) {
+      const element = target(event);
+      if (element && !changed.has(element)) baseline.set(element, editableValue(element));
+    },
+    edit(event: Event) {
+      const element = target(event);
+      if (!element) return;
+      if (!baseline.has(element)) baseline.set(element, defaultEditableValue(element));
+      if (editableValue(element) === baseline.get(element)) changed.delete(element);
+      else changed.add(element);
+    },
+    hasChanges() {
+      for (const element of changed) {
+        if (!element.isConnected || editableValue(element) === baseline.get(element)) changed.delete(element);
+      }
+      return changed.size > 0;
+    },
+  };
+}
+
+export function hasUnsavedFormInput(): boolean {
+  return Array.from(document.querySelectorAll(editableSelector)).some(element => {
+    const initial = defaultEditableValue(element);
+    return initial !== undefined && editableValue(element) !== initial;
+  });
+}
+
 export type SafeLocation = {
   pathname: string;
   search?: string;
@@ -80,7 +135,8 @@ export function PwaUpdatePrompt() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSnoozed, setIsSnoozed] = useState(false);
   const updateTriggeredRef = useRef(false);
-  const edited = useRef(false);
+  const lastEditTime = useRef(0);
+  const editTracker = useRef(createEditTracker());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const autoBlocked = useRef(false);
   const lastActivity = useRef(Date.now());
@@ -99,13 +155,17 @@ export function PwaUpdatePrompt() {
   useEffect(() => {
     try { snoozeUntil.current = Number(sessionStorage.getItem(SNOOZE_KEY)) || 0; } catch {}
     const activity = () => { lastActivity.current = Date.now(); };
-    const edit = () => {
-      edited.current = true;
+    const edit = (event: Event) => {
+      editTracker.current.edit(event);
+      lastEditTime.current = Date.now();
       activity();
     };
+    const focus = (event: Event) => editTracker.current.focus(event);
+    document.addEventListener("focusin", focus, true);
     for (const event of ["pointerdown", "touchstart", "keydown", "scroll"]) window.addEventListener(event, activity, true);
     for (const event of ["input", "change"]) document.addEventListener(event, edit, true);
     return () => {
+      document.removeEventListener("focusin", focus, true);
       for (const event of ["pointerdown", "touchstart", "keydown", "scroll"]) window.removeEventListener(event, activity, true);
       for (const event of ["input", "change"]) document.removeEventListener(event, edit, true);
     };
@@ -169,7 +229,8 @@ export function PwaUpdatePrompt() {
 
   const applyUpdate = async (manual = false) => {
     if (manual) {
-      if (edited.current || isUserActivelyEditing()) setConfirmOpen(true);
+      const isEditingNow = isUserActivelyEditing() || editTracker.current.hasChanges() || hasUnsavedFormInput() || Date.now() - lastEditTime.current < 15000;
+      if (isEditingNow) setConfirmOpen(true);
       else void doApplyUpdate();
       return;
     }
@@ -192,7 +253,7 @@ export function PwaUpdatePrompt() {
       const now = Date.now();
       const snoozed = now < snoozeUntil.current;
       setIsSnoozed(snoozed);
-      const editing = isUserActivelyEditing() || edited.current;
+      const editing = isUserActivelyEditing() || editTracker.current.hasChanges() || hasUnsavedFormInput() || now - lastEditTime.current < 15000;
       setIsEditing(editing);
       const safePage = typeof window !== "undefined" && isSafeUrlForAutoUpdate(window.location);
       let previousReload = now;
@@ -204,7 +265,7 @@ export function PwaUpdatePrompt() {
         !safePage ||
         document.visibilityState !== "visible" ||
         !navigator.onLine ||
-        now - lastActivity.current < 60000 ||
+        now - lastActivity.current < 7000 ||
         now - previousReload < 180000
       ) {
         seconds = null;
