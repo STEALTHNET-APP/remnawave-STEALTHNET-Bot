@@ -1,3 +1,4 @@
+import { adminPrompt, adminAlert } from "@/lib/admin-dialogs";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ExternalLink, Eye, Flag, Search, ShoppingBag } from "lucide-react";
@@ -292,16 +293,18 @@ function ListingDialog({ open, item, lang, onClose }: { open: boolean; item: Mar
 
   const submitReport = async () => {
     if (!state.accessToken) return;
-    const reason = window.prompt("Reason: spam | scam | wrong_category | offensive | other", "spam");
+    const reason = (await adminPrompt("Reason: spam | scam | wrong_category | offensive | other", "spam"));
     if (!reason) return;
     const allowed = ["spam", "scam", "wrong_category", "offensive", "other"] as const;
     if (!allowed.includes(reason as (typeof allowed)[number])) return;
-    const comment = window.prompt("Comment (optional)") ?? undefined;
+    const commentInput = await adminPrompt("Comment (optional)");
+    if (commentInput === null) return;
+    const comment = commentInput || undefined;
     try {
       await api.marketplaceReport(state.accessToken, { listingId: item.id, reason: reason as (typeof allowed)[number], comment });
       setReportSent(true);
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : String(e));
+      (await adminAlert(e instanceof Error ? e.message : String(e)));
     }
   };
 

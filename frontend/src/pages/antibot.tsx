@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -116,12 +117,12 @@ export function AntibotPage() {
     setSelected(next);
   };
 
-  const purge = (force = false) => {
+  const purge = async (force = false) => {
     if (selected.size === 0 || purging) return;
     const msg = force
       ? `Удалить ${selected.size} клиентов БЕЗ защиты от удаления платящих? Это необратимо.`
       : `Удалить ${selected.size} клиентов? Платящие/с активной подпиской будут пропущены.`;
-    if (!confirm(msg)) return;
+    if (!(await adminConfirm(msg))) return;
     purgeMutation.mutate(force);
   };
 

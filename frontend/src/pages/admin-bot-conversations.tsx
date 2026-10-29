@@ -80,7 +80,7 @@ export function AdminBotConversationsPage() {
 
       <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
         {/* LEFT: list */}
-        <Card className="bg-card border-border rounded-xl p-3 lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] overflow-y-auto">
+        <Card className="bg-card border-border rounded-xl p-3 admin-split-sidebar lg:self-start lg:max-h-[calc(100vh-7rem)] overflow-y-auto">
           <div className="flex items-center gap-1 mb-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />

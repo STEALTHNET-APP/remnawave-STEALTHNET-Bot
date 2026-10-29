@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -38,18 +39,18 @@ export function MarketplaceMyListingsPage() {
       await api.marketplaceUpdateListing(state.accessToken, id, { status });
       reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : String(e));
+      (await adminAlert(e instanceof Error ? e.message : String(e)));
     }
   };
 
   const remove = async (id: string) => {
     if (!state.accessToken) return;
-    if (!window.confirm("Delete this listing?")) return;
+    if (!(await adminConfirm("Delete this listing?"))) return;
     try {
       await api.marketplaceDeleteListing(state.accessToken, id);
       reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : String(e));
+      (await adminAlert(e instanceof Error ? e.message : String(e)));
     }
   };
 

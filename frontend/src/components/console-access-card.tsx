@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 /**
  * Карточка «SSH-консоль мониторинга» в админке.
  * Показывает готовую ssh-команду + пароль + IP/порт + подсказку про фаервол,
@@ -49,7 +50,7 @@ export function ConsoleAccessCard({ token }: { token: string | null }) {
 
   const regenerate = async () => {
     if (!token) return;
-    if (!confirm("Сгенерировать новый доступ? Старые логин/порт/пароль перестанут работать.")) return;
+    if (!(await adminConfirm("Сгенерировать новый доступ? Старые логин/порт/пароль перестанут работать."))) return;
     setRegenerating(true);
     setError(null);
     try {

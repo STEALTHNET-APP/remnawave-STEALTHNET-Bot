@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 import { useAdminListParams } from "@/lib/use-admin-list-params";
 import "@/components/admin/admin-list.css";
 import { AdminReferralQr } from "@/components/referral-qr";
@@ -180,8 +181,8 @@ export function ClientsPage() {
       if (editing?.id === id) setEditing(null);
       invalidateClientList();
     },
-    onError: (e) => {
-      alert(e instanceof Error ? e.message : "Ошибка удаления");
+    onError: async (e) => {
+      (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления"));
     },
   });
 
@@ -239,11 +240,11 @@ export function ClientsPage() {
   const allSelected = allRowIds.length > 0 && allRowIds.every((id) => selectedIdSet.has(id));
 
   // Массовые операции напрямую в Remnawave (API 2.8 /users/bulk/*): маппим выбранных клиентов  remnawaveUuid.
-  const runRemnaBulk = (action: "reset-traffic" | "revoke") => {
+  const runRemnaBulk = async (action: "reset-traffic" | "revoke") => {
     const remnaUuids = (data?.items ?? []).filter((c) => selectedIdSet.has(c.id) && c.remnawaveUuid).map((c) => c.remnawaveUuid as string);
     if (remnaUuids.length === 0) { setBulkError("У выбранных клиентов нет VPN-подписки (remnawaveUuid)."); setBulkResult(null); return; }
     const label = action === "reset-traffic" ? "Сбросить трафик" : "Перевыпустить подписку (revoke)";
-    if (!confirm(`${label} у ${remnaUuids.length} клиент(ов) в Remnawave?`)) return;
+    if (!(await adminConfirm(`${label} у ${remnaUuids.length} клиент(ов) в Remnawave?`))) return;
     setRemnaBulkBusy(action); setBulkError(null); setBulkResult(null);
     remnaBulkMutation.mutate({ action, uuids: remnaUuids });
   };
@@ -330,8 +331,8 @@ export function ClientsPage() {
     });
   }
 
-  function deleteClient(c: ClientRecord) {
-    if (!confirm(`Удалить клиента ${c.email || c.telegramId || c.id}?`)) return;
+  async function deleteClient(c: ClientRecord) {
+    if (!(await adminConfirm(`Удалить клиента ${c.email || c.telegramId || c.id}?`))) return;
     deleteClientMutation.mutate(c.id);
   }
 
@@ -1979,7 +1980,7 @@ function ClientBulkActionsPanel({
     fn: () => Promise<import("@/lib/api").BulkOpReport | import("@/lib/api").BulkOpReportFull>,
     options?: { confirm?: string },
   ) => {
-    if (options?.confirm && !window.confirm(options.confirm)) return;
+    if (options?.confirm && !(await adminConfirm(options.confirm))) return;
     setBusy(key);
     try {
       const r = await fn();
@@ -2283,8 +2284,8 @@ function ClientServicesTab({ clientId, token }: { clientId: string; token: strin
     grantDevicesMutation.mutate({ subscriptionId: grantSubId, deviceCount: grantCount, monthlyPrice: Math.max(0, grantPrice) });
   }
 
-  function remove(subId: string) {
-    if (!confirm("Забрать все доп. устройства этой подписки? Лимит вернётся к базовому тарифу, лишние устройства будут отключены, а цена продления уменьшится.")) return;
+  async function remove(subId: string) {
+    if (!(await adminConfirm("Забрать все доп. устройства этой подписки? Лимит вернётся к базовому тарифу, лишние устройства будут отключены, а цена продления уменьшится."))) return;
     setBusy(subId); setError("");
     removeDevicesMutation.mutate(subId);
   }
@@ -2405,7 +2406,7 @@ function ClientAllDevicesTab({ clientId, token }: { clientId: string; token: str
 
   const deleteDevice = async (subId: string, uuid: string | null, hwid: string) => {
     if (!uuid) return;
-    if (!confirm(t("admin.clients.delete_device_confirm"))) return;
+    if (!(await adminConfirm(t("admin.clients.delete_device_confirm")))) return;
     try {
       // Используем эндпоинт по subId если будет в будущем; пока — через clientId (proxy на primary)
       // если устройство с primary; иначе — через прямой Remna-uuid (надо отдельный endpoint).
@@ -2413,7 +2414,7 @@ function ClientAllDevicesTab({ clientId, token }: { clientId: string; token: str
       await api.deleteClientRemnaDevice(token, clientId, hwid);
       void devicesQuery.refetch();
     } catch (e) {
-      alert(e instanceof Error ? e.message : t("admin.clients.delete_error"));
+      (await adminAlert(e instanceof Error ? e.message : t("admin.clients.delete_error")));
     }
     // marker: subId/uuid сейчас не используются — оставлены для будущего per-sub эндпоинта.
     void subId; void uuid;

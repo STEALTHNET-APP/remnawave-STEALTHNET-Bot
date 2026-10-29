@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
@@ -144,7 +145,7 @@ export function PromoPage() {
       setShowForm(false);
       invalidatePromo();
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка сохранения")),
   });
   const saving = saveMutation.isPending;
   const handleSave = () => saveMutation.mutate();
@@ -155,17 +156,17 @@ export function PromoPage() {
       if (detailId === id) setDetailId(null);
       invalidatePromo();
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
   });
-  const handleDelete = (id: string) => {
-    if (!confirm("Удалить промо-группу? Все активации будут удалены.")) return;
+  const handleDelete = async (id: string) => {
+    if (!(await adminConfirm("Удалить промо-группу? Все активации будут удалены."))) return;
     deleteMutation.mutate(id);
   };
 
   const toggleMutation = useMutation({
     mutationFn: (g: PromoGroup) => api.updatePromoGroup(token, g.id, { isActive: !g.isActive }),
     onSuccess: () => invalidatePromo(),
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
   });
   const handleToggleActive = (g: PromoGroup) => toggleMutation.mutate(g);
 

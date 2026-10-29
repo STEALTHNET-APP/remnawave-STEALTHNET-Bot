@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
@@ -816,13 +817,13 @@ export function TariffsPage() {
     },
   });
 
-  const handleDeleteCategory = (id: string) => {
-    if (!token || !confirm("Удалить категорию и все тарифы в ней?")) return;
+  const handleDeleteCategory = async (id: string) => {
+    if (!token || !(await adminConfirm("Удалить категорию и все тарифы в ней?"))) return;
     deleteCategoryMutation.mutate(id);
   };
 
-  const handleDeleteTariff = (id: string) => {
-    if (!token || !confirm("Удалить тариф?")) return;
+  const handleDeleteTariff = async (id: string) => {
+    if (!token || !(await adminConfirm("Удалить тариф?"))) return;
     deleteTariffMutation.mutate(id, {
       onSuccess: () => setTariffModal(null),
     });

@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
@@ -97,12 +98,12 @@ export function RemnaHostsPage() {
       if (variables.action === "delete") invalidateHosts();
       else void qc.invalidateQueries({ queryKey: qk.admin.remnaHosts(), exact: false });
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка массового действия"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка массового действия")),
   });
-  const bulkAction = (action: "enable" | "disable" | "delete") => {
+  const bulkAction = async (action: "enable" | "disable" | "delete") => {
     const uuids = [...selected];
     if (uuids.length === 0) return;
-    if (action === "delete" && !confirm(`Удалить ${uuids.length} хост(ов)? Действие необратимо.`)) return;
+    if (action === "delete" && !(await adminConfirm(`Удалить ${uuids.length} хост(ов)? Действие необратимо.`))) return;
     bulkMutation.mutate({ action, uuids });
   };
 
@@ -113,12 +114,12 @@ export function RemnaHostsPage() {
       setShowForm(false);
       invalidateHosts();
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка сохранения")),
   });
   const deleteMutation = useMutation({
     mutationFn: (uuid: string) => api.remnaHostDelete(token!, uuid),
     onSuccess: () => invalidateHosts(),
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
   });
 
   const selectedProfile = useMemo(
@@ -207,8 +208,8 @@ export function RemnaHostsPage() {
     saveMutation.mutate(body);
   };
 
-  const handleDelete = (h: RemnaHost) => {
-    if (!confirm(`Удалить хост «${h.remark || h.address}»?`)) return;
+  const handleDelete = async (h: RemnaHost) => {
+    if (!(await adminConfirm(`Удалить хост «${h.remark || h.address}»?`))) return;
     deleteMutation.mutate(h.uuid);
   };
 

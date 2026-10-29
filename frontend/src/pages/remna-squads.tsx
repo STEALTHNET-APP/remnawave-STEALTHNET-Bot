@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/auth";
@@ -73,12 +74,12 @@ export function RemnaSquadsPage() {
       setShowForm(false);
       invalidateSquads();
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка сохранения")),
   });
   const deleteMutation = useMutation({
     mutationFn: (uuid: string) => api.remnaSquadDelete(token!, uuid),
     onSuccess: () => invalidateSquads(),
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
   });
 
   /** uuid инбаунда  {tag,type,port} из config-профилей (для чипов). */
@@ -140,12 +141,12 @@ export function RemnaSquadsPage() {
     saveMutation.mutate({ uuid: editingUuid, body: { name: form.name.trim(), inbounds: form.inbounds } });
   };
 
-  const handleDelete = (s: InternalSquad) => {
+  const handleDelete = async (s: InternalSquad) => {
     const linked = tariffsBySquad.get(s.uuid) ?? [];
     const warn = linked.length
       ? `\n\n Сквад выдают ${plural(linked.length, ["тариф", "тарифа", "тарифов"])}: ${linked.map((t) => t.name).join(", ")} — они потеряют его.`
       : "";
-    if (!confirm(`Удалить сквад «${s.name}»?${warn}`)) return;
+    if (!(await adminConfirm(`Удалить сквад «${s.name}»?${warn}`))) return;
     deleteMutation.mutate(s.uuid);
   };
 

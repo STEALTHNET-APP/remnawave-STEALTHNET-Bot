@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 /**
  * админ-страница управления Trial-пресетами.
  *
@@ -71,8 +72,8 @@ export function TrialsPage() {
     onError: (e) => setError(e instanceof Error ? e.message : "Ошибка удаления"),
   });
 
-  const handleDelete = (id: string) => {
-    if (!token || !confirm("Удалить триал? Уже активированные клиентами подписки останутся живыми, но потеряют пометку.")) return;
+  const handleDelete = async (id: string) => {
+    if (!token || !(await adminConfirm("Удалить триал? Уже активированные клиентами подписки останутся живыми, но потеряют пометку."))) return;
     deleteMutation.mutate(id);
   };
 

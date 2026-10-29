@@ -132,7 +132,7 @@ export function AdminEmailTemplatesPage() {
 
       <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
         {/* LEFT: list */}
-        <Card className="bg-card border-border rounded-xl p-2 lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] overflow-y-auto">
+        <Card className="bg-card border-border rounded-xl p-2 admin-split-sidebar lg:self-start lg:max-h-[calc(100vh-7rem)] overflow-y-auto">
           {loading && items.length === 0 ? (
             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
           ) : (

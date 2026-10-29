@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 /**
  * Admin  Рефералка (редизайн 30.05.2026)
  *
@@ -141,7 +142,7 @@ export function AdminReferralsPage() {
       setEditValue("");
       void queryClient.invalidateQueries({ queryKey: ["admin", "referral"], exact: false });
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Ошибка сохранения");
+      (await adminAlert(e instanceof Error ? e.message : "Ошибка сохранения"));
     } finally {
       setSavingReferrer(false);
     }
@@ -270,7 +271,7 @@ export function AdminReferralsPage() {
                   <UserPlus className="h-3.5 w-3.5" /> {detail.referrer ? "Изменить" : "Привязать"}
                 </Button>
                 {detail.referrer && (
-                  <Button variant="outline" size="sm" onClick={() => { if (confirm("Отвязать реферера?")) handleSaveReferrer(null); }} className="gap-1.5 rounded-lg border-rose-500/30 text-rose-300 hover:bg-rose-500/10">
+                  <Button variant="outline" size="sm" onClick={async () => { if ((await adminConfirm("Отвязать реферера?"))) handleSaveReferrer(null); }} className="gap-1.5 rounded-lg border-rose-500/30 text-rose-300 hover:bg-rose-500/10">
                     <UserMinus className="h-3.5 w-3.5" /> Отвязать
                   </Button>
                 )}

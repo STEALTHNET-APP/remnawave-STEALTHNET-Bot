@@ -261,7 +261,7 @@ function StatCard({
       transition={{ duration: 0.25 }}
     >
       <Card
-        className="group relative overflow-hidden bg-card border-border rounded-xl px-[15px] py-[13px] transition-colors"
+        className="admin-metric group relative overflow-hidden bg-card border-border rounded-xl px-[15px] py-[13px] transition-colors"
         style={{ ["--card-glow" as string]: accent.glow }}
       >
         {/* Accent gradient orb in top-right */}
@@ -673,7 +673,7 @@ export function DashboardPage() {
   const nodesTotal = nodes.length;
 
   return (
-    <div className="w-full flex flex-col gap-3.5 relative">
+    <div className="admin-overview w-full flex flex-col gap-3.5 relative">
       {/* Background ambient orbs */}
       
       
@@ -772,7 +772,7 @@ export function DashboardPage() {
         <SectionHeader icon={Activity} title={t("admin.dashboard.micro_analytics")} subtitle={t("admin.dashboard.key_metrics")} />
         <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={0}>
           <Card className="relative overflow-hidden bg-card border-border rounded-xl px-[17px] py-[15px]">
-            <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+            <div className="admin-revenue-summary grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
               {[
                 { label: t("admin.dashboard.total"), amount: stats?.sales.totalAmount ?? 0, count: stats?.sales.totalCount ?? 0, gradient: "bg-muted", textColor: "text-primary" },
                 { label: t("admin.dashboard.today"), amount: stats?.sales.todayAmount ?? 0, count: stats?.sales.todayCount ?? 0, gradient: "bg-muted", textColor: "text-muted-foreground dark:text-muted-foreground" },
@@ -791,7 +791,7 @@ export function DashboardPage() {
                     {stats || analyticsData ? <CountUpMoney value={item.amount} currency={defaultCurrency} /> : "—"}
                   </p>
                   <p className="text-[10px] text-muted-foreground/80 mt-0.5">
-                    {item.isLast90 ? "90 days" : `${item.count} платежей`}
+                    {item.isLast90 ? "За последние 90 дней" : `Платежи: ${item.count}`}
                   </p>
                 </motion.div>
               ))}
@@ -823,7 +823,7 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <div className="mt-4 h-[320px] w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
+            <div className="admin-revenue-chart mt-4 h-[320px] w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <defs>

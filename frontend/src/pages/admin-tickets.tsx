@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 import { useRef, useState, useEffect, type ChangeEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
@@ -318,11 +319,11 @@ export function AdminTicketsPage() {
     statusMutation.mutate(detail.status === "open" ? "closed" : "open");
   };
 
-  const handleDeleteTicket = (id: string, subject?: string) => {
+  const handleDeleteTicket = async (id: string, subject?: string) => {
     const msg = subject
       ? `Удалить тикет «${subject}» навсегда? Все сообщения и вложенные файлы будут удалены.`
       : "Удалить этот тикет навсегда? Все сообщения и вложенные файлы будут удалены.";
-    if (!confirm(msg)) return;
+    if (!(await adminConfirm(msg))) return;
     deleteMutation.mutate(id);
   };
 
@@ -976,8 +977,8 @@ export function AdminTicketsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    if (confirm(`Удалить выбранные тикеты (${selectedIds.length} шт.) навсегда? Все сообщения и файлы будут стёрты.`)) {
+                  onClick={async () => {
+                    if ((await adminConfirm(`Удалить выбранные тикеты (${selectedIds.length} шт.) навсегда? Все сообщения и файлы будут стёрты.`))) {
                       bulkDeleteMutation.mutate();
                     }
                   }}

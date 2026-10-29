@@ -1,3 +1,4 @@
+import { adminConfirm, adminAlert } from "@/lib/admin-dialogs";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
@@ -268,14 +269,14 @@ export function ContestsPage() {
   };
 
   const undoDraw = async (id: string) => {
-    if (!confirm("Отменить розыгрыш? Balance-призы будут возвращены клиентам, vpn_days и custom призы остаются — отзывайте вручную.")) return;
+    if (!(await adminConfirm("Отменить розыгрыш? Balance-призы будут возвращены клиентам, vpn_days и custom призы остаются — отзывайте вручную."))) return;
     setDrawingId(id);
     setActionError(null);
     try {
       const r = await contestExtrasApi.undoDraw(token, id);
       invalidateContests();
       await queryClient.invalidateQueries({ queryKey: qk.admin.contestDetail(id) });
-      alert(r.message + (r.refunded > 0 ? ` (возвращено ${r.refunded})` : ""));
+      (await adminAlert(r.message + (r.refunded > 0 ? ` (возвращено ${r.refunded})` : "")));
     } catch (e) {
       setActionError(errText(e, "Ошибка отмены розыгрыша"));
     } finally {
@@ -287,14 +288,14 @@ export function ContestsPage() {
     try {
       const r = await contestExtrasApi.applyPrize(token, contestId, winnerId);
       await queryClient.invalidateQueries({ queryKey: qk.admin.contestDetail(contestId) });
-      alert(r.message);
+      (await adminAlert(r.message));
     } catch (e) {
       setActionError(errText(e, "Ошибка применения приза"));
     }
   };
 
   const removeWinner = async (contestId: string, winnerId: string) => {
-    if (!confirm("Удалить победителя? Balance-приз (если был применён) будет возвращён.")) return;
+    if (!(await adminConfirm("Удалить победителя? Balance-приз (если был применён) будет возвращён."))) return;
     try {
       await contestExtrasApi.removeWinner(token, contestId, winnerId);
       await queryClient.invalidateQueries({ queryKey: qk.admin.contestDetail(contestId) });

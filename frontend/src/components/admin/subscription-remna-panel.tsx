@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 /**
  * T-subscription-remna (14.05.2026)
  *
@@ -481,15 +482,15 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
                 <Ticket className="h-4 w-4" /> Отозвать подписку
               </Button>
               <Button variant="outline" className="justify-start gap-2 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 text-[12.8px] font-semibold h-9"
-                onClick={() => {
-                  if (!confirm("Отвязать эту подписку от Remna? UUID будет обнулён, при следующей покупке создастся новый.")) return;
+                onClick={async () => {
+                  if (!(await adminConfirm("Отвязать эту подписку от Remna? UUID будет обнулён, при следующей покупке создастся новый."))) return;
                   runAction("Подписка отвязана от Remna", () => api.subscriptionRemnaUnlink(token, subscription.id));
                 }}>
                 <Unlink className="h-4 w-4" /> Отвязать от Remna
               </Button>
               <Button variant="outline" className="justify-start gap-2 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 text-[12.8px] font-semibold h-9"
-                onClick={() => {
-                  if (!confirm("Удалить эту подписку? Она исчезнет у клиента, а пользователь в Remnawave будет удалён. Действие необратимо.")) return;
+                onClick={async () => {
+                  if (!(await adminConfirm("Удалить эту подписку? Она исчезнет у клиента, а пользователь в Remnawave будет удалён. Действие необратимо."))) return;
                   runAction("Подписка удалена", () => api.deleteSecondarySubscription(token, subscription.id));
                 }}>
                 <Trash2 className="h-4 w-4" /> Удалить подписку

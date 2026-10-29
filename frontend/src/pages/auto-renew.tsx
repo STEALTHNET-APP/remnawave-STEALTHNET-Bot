@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 /**
  * админ-страница «Автосписание».
  *
@@ -160,7 +161,7 @@ export function AutoRenewPage() {
       setTimeout(() => setSavedMsg(null), 2500);
       void queryClient.invalidateQueries({ queryKey: qk.admin.settings() });
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка сохранения")),
   });
   const saving = saveSettingsMutation.isPending;
   const handleSaveSettings = () => {
@@ -175,7 +176,7 @@ export function AutoRenewPage() {
   const toggleMutation = useMutation({
     mutationFn: (n: AutoRenewNotificationRecord) => api.updateAutoRenewNotification(token!, n.id, { enabled: !n.enabled }),
     onSuccess: () => invalidateNotifs(),
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
   });
   const handleToggle = (n: AutoRenewNotificationRecord) => {
     if (!token) return;
@@ -185,11 +186,11 @@ export function AutoRenewPage() {
   const deleteMutation = useMutation({
     mutationFn: (n: AutoRenewNotificationRecord) => api.deleteAutoRenewNotification(token!, n.id),
     onSuccess: () => invalidateNotifs(),
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
   });
-  const handleDelete = (n: AutoRenewNotificationRecord) => {
+  const handleDelete = async (n: AutoRenewNotificationRecord) => {
     if (!token) return;
-    if (!confirm(`Удалить шаблон «${n.name}»?`)) return;
+    if (!(await adminConfirm(`Удалить шаблон «${n.name}»?`))) return;
     deleteMutation.mutate(n);
   };
 

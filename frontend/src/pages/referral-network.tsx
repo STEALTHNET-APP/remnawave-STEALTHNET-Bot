@@ -106,7 +106,7 @@ export function ReferralNetworkPage() {
 
   const handleFit = () => {
     if (!fgRef.current) return;
-    fgRef.current.zoomToFit(400, 40);
+    fgRef.current.zoomToFit(400, Math.min(100, dims.width / 4));
   };
 
       useEffect(() => {
@@ -117,12 +117,12 @@ export function ReferralNetworkPage() {
       }, [graph]);
 
       return (
-        <div ref={wrapRef} className="relative -mx-5 -mt-4 overflow-hidden bg-card" style={{ height: "calc(100dvh - 3.5rem)" }}>
-      <div className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-md bg-card border shadow-sm px-3 py-2 text-sm font-medium">
+        <div className="admin-network relative -mx-5 -mt-4 overflow-hidden bg-card" style={{ height: "calc(100dvh - 3.5rem)" }}>
+      <div className="admin-network-title absolute left-3 top-3 z-10 flex items-center gap-2 rounded-md bg-card border shadow-sm px-3 py-2 text-sm font-medium">
         <Network className="h-4 w-4 text-primary" /> Реферальная сеть
       </div>
       
-      <div className="absolute right-3 top-14 sm:top-3 z-10 flex items-center gap-2">
+      <div className="admin-network-actions absolute right-3 top-14 sm:top-3 z-10 flex items-center gap-2">
         <Button
           variant={onlyLinked ? "default" : "secondary"}
           size="sm"
@@ -140,7 +140,7 @@ export function ReferralNetworkPage() {
 
       {/* Статистика слева внизу */}
       {data?.stats && (
-        <div className={`${mobilePanel === "stats" ? "block" : "hidden"} sm:block absolute left-3 bottom-28 sm:bottom-3 z-10 w-64 max-w-[calc(100%_-_24px)] rounded-xl bg-card border p-4 text-sm pointer-events-none`}>
+        <div className={`admin-network-stats ${mobilePanel === "stats" ? "block" : "hidden"} sm:block absolute left-3 bottom-28 sm:bottom-3 z-10 w-64 max-w-[calc(100%_-_24px)] rounded-xl bg-card border p-4 text-sm pointer-events-none`}>
           <h3 className="font-semibold mb-3">Сводная статистика</h3>
           <div className="space-y-2">
             <div className="flex justify-between">
@@ -170,7 +170,7 @@ export function ReferralNetworkPage() {
       )}
 
       {/* Управление камерой по центру внизу */}
-      <div className="absolute left-1/2 bottom-16 sm:bottom-4 -translate-x-1/2 z-10 flex items-center gap-1 rounded-full bg-card border p-1">
+      <div className="admin-network-controls absolute left-1/2 bottom-16 sm:bottom-4 -translate-x-1/2 z-10 flex items-center gap-1 rounded-full bg-card border p-1">
         <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={handleZoomIn} title="Увеличить">
           <ZoomIn className="h-4 w-4" />
         </Button>
@@ -187,7 +187,7 @@ export function ReferralNetworkPage() {
       </div>
 
       {/* Легенда справа внизу */}
-      <div className={`${mobilePanel === "legend" ? "block" : "hidden"} sm:block absolute right-3 bottom-28 sm:bottom-3 z-10 rounded-xl bg-card border p-4 text-sm pointer-events-none`}>
+      <div className={`admin-network-legend ${mobilePanel === "legend" ? "block" : "hidden"} sm:block absolute right-3 bottom-28 sm:bottom-3 z-10 rounded-xl bg-card border p-4 text-sm pointer-events-none`}>
         <h3 className="font-semibold mb-3">Легенда</h3>
         <div className="space-y-2">
           {Object.entries(STATUS_COLORS).map(([status, color]) => (
@@ -201,16 +201,17 @@ export function ReferralNetworkPage() {
 
       {/* T-network-filter: счётчик скрытых одиночных узлов */}
       {!loading && onlyLinked && hiddenCount > 0 && (
-        <div className="absolute left-3 top-28 sm:left-1/2 sm:top-3 z-10 sm:-translate-x-1/2 rounded-full bg-card border shadow-sm px-3 py-1 text-xs text-muted-foreground pointer-events-none">
+        <div className="admin-network-count absolute left-3 top-28 sm:left-1/2 sm:top-3 z-10 sm:-translate-x-1/2 rounded-full bg-card border shadow-sm px-3 py-1 text-xs text-muted-foreground pointer-events-none">
           Скрыто {hiddenCount} без связей · показаны {graph.nodes.length}
         </div>
       )}
 
-      <div className="absolute bottom-3 left-3 right-3 z-10 flex justify-center gap-2 sm:hidden">
+      <div className="admin-network-mobile-panels absolute bottom-3 left-3 right-3 z-10 flex justify-center gap-2 sm:hidden">
         <Button size="sm" variant="secondary" aria-expanded={mobilePanel === "stats"} onClick={() => setMobilePanel(mobilePanel === "stats" ? null : "stats")}>Статистика</Button>
         <Button size="sm" variant="secondary" aria-expanded={mobilePanel === "legend"} onClick={() => setMobilePanel(mobilePanel === "legend" ? null : "legend")}>Легенда</Button>
       </div>
 
+      <div ref={wrapRef} className="admin-network-canvas h-full">
       {networkQuery.isError ? (
         <div className="h-full flex items-center justify-center p-4"><Card><CardContent className="pt-6 text-sm" role="alert">Не удалось загрузить реферальную сеть. Нажмите «Обновить», чтобы повторить.</CardContent></Card></div>
       ) : loading ? (
@@ -229,6 +230,7 @@ export function ReferralNetworkPage() {
           graphData={graph}
           width={dims.width}
           height={dims.height}
+          cooldownTicks={100}
           nodeRelSize={6}
           linkColor={() => "rgba(148,163,184,0.6)"}
           linkWidth={1.5}
@@ -274,9 +276,10 @@ export function ReferralNetworkPage() {
             ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
             ctx.fillText(label, node.x! + radius + 3 + fontSize * 0.2, node.y!);
           }}
-          onEngineStop={() => fgRef.current?.zoomToFit(400, 40)}
+          onEngineStop={() => fgRef.current?.zoomToFit(400, Math.min(100, dims.width / 4))}
         />
       )}
+      </div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -292,7 +293,7 @@ export function ApiKeysPage() {
                 await load();
               }}
               onDelete={async () => {
-                if (!confirm(`Удалить ключ "${k.name}"? Действие необратимо.`)) return;
+                if (!(await adminConfirm(`Удалить ключ "${k.name}"? Действие необратимо.`))) return;
                 await api.deleteApiKey(token, k.id);
                 await load();
               }}

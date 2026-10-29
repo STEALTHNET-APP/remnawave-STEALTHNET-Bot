@@ -30,9 +30,15 @@ function hexToRgb(hex: string) {
 }
 
 export function AnimatedBackground({ variant = "fixed", intensity = "normal" }: { variant?: "fixed" | "absolute", intensity?: "normal" | "weak" }) {
+  const { adminAppearance } = useTheme();
+  const { pathname } = useLocation();
+  const admin = pathname === "/admin" || pathname.startsWith("/admin/");
+  if (variant === "fixed" && ((admin && (adminAppearance === "modern" || pathname === "/admin")) || pathname === "/cabinet-design-preview")) return null;
+  return <BackgroundCanvas variant={variant} intensity={intensity} />;
+}
+
+function BackgroundCanvas({ variant, intensity }: { variant: "fixed" | "absolute"; intensity: "normal" | "weak" }) {
   const { config, resolvedMode } = useTheme();
-  const location = useLocation();
-  if (location.pathname === "/admin" && variant === "fixed") return null;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef<number>(0);
@@ -117,15 +123,24 @@ export function AnimatedBackground({ variant = "fixed", intensity = "normal" }: 
         ctx.fill();
       }
 
-      frameRef.current = requestAnimationFrame(draw);
+      if (!document.hidden && !motion.matches) frameRef.current = requestAnimationFrame(draw);
     };
 
-    frameRef.current = requestAnimationFrame(draw);
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const resume = () => {
+      cancelAnimationFrame(frameRef.current);
+      if (!document.hidden) frameRef.current = requestAnimationFrame(draw);
+    };
+    resume();
+    document.addEventListener("visibilitychange", resume);
+    motion.addEventListener("change", resume);
     return () => {
+      document.removeEventListener("visibilitychange", resume);
+      motion.removeEventListener("change", resume);
       cancelAnimationFrame(frameRef.current);
       window.removeEventListener("resize", resize);
     };
-  }, [config.accent, resolvedMode]);
+  }, [config.accent, resolvedMode, variant]);
 
   return (
     <div className={`${variant === "fixed" ? "fixed" : "absolute"} inset-0 ${variant === "fixed" ? "-z-50" : "z-0"} overflow-hidden ${intensity === "weak" ? "opacity-30" : ""}`} aria-hidden>

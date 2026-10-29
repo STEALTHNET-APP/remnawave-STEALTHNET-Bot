@@ -1,3 +1,4 @@
+import { adminConfirm, adminAlert } from "@/lib/admin-dialogs";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
@@ -264,7 +265,7 @@ export function AutoBroadcastPage() {
   }
 
   async function handleDelete(ruleId: string) {
-    if (!confirm("Удалить правило?")) return;
+    if (!(await adminConfirm("Удалить правило?"))) return;
     try {
       await api.deleteAutoBroadcastRule(token, ruleId);
       invalidateRules();
@@ -290,9 +291,9 @@ export function AutoBroadcastPage() {
       const totalSkipped = results.reduce((s, r) => s + r.skipped, 0);
       const totalErrors = results.reduce((s, r) => s + r.errors.length, 0);
       invalidateRules();
-      alert(`Отправлено: ${totalSent}, пропущено: ${totalSkipped}${totalErrors > 0 ? `, ошибок: ${totalErrors}` : ""}`);
+      (await adminAlert(`Отправлено: ${totalSent}, пропущено: ${totalSkipped}${totalErrors > 0 ? `, ошибок: ${totalErrors}` : ""}`));
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Ошибка запуска");
+      (await adminAlert(err instanceof Error ? err.message : "Ошибка запуска"));
     } finally {
       setRunAllLoading(false);
     }
@@ -303,9 +304,9 @@ export function AutoBroadcastPage() {
     try {
       const result = await api.runAutoBroadcastRule(token, ruleId);
       invalidateRules();
-      alert(formatRunResult(result));
+      (await adminAlert(formatRunResult(result)));
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Ошибка запуска");
+      (await adminAlert(err instanceof Error ? err.message : "Ошибка запуска"));
     } finally {
       setRunningRuleId(null);
     }

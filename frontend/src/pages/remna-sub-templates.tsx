@@ -1,3 +1,4 @@
+import { adminAlert } from "@/lib/admin-dialogs";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
@@ -79,7 +80,7 @@ export function RemnaSubTemplatesPage() {
       setSettingsOpen(false);
       void qc.invalidateQueries({ queryKey: qk.admin.remnaSubSettings(), exact: false });
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка сохранения")),
   });
   const openSettings = () => {
     setSettingsOpen(true);
@@ -113,7 +114,7 @@ export function RemnaSubTemplatesPage() {
       invalidateTemplates();
       void qc.invalidateQueries({ queryKey: qk.admin.remnaSubTemplate(variables.uuid), exact: false });
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка сохранения")),
   });
 
   const jsonValidation = useMemo(() => {
@@ -141,15 +142,15 @@ export function RemnaSubTemplatesPage() {
           setText(full?.templateJson != null ? JSON.stringify(full.templateJson, null, 2) : "{}");
         }
       })
-      .catch(() => {
+      .catch(async () => {
         setEditing(null);
-        alert("Не удалось загрузить шаблон");
+        (await adminAlert("Не удалось загрузить шаблон"));
       })
       .finally(() => setEditLoading(false));
   };
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editing) return;
-    if (kind === "json" && !jsonValidation.valid) { alert("JSON невалиден."); return; }
+    if (kind === "json" && !jsonValidation.valid) { (await adminAlert("JSON невалиден.")); return; }
     const body: { uuid: string; name?: string; templateJson?: unknown; encodedTemplateYaml?: string } = {
       uuid: editing.uuid,
       name: name.trim() || editing.name,

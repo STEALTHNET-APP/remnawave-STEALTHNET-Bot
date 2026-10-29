@@ -27,6 +27,7 @@ export function Tabs({
 export function TabsList({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
     <div
+      data-ui="tabs-list"
       className={cn(
         "inline-flex h-10 items-center justify-center rounded-xl bg-muted/60 p-1.5 text-muted-foreground gap-0.5",
         className

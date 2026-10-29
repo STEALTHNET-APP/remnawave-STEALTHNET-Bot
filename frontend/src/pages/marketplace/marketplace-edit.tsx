@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -98,7 +99,7 @@ export function MarketplaceEditListingPage() {
 
   const remove = async () => {
     if (!state.accessToken || !id) return;
-    if (!window.confirm("Delete this listing?")) return;
+    if (!(await adminConfirm("Delete this listing?"))) return;
     try {
       await api.marketplaceDeleteListing(state.accessToken, id);
       navigate("/admin/marketplace/my");

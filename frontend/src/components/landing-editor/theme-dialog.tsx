@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 /**
  * Тема лендинга: цвета (primary/accent/background/text), шрифт из пресетов,
  * border-radius и кастомный CSS. Все изменения уходят в `theme.draft` —
@@ -91,7 +92,7 @@ export function ThemeDialog({ open, onClose, token, onChanged, onError, onSucces
 
   const handlePublish = async () => {
     if (!token) return;
-    if (!confirm("Опубликовать черновик темы?")) return;
+    if (!(await adminConfirm("Опубликовать черновик темы?"))) return;
     setBusy(true);
     try {
       await landingEditorApi.publishTheme(token);
@@ -107,7 +108,7 @@ export function ThemeDialog({ open, onClose, token, onChanged, onError, onSucces
 
   const handleDiscard = async () => {
     if (!token) return;
-    if (!confirm("Отбросить черновик темы?")) return;
+    if (!(await adminConfirm("Отбросить черновик темы?"))) return;
     setBusy(true);
     try {
       await landingEditorApi.discardThemeDraft(token);

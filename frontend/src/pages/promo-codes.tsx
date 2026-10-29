@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 import { PromoFreeDaysFields } from "@/components/promo-free-days-fields";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -156,7 +157,7 @@ export function PromoCodesPage() {
       setShowForm(false);
       invalidateCodes();
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка сохранения")),
   });
   const saving = saveMutation.isPending;
   const handleSave = () => saveMutation.mutate();
@@ -167,17 +168,17 @@ export function PromoCodesPage() {
       if (detailId === id) setDetailId(null);
       invalidateCodes();
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
   });
-  const handleDelete = (id: string) => {
-    if (!confirm("Удалить промокод? Все данные об использованиях будут удалены.")) return;
+  const handleDelete = async (id: string) => {
+    if (!(await adminConfirm("Удалить промокод? Все данные об использованиях будут удалены."))) return;
     deleteMutation.mutate(id);
   };
 
   const toggleMutation = useMutation({
     mutationFn: (c: PromoCodeRecord) => api.updatePromoCode(token, c.id, { isActive: !c.isActive }),
     onSuccess: () => invalidateCodes(),
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
   });
   const handleToggleActive = (c: PromoCodeRecord) => toggleMutation.mutate(c);
 

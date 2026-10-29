@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Eye, Flag, RefreshCw, Trash2, X } from "lucide-react";
@@ -37,18 +38,18 @@ export function MarketplaceHubReportsPage() {
       await api.marketplaceHubResolveReport(state.accessToken, id, { status: st, unhideListing: unhide });
       reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : String(e));
+      (await adminAlert(e instanceof Error ? e.message : String(e)));
     }
   };
 
   const forceDelete = async (id: string) => {
     if (!state.accessToken) return;
-    if (!window.confirm("Delete this listing entirely?")) return;
+    if (!(await adminConfirm("Delete this listing entirely?"))) return;
     try {
       await api.marketplaceHubForceDeleteListing(state.accessToken, id);
       reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : String(e));
+      (await adminAlert(e instanceof Error ? e.message : String(e)));
     }
   };
 

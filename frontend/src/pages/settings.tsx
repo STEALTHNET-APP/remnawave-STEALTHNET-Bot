@@ -1,3 +1,4 @@
+import { adminAlert } from "@/lib/admin-dialogs";
 import { isBotButtonUrl } from "@/lib/bot-button-url";
 import { SettingsNavigation, SETTINGS_TABS } from "@/components/admin/settings-navigation";
 import { MailTest } from "@/components/admin/mail-test";
@@ -20,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Download, Upload, Link2, Settings2, Gift, Users, MessageCircle, CreditCard, ChevronDown, ChevronUp, Copy, Check, Bot, Wallet, Plus, Trash2, KeyRound, Loader2, Sparkles, Layers, Globe, BarChart3, RotateCw, FileText, GripVertical, Smile, Sliders, MessageSquare, Eye, Plug, EyeOff, RotateCcw, CheckCircle2, AlertCircle } from "lucide-react";
+import { Shield, Download, Upload, Link2, Settings2, Gift, Users, MessageCircle, CreditCard, ChevronDown, ChevronUp, Copy, Check, Bot, Wallet, Plus, Trash2, KeyRound, Loader2, Sparkles, Layers, Globe, BarChart3, RotateCw, FileText, GripVertical, Smile, Sliders, MessageSquare, Eye, Plug, EyeOff, RotateCcw, CheckCircle2, AlertCircle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ACCENT_PALETTES } from "@/contexts/theme";
@@ -1253,7 +1254,7 @@ export function SettingsPage() {
   if (!settings) return <div className="text-destructive">{t("admin.common.loading_error")}</div>;
 
   return (
-    <div className="space-y-6">
+    <div className="admin-settings space-y-6">
       {/*  HERO  */}
       <div className="relative overflow-hidden rounded-2xl border border-border bg-muted">
         <div className="absolute inset-0 bg-transparent pointer-events-none" />
@@ -2131,7 +2132,7 @@ export function SettingsPage() {
                         onChange={(updated) => setSettings((s) => (s ? { ...s, botButtons: updated } : s))}
                       />
                       <p className="text-xs text-muted-foreground rounded-lg bg-card border border-border p-2.5 flex items-start gap-2">
-                        <span className="text-base"></span>
+                        <Wallet className="h-4 w-4" aria-hidden="true"/>
                         <span>Перетаскивайте кнопки за ⋮⋮ ручку слева, чтобы менять порядок. «Во всю ширину» вытолкнет кнопку на отдельную строку даже в режиме 2-колоночного меню.</span>
                       </p>
                     </div>
@@ -2284,11 +2285,11 @@ export function SettingsPage() {
                             <input
                               type="file"
                               accept="image/png,image/jpeg,image/gif,image/webp"
-                              onChange={(e) => {
+                              onChange={async (e) => {
                                 const f = e.target.files?.[0];
                                 if (!f) return;
                                 if (f.size > 5_000_000) {
-                                  alert("Файл больше 5 МБ — попробуйте сжать.");
+                                  (await adminAlert("Файл больше 5 МБ — попробуйте сжать."));
                                   return;
                                 }
                                 const reader = new FileReader();
@@ -4365,7 +4366,7 @@ export function SettingsPage() {
                 <div className="rounded-xl border border-violet-500/20 bg-muted p-4 space-y-3">
                   <div className="flex items-center gap-2.5">
                     <div className="h-8 w-8 rounded-xl bg-violet-500/20 flex items-center justify-center">
-                      <span className="text-sm"></span>
+                      <Link2 className="h-4 w-4" aria-hidden="true"/>
                     </div>
                     <h3 className="text-base font-semibold">Happ Crypto Link</h3>
                   </div>
@@ -4395,7 +4396,7 @@ export function SettingsPage() {
                 <div className="rounded-xl border border-red-500/20 bg-muted p-4 space-y-4">
                   <div className="flex items-center gap-2.5">
                     <div className="h-8 w-8 rounded-xl bg-red-500/20 flex items-center justify-center">
-                      <span className="text-sm"></span>
+                      <Shield className="h-4 w-4" aria-hidden="true"/>
                     </div>
                     <h3 className="text-base font-semibold">Антибот-защита регистраций</h3>
                   </div>
@@ -4706,6 +4707,7 @@ export function SettingsPage() {
         </form>
 
         <TabsContent value="theme">
+          <Card className="mb-5 p-5"><h2 className="mb-2">Редактор дизайна кабинета</h2><p className="text-sm text-muted-foreground mb-4">Пресеты, цвета, шрифты и элементы интерфейса. Предпросмотр и черновик перед публикацией.</p><Link className="underline" to="/admin/cabinet-design">Открыть редактор →</Link></Card>
           <Card className="overflow-hidden border-border">
             <div className="relative bg-muted p-4 border-b border-border">
               <div className="absolute inset-0 bg-transparent pointer-events-none" />
