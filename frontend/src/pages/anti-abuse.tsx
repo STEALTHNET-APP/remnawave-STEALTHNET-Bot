@@ -1,3 +1,4 @@
+import { adminPrompt, adminConfirm } from "@/lib/admin-dialogs";
 import { useCallback, useEffect, useState } from "react";
 import {
   ShieldBan, Loader2, RefreshCw, AlertTriangle, Plus, Trash2, Pencil, PlayCircle,
@@ -606,10 +607,10 @@ function ListingTab({ token }: { token: string }) {
 
   const unban = async (subscriptionId: string) => {
     // T-abuse-grace (29.06.2026): админ задаёт срок иммунитета от авто-бана.
-    const input = window.prompt(
+    const input = (await adminPrompt(
       "На сколько ДНЕЙ дать иммунитет от авто-бана?\n\nВ это время крон не забанит подписку снова — даём время исправиться. Если через срок не исправился — забанит как обычно.\n\n0 = без иммунитета (крон может забанить уже на следующем часе).",
       "7",
-    );
+    ));
     if (input === null) return;
     const immuneDays = Math.max(0, Math.min(365, Math.round(Number(input) || 0)));
     try {
@@ -877,7 +878,7 @@ function RulesTab({ token }: { token: string }) {
   };
 
   const remove = async (rule: AntiAbuseRule) => {
-    if (!window.confirm(`Удалить правило «${rule.name}»?`)) return;
+    if (!(await adminConfirm(`Удалить правило «${rule.name}»?`))) return;
     try {
       await api.deleteAntiAbuseRule(token, rule.id);
       toast.success("Правило удалено");

@@ -38,8 +38,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild, children, ...props }, ref) => {
     const compClassName = cn(buttonVariants({ variant, size, className }));
     if (asChild && React.Children.count(children) === 1 && React.isValidElement(children)) {
-      const child = children as React.ReactElement<{ className?: string; ref?: React.Ref<unknown> }>;
+      const child = children as React.ReactElement<{ className?: string; ref?: React.Ref<unknown>; "data-ui"?: string; "data-variant"?: string }>;
       return React.cloneElement(child, {
+        "data-ui": "button",
+        "data-variant": variant ?? "default",
         ...props,
         className: cn(compClassName, child.props?.className),
         ref,
@@ -47,6 +49,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     }
     return (
       <button
+        data-ui="button"
+        data-variant={variant ?? "default"}
         className={compClassName}
         ref={ref}
         {...props}

@@ -1,4 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { openAdminSearch, searchShortcut } from "@/lib/search-shortcut";
+import { ModernAdminShell } from "./modern-admin-shell";
+import { AdminAppearanceChoice } from "./admin-appearance";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import gsap from "gsap";
 import { reducedMotion } from "@/lib/gsap-utils";
@@ -86,6 +89,7 @@ function useNavSections(): NavItem[] {
     { to: "/admin/tour-constructor", label: "Конструктор тура", icon: Sparkles, section: "tour-constructor", category: "tools" },
     { to: "/admin/promo-vpn", label: t("admin.nav.promo_vpn"), icon: Rocket, section: "promo-vpn", category: "marketing" },
     { to: "/admin/marketplace", label: t("admin.nav.marketplace"), icon: ShoppingBag, section: "marketplace", category: "tools" },
+    { to: "/admin/cabinet-design", label: "Дизайн кабинета", icon: Palette, section: "admins", category: "settings" },
     { to: "/admin/settings", label: t("admin.nav.settings"), icon: Settings, section: "settings", category: "settings" },
     { to: "/admin/languages", label: t("admin.nav.languages"), icon: Languages, section: "languages", category: "settings" },
     { to: "/admin/admins", label: t("admin.nav.managers"), icon: UserCog, section: "admins", category: "settings" },
@@ -99,7 +103,7 @@ function useNavSections(): NavItem[] {
   ];
 }
 
-function NavItems({ onClick }: { onClick?: () => void }) {
+const NavItems = memo(function NavItems({ onClick }: { onClick?: () => void }) {
   const { t } = useTranslation();
   const location = useLocation();
   const admin = useAuth().state.admin;
@@ -189,13 +193,13 @@ function NavItems({ onClick }: { onClick?: () => void }) {
       })}
     </>
   );
-}
+});
 
 export function DashboardLayout() {
   const { t } = useTranslation();
   useAdminLanguageSync();
   const { state, logout } = useAuth();
-  const { config: themeConfig, setMode, setAccent } = useTheme();
+  const { config: themeConfig, setMode, setAccent, adminAppearance } = useTheme();
 
   const MODE_OPTIONS: { value: ThemeMode; icon: typeof Sun; label: string }[] = [
     { value: "light", icon: Sun, label: t("admin.header.theme_light") },
@@ -302,12 +306,15 @@ export function DashboardLayout() {
     const token = state.accessToken;
     if (!token || !notificationsEnabled) return;
     let cancelled = false;
+    let pending = false;
     const pushToast = (text: string, icon = "") => {
       const id = Date.now() + Math.random();
       setNotificationToasts((prev) => [...prev, { id, text, icon }]);
       window.setTimeout(() => { setNotificationToasts((prev) => prev.filter((t) => t.id !== id)); }, 5000);
     };
     const fetchCounters = async () => {
+      if (document.hidden || pending) return;
+      pending = true;
       try {
         const data = await api.getAdminNotificationCounters(token);
         if (cancelled) return;
@@ -323,17 +330,26 @@ export function DashboardLayout() {
           if (newTickets > 0) pushToast(newTickets === 1 ? t("admin.header.notification_new_ticket") : t("admin.header.notification_new_tickets", { newTickets }), "\u{1F4AC}");
         }
         lastCountersRef.current = data;
-      } catch { /* ignore */ }
+      } catch { /* ignore */ } finally { pending = false; }
     };
     fetchCounters();
     const id = window.setInterval(fetchCounters, 15000);
-    return () => { cancelled = true; window.clearInterval(id); };
+    document.addEventListener("visibilitychange", fetchCounters);
+    return () => { cancelled = true; window.clearInterval(id); document.removeEventListener("visibilitychange", fetchCounters); };
   }, [state.accessToken, notificationsEnabled]);
 
   async function handleLogout() {
     await logout();
     navigate("/admin/login", { replace: true });
   }
+
+  if (adminAppearance === "modern") return (
+    <ModernAdminShell brand={brand} onLogout={handleLogout} navigation={(close) => <NavItems onClick={close} />}>
+      <ReleaseToast />
+      {state.admin?.role === "ADMIN" && state.accessToken && <UpdateNotice token={state.accessToken} />}
+      <Outlet />
+    </ModernAdminShell>
+  );
 
   return (
     <div className="flex min-h-svh bg-background relative">
@@ -487,12 +503,12 @@ export function DashboardLayout() {
           </div>
           <button
             type="button"
-            onClick={() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, ctrlKey: true, bubbles: true }))}
+            onClick={openAdminSearch} aria-keyshortcuts={searchShortcut().aria} title={`Поиск (${searchShortcut().label})`}
             className="hidden md:flex items-center gap-[7px] basis-[300px] shrink text-[12.5px] text-muted-foreground bg-background border border-border rounded-lg px-[11px] py-[6px] hover:border-foreground/20 transition-colors"
           >
             <Search className="h-[13px] w-[13px] shrink-0" />
             <span className="truncate">Поиск: клиент, платёж, нода…</span>
-            <span className="ml-auto text-[10.5px] bg-muted border border-border rounded px-1.5 py-[1px] shrink-0">⌘K</span>
+            <span className="ml-auto text-[10.5px] bg-muted border border-border rounded px-1.5 py-[1px] shrink-0">{searchShortcut().label}</span>
           </button>
           <div className="flex items-center gap-1.5 shrink-0">
             {/* Real-time toast indicator (legacy, низ-приоритет) */}
@@ -516,6 +532,7 @@ export function DashboardLayout() {
                     "absolute right-0 top-full z-50 mt-2 w-[calc(100vw-2rem)] sm:w-[320px] max-w-[320px] rounded-xl border border-border bg-card p-4 origin-top-right",
                     "opacity-100 scale-100 pointer-events-auto translate-y-0"
                   )}>
+                    <AdminAppearanceChoice />
                     <div className="mb-5">
                       <h4 className="mb-3 text-sm font-semibold tracking-tight text-foreground">{t("admin.header.mode")}</h4>
                       <div className="flex rounded-xl bg-muted/60 p-1 border border-border/50">

@@ -1,3 +1,8 @@
+import { AdminDialogHost } from "@/components/admin/admin-dialog-host";
+import { lazyPage } from "@/lib/lazy-page";
+const CabinetDesignEditorPage = lazyPage(() => import("@/pages/cabinet-design-editor").then(module => ({ default: module.CabinetDesignEditorPage })));
+const CabinetDesignPreviewPage = lazyPage(() => import("@/pages/cabinet-design-preview").then(module => ({ default: module.CabinetDesignPreviewPage })));
+import { CabinetDesignRuntime } from "@/components/cabinet-design/runtime";
 import { CabinetConfigProvider } from "@/contexts/cabinet-config";
 import { ClientHistoryPage } from "@/pages/cabinet/client-history";
 import { ClientWalletPage } from "@/pages/cabinet/client-wallet";
@@ -20,55 +25,55 @@ import { AnimatedBackground } from "@/components/animated-background";
 import { PwaUpdatePrompt } from "@/components/pwa/pwa-update-prompt";
 import { LoginPage } from "@/pages/login";
 import { ChangePasswordPage } from "@/pages/change-password";
-import { DashboardPage } from "@/pages/dashboard";
-import { ClientsPage } from "@/pages/clients";
-import { TariffsPage } from "@/pages/tariffs";
-import { TrialsPage } from "@/pages/trials"; // T15 (11.05.2026)
-import { WithdrawalsPage } from "@/pages/withdrawals"; // T6 (11.05.2026)
-import { AutoRenewPage } from "@/pages/auto-renew"; // T-autorenew (12.05.2026)
-import { SettingsPage } from "@/pages/settings";
-import { LandingEditorPage } from "@/pages/landing-editor";
-import { LandingPreviewPage } from "@/pages/landing-preview";
-import { AdminAuditPage } from "@/pages/admin-audit";
-import { AdminWebhookInboxPage } from "@/pages/admin-webhook-inbox";
-import { AdminDiagnosticsPage } from "@/pages/admin-diagnostics";
-import { AdminBusinessAnalyticsPage } from "@/pages/admin-business-analytics";
-import { AdminAntiFraudPage } from "@/pages/admin-anti-fraud";
-import { AdminEmailTemplatesPage } from "@/pages/admin-email-templates";
-import { AdminBotMessagesPage } from "@/pages/admin-bot-messages";
-import { AdminBotConversationsPage } from "@/pages/admin-bot-conversations";
+const DashboardPage = lazyPage(() => import("@/pages/dashboard").then(module => ({ default: module.DashboardPage })));
+const ClientsPage = lazyPage(() => import("@/pages/clients").then(module => ({ default: module.ClientsPage })));
+const TariffsPage = lazyPage(() => import("@/pages/tariffs").then(module => ({ default: module.TariffsPage })));
+const TrialsPage = lazyPage(() => import("@/pages/trials").then(module => ({ default: module.TrialsPage }))); // T15 (11.05.2026)
+const WithdrawalsPage = lazyPage(() => import("@/pages/withdrawals").then(module => ({ default: module.WithdrawalsPage }))); // T6 (11.05.2026)
+const AutoRenewPage = lazyPage(() => import("@/pages/auto-renew").then(module => ({ default: module.AutoRenewPage }))); // T-autorenew (12.05.2026)
+const SettingsPage = lazyPage(() => import("@/pages/settings").then(module => ({ default: module.SettingsPage })));
+const LandingEditorPage = lazyPage(() => import("@/pages/landing-editor").then(module => ({ default: module.LandingEditorPage })));
+const LandingPreviewPage = lazyPage(() => import("@/pages/landing-preview").then(module => ({ default: module.LandingPreviewPage })));
+const AdminAuditPage = lazyPage(() => import("@/pages/admin-audit").then(module => ({ default: module.AdminAuditPage })));
+const AdminWebhookInboxPage = lazyPage(() => import("@/pages/admin-webhook-inbox").then(module => ({ default: module.AdminWebhookInboxPage })));
+const AdminDiagnosticsPage = lazyPage(() => import("@/pages/admin-diagnostics").then(module => ({ default: module.AdminDiagnosticsPage })));
+const AdminBusinessAnalyticsPage = lazyPage(() => import("@/pages/admin-business-analytics").then(module => ({ default: module.AdminBusinessAnalyticsPage })));
+const AdminAntiFraudPage = lazyPage(() => import("@/pages/admin-anti-fraud").then(module => ({ default: module.AdminAntiFraudPage })));
+const AdminEmailTemplatesPage = lazyPage(() => import("@/pages/admin-email-templates").then(module => ({ default: module.AdminEmailTemplatesPage })));
+const AdminBotMessagesPage = lazyPage(() => import("@/pages/admin-bot-messages").then(module => ({ default: module.AdminBotMessagesPage })));
+const AdminBotConversationsPage = lazyPage(() => import("@/pages/admin-bot-conversations").then(module => ({ default: module.AdminBotConversationsPage })));
 import { CmdKPalette } from "@/components/cmd-k-palette";
-import { PromoPage } from "@/pages/promo";
-import { PromoCodesPage } from "@/pages/promo-codes";
-import { RemnaNodesPage } from "@/pages/remna-nodes";
-import { RemnaSquadsPage } from "@/pages/remna-squads";
-import { RemnaHostsPage } from "@/pages/remna-hosts";
-import { RemnaProfilesPage } from "@/pages/remna-profiles";
-import { RemnaSubTemplatesPage } from "@/pages/remna-sub-templates";
-import { AnalyticsPage } from "@/pages/analytics";
-import { MarketingPage } from "@/pages/marketing";
-import { AdminsPage } from "@/pages/admins";
-import { SalesReportPage } from "@/pages/sales-report";
-import { BalanceSalesPage } from "@/pages/balance-sales";
-import { VideoInstructionsPage } from "@/pages/video-instructions";
-import { BackupPage } from "@/pages/backup";
-import { ContestsPage } from "@/pages/contests";
-import { AdminTicketsPage } from "@/pages/admin-tickets";
-import { BroadcastPage } from "@/pages/broadcast";
-import { AutoBroadcastPage } from "@/pages/auto-broadcast";
-import { ReferralNetworkPage } from "@/pages/referral-network";
-import { AdminReferralsPage } from "@/pages/admin-referrals";
-import { GramadsPromoPage } from "@/pages/gramads-promo";
-import { TrafficAbusePage } from "@/pages/traffic-abuse";
-import { AntiAbusePage } from "@/pages/anti-abuse";
-import { ApiKeysPage } from "@/pages/api-keys";
-import { AntibotPage } from "@/pages/antibot";
-import { ApiDocsPage } from "@/pages/api-docs";
-import { AdminSecondarySubscriptionsPage } from "@/pages/admin-secondary-subscriptions";
-import { ProxyPage } from "@/pages/proxy";
-import { SingboxPage } from "@/pages/singbox";
-import LanguagesPage from "@/pages/languages";
-import { TourConstructorPage } from "@/pages/tour-constructor";
+const PromoPage = lazyPage(() => import("@/pages/promo").then(module => ({ default: module.PromoPage })));
+const PromoCodesPage = lazyPage(() => import("@/pages/promo-codes").then(module => ({ default: module.PromoCodesPage })));
+const RemnaNodesPage = lazyPage(() => import("@/pages/remna-nodes").then(module => ({ default: module.RemnaNodesPage })));
+const RemnaSquadsPage = lazyPage(() => import("@/pages/remna-squads").then(module => ({ default: module.RemnaSquadsPage })));
+const RemnaHostsPage = lazyPage(() => import("@/pages/remna-hosts").then(module => ({ default: module.RemnaHostsPage })));
+const RemnaProfilesPage = lazyPage(() => import("@/pages/remna-profiles").then(module => ({ default: module.RemnaProfilesPage })));
+const RemnaSubTemplatesPage = lazyPage(() => import("@/pages/remna-sub-templates").then(module => ({ default: module.RemnaSubTemplatesPage })));
+const AnalyticsPage = lazyPage(() => import("@/pages/analytics").then(module => ({ default: module.AnalyticsPage })));
+const MarketingPage = lazyPage(() => import("@/pages/marketing").then(module => ({ default: module.MarketingPage })));
+const AdminsPage = lazyPage(() => import("@/pages/admins").then(module => ({ default: module.AdminsPage })));
+const SalesReportPage = lazyPage(() => import("@/pages/sales-report").then(module => ({ default: module.SalesReportPage })));
+const BalanceSalesPage = lazyPage(() => import("@/pages/balance-sales").then(module => ({ default: module.BalanceSalesPage })));
+const VideoInstructionsPage = lazyPage(() => import("@/pages/video-instructions").then(module => ({ default: module.VideoInstructionsPage })));
+const BackupPage = lazyPage(() => import("@/pages/backup").then(module => ({ default: module.BackupPage })));
+const ContestsPage = lazyPage(() => import("@/pages/contests").then(module => ({ default: module.ContestsPage })));
+const AdminTicketsPage = lazyPage(() => import("@/pages/admin-tickets").then(module => ({ default: module.AdminTicketsPage })));
+const BroadcastPage = lazyPage(() => import("@/pages/broadcast").then(module => ({ default: module.BroadcastPage })));
+const AutoBroadcastPage = lazyPage(() => import("@/pages/auto-broadcast").then(module => ({ default: module.AutoBroadcastPage })));
+const ReferralNetworkPage = lazyPage(() => import("@/pages/referral-network").then(module => ({ default: module.ReferralNetworkPage })));
+const AdminReferralsPage = lazyPage(() => import("@/pages/admin-referrals").then(module => ({ default: module.AdminReferralsPage })));
+const GramadsPromoPage = lazyPage(() => import("@/pages/gramads-promo").then(module => ({ default: module.GramadsPromoPage })));
+const TrafficAbusePage = lazyPage(() => import("@/pages/traffic-abuse").then(module => ({ default: module.TrafficAbusePage })));
+const AntiAbusePage = lazyPage(() => import("@/pages/anti-abuse").then(module => ({ default: module.AntiAbusePage })));
+const ApiKeysPage = lazyPage(() => import("@/pages/api-keys").then(module => ({ default: module.ApiKeysPage })));
+const AntibotPage = lazyPage(() => import("@/pages/antibot").then(module => ({ default: module.AntibotPage })));
+const ApiDocsPage = lazyPage(() => import("@/pages/api-docs").then(module => ({ default: module.ApiDocsPage })));
+const AdminSecondarySubscriptionsPage = lazyPage(() => import("@/pages/admin-secondary-subscriptions").then(module => ({ default: module.AdminSecondarySubscriptionsPage })));
+const ProxyPage = lazyPage(() => import("@/pages/proxy").then(module => ({ default: module.ProxyPage })));
+const SingboxPage = lazyPage(() => import("@/pages/singbox").then(module => ({ default: module.SingboxPage })));
+const LanguagesPage = lazyPage(() => import("@/pages/languages"));
+const TourConstructorPage = lazyPage(() => import("@/pages/tour-constructor").then(module => ({ default: module.TourConstructorPage })));
 import { MarketplaceLayout } from "@/pages/marketplace/marketplace-layout";
 import { MarketplaceBrowsePage } from "@/pages/marketplace/marketplace-browse";
 import { MarketplaceMyListingsPage } from "@/pages/marketplace/marketplace-my";
@@ -219,11 +224,12 @@ function AppRoutes() {
   }, []);
 
   return (
-    <MaintenanceGate><Routes>
+    <MaintenanceGate><CabinetDesignRuntime /><Routes>
       {/* Главная: лендинг (если включён в настройках) или редирект в кабинет */}
       <Route path="/" element={<RootRoute />} />
 
       <Route path="/admin/landing-preview" element={<RequireAuth><ForceChangePassword><LandingPreviewPage /></ForceChangePassword></RequireAuth>} />
+      <Route path="/cabinet-design-preview" element={<RequireAuth><CabinetDesignPreviewPage /></RequireAuth>} />
       <Route path="/admin/landing-editor" element={<RequireAuth><ForceChangePassword><LandingEditorPage /></ForceChangePassword></RequireAuth>} />
       {/* Админка */}
       <Route path="/admin/login" element={state.accessToken ? <Navigate to="/admin" replace /> : <LoginPage />} />
@@ -262,6 +268,7 @@ function AppRoutes() {
         <Route path="withdrawals" element={<ForceChangePassword><WithdrawalsPage /></ForceChangePassword>} />
         {/* T-autorenew (12.05.2026) */}
         <Route path="auto-renew" element={<ForceChangePassword><AutoRenewPage /></ForceChangePassword>} />
+        <Route path="cabinet-design" element={<ForceChangePassword><CabinetDesignEditorPage /></ForceChangePassword>} />
         <Route path="settings" element={<ForceChangePassword><SettingsPage /></ForceChangePassword>} />
 
 
@@ -609,6 +616,7 @@ export default function App() {
       <BrowserRouter future={routerFutureFlags}>
         <ThemeProvider>
           <AuthProvider>
+            <AdminDialogHost />
             <AnimatedBackground />
             <TitleAndThemeSync  />
             <AppRoutes />

@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -83,7 +84,7 @@ export function VideoInstructionsPage() {
   }
 
   async function deleteItem(id: string) {
-    if (!confirm("Удалить эту инструкцию?")) return;
+    if (!(await adminConfirm("Удалить эту инструкцию?"))) return;
     try {
       await api.deleteVideoInstruction(token, id);
       invalidate();

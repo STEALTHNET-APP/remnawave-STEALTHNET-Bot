@@ -1,0 +1,9 @@
+import { DEFAULT_DESIGN, type CabinetDesign } from "./cabinet-design";
+export const DESIGN_PRESETS: { id: string; description: string; design: CabinetDesign }[] = [
+ { id: "graphite", description: "Нейтральный, спокойный, контрастный", design: DEFAULT_DESIGN },
+ { id: "paper", description: "Светлая бумага и чёткие границы", design: { ...DEFAULT_DESIGN, name: "Бумага", mode: "light", radius: 4, buttonRadius: 4, inputRadius: 4, light: { ...DEFAULT_DESIGN.light, background: "#f2efe8", surface: "#fffdf8", text: "#292820", muted: "#747064", border: "#d9d2c2", accent: "#514c3b" } } },
+ { id: "ocean", description: "Холодные поверхности, синий акцент", design: { ...DEFAULT_DESIGN, name: "Океан", radius: 14, dark: { background: "#101921", surface: "#17242e", text: "#e9f1f8", muted: "#a1b4c3", border: "#334958", accent: "#83c8f5", onAccent: "#102330" }, light: { ...DEFAULT_DESIGN.light, background: "#f0f6fa", accent: "#175c85", border: "#c8dce8" } } },
+ { id: "forest", description: "Тёплый зелёный без лишнего декора", design: { ...DEFAULT_DESIGN, name: "Лес", dark: { background: "#141c18", surface: "#1e2a23", text: "#e6eee7", muted: "#a5b8a9", border: "#384d3e", accent: "#a3d4ad", onAccent: "#182b1d" }, light: { ...DEFAULT_DESIGN.light, background: "#f1f5ef", accent: "#315e3d", border: "#cedbca" } } },
+ { id: "ink", description: "Строгие формы и компактные отступы", design: { ...DEFAULT_DESIGN, name: "Тушь", radius: 0, buttonRadius: 0, inputRadius: 0, density: "compact", buttons: "outline", width: 1280, dark: { ...DEFAULT_DESIGN.dark, background: "#101010", surface: "#191919", border: "#444444" } } },
+ { id: "editorial", description: "Светлая тема с классической типографикой", design: { ...DEFAULT_DESIGN, name: "Редакция", mode: "light", font: "serif", fontSize: 16, radius: 6, width: 1280, light: { ...DEFAULT_DESIGN.light, background: "#faf6f1", accent: "#763b2e", border: "#dfd2c7" } } },
+];

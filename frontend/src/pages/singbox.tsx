@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm, adminPrompt } from "@/lib/admin-dialogs";
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
 import {
@@ -153,7 +154,7 @@ export function SingboxPage() {
           setCategoryModal(null);
           setCategoryForm({ name: "", sortOrder: "0" });
         },
-        onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+        onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
       });
     } else if (categoryModal && "edit" in categoryModal) {
       updateCategory.mutate({ id: categoryModal.edit.id, data: payload }, {
@@ -161,15 +162,15 @@ export function SingboxPage() {
           setCategoryModal(null);
           setCategoryForm({ name: "", sortOrder: "0" });
         },
-        onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+        onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
       });
     }
   }
 
-  function handleDeleteCategory(id: string) {
-    if (!token || !confirm("Удалить категорию и все тарифы в ней?")) return;
+  async function handleDeleteCategory(id: string) {
+    if (!token || !(await adminConfirm("Удалить категорию и все тарифы в ней?"))) return;
     deleteCategory.mutate(id, {
-      onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+      onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
     });
   }
 
@@ -200,21 +201,21 @@ export function SingboxPage() {
       if (!payload.categoryId) return;
       createTariff.mutate(payload, {
         onSuccess: resetForm,
-        onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+        onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
       });
     } else if (tariffModal?.kind === "edit") {
       updateTariff.mutate({ id: tariffModal.tariff.id, data: payload }, {
         onSuccess: resetForm,
-        onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+        onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
       });
     }
   }
 
-  function handleDeleteTariff(id: string) {
-    if (!token || !confirm("Удалить тариф?")) return;
+  async function handleDeleteTariff(id: string) {
+    if (!token || !(await adminConfirm("Удалить тариф?"))) return;
     deleteTariff.mutate(id, {
       onSuccess: () => setTariffModal(null),
-      onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+      onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
     });
   }
 
@@ -226,7 +227,7 @@ export function SingboxPage() {
       { name: newNodeName.trim() || "Sing-box node", protocol: newNodeProtocol, port, tlsEnabled: newNodeProtocol !== "AMNEZIAWG", ...(newNodeProtocol === "AMNEZIAWG" && { publicHost: newNodeHost.trim() }), ...(newNodeProtocol.startsWith("AWP_") && { webPanel: { ...webPanelForm, serverId: Number(webPanelForm.serverId) } }) },
       {
         onSuccess: (res) => { setAddResult(res); setWebPanelForm(f => ({ ...f, apiToken: "" })); },
-        onError: (e) => alert(e instanceof Error ? e.message : "Ошибка создания"),
+        onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка создания")),
       },
     );
   }
@@ -251,7 +252,7 @@ export function SingboxPage() {
     if (!token || !detailId) return;
     setWebSlotBusy(true);
     try { await api.updateWebPanelSlot(token, detailId, slotId, data); await detailQuery.refetch(); }
-    catch (error) { alert(error instanceof Error ? error.message : "Не удалось изменить доступ"); }
+    catch (error) { (await adminAlert(error instanceof Error ? error.message : "Не удалось изменить доступ")); }
     finally { setWebSlotBusy(false); }
   }
 
@@ -265,7 +266,7 @@ export function SingboxPage() {
           setEditOpen(false);
           setEditingNode(null);
         },
-        onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+        onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
       },
     );
   }
@@ -277,7 +278,7 @@ export function SingboxPage() {
         if (detailId === nodeToDelete.id) setDetailId(null);
         setNodeToDelete(null);
       },
-      onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+      onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
     });
   }
 
@@ -496,8 +497,8 @@ export function SingboxPage() {
                           <span className="font-mono text-xs">{s.userIdentifier}</span>
                           <span className="text-muted-foreground text-xs">{formatDate(s.expiresAt)}</span>
                           {detailNode.protocol.startsWith("AWP_") && <div className="flex gap-1">
-                            <Button size="sm" variant="outline" disabled={webSlotBusy} onClick={() => { const days = prompt("На сколько дней продлить?", "30"); const count = Number(days); if (days && Number.isInteger(count) && count > 0 && count <= 3650) void changeWebSlot(s.id, { expiresAt: new Date(Math.max(Date.now(), Date.parse(s.expiresAt)) + count * 86400000).toISOString(), status: "ACTIVE" }); }}>Продлить</Button>
-                            <Button size="sm" variant="outline" disabled={webSlotBusy || s.status === "REVOKED"} onClick={() => { if (confirm("Отозвать доступ во внешней панели?")) void changeWebSlot(s.id, { status: "REVOKED" }); }}>Отозвать</Button>
+                            <Button size="sm" variant="outline" disabled={webSlotBusy} onClick={async () => { const days = (await adminPrompt("На сколько дней продлить?", "30")); const count = Number(days); if (days && Number.isInteger(count) && count > 0 && count <= 3650) void changeWebSlot(s.id, { expiresAt: new Date(Math.max(Date.now(), Date.parse(s.expiresAt)) + count * 86400000).toISOString(), status: "ACTIVE" }); }}>Продлить</Button>
+                            <Button size="sm" variant="outline" disabled={webSlotBusy || s.status === "REVOKED"} onClick={async () => { if ((await adminConfirm("Отозвать доступ во внешней панели?"))) void changeWebSlot(s.id, { status: "REVOKED" }); }}>Отозвать</Button>
                           </div>}
                         </li>
                       ))}
@@ -575,8 +576,8 @@ export function SingboxPage() {
               <Button
                 size="sm"
                 className="gap-1.5 rounded-xl"
-                onClick={() => {
-                  if (categories.length === 0) { alert("Сначала добавьте категорию"); return; }
+                onClick={async () => {
+                  if (categories.length === 0) { (await adminAlert("Сначала добавьте категорию")); return; }
                   setTariffModal({ kind: "add", categoryId: categories[0]!.id });
                   setTariffForm({ protocol: "SINGBOX", name: "", categoryId: categories[0]!.id, slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true });
                 }}

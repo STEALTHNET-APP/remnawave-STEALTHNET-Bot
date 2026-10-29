@@ -1,3 +1,4 @@
+import { adminConfirm, adminAlert } from "@/lib/admin-dialogs";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAdminListParams } from "@/lib/use-admin-list-params";
@@ -204,7 +205,7 @@ export function AdminSecondarySubscriptionsPage() {
 
   const handleDeleteSelected = async () => {
     if (!token) return;
-    if (!confirm(`Удалить ${selectedIds.size} подписок? Это действие нельзя отменить.`)) return;
+    if (!(await adminConfirm(`Удалить ${selectedIds.size} подписок? Это действие нельзя отменить.`))) return;
     
     try {
       await api.deleteSecondarySubscriptionsBulk(token, Array.from(selectedIds));
@@ -212,20 +213,20 @@ export function AdminSecondarySubscriptionsPage() {
       fetchItems();
     } catch (err) {
       console.error("Failed to bulk delete", err);
-      alert("Ошибка при удалении");
+      (await adminAlert("Ошибка при удалении"));
     }
   };
 
   const handleDeleteSingle = async (id: string) => {
     if (!token) return;
-    if (!confirm("Удалить эту подписку?")) return;
+    if (!(await adminConfirm("Удалить эту подписку?"))) return;
     try {
       await api.deleteSecondarySubscription(token, id);
       setSelectedIds((previous) => new Set([...previous].filter((value) => value !== id)));
       fetchItems();
     } catch (err) {
       console.error("Failed to delete", err);
-      alert("Ошибка при удалении");
+      (await adminAlert("Ошибка при удалении"));
     }
   };
 

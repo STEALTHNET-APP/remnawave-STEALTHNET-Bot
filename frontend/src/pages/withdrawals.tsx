@@ -1,3 +1,4 @@
+import { adminConfirm, adminAlert, adminPrompt } from "@/lib/admin-dialogs";
 /**
  * админ-страница «Заявки на вывод» (USDT TRC20).
  *
@@ -71,13 +72,13 @@ export function WithdrawalsPage() {
 
   const handleApprove = async (id: string) => {
     if (!token) return;
-    if (!confirm("Одобрить заявку? Клиенту придёт уведомление в Telegram.\n\nДеньги переводи на USDT TRC20 кошелёк вручную после нажатия.")) return;
+    if (!(await adminConfirm("Одобрить заявку? Клиенту придёт уведомление в Telegram.\n\nДеньги переводи на USDT TRC20 кошелёк вручную после нажатия."))) return;
     setProcessing(id);
     try {
       await api.approveWithdrawal(token, id);
       void queryClient.invalidateQueries({ queryKey: ["admin", "withdrawals"], exact: false });
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка одобрения");
+      (await adminAlert(e instanceof Error ? e.message : "Ошибка одобрения"));
     } finally {
       setProcessing(null);
     }
@@ -85,15 +86,15 @@ export function WithdrawalsPage() {
 
   const handleReject = async (id: string) => {
     if (!token) return;
-    const comment = prompt("Причина отклонения (необязательно):");
+    const comment = (await adminPrompt("Причина отклонения (необязательно):"));
     if (comment === null) return;
-    if (!confirm("Отклонить заявку? Баланс автоматически вернётся клиенту.")) return;
+    if (!(await adminConfirm("Отклонить заявку? Баланс автоматически вернётся клиенту."))) return;
     setProcessing(id);
     try {
       await api.rejectWithdrawal(token, id, comment.trim() || undefined);
       void queryClient.invalidateQueries({ queryKey: ["admin", "withdrawals"], exact: false });
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка отклонения");
+      (await adminAlert(e instanceof Error ? e.message : "Ошибка отклонения"));
     } finally {
       setProcessing(null);
     }

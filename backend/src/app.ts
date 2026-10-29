@@ -1,3 +1,4 @@
+import { cabinetDesignAdminRouter, cabinetDesignPublicRouter } from "./modules/cabinet-design/routes.js";
 import { starsBotRouter } from "./modules/telegram-stars/stars.routes.js";
 import { maintenanceGuard } from "./modules/client/maintenance.js";
 import { botTermsRouter } from "./modules/bot/terms.routes.js";
@@ -368,6 +369,8 @@ app.use("/api/auth", authRouter);
 app.use("/api/admin/referrals", adminReferralsRouter);
 app.use("/api/admin/console", consoleAdminRouter);
 app.use("/api/internal/console", consoleInternalRouter);
+app.use("/api/admin/cabinet-design", cabinetDesignAdminRouter);
+app.use("/api/public/cabinet-design", cabinetDesignPublicRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/admin/traffic-abuse", trafficAbuseRouter);
 app.use("/api/admin/anti-abuse", antiAbuseRouter);

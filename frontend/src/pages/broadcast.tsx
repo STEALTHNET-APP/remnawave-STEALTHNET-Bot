@@ -1,3 +1,4 @@
+import { adminConfirm, adminAlert } from "@/lib/admin-dialogs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
@@ -128,13 +129,13 @@ export function BroadcastPage() {
 
   async function handleBroadcastCancel() {
     if (!broadcastJobId || broadcastCancelRequested) return;
-    if (!confirm("Прервать рассылку? Уже отправленные сообщения останутся.")) return;
+    if (!(await adminConfirm("Прервать рассылку? Уже отправленные сообщения останутся."))) return;
     setBroadcastCancelRequested(true);
     try {
       await api.cancelBroadcast(token, broadcastJobId);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Ошибка";
-      alert(`Не удалось отменить: ${msg}`);
+      (await adminAlert(`Не удалось отменить: ${msg}`));
       setBroadcastCancelRequested(false);
     }
   }
@@ -507,7 +508,7 @@ export function BroadcastPage() {
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden bg-card border border-border p-4 rounded-[2.5rem]"
+        className="admin-broadcast-heading relative overflow-hidden bg-card border border-border p-4 rounded-[2.5rem]"
       >
         <div className="absolute inset-0 bg-transparent pointer-events-none" />
         <div className="absolute top-0 right-0 w-40 h-40 bg-primary/20 blur-3xl rounded-full pointer-events-none" />
@@ -1432,11 +1433,11 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
   const resumeMutation = useMutation({
     mutationFn: ({ jobId, file }: { jobId: string; file?: File }) =>
       api.resumeBroadcast(token, jobId, file),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       setDetail(null);
       setResumeError(null);
       invalidateHistory();
-      alert(`Рассылка возобновлена (jobId=${res.jobId}). Уже отправленные ${detail?.sentTelegram ?? 0} получателей будут пропущены.`);
+      (await adminAlert(`Рассылка возобновлена (jobId=${res.jobId}). Уже отправленные ${detail?.sentTelegram ?? 0} получателей будут пропущены.`));
     },
     onError: (e) => {
       setResumeError(e instanceof Error ? e.message : String(e));
@@ -1446,9 +1447,9 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
   const stopLoading = stopMutation.isPending;
   const resumeLoading = resumeMutation.isPending;
 
-  const handleStop = () => {
+  const handleStop = async () => {
     if (!detail) return;
-    if (!window.confirm("Остановить эту рассылку? Если она ещё идёт — прервётся между сообщениями. Если зависла — будет помечена как cancelled.")) return;
+    if (!(await adminConfirm("Остановить эту рассылку? Если она ещё идёт — прервётся между сообщениями. Если зависла — будет помечена как cancelled."))) return;
     stopMutation.mutate(detail.id);
   };
 
@@ -1467,7 +1468,7 @@ function BroadcastHistoryPanel({ token }: { token: string }) {
     try {
       await api.downloadBroadcastRecipientsCsv(token, detail.id);
     } catch (e) {
-      alert(`Не удалось скачать: ${e instanceof Error ? e.message : String(e)}`);
+      (await adminAlert(`Не удалось скачать: ${e instanceof Error ? e.message : String(e)}`));
     } finally {
       setRecipientsLoading(false);
     }

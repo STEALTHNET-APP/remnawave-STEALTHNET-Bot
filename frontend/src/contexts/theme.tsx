@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useState, useCallback, type ReactNode } from "react";
 import { getPublicConfigCached } from "@/lib/public-config";
 
 import { useLocation } from "react-router-dom";
-import { normalizeTheme, readStoredTheme, resolveThemePolicy, type ThemeConfig, type ThemeMode, type ThemeAccent } from "@/lib/theme-policy";
+import { normalizeTheme, readStoredTheme, resolveThemePolicy, isAdminThemePath, type ThemeConfig, type ThemeMode, type ThemeAccent } from "@/lib/theme-policy";
 export type { ThemeConfig, ThemeMode, ThemeAccent } from "@/lib/theme-policy";
 
 interface AccentPalette {
@@ -27,7 +27,11 @@ export const ACCENT_PALETTES: Record<ThemeAccent, AccentPalette> = {
   indigo: { label: "Индиго", swatch: "#6366f1", light: { "--primary": "238.7 83.5% 66.7%", "--primary-foreground": "0 0% 100%", "--ring": "238.7 83.5% 66.7%" }, dark: { "--primary": "238.7 83.5% 66.7%", "--primary-foreground": "0 0% 100%", "--ring": "238.7 83.5% 66.7%" } },
 };
 
+export type AdminAppearance = "modern" | "legacy";
+
 interface ThemeContextValue {
+  adminAppearance: AdminAppearance;
+  setAdminAppearance: (appearance: AdminAppearance) => void;
   config: ThemeConfig;
   resolvedMode: "light" | "dark";
   setMode: (mode: ThemeMode) => void;
@@ -37,6 +41,8 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
+  adminAppearance: "modern",
+  setAdminAppearance: () => {},
   config: { mode: "dark", accent: "default" },
   resolvedMode: "dark",
   setMode: () => {},
@@ -71,6 +77,19 @@ function saveTheme(cfg: ThemeConfig) {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
+  const [adminAppearance, updateAdminAppearance] = useState<AdminAppearance>(() => {
+    try { return localStorage.getItem("stealthnet-admin-appearance") === "legacy" ? "legacy" : "modern"; }
+    catch { return "modern"; }
+  });
+  const setAdminAppearance = useCallback((appearance: AdminAppearance) => {
+    updateAdminAppearance(appearance);
+    try { localStorage.setItem("stealthnet-admin-appearance", appearance); } catch {}
+  }, []);
+  useLayoutEffect(() => {
+    if (isAdminThemePath(pathname)) document.body.dataset.adminUi = adminAppearance;
+    else delete document.body.dataset.adminUi;
+    return () => { delete document.body.dataset.adminUi; };
+  }, [pathname, adminAppearance]);
   const [personalConfig, setPersonalConfig] = useState<ThemeConfig | null>(loadTheme);
   const [systemDark, setSystemDark] = useState(getSystemDark);
   const [serverConfig, setServerConfig] = useState<ThemeConfig>(() => normalizeTheme(null));
@@ -79,7 +98,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
     getPublicConfigCached().then((cfg) => {
-      if (active) setServerConfig(normalizeTheme({ mode: cfg.themeMode, accent: cfg.themeAccent }));
+      if (active) setServerConfig(normalizeTheme({ mode: "themeMode" in cfg ? cfg.themeMode : "dark", accent: cfg.themeAccent }));
     }).catch(() => {});
     return () => { active = false; };
   }, []);
@@ -125,7 +144,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [config, setConfig]);
 
   return (
-    <ThemeContext.Provider value={{ config, resolvedMode, setMode, setAccent, setConfig, allowUserThemeChange: editable }}>
+    <ThemeContext.Provider value={{ adminAppearance, setAdminAppearance, config, resolvedMode, setMode, setAccent, setConfig, allowUserThemeChange: editable }}>
       {children}
     </ThemeContext.Provider>
   );

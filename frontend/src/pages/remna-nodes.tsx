@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 import { useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "@/contexts/auth";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
@@ -319,50 +320,50 @@ export function RemnaNodesPage() {
       await saveNodeMutation.mutateAsync(payload);
       setShowForm(false);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Ошибка сохранения");
+      (await adminAlert(e instanceof Error ? e.message : "Ошибка сохранения"));
     }
   };
 
   const runAction = async (uuid: string, action: "enable" | "disable" | "restart") => {
     setBusy(uuid + action);
     try { await nodeActionMutation.mutateAsync({ uuid, action }); }
-    catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+    catch (e) { (await adminAlert(e instanceof Error ? e.message : "Ошибка")); }
     finally { setBusy(null); }
   };
 
   const handleDelete = async (n: RemnaNode) => {
-    if (!confirm(`Удалить ноду «${n.name}»? Это действие необратимо.`)) return;
+    if (!(await adminConfirm(`Удалить ноду «${n.name}»? Это действие необратимо.`))) return;
     setBusy(n.uuid + "del");
     try { await deleteNodeMutation.mutateAsync(n.uuid); }
-    catch (e) { alert(e instanceof Error ? e.message : "Ошибка удаления"); }
+    catch (e) { (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")); }
     finally { setBusy(null); }
   };
 
   const createProvider = async () => {
     if (!newProviderName.trim()) return;
     try { await createProviderMutation.mutateAsync(); }
-    catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+    catch (e) { (await adminAlert(e instanceof Error ? e.message : "Ошибка")); }
   };
   const deleteProvider = async (uuid: string, name: string) => {
-    if (!confirm(`Удалить провайдера «${name}»? Привязки нод к нему тоже уйдут.`)) return;
+    if (!(await adminConfirm(`Удалить провайдера «${name}»? Привязки нод к нему тоже уйдут.`))) return;
     try { await deleteProviderMutation.mutateAsync(uuid); }
-    catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+    catch (e) { (await adminAlert(e instanceof Error ? e.message : "Ошибка")); }
   };
   const createBillingNode = async () => {
-    if (!billForm.providerUuid || !billForm.nodeUuid || !billForm.date) { alert("Выберите провайдера, ноду и дату"); return; }
+    if (!billForm.providerUuid || !billForm.nodeUuid || !billForm.date) { (await adminAlert("Выберите провайдера, ноду и дату")); return; }
     try { await createBillingNodeMutation.mutateAsync(); }
-    catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+    catch (e) { (await adminAlert(e instanceof Error ? e.message : "Ошибка")); }
   };
   const deleteBillingNode = async (uuid: string) => {
-    if (!confirm("Убрать ноду из биллинга?")) return;
+    if (!(await adminConfirm("Убрать ноду из биллинга?"))) return;
     try { await deleteBillingNodeMutation.mutateAsync(uuid); }
-    catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+    catch (e) { (await adminAlert(e instanceof Error ? e.message : "Ошибка")); }
   };
 
   const deletePlugin = async (uuid: string, name: string) => {
-    if (!confirm(`Удалить плагин «${name}»?`)) return;
+    if (!(await adminConfirm(`Удалить плагин «${name}»?`))) return;
     try { await deletePluginMutation.mutateAsync(uuid); }
-    catch (e) { alert(e instanceof Error ? e.message : "Ошибка удаления"); }
+    catch (e) { (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")); }
   };
 
   const kpi = useMemo(() => {
@@ -631,10 +632,10 @@ export function RemnaNodesPage() {
               className="gap-1.5 rounded-xl"
               disabled={busy === "restart-all"}
               onClick={async () => {
-                if (!confirm(`Перезапустить ВСЕ ноды (${nodes.length})? Активные соединения клиентов кратко оборвутся.`)) return;
+                if (!(await adminConfirm(`Перезапустить ВСЕ ноды (${nodes.length})? Активные соединения клиентов кратко оборвутся.`))) return;
                 setBusy("restart-all");
                 try { await restartAllMutation.mutateAsync(); }
-                catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+                catch (e) { (await adminAlert(e instanceof Error ? e.message : "Ошибка")); }
                 finally { setBusy(null); }
               }}
             >
@@ -869,10 +870,10 @@ export function RemnaNodesPage() {
                               disabled={busy === n.uuid + "rst"}
                               onClick={async () => {
                                 setMenuFor(null);
-                                if (!confirm(`Обнулить счётчик трафика ноды «${n.name}»?`)) return;
+                                if (!(await adminConfirm(`Обнулить счётчик трафика ноды «${n.name}»?`))) return;
                                 setBusy(n.uuid + "rst");
                                 try { await resetTrafficMutation.mutateAsync(n.uuid); }
-                                catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+                                catch (e) { (await adminAlert(e instanceof Error ? e.message : "Ошибка")); }
                                 finally { setBusy(null); }
                               }}
                             />
@@ -1094,9 +1095,9 @@ export function RemnaNodesPage() {
                   <Button
                     variant="outline" size="sm" className="rounded-lg gap-1.5 text-xs text-red-500 dark:text-red-400 hover:bg-red-500/10"
                     onClick={async () => {
-                      if (!confirm("Очистить все отчёты торрент-блокера?")) return;
+                      if (!(await adminConfirm("Очистить все отчёты торрент-блокера?"))) return;
                       try { await truncateTorrentMutation.mutateAsync(); }
-                      catch (e) { alert(e instanceof Error ? e.message : "Ошибка"); }
+                      catch (e) { (await adminAlert(e instanceof Error ? e.message : "Ошибка")); }
                     }}
                   ><Trash2 className="h-3.5 w-3.5" /> Очистить отчёты</Button>
                 </div>

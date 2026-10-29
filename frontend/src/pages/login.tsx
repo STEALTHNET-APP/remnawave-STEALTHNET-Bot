@@ -69,7 +69,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-svh flex items-center justify-center p-4">
+    <div className="admin-login min-h-svh flex items-center justify-center p-4">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}

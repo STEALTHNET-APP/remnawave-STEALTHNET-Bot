@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 /**
  * Webhook inbox: входящие webhook'и от Platega/YooKassa/Lava/Crypto/Heleket/YooMoney/Overpay.
  * Фильтр по провайдеру и outcome. Drawer с raw body + headers + кнопкой replay.
@@ -80,11 +81,11 @@ export function AdminWebhookInboxPage() {
 
   const replayMutation = useMutation({
     mutationFn: () => webhookInboxApi.replay(token!, selectedId!),
-    onSuccess: (res) => {
-      alert(`Replay выполнен. HTTP ${res.replayedHttpStatus ?? "?"}.`);
+    onSuccess: async (res) => {
+      (await adminAlert(`Replay выполнен. HTTP ${res.replayedHttpStatus ?? "?"}.`));
       void qc.invalidateQueries({ queryKey: ["admin", "webhook-inbox"], exact: false });
     },
-    onError: (e) => alert(`Ошибка replay: ${e}`),
+    onError: async (e) => (await adminAlert(`Ошибка replay: ${e}`)),
   });
   const replaying = replayMutation.isPending;
 
@@ -99,9 +100,9 @@ export function AdminWebhookInboxPage() {
     setCursor(nextCursor);
   };
 
-  const handleReplay = () => {
+  const handleReplay = async () => {
     if (!selectedId || !token) return;
-    if (!confirm("Повторно отправить этот webhook нашему серверу? Создастся новая запись WebhookEvent с replay-меткой.")) return;
+    if (!(await adminConfirm("Повторно отправить этот webhook нашему серверу? Создастся новая запись WebhookEvent с replay-меткой."))) return;
     replayMutation.mutate();
   };
   return (

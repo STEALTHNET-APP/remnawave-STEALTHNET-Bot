@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/auth";
@@ -205,12 +206,12 @@ export function RemnaProfilesPage() {
       setShowForm(false);
       invalidateProfiles();
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка сохранения"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка сохранения")),
   });
   const deleteMutation = useMutation({
     mutationFn: (uuid: string) => api.remnaConfigProfileDelete(token!, uuid),
     onSuccess: () => invalidateProfiles(),
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
   });
 
   const openCreate = () => {
@@ -231,8 +232,8 @@ export function RemnaProfilesPage() {
     setShowForm(true);
   };
 
-  const applyTemplate = (t: { name: string; config: string }) => {
-    if (configText.trim() && configText !== DEFAULT_CONFIG && !confirm(`Заменить текущий конфиг шаблоном «${t.name}»?`)) return;
+  const applyTemplate = async (t: { name: string; config: string }) => {
+    if (configText.trim() && configText !== DEFAULT_CONFIG && !(await adminConfirm(`Заменить текущий конфиг шаблоном «${t.name}»?`))) return;
     setConfigText(t.config);
   };
 
@@ -260,17 +261,17 @@ export function RemnaProfilesPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!configValidation.valid) {
-      alert("Config не является корректным JSON.");
+      (await adminAlert("Config не является корректным JSON."));
       return;
     }
     const config = JSON.parse(configText);
     saveMutation.mutate({ uuid: editingUuid, body: { name: name.trim(), config } });
   };
 
-  const handleDelete = (p: RemnaConfigProfile) => {
-    if (!confirm(`Удалить профиль «${p.name}»? Ноды и хосты, привязанные к нему, потеряют конфигурацию.`)) return;
+  const handleDelete = async (p: RemnaConfigProfile) => {
+    if (!(await adminConfirm(`Удалить профиль «${p.name}»? Ноды и хосты, привязанные к нему, потеряют конфигурацию.`))) return;
     deleteMutation.mutate(p.uuid);
   };
 

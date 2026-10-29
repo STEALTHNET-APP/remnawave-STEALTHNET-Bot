@@ -1,3 +1,4 @@
+import { adminAlert } from "@/lib/admin-dialogs";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Megaphone, Wallet, RefreshCw, Plus, Loader2, KeyRound, Eye, EyeOff, Power, Archive, Star, Send, Clock, TrendingUp, X, Check, AlertCircle, ExternalLink } from "lucide-react";
@@ -173,7 +174,7 @@ export function GramadsPromoPage() {
         detailPost?.id === postId
           ? detailPost
           : (posts?.items ?? []).find((p) => p.id === postId) ?? null;
-      if (!current) { alert("Пост не найден в списке — обновите страницу."); return; }
+      if (!current) { (await adminAlert("Пост не найден в списке — обновите страницу.")); return; }
 
       // Копируем текущее состояние и выставляем желаемое значение конкретного флага.
       const payload: GramadsPostDto = { ...current };
@@ -196,14 +197,14 @@ export function GramadsPromoPage() {
       // Диагностика: действие не применилось.
       const expl = updated.notSuccessExplanation ?? 0;
       if (expl && expl !== 0) {
-        alert(notSuccessExplanationHint(expl));
+        (await adminAlert(notSuccessExplanationHint(expl)));
       } else if (action === "switchEnabled" && current.enabled === updated.enabled) {
-        if (updated.moderationStatus === 2) alert("Пост отклонён модераторами Gramads. Создайте новую кампанию с другим текстом/ссылкой.");
-        else alert("Gramads не применил действие. Проверьте, что на балансе есть показы и что кампания одобрена.");
+        if (updated.moderationStatus === 2) (await adminAlert("Пост отклонён модераторами Gramads. Создайте новую кампанию с другим текстом/ссылкой."));
+        else (await adminAlert("Gramads не применил действие. Проверьте, что на балансе есть показы и что кампания одобрена."));
       }
 
       void queryClient.invalidateQueries({ queryKey: qk.admin.gramadsPosts(postFilter) });
-    } catch (e) { alert(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { (await adminAlert(e instanceof Error ? e.message : String(e))); }
   };
 
 

@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm, adminPrompt } from "@/lib/admin-dialogs";
 /**
  * Diagnostics: health checks (postgres/remna/bot/disk/ram/uptime), cron-monitor,
  * logs viewer + кнопка «Logout all admins».
@@ -57,30 +58,30 @@ export function AdminDiagnosticsPage() {
   const triggerCronMutation = useMutation({
     mutationFn: (name: string) => diagnosticsApi.triggerCron(token!, name),
     onSuccess: () => void cronsQuery.refetch(),
-    onError: (e) => alert(`Ошибка: ${e}`),
+    onError: async (e) => (await adminAlert(`Ошибка: ${e}`)),
   });
   const triggeringCron = triggerCronMutation.isPending ? triggerCronMutation.variables ?? null : null;
 
-  const triggerCron = (name: string) => {
+  const triggerCron = async (name: string) => {
     if (!token) return;
-    if (!confirm(`Запустить cron-задачу «${name}» прямо сейчас?`)) return;
+    if (!(await adminConfirm(`Запустить cron-задачу «${name}» прямо сейчас?`))) return;
     triggerCronMutation.mutate(name);
   };
 
   const handleLogoutAll = async () => {
     if (!token) return;
-    const reason = prompt("Зачем (для аудит-лога):", "manual logout-all");
+    const reason = (await adminPrompt("Зачем (для аудит-лога):", "manual logout-all"));
     if (reason === null) return;
-    const incMe = confirm("Включая ВАС? OK = включая (вы тоже разлогинитесь). Cancel = только остальные админы.");
+    const incMe = (await adminConfirm("Включая ВАС? OK = включая (вы тоже разлогинитесь). Cancel = только остальные админы."));
     try {
       const r = await adminSecurityApi.logoutAll(token, { includingMe: incMe, reason: reason || undefined });
-      alert(r.message);
+      (await adminAlert(r.message));
       if (incMe) {
         // Если включили себя, refresh-токен у нас тоже инвалидирован — на следующий API-call мы получим 401.
         window.location.reload();
       }
     } catch (e) {
-      alert(`Ошибка: ${e}`);
+      (await adminAlert(`Ошибка: ${e}`));
     }
   };
 

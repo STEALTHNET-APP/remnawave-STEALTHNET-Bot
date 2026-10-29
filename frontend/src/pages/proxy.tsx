@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 import { useState, useEffect, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
@@ -209,7 +210,7 @@ export function ProxyPage() {
   const deleteCategoryMut = useMutation({
     mutationFn: (id: string) => api.deleteProxyCategory(token, id),
     onSuccess: invalidateTariffData,
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
   });
 
   const deleteTariffMut = useMutation({
@@ -218,13 +219,13 @@ export function ProxyPage() {
       invalidateTariffData();
       setTariffModal(null);
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
   });
 
   const toggleTariffMut = useMutation({
     mutationFn: (t: ProxyTariffItem) => api.updateProxyTariff(token, t.id, { enabled: !t.enabled }),
     onSuccess: invalidateTariffData,
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
   });
 
   const saveSlotMut = useMutation({
@@ -239,32 +240,32 @@ export function ProxyPage() {
       invalidateSlots();
       setEditSlot(null);
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
   });
 
   const revokeSlotMut = useMutation({
     mutationFn: (id: string) => api.updateProxySlotAdmin(token, id, { status: "REVOKED" }),
     onSuccess: invalidateSlots,
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
   });
 
   const deleteSlotMut = useMutation({
     mutationFn: (id: string) => api.deleteProxySlotAdmin(token, id),
     onSuccess: invalidateSlots,
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
   });
   function openSlotEdit(s: ProxySlotAdminItem) {
     setEditSlot(s);
     setSlotForm({ login: s.login, password: s.password, connectionLimit: s.connectionLimit != null ? String(s.connectionLimit) : "", status: s.status });
   }
 
-  function handleDeleteCategory(id: string) {
-    if (!confirm("Удалить категорию и все тарифы в ней?")) return;
+  async function handleDeleteCategory(id: string) {
+    if (!(await adminConfirm("Удалить категорию и все тарифы в ней?"))) return;
     deleteCategoryMut.mutate(id);
   }
 
-  function handleDeleteTariff(id: string) {
-    if (!confirm("Удалить тариф?")) return;
+  async function handleDeleteTariff(id: string) {
+    if (!(await adminConfirm("Удалить тариф?"))) return;
     deleteTariffMut.mutate(id);
   }
 
@@ -316,13 +317,13 @@ export function ProxyPage() {
     });
   }
 
-  function handleRevokeSlot(id: string) {
-    if (!confirm("Отозвать доступ? Слот станет REVOKED.")) return;
+  async function handleRevokeSlot(id: string) {
+    if (!(await adminConfirm("Отозвать доступ? Слот станет REVOKED."))) return;
     revokeSlotMut.mutate(id);
   }
 
-  function handleDeleteSlot(id: string) {
-    if (!confirm("Удалить слот? Это нельзя отменить.")) return;
+  async function handleDeleteSlot(id: string) {
+    if (!(await adminConfirm("Удалить слот? Это нельзя отменить."))) return;
     deleteSlotMut.mutate(id);
   }
 
@@ -437,7 +438,7 @@ cd /opt/proxy-node && docker compose up -d --build`
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => token && api.downloadProxySlotsCsv(token).catch((e) => alert(e instanceof Error ? e.message : "Ошибка"))} className="gap-1.5 rounded-xl">
+            <Button variant="outline" size="sm" onClick={() => token && api.downloadProxySlotsCsv(token).catch(async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")))} className="gap-1.5 rounded-xl">
               <Download className="h-4 w-4" /> Экспорт CSV
             </Button>
             <Button
@@ -967,7 +968,7 @@ function ProxyCategoryModal({
       onSaved();
       invalidate();
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
   });
 
   const submit = (e: React.FormEvent) => {
@@ -1097,15 +1098,15 @@ function ProxyTariffModal({
       onSaved();
       invalidate();
     },
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
   });
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token || !name.trim()) return;
     const priceNum = parseFloat(price);
     if (isNaN(priceNum) || priceNum < 0) {
-      alert("Введите корректную цену");
+      (await adminAlert("Введите корректную цену"));
       return;
     }
     mut.mutate({

@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type PanelUpdateState } from "@/lib/api";
@@ -69,11 +70,11 @@ export function PanelUpdates({ token }: { token: string }) {
           {data.status?.changes && <details><summary className="cursor-pointer">Что изменилось</summary><pre className="mt-2 whitespace-pre-wrap break-words text-sm">{data.status.changes}</pre></details>}
           <div className="flex flex-wrap gap-3">
             <Button type="button" variant="outline" disabled={busy || dirty} onClick={() => mutation.mutate({ action: "check" })}>Проверить обновления</Button>
-            <Button type="button" disabled={busy || dirty || !data.status?.available || data.status?.recoveryRequired || !!data.status?.blockedReason} onClick={() => {
-              if (window.confirm("Установить обновление? Панель и бот будут временно недоступны. Перед установкой сохраним резервную копию.")) mutation.mutate({ action: "install" });
+            <Button type="button" disabled={busy || dirty || !data.status?.available || data.status?.recoveryRequired || !!data.status?.blockedReason} onClick={async () => {
+              if ((await adminConfirm("Установить обновление? Панель и бот будут временно недоступны. Перед установкой сохраним резервную копию."))) mutation.mutate({ action: "install" });
             }}>Обновить сейчас</Button>
-            {localChanges?.canPreserve && <Button type="button" variant="outline" disabled={busy || dirty || !data.status?.available || data.status?.recoveryRequired} onClick={() => {
-              if (window.confirm("Сохранить локальные изменения отдельно и установить исходники обновления? Панель и бот будут временно недоступны. Локальные правки останутся в резервной копии и Git stash, но не будут применены к новой версии.")) mutation.mutate({ action: "install", body: { localChangesId: localChanges.id } });
+            {localChanges?.canPreserve && <Button type="button" variant="outline" disabled={busy || dirty || !data.status?.available || data.status?.recoveryRequired} onClick={async () => {
+              if ((await adminConfirm("Сохранить локальные изменения отдельно и установить исходники обновления? Панель и бот будут временно недоступны. Локальные правки останутся в резервной копии и Git stash, но не будут применены к новой версии."))) mutation.mutate({ action: "install", body: { localChangesId: localChanges.id } });
             }}>Сохранить правки и обновить</Button>}
           </div>
           {draft && <div className="space-y-4 border-t pt-4">

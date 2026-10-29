@@ -1,3 +1,4 @@
+import { adminAlert, adminPrompt, adminConfirm } from "@/lib/admin-dialogs";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Ban, ExternalLink, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-react";
@@ -39,28 +40,28 @@ export function MarketplaceHubInstallationsPage() {
         await api.marketplaceHubBanInstallation(state.accessToken, i.id, false);
         reload();
       } catch (e) {
-        window.alert(e instanceof Error ? e.message : String(e));
+        (await adminAlert(e instanceof Error ? e.message : String(e)));
       }
       return;
     }
-    const reason = window.prompt(t("admin.marketplace.hub.ban_reason"), "spam") ?? undefined;
+    const reason = (await adminPrompt(t("admin.marketplace.hub.ban_reason"), "spam")) ?? undefined;
     if (reason === undefined) return;
     try {
       await api.marketplaceHubBanInstallation(state.accessToken, i.id, true, reason);
       reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : String(e));
+      (await adminAlert(e instanceof Error ? e.message : String(e)));
     }
   };
 
   const remove = async (i: MarketplaceInstallationDto) => {
     if (!state.accessToken) return;
-    if (!window.confirm(`Delete installation ${i.domain}? All its listings will be removed.`)) return;
+    if (!(await adminConfirm(`Delete installation ${i.domain}? All its listings will be removed.`))) return;
     try {
       await api.marketplaceHubDeleteInstallation(state.accessToken, i.id);
       reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : String(e));
+      (await adminAlert(e instanceof Error ? e.message : String(e)));
     }
   };
 

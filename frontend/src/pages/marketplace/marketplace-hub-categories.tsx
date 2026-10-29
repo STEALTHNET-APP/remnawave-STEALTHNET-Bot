@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Save, Trash2 } from "lucide-react";
@@ -84,7 +85,7 @@ export function MarketplaceHubCategoriesPage() {
 
   const remove = async (id: string) => {
     if (!state.accessToken) return;
-    if (!window.confirm("Delete category?")) return;
+    if (!(await adminConfirm("Delete category?"))) return;
     try {
       await api.marketplaceHubDeleteCategory(state.accessToken, id);
       reload();

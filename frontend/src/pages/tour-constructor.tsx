@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 import { useEffect, useState, useRef } from "react";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { qk } from "@/lib/query-client";
@@ -437,8 +438,8 @@ export function TourConstructorPage() {
     onError: (e) => setError(e instanceof Error ? e.message : "Ошибка удаления шага"),
   });
 
-  const handleDeleteStep = () => {
-    if (!token || !selectedStepId || !confirm("Удалить этот шаг?")) return;
+  const handleDeleteStep = async () => {
+    if (!token || !selectedStepId || !(await adminConfirm("Удалить этот шаг?"))) return;
     deleteStepMutation.mutate(selectedStepId);
   };
 
@@ -451,8 +452,8 @@ export function TourConstructorPage() {
     onError: (e) => setError(e instanceof Error ? e.message : "Ошибка заполнения по умолчанию"),
   });
 
-  const handleSeedDefaults = () => {
-    if (!token || !confirm("Это создаст дефолтные шаги. Продолжить?")) return;
+  const handleSeedDefaults = async () => {
+    if (!token || !(await adminConfirm("Это создаст дефолтные шаги. Продолжить?"))) return;
     seedDefaultsMutation.mutate();
   };
 
@@ -467,8 +468,8 @@ export function TourConstructorPage() {
     onError: (e) => setError(e instanceof Error ? e.message : "Ошибка очистки шагов"),
   });
 
-  const handleClearAll = () => {
-    if (!token || steps.length === 0 || !confirm("Удалить все шаги тура? Это действие нельзя отменить.")) return;
+  const handleClearAll = async () => {
+    if (!token || steps.length === 0 || !(await adminConfirm("Удалить все шаги тура? Это действие нельзя отменить."))) return;
     clearAllMutation.mutate();
   };
 
@@ -551,8 +552,8 @@ export function TourConstructorPage() {
     onError: (e) => setError(e instanceof Error ? e.message : "Ошибка удаления эмоции"),
   });
 
-  const handleDeleteEmotion = (mascotId: string, emotionId: string) => {
-    if (!token || !confirm("Удалить эту эмоцию?")) return;
+  const handleDeleteEmotion = async (mascotId: string, emotionId: string) => {
+    if (!token || !(await adminConfirm("Удалить эту эмоцию?"))) return;
     deleteEmotionMutation.mutate({ mascotId, emotionId });
   };
 
@@ -565,8 +566,8 @@ export function TourConstructorPage() {
     onError: (e) => setError(e instanceof Error ? e.message : "Ошибка удаления персонажа"),
   });
 
-  const handleDeleteMascot = (mascotId: string) => {
-    if (!token || !confirm("Удалить этого персонажа?")) return;
+  const handleDeleteMascot = async (mascotId: string) => {
+    if (!token || !(await adminConfirm("Удалить этого персонажа?"))) return;
     deleteMascotMutation.mutate(mascotId);
   };
 
@@ -592,7 +593,7 @@ export function TourConstructorPage() {
   const isUploadedVideo = editVideoUrl.startsWith("/api/uploads/");
 
   return (
-    <div className="space-y-6 xl:h-[calc(100vh-140px)] flex flex-col relative z-0 min-w-0">
+    <div className="admin-tour space-y-6 xl:h-[calc(100vh-140px)] flex flex-col relative z-0 min-w-0">
       {/* Ambient background glows */}
       <div className="absolute top-0 left-0 w-[40%] h-[40%] rounded-full bg-primary/20 blur-[120px] pointer-events-none -z-10" />
       <div className="absolute top-[30%] right-0 w-[30%] h-[50%] rounded-full bg-purple-500/10 blur-[100px] pointer-events-none -z-10" />

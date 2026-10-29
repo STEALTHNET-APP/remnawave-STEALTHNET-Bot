@@ -1,3 +1,4 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAdminListParams } from "@/lib/use-admin-list-params";
@@ -122,12 +123,12 @@ export function SalesReportPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.deleteSalePayment(token!, id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["admin", "sales-report"], exact: false }),
-    onError: (e) => alert(e instanceof Error ? e.message : "Ошибка удаления"),
+    onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
   });
 
-  function deletePayment(id: string) {
+  async function deletePayment(id: string) {
     if (!token) return;
-    if (!confirm("Удалить этот платёж? Это действие необратимо.")) return;
+    if (!(await adminConfirm("Удалить этот платёж? Это действие необратимо."))) return;
     deleteMutation.mutate(id);
   }
 
