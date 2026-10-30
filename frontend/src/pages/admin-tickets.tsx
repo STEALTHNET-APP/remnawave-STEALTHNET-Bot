@@ -263,7 +263,7 @@ export function AdminTicketsPage() {
     onSuccess: (res) => {
       toast.success(
         res.status === "closed" ? "Тикеты закрыты" : "Тикеты открыты",
-        `Обновлено тикетов: ${res.count}`
+        `Обновлено тикетов: ${res.updatedCount ?? res.count}`
       );
       setSelectedIds([]);
       void qc.invalidateQueries({ queryKey: ["admin", "tickets"], exact: false });

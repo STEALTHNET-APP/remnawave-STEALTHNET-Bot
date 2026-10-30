@@ -1581,7 +1581,7 @@ export const api = {
   async bulkStatusAdminTickets(
     token: string,
     data: { ticketIds: string[]; status: "open" | "closed" }
-  ): Promise<{ success: boolean; count: number; status: "open" | "closed" }> {
+  ): Promise<{ success: boolean; count: number; updatedCount?: number; status: "open" | "closed" }> {
     return request("/admin/tickets/bulk-status", {
       method: "POST",
       body: JSON.stringify(data),
