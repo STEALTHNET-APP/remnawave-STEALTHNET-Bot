@@ -16,9 +16,12 @@ import { buildReferralLinks } from "@/lib/referral-links";
  */
 
 import { useEffect, useState } from "react";
-import { Copy, Check, Send, Users } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Banknote, Copy, Check, Send, Users } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
+import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { api, type ClientReferralStats, type PublicConfig } from "@/lib/api";
+import { AuroraWithdrawSheet } from "@/components/aurora/aurora-withdraw-sheet";
 import { cn } from "@/lib/utils";
 import { getPublicConfigCached } from "@/lib/public-config";
 
@@ -27,23 +30,15 @@ function fmtMoney(n: number, currency: string) {
   return `${Math.round(n)}${sym}`;
 }
 
-/** «3 друга» с правильным окончанием. */
-function pluralFriends(n: number): string {
-  const m10 = n % 10;
-  const m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return "друг";
-  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "друга";
-  return "друзей";
-}
-
-const SHARE_TEXT = "Пользуюсь этим VPN — присоединяйся по моей ссылке";
-
 export function AuroraReferral() {
+  const { t } = useTranslation();
   const { state } = useClientAuth();
+  const cabinetConfig = useCabinetConfig();
   const [stats, setStats] = useState<ClientReferralStats | null>(null);
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
 
   useEffect(() => {
     if (!state.token) return;
@@ -85,12 +80,12 @@ export function AuroraReferral() {
     const tg = window.Telegram?.WebApp;
     if (tg?.initData?.trim() && typeof tg.openTelegramLink === "function") {
       tg.openTelegramLink(
-        `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(SHARE_TEXT)}`,
+        `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(t("aurora.referral_share_text"))}`,
       );
       return;
     }
     if (typeof navigator !== "undefined" && "share" in navigator) {
-      navigator.share({ url: link, title: SHARE_TEXT }).catch(() => {});
+      navigator.share({ url: link, title: t("aurora.referral_share_text") }).catch(() => {});
       return;
     }
     copy();
@@ -108,24 +103,24 @@ export function AuroraReferral() {
 
   const levels = stats
     ? [
-        { n: 1, percent: stats.referralPercent, note: "с оплат тех, кого пригласили вы" },
-        { n: 2, percent: stats.referralPercentLevel2, note: "с оплат тех, кого пригласили ваши друзья" },
-        { n: 3, percent: stats.referralPercentLevel3, note: "с оплат третьего уровня" },
+        { n: 1, percent: stats.referralPercent, note: t("aurora.referral_level_1_note") },
+        { n: 2, percent: stats.referralPercentLevel2, note: t("aurora.referral_level_2_note") },
+        { n: 3, percent: stats.referralPercentLevel3, note: t("aurora.referral_level_3_note") },
       ].filter((l) => l.percent > 0)
     : [];
 
   return (
     <div className="space-y-3">
       <header className="px-1 pb-1">
-        <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">Друзья</h1>
-        <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">{stats ? referralRewardDescription(stats) : "Приглашайте друзей — получайте бонусы"}</p>
+        <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">{t("aurora.referral")}</h1>
+        <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">{stats ? referralRewardDescription(stats) : t("aurora.referral_subtitle")}</p>
       </header>
 
       {stats && <ReferralRewardSummary stats={stats} />}
 
       {/* ── Накоплено и друзья ── */}
       <section className="relative overflow-hidden rounded-[26px] bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] p-5 text-white">
-        <div className="text-[13px] text-white/75">Накоплено на балансе</div>
+        <div className="text-[13px] text-white/75">{t("aurora.referral_earned")}</div>
         <div className="mt-1 text-[40px] font-extrabold leading-none tracking-tight tabular-nums">
           {fmtMoney(stats?.totalEarnings ?? 0, currency)}
         </div>
@@ -136,10 +131,10 @@ export function AuroraReferral() {
           </span>
           <div>
             <div className="text-[17px] font-bold leading-tight tabular-nums">
-              {friends} {pluralFriends(friends)}
+              {t("aurora.referral_friends", { count: friends })}
             </div>
             <div className="text-[13px] text-white/75">
-              {friends === 0 ? "пока никого не пригласили" : "пришли по вашей ссылке"}
+              {friends === 0 ? t("aurora.referral_no_friends") : t("aurora.referral_joined")}
             </div>
           </div>
         </div>
@@ -149,7 +144,7 @@ export function AuroraReferral() {
       <section className="rounded-[22px] bg-[var(--au-surface)] p-4">
         {stats?.referralCode && links.length > 0
           ? <ReferralQrLinks code={stats.referralCode} links={links} />
-          : <p className="text-sm">Ссылки пока недоступны</p>}
+          : <p className="text-sm">{t("aurora.referral_links_unavailable")}</p>}
         <div className="mt-3 grid grid-cols-2 gap-2.5">
           <button
             type="button"
@@ -161,7 +156,7 @@ export function AuroraReferral() {
             )}
           >
             {copied ? <Check className="h-[18px] w-[18px]" /> : <Copy className="h-[18px] w-[18px]" />}
-            {copied ? "Готово" : "Скопировать"}
+            {copied ? t("aurora.copied") : t("aurora.referral_copy")}
           </button>
           <button
             type="button"
@@ -170,19 +165,19 @@ export function AuroraReferral() {
             className="flex items-center justify-center gap-2 rounded-[16px] bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] px-4 py-3.5 text-[15px] font-bold text-white transition-transform enabled:active:scale-[0.97] disabled:opacity-45"
           >
             <Send className="h-[18px] w-[18px]" />
-            Поделиться
+            {t("aurora.share")}
           </button>
         </div>
       </section>
 
       {/* ── Как это работает ── */}
       <section className="rounded-[22px] bg-[var(--au-surface)] p-4">
-        <p className="text-[13px] font-semibold text-[var(--au-muted)]">Как это работает</p>
+        <p className="text-[13px] font-semibold text-[var(--au-muted)]">{t("aurora.referral_how")}</p>
         <ol className="mt-3 space-y-3.5">
           {[
-            "Отправьте ссылку другу — в чат, сторис или куда удобно.",
-            "Друг переходит по ней и оформляет подписку.",
-            stats ? referralRewardDescription(stats) : "Получайте бонусы за приглашения.",
+            t("aurora.referral_step_1"),
+            t("aurora.referral_step_2"),
+            stats ? referralRewardDescription(stats) : t("aurora.referral_step_3"),
           ].map((step, i) => (
             <li key={i} className="flex gap-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-[13px] font-bold text-white">
@@ -197,7 +192,7 @@ export function AuroraReferral() {
       {/* ── Проценты по уровням ── */}
       {levels.length > 0 && (
         <section className="rounded-[22px] bg-[var(--au-surface)] p-4">
-          <p className="text-[13px] font-semibold text-[var(--au-muted)]">Сколько начисляем</p>
+          <p className="text-[13px] font-semibold text-[var(--au-muted)]">{t("aurora.referral_levels")}</p>
           <div className="mt-2.5 space-y-2">
             {levels.map((l) => (
               <div key={l.n} className="flex items-center gap-3 rounded-[16px] bg-[var(--au-bg)] px-3.5 py-3">
@@ -205,17 +200,30 @@ export function AuroraReferral() {
                   {Math.round(l.percent)}%
                 </span>
                 <div className="min-w-0">
-                  <div className="text-[14px] font-semibold">{l.n}-й уровень</div>
+                  <div className="text-[14px] font-semibold">{t("aurora.referral_level", { level: l.n })}</div>
                   <div className="text-[12.5px] leading-snug text-[var(--au-muted)]">{l.note}</div>
                 </div>
               </div>
             ))}
           </div>
           <p className="mt-3 text-[13px] leading-relaxed text-[var(--au-muted)]">
-            Начисления приходят автоматически после успешной оплаты другом.
+            {t("aurora.referral_levels_note")}
           </p>
         </section>
       )}
+
+      {cabinetConfig?.withdrawalsEnabled !== false && (
+        <button
+          type="button"
+          onClick={() => setWithdrawOpen(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-[var(--au-surface)] px-4 py-3.5 text-[13.5px] font-bold text-[var(--au-ink)] active:scale-[0.99]"
+        >
+          <Banknote className="h-4 w-4" />
+          {t("aurora.withdraw_request")}
+        </button>
+      )}
+
+      <AuroraWithdrawSheet open={withdrawOpen} onClose={() => setWithdrawOpen(false)} />
     </div>
   );
 }

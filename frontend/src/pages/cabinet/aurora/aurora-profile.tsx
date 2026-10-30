@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Globe, HelpCircle, CreditCard, FileText, Wallet, ChevronRight,
-  User, Shield, LogOut, Lock, Wifi, Smartphone, type LucideIcon,
+  User, Shield, LogOut, Lock, Wifi, Smartphone, Gift, PlusCircle, KeyRound, type LucideIcon,
 } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { getPublicConfigCached } from "@/lib/public-config";
@@ -116,7 +116,12 @@ export function AuroraProfile() {
           onClick: () => openTab("devices"),
         },
         { id: "payments", label: t("aurora.payments"), icon: CreditCard, onClick: () => openTab("payments") },
-        { id: "support", label: t("aurora.support"), icon: HelpCircle, to: "/cabinet/tickets" },
+        { id: "history", label: t("aurora.history"), icon: Wallet, to: "/cabinet/history" },
+        ...(config?.giftSubscriptionsEnabled ? [{ id: "gifts", label: t("aurora.gifts"), icon: Gift, to: "/cabinet/gifts" } as MenuRow] : []),
+        ...(config?.sellOptionsEnabled ? [{ id: "options", label: t("aurora.extra_options"), icon: PlusCircle, to: "/cabinet/extra-options" } as MenuRow] : []),
+        ...(config?.showProxyEnabled ? [{ id: "proxy", label: t("aurora.proxy"), icon: Globe, to: "/cabinet/proxy" } as MenuRow] : []),
+        ...(config?.showSingboxEnabled ? [{ id: "singbox", label: "Sing-box / AmneziaWG", icon: KeyRound, to: "/cabinet/singbox" } as MenuRow] : []),
+        { id: "help", label: t("aurora.help"), icon: HelpCircle, to: "/cabinet/help" },
       ],
     },
     {

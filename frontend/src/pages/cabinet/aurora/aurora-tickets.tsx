@@ -12,8 +12,10 @@
  */
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Plus, MessageCircle, AlertCircle, Trash2 } from "lucide-react";
 import { askConfirm } from "@/lib/confirm";
+import { toast } from "@/components/ui/toast";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api } from "@/lib/api";
 import { AuroraNewTicketSheet } from "@/components/aurora/aurora-new-ticket-sheet";
@@ -28,9 +30,9 @@ interface TicketItem {
   updatedAt: string;
 }
 
-function statusLabel(status: string): string {
-  if (status === "open") return "Открыт";
-  if (status === "closed") return "Закрыт";
+function statusLabel(status: string, t: (key: string) => string): string {
+  if (status === "open") return t("aurora.ticket_open");
+  if (status === "closed") return t("aurora.ticket_closed");
   return status;
 }
 
@@ -41,15 +43,16 @@ function statusCls(status: string): string {
   return "bg-[#FFF7E8] text-[#7A4E00]";
 }
 
-function fmtDate(iso: string): string {
+function fmtDate(iso: string, locale: string): string {
   try {
-    return new Date(iso).toLocaleDateString("ru-RU", { day: "2-digit", month: "short" });
+    return new Date(iso).toLocaleDateString(locale, { day: "2-digit", month: "short" });
   } catch {
     return iso;
   }
 }
 
 export function AuroraTickets() {
+  const { t, i18n } = useTranslation();
   const { state } = useClientAuth();
   const [items, setItems] = useState<TicketItem[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,7 +67,7 @@ export function AuroraTickets() {
     api
       .getTickets(state.token)
       .then((r) => setItems(r.items ?? []))
-      .catch((e) => setErr(e instanceof Error ? e.message : "Не удалось загрузить обращения"))
+      .catch((e) => setErr(e instanceof Error ? e.message : t("aurora.tickets_load_error")))
       .finally(() => setLoading(false));
   }
 
@@ -84,7 +87,7 @@ export function AuroraTickets() {
 
   async function handleDeleteTicket(id: string, subject?: string) {
     if (!state.token) return;
-    const msg = subject ? `Удалить обращение «${subject}»? Все сообщения будут удалены.` : "Удалить обращение?";
+    const msg = subject ? t("aurora.ticket_delete_subject", { subject }) : t("aurora.ticket_delete");
     const ok = await askConfirm(msg);
     if (!ok) return;
     try {
@@ -92,15 +95,15 @@ export function AuroraTickets() {
       setItems((prev) => (prev ? prev.filter((t) => t.id !== id) : []));
       if (chatTicketId === id) setChatTicketId(null);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Не удалось удалить обращение");
+      toast.error(e instanceof Error ? e.message : t("aurora.ticket_delete_error"));
     }
   }
 
   return (
     <div className="space-y-3">
       <header className="px-1 pb-1">
-        <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">Поддержка</h1>
-        <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">Ответим в чате — обычно в течение дня</p>
+        <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">{t("aurora.support")}</h1>
+        <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">{t("aurora.support_subtitle")}</p>
       </header>
 
       <button
@@ -109,7 +112,7 @@ export function AuroraTickets() {
         className="flex w-full items-center justify-center gap-2 rounded-[20px] bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] px-5 py-4 text-[17px] font-bold text-white shadow-[0_10px_28px_-10px_color-mix(in_srgb,var(--au-from)_70%,transparent)] transition-transform active:scale-[0.99]"
       >
         <Plus className="h-[20px] w-[20px]" />
-        Новое обращение
+        {t("aurora.new_ticket")}
       </button>
 
       {loading ? (
@@ -128,29 +131,29 @@ export function AuroraTickets() {
           <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--au-bg)]">
             <MessageCircle className="h-6 w-6 text-[var(--au-muted)]" />
           </span>
-          <p className="mt-3 text-[15px] font-semibold">Обращений пока нет</p>
+          <p className="mt-3 text-[15px] font-semibold">{t("aurora.tickets_empty_title")}</p>
           <p className="mt-1 text-[13px] leading-relaxed text-[var(--au-muted)]">
-            Если что-то не работает или есть вопрос — напишите нам, поможем.
+            {t("aurora.tickets_empty_hint")}
           </p>
         </section>
       ) : (
         <div className="space-y-2.5">
-          {items.map((t) => (
+          {items.map((item) => (
             <div
-              key={t.id}
-              onClick={() => setChatTicketId(t.id)}
+              key={item.id}
+              onClick={() => setChatTicketId(item.id)}
               className="flex w-full items-center gap-3 rounded-[20px] bg-[var(--au-surface)] p-4 text-left transition-transform active:scale-[0.99] cursor-pointer"
             >
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--au-bg)]">
                 <MessageCircle className="h-5 w-5 text-[var(--au-muted)]" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-semibold">{t.subject || "Без темы"}</p>
+                <p className="truncate text-[15px] font-semibold">{item.subject || t("aurora.ticket_no_subject")}</p>
                 <div className="mt-1 flex items-center gap-2">
-                  <span className={cn("rounded-full px-2 py-0.5 text-[12px] font-bold", statusCls(t.status))}>
-                    {statusLabel(t.status)}
+                  <span className={cn("rounded-full px-2 py-0.5 text-[12px] font-bold", statusCls(item.status))}>
+                    {statusLabel(item.status, t)}
                   </span>
-                  <span className="text-[12.5px] text-[var(--au-muted)]">{fmtDate(t.updatedAt)}</span>
+                  <span className="text-[12.5px] text-[var(--au-muted)]">{fmtDate(item.updatedAt, i18n.language)}</span>
                 </div>
               </div>
               <button
@@ -160,10 +163,10 @@ export function AuroraTickets() {
                 onClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
-                  void handleDeleteTicket(t.id, t.subject);
+                  void handleDeleteTicket(item.id, item.subject);
                 }}
                 className="h-9 w-9 flex items-center justify-center rounded-full text-[var(--au-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
-                title="Удалить обращение"
+                title={t("aurora.ticket_delete")}
               >
                 <Trash2 className="h-4 w-4" />
               </button>

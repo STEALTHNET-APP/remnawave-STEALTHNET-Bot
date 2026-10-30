@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthDashboard } from "@/pages/cabinet/stealth/stealth-dashboard";
+import { AuroraDashboard } from "@/pages/cabinet/aurora/aurora-dashboard";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { qk } from "@/lib/query-client";
 import { useClientSubscription, useClientAllSubscriptions, useClientPayments, useReferralStats, useAvailableTrials, useInvalidateClientData } from "@/lib/queries";
@@ -125,11 +126,20 @@ function parseSubscription(sub: unknown): {
 export function ClientDashboardPage() {
   const design = useCabinetDesign();
   const { t } = useTranslation();
+  if (design === "aurora") {
+    return (
+      <>
+        <LinkTelegramPrompt />
+        <CloudPaymentsTrial />
+        <AuroraDashboard />
+      </>
+    );
+  }
   return (
     <>
       <LinkTelegramPrompt />
       <CloudPaymentsTrial />
-      {design === "stealth" ? <StealthDashboard /> : <ClassicDashboardPage compact={design === "aurora"} />}
+      {design === "stealth" ? <StealthDashboard /> : <ClassicDashboardPage />}
       {design !== "stealth" && <details className="cabinet-promo-disclosure"><summary>{t("cabinet.journey.promo")}</summary><PromoCodeForm /></details>}
     </>
   );
