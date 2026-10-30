@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useClientAuth } from "@/contexts/client-auth";
+import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { api } from "@/lib/api";
 import { AuroraSheet } from "./aurora-sheet";
 
 export function AuroraAccountSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
+  const config = useCabinetConfig();
   const client = state.client;
   const token = state.token;
   const [email, setEmail] = useState("");
@@ -32,8 +34,14 @@ export function AuroraAccountSheet({ open, onClose }: { open: boolean; onClose: 
     if (!token || busy || !email.trim()) return;
     setBusy("email"); setError(""); setMessage("");
     try {
-      await api.clientLinkEmailRequest(token, { email: email.trim() });
-      setMessage(t("cabinet.profile.link_email_sent"));
+      if (config?.smtpConfigured) {
+        await api.clientLinkEmailRequest(token, { email: email.trim() });
+        setMessage(t("cabinet.profile.link_email_sent"));
+      } else {
+        await api.clientLinkEmailDirect(token, { email: email.trim() });
+        await refreshProfile();
+        setMessage(t("aurora.email_linked"));
+      }
       setEmail("");
     } catch (e) {
       setError(e instanceof Error ? e.message : t("cabinet.profile.link_email_error"));
