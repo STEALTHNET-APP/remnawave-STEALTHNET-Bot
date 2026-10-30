@@ -217,6 +217,7 @@ export function AdminTicketsPage() {
       }
       setSelectedIds((prev) => prev.filter((id) => id !== deletedId));
       void qc.invalidateQueries({ queryKey: ["admin", "tickets"], exact: false });
+      void qc.invalidateQueries({ queryKey: ["admin", "ticket"], exact: false });
     },
     onError: (e) => {
       toast.error("Ошибка при удалении", e instanceof Error ? e.message : "Не удалось удалить тикет");
@@ -249,6 +250,7 @@ export function AdminTicketsPage() {
       setSelectedIds([]);
       setDetailId(null);
       void qc.invalidateQueries({ queryKey: ["admin", "tickets"], exact: false });
+      void qc.invalidateQueries({ queryKey: ["admin", "ticket"], exact: false });
     },
     onError: (e) => {
       toast.error("Ошибка удаления", e instanceof Error ? e.message : "Не удалось очистить тикеты");
@@ -261,10 +263,11 @@ export function AdminTicketsPage() {
     onSuccess: (res) => {
       toast.success(
         res.status === "closed" ? "Тикеты закрыты" : "Тикеты открыты",
-        `Обновлено тикетов: ${res.count}`
+        `Обновлено тикетов: ${res.updatedCount ?? res.count}`
       );
       setSelectedIds([]);
       void qc.invalidateQueries({ queryKey: ["admin", "tickets"], exact: false });
+      void qc.invalidateQueries({ queryKey: ["admin", "ticket"], exact: false });
     },
     onError: (e) => {
       toast.error("Ошибка обновления", e instanceof Error ? e.message : "Не удалось обновить статус");
@@ -277,6 +280,7 @@ export function AdminTicketsPage() {
       toast.success("Тикеты удалены", `Удалено тикетов: ${res.count}`);
       setSelectedIds([]);
       void qc.invalidateQueries({ queryKey: ["admin", "tickets"], exact: false });
+      void qc.invalidateQueries({ queryKey: ["admin", "ticket"], exact: false });
     },
     onError: (e) => {
       toast.error("Ошибка удаления", e instanceof Error ? e.message : "Не удалось удалить выбранные тикеты");
@@ -302,6 +306,7 @@ export function AdminTicketsPage() {
       setBulkReplyCloseAfter(false);
       setSelectedIds([]);
       void qc.invalidateQueries({ queryKey: ["admin", "tickets"], exact: false });
+      void qc.invalidateQueries({ queryKey: ["admin", "ticket"], exact: false });
     },
     onError: (e) => {
       setBulkReplyError(e instanceof Error ? e.message : "Не удалось отправить ответ");
@@ -360,10 +365,9 @@ export function AdminTicketsPage() {
     }
   };
 
-  const toggleSelectTicket = (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  const toggleSelectTicket = (id: string, checked: boolean) => {
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      checked ? Array.from(new Set([...prev, id])) : prev.filter((item) => item !== id)
     );
   };
 
@@ -833,12 +837,15 @@ export function AdminTicketsPage() {
                   <div className="flex items-center gap-3">
                     {/* Multi-select checkbox */}
                     <div
-                      onClick={(e) => toggleSelectTicket(t.id, e)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (e.target === e.currentTarget) toggleSelectTicket(t.id, !isSelected);
+                      }}
                       className="p-1 -m-1 cursor-pointer shrink-0"
                     >
                       <Checkbox
                         checked={isSelected}
-                        onCheckedChange={() => toggleSelectTicket(t.id)}
+                        onCheckedChange={(checked) => toggleSelectTicket(t.id, checked === true)}
                         className="rounded-md"
                       />
                     </div>

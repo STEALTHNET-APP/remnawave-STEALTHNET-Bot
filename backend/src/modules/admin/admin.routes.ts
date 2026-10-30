@@ -131,6 +131,7 @@ import {
   serializeAttachments,
   parseAttachments,
   pickField as pickTicketField,
+  pickBooleanField,
 } from "../ticket/attachments.js";
 import { notifyClientAboutSupportReply } from "../ticket/ticket-client-notify.service.js";
 import {
@@ -4741,19 +4742,19 @@ adminRouter.post("/tickets/bulk-status", asyncRoute(async (req, res) => {
     // Закрываем только открытые тикеты (чтобы не сбрасывать таймер retention у уже закрытых)
     const updateOpen = await prisma.ticket.updateMany({
       where: { id: { in: ticketIds }, status: { not: "closed" } },
-      data: { status: "closed", closedAt: new Date() },
+      data: { status: "closed", closedAt: new Date(), updatedAt: new Date() },
     });
     // Если среди закрытых были легаси тикеты с closedAt == null, дозаполняем
-    await prisma.ticket.updateMany({
+    const backfilled = await prisma.ticket.updateMany({
       where: { id: { in: ticketIds }, status: "closed", closedAt: null },
-      data: { closedAt: new Date() },
+      data: { closedAt: new Date(), updatedAt: new Date() },
     });
-    return res.json({ success: true, count: ticketIds.length, updatedCount: updateOpen.count, status });
+    return res.json({ success: true, count: ticketIds.length, updatedCount: updateOpen.count + backfilled.count, status });
   } else {
     // Открываем все выбранные тикеты со сбросом closedAt
     const result = await prisma.ticket.updateMany({
       where: { id: { in: ticketIds } },
-      data: { status: "open", closedAt: null },
+      data: { status: "open", closedAt: null, updatedAt: new Date() },
     });
     return res.json({ success: true, count: result.count, status });
   }
@@ -4762,8 +4763,7 @@ adminRouter.post("/tickets/bulk-status", asyncRoute(async (req, res) => {
 // Массовый ответ выбранным тикетам (с поддержкой фото-вложений и опции автозакрытия)
 adminRouter.post("/tickets/bulk-reply", uploadTicketAttachment.array("files", 5), asyncRoute(async (req, res) => {
   const content = pickTicketField(req, "content");
-  const closeAfterReplyRaw = pickTicketField(req, "closeAfterReply");
-  const closeAfterReply = closeAfterReplyRaw === "true" || closeAfterReplyRaw === "1";
+  const closeAfterReply = pickBooleanField(req, "closeAfterReply");
 
   let ticketIds: string[] = [];
   const rawTicketIds = (req.body as Record<string, unknown> | undefined)?.ticketIds;
@@ -4793,7 +4793,7 @@ adminRouter.post("/tickets/bulk-reply", uploadTicketAttachment.array("files", 5)
 
   const tickets = await prisma.ticket.findMany({
     where: { id: { in: ticketIds } },
-    select: { id: true, clientId: true, status: true },
+    select: { id: true, clientId: true, status: true, closedAt: true },
   });
 
   if (tickets.length === 0) {
@@ -4803,9 +4803,14 @@ adminRouter.post("/tickets/bulk-reply", uploadTicketAttachment.array("files", 5)
   const serializedAtt = serializeAttachments(attachments);
   await prisma.$transaction(async tx => {
     for (const ticket of [...tickets].sort((a, b) => a.id.localeCompare(b.id))) {
+      const staysClosed = closeAfterReply || ticket.status === "closed";
       await tx.ticket.update({
         where: { id: ticket.id },
-        data: { updatedAt: new Date(), status: closeAfterReply ? "closed" : "open", closedAt: closeAfterReply ? new Date() : null },
+        data: {
+          updatedAt: new Date(),
+          status: staysClosed ? "closed" : "open",
+          closedAt: staysClosed ? (ticket.closedAt ?? new Date()) : null,
+        },
       });
       await tx.ticketMessage.create({ data: { ticketId: ticket.id, authorType: "support", content: trimmed, attachments: serializedAtt } });
     }
