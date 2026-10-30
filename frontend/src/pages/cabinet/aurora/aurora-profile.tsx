@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Globe, HelpCircle, CreditCard, FileText, Wallet, ChevronRight,
-  User, Shield, LogOut, Lock, Wifi, Smartphone, Gift, PlusCircle, KeyRound, type LucideIcon,
+  User, Shield, LogOut, Lock, Wifi, Smartphone, Gift, PlusCircle, KeyRound, Send, type LucideIcon,
 } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { getPublicConfigCached } from "@/lib/public-config";
@@ -128,6 +128,13 @@ export function AuroraProfile() {
       title: t("aurora.account"),
       rows: [
         { id: "account", label: t("aurora.account_details"), icon: User, onClick: () => openTab("account") },
+        {
+          id: "telegram",
+          label: t("aurora.telegram"),
+          icon: Send,
+          right: client?.telegramUsername ? `@${client.telegramUsername}` : client?.telegramId ? t("aurora.telegram_status_linked") : t("aurora.telegram_status_missing"),
+          onClick: () => openTab("account"),
+        },
         { id: "language", label: t("aurora.language"), icon: Globe, right: langLabel, onClick: () => openTab("language") },
         { id: "security", label: t("aurora.security"), icon: Lock, onClick: () => openTab("security") },
       ],

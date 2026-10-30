@@ -2757,6 +2757,11 @@
     "devices_short": "Устройства",
     "option_devices_one": "{{count}} устройство",
     "option_devices_few": "{{count}} устройства",
-    "option_devices_many": "{{count}} устройств"
+    "option_devices_many": "{{count}} устройств",
+    "telegram": "Telegram",
+    "telegram_status_linked": "Привязан",
+    "telegram_status_missing": "Не привязан",
+    "telegram_why": "Нужен для входа в мини-апп, уведомлений и восстановления доступа.",
+    "telegram_link_steps": "Откройте бота по ссылке и отправьте код — статус обновится автоматически после возврата в кабинет."
   }
 }
