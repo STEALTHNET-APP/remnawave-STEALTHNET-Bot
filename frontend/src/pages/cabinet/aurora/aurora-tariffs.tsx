@@ -75,8 +75,10 @@ export function AuroraTariffs() {
   const promoLocation = useLocation();
   const [promoInput, setPromoInput] = useState(() => typeof promoLocation.state?.promoCode === "string" ? promoLocation.state.promoCode : "");
   const [promoApplied, setPromoApplied] = useState<string | null>(null);
+  const [promoInfo, setPromoInfo] = useState<{ percent: number; fixed: number; name: string } | null>(null);
   const [promoMsg, setPromoMsg] = useState<string | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
+  const [extraDevices, setExtraDevices] = useState(0);
 
   const [selectedMethod, setSelectedMethod] = useState<PayMethod | null>(null);
   const [paying, setPaying] = useState(false);
@@ -218,7 +220,24 @@ export function AuroraTariffs() {
   const convExtendExtrasCost = !extendTarget && convPreview?.mode === "extend" && convKeepExtras && (convPreview.extras?.extraDevices ?? 0) > 0
     ? Math.round((convPreview.extras?.extraDevicesMonthlyPrice ?? 0) * (Math.max(1, days) / 30))
     : 0;
-  const totalPrice = basePrice + extendExtrasCost + convExtendExtrasCost;
+  // докупка доп. устройств при покупке (та же формула скидок, что в классике и боте).
+  const extrasCost = (() => {
+    if (extendTarget || !currentTariff || extraDevices <= 0) return 0;
+    const perDevice = currentTariff.pricePerExtraDevice ?? 0;
+    if (perDevice <= 0) return 0;
+    const tiers = [...(currentTariff.deviceDiscountTiers ?? [])].sort((a, b) => b.minExtraDevices - a.minExtraDevices);
+    const tier = tiers.find((t) => extraDevices >= t.minExtraDevices);
+    const percent = tier?.discountPercent ?? 0;
+    const monthly = (perDevice * extraDevices * (100 - percent)) / 100;
+    return Math.round(monthly * (Math.max(1, days) / 30) * 100) / 100;
+  })();
+  const promoDiscount = (() => {
+    if (!promoInfo) return 0;
+    const gross = basePrice + extrasCost;
+    const raw = promoInfo.percent > 0 ? (gross * promoInfo.percent) / 100 : promoInfo.fixed;
+    return Math.min(gross, Math.max(0, Math.round(raw * 100) / 100));
+  })();
+  const totalPrice = Math.max(0, basePrice + extrasCost + extendExtrasCost + convExtendExtrasCost - promoDiscount);
   const pricePerDay = days > 0 ? totalPrice / days : 0;
   const currency = currentTariff?.currency ?? "rub";
   const requestedPreviewKey = `${selectedTariffId}:${selectedPriceOptionId ?? "base"}`;
@@ -251,6 +270,10 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
       setSelectedMethod(availableMethods[0]);
     }
   }, [availableMethods, selectedMethod]);
+
+  useEffect(() => {
+    setExtraDevices(0);
+  }, [selectedTariffId, selectedPriceOptionId]);
 
   // Свежий баланс: профиль мог быть не загружен/устаревшим — без этого тайл
   // «Баланс» показывал 0 и решение о доступности оплаты было неверным.
@@ -329,12 +352,17 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
     setPromoBusy(true);
     setPromoMsg(null);
     try {
-      // clientCheckPromoCode возвращает данные промо при успехе или throws при ошибке
-      await api.clientCheckPromoCode(state.token, promoInput.trim());
+      const res = await api.clientCheckPromoCode(state.token, promoInput.trim());
       setPromoApplied(promoInput.trim());
+      setPromoInfo({
+        percent: res.discountPercent ?? 0,
+        fixed: res.discountFixed ?? 0,
+        name: res.name ?? "",
+      });
       setPromoMsg("Промокод применён");
     } catch (e) {
       setPromoApplied(null);
+      setPromoInfo(null);
       setPromoMsg(e instanceof Error ? e.message : "Промокод недействителен");
     } finally {
       setPromoBusy(false);
@@ -381,6 +409,8 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
         tariffId: selectedTariffId,
         tariffPriceOptionId: selectedPriceOptionId ?? undefined,
         promoCode: promoApplied ?? undefined,
+        ...(extraDevices > 0 && !extendTarget ? { deviceCount: extraDevices } : {}),
+        ...(!extendTarget && !convPreview?.willConvert && mySubs.length > 0 ? { asAdditional: true } : {}),
         // режим продления конкретной подписки (?extend=) —
         // оплата продлевает ИМЕННО её, а не создаёт новую.
         ...(extendTarget ? { extendsSecondarySubId: extendTarget.id } : {}),
@@ -818,8 +848,23 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
               <div><dt>Устройства в тарифе</dt><dd>{auroraDevices(currentTariff)}</dd></div>
               <div><dt>Трафик</dt><dd>{auroraTraffic(currentTariff).value}</dd></div>
             </dl>}
+            {!extendTarget && currentTariff && (currentTariff.maxExtraDevices ?? 0) > 0 && (
+              <div className="flex items-center justify-between gap-3 rounded-[18px] bg-[var(--au-surface)] px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-[13.5px] font-semibold">Доп. устройства</p>
+                  <p className="text-[11.5px] text-[var(--au-muted)]">{extrasCost > 0 ? `+${fmtPrice(extrasCost, currency)}` : "можно докупить к тарифу"}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" aria-label="Меньше устройств" onClick={() => setExtraDevices((value) => Math.max(0, value - 1))} className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--au-bg)] text-[18px] font-bold">−</button>
+                  <span className="w-6 text-center text-[15px] font-extrabold tabular-nums">{extraDevices}</span>
+                  <button type="button" aria-label="Больше устройств" onClick={() => setExtraDevices((value) => Math.min(currentTariff.maxExtraDevices ?? 0, value + 1))} className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--au-bg)] text-[18px] font-bold">+</button>
+                </div>
+              </div>
+            )}
             <dl className="au-tariff-checkout-breakdown">
               <div><dt>Тариф на {auroraDays(days)}</dt><dd>{fmtPrice(basePrice, currency)}</dd></div>
+              {extrasCost > 0 && <div><dt>Доп. устройства</dt><dd>+{fmtPrice(extrasCost, currency)}</dd></div>}
+              {promoDiscount > 0 && <div><dt>Скидка по промокоду</dt><dd>−{fmtPrice(promoDiscount, currency)}</dd></div>}
               {(extendExtrasCost + convExtendExtrasCost) > 0 && <div><dt>Сохранённые устройства</dt><dd>+{fmtPrice(extendExtrasCost + convExtendExtrasCost, currency)}</dd></div>}
             </dl>
             <div className="mt-4 space-y-3">

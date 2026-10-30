@@ -18,6 +18,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
 import { PayNowPanel } from "@/components/payment/pay-now-panel";
 import { cn } from "@/lib/utils";
+import { useCabinetDesign } from "@/lib/use-cabinet-design";
+import { AuroraProxy } from "@/pages/cabinet/aurora/aurora-proxy";
 import { getPublicConfigCached } from "@/lib/public-config";
 
 type ProxyTariff = { id: string; name: string; description?: string; proxyCount: number; durationDays: number; price: number; currency: string };
@@ -68,6 +70,12 @@ function formatDate(iso: string) {
 }
 
 export function ClientProxyPage() {
+  const design = useCabinetDesign();
+  if (design === "aurora") return <AuroraProxy />;
+  return <ClassicProxyPage />;
+}
+
+function ClassicProxyPage() {
   const { state, refreshProfile } = useClientAuth();
   const token = state.token;
   const client = state.client;

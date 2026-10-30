@@ -18,6 +18,8 @@ import {
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
 import { PayNowPanel } from "@/components/payment/pay-now-panel";
 import { cn } from "@/lib/utils";
+import { useCabinetDesign } from "@/lib/use-cabinet-design";
+import { AuroraExtraOptions } from "@/pages/cabinet/aurora/aurora-extra-options";
 import { getPublicConfigCached } from "@/lib/public-config";
 
 function formatMoney(amount: number, currency: string) {
@@ -46,6 +48,12 @@ function optionIcon(o: PublicSellOption) {
 }
 
 export function ClientExtraOptionsPage() {
+  const design = useCabinetDesign();
+  if (design === "aurora") return <AuroraExtraOptions />;
+  return <ClassicExtraOptionsPage />;
+}
+
+function ClassicExtraOptionsPage() {
   const { state, refreshProfile } = useClientAuth();
   const token = state.token;
   const balance = state.client?.balance ?? 0;
