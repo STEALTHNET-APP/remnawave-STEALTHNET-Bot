@@ -32,21 +32,41 @@ try {
       });
       await page.goto(base);
       await page.getByText("Webhook", { exact: true }).waitFor();
+      await page.getByRole("button", { name: "Webhook активен" }).waitFor();
+      const secretInput = page.getByLabel("Секрет проверки запросов");
+
+      // Генерация секрета заполняет поле и включает dirty-state.
+      await page.getByRole("button", { name: "Сгенерировать" }).click();
+      const generated = await secretInput.inputValue();
+      assert.match(generated, /^[0-9a-f]{64}$/);
+      assert.equal(await secretInput.getAttribute("type"), "text");
+      await page.getByRole("button", { name: "Сохранить изменения" }).waitFor();
+
+      // Сброс очищает сгенерированный секрет.
+      await page.getByRole("button", { name: "Сбросить", exact: true }).click();
+      assert.equal(await secretInput.inputValue(), "");
+      await page.getByRole("button", { name: "Webhook активен" }).waitFor();
+
+      // Генерация + сохранение отправляют новый секрет на бэкенд.
+      await page.getByRole("button", { name: "Сгенерировать" }).click();
+      const generatedForSave = await secretInput.inputValue();
+      assert.match(generatedForSave, /^[0-9a-f]{64}$/);
       await page.getByLabel("Адрес webhook").fill("https://another.example/api/bot/webhook");
       await page.getByRole("button", { name: "Проверить статус" }).click();
       assert.equal(await page.getByLabel("Адрес webhook").inputValue(), "https://another.example/api/bot/webhook");
-      await page.getByRole("button", { name: "Включить Webhook", exact: true }).click();
+      await page.getByRole("button", { name: "Сохранить изменения" }).click();
       await page.getByRole("alert").filter({ hasText: "Переключение не подтверждено" }).waitFor();
-      assert.deepEqual(changes[0], { url: "https://another.example/api/bot/webhook" });
+      assert.deepEqual(changes[0], { url: "https://another.example/api/bot/webhook", secretToken: generatedForSave });
       await page.getByRole("button", { name: "Перейти на Long Polling" }).click();
       await page.getByRole("dialog").waitFor();
       assert.equal(changes.length, 1);
       await page.getByRole("button", { name: "Переключить", exact: true }).click();
       await page.getByRole("status").filter({ hasText: "Long Polling включён" }).waitFor();
       assert.equal(changes.length, 2);
+      assert.deepEqual(changes[1], { dropPendingUpdates: false });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
       assert.deepEqual(errors, []);
-      await page.screenshot({ path: `/tmp/pr248-webhook-${width}.png`, fullPage: true });
+      await page.screenshot({ path: `/tmp/pr258-webhook-${width}.png`, fullPage: true });
       await page.close();
     }
   });

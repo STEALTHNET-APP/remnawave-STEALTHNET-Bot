@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Check, RefreshCw, Loader2, Radio, ShieldCheck, Trash2, Undo2 } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, RefreshCw, Loader2, Radio, ShieldCheck, Sparkles, Trash2, Undo2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 
 type Status = Awaited<ReturnType<typeof api.getBotWebhookStatus>>;
 
+/** 32 случайных байта в hex — тот же формат, что у бэкенда (randomBytes(32).toString("hex")). */
+function generateWebhookSecret(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
 export function BotWebhookManager({ token }: { token: string }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(false);
@@ -18,6 +24,8 @@ export function BotWebhookManager({ token }: { token: string }) {
   const [lastChecked, setLastChecked] = useState<string | null>(null);
   const [url, setUrl] = useState(() => window.location.origin + "/api/bot/webhook");
   const [secret, setSecret] = useState("");
+  const [secretVisible, setSecretVisible] = useState(false);
+  const [secretCopied, setSecretCopied] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [confirmPolling, setConfirmPolling] = useState(false);
@@ -72,6 +80,8 @@ export function BotWebhookManager({ token }: { token: string }) {
       setMessage(successMsg);
       toast.success("Режим бота изменён", successMsg);
       setSecret("");
+      setSecretVisible(false);
+      setSecretCopied(false);
     } catch (error) {
       const errStr = error instanceof Error ? error.message : "Не удалось переключить режим";
       setError(errStr);
@@ -114,6 +124,32 @@ export function BotWebhookManager({ token }: { token: string }) {
   const handleResetForm = () => {
     if (configuredUrl) setUrl(configuredUrl);
     setSecret("");
+    setSecretVisible(false);
+    setSecretCopied(false);
+  };
+
+  const handleGenerateSecret = () => {
+    setSecret(generateWebhookSecret());
+    setSecretVisible(true);
+    setSecretCopied(false);
+    setError("");
+    toast.success(
+      "Секрет сгенерирован",
+      activeWebhook
+        ? "Нажмите «Сохранить изменения», чтобы применить его."
+        : "Он применится при включении Webhook.",
+    );
+  };
+
+  const handleCopySecret = async () => {
+    if (!secret) return;
+    try {
+      await navigator.clipboard.writeText(secret);
+      setSecretCopied(true);
+      setTimeout(() => setSecretCopied(false), 1500);
+    } catch {
+      toast.error("Не удалось скопировать", "Выделите секрет вручную.");
+    }
   };
 
   return <>
@@ -145,7 +181,7 @@ export function BotWebhookManager({ token }: { token: string }) {
       <CardContent className="space-y-5">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {message && (
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between gap-2">
+          <div role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between gap-2">
             <span className="inline-flex items-center gap-2">
               <Check className="h-4 w-4 shrink-0" />
               {message}
@@ -198,8 +234,54 @@ export function BotWebhookManager({ token }: { token: string }) {
           <p className="text-xs text-muted-foreground">Укажите публичный HTTPS-адрес этой панели с путём /api/bot/webhook.</p>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="webhook-secret" className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" />Секрет проверки запросов</Label>
-          <Input id="webhook-secret" type="password" autoComplete="new-password" value={secret} onChange={event => setSecret(event.target.value)} disabled={saving || droppingQueue} placeholder={status?.hasSecret ? "Сохранён. Введите новый для смены" : "Будет создан автоматически"} />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label htmlFor="webhook-secret" className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" />Секрет проверки запросов</Label>
+            <button
+              type="button"
+              disabled={saving || droppingQueue}
+              onClick={handleGenerateSecret}
+              className="inline-flex cursor-pointer items-center gap-1 text-xs text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Сгенерировать
+            </button>
+          </div>
+          <div className="relative">
+            <Input
+              id="webhook-secret"
+              type={secretVisible ? "text" : "password"}
+              autoComplete="new-password"
+              value={secret}
+              onChange={event => setSecret(event.target.value)}
+              disabled={saving || droppingQueue}
+              placeholder={status?.hasSecret ? "Сохранён. Введите новый для смены" : "Будет создан автоматически"}
+              className="pr-20 font-mono"
+            />
+            <div className="absolute inset-y-0 right-0 flex items-center gap-0.5 pr-1.5">
+              <button
+                type="button"
+                aria-label={secretVisible ? "Скрыть секрет" : "Показать секрет"}
+                title={secretVisible ? "Скрыть секрет" : "Показать секрет"}
+                disabled={saving || droppingQueue}
+                onClick={() => setSecretVisible(visible => !visible)}
+                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {secretVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+              {secret && (
+                <button
+                  type="button"
+                  aria-label="Скопировать секрет"
+                  title="Скопировать секрет"
+                  disabled={saving || droppingQueue}
+                  onClick={() => void handleCopySecret()}
+                  className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {secretCopied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                </button>
+              )}
+            </div>
+          </div>
           <p className="text-xs text-muted-foreground">Пустое поле сохраняет текущий секрет. При первом включении панель создаст его сама.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
