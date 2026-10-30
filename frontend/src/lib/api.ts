@@ -1493,7 +1493,7 @@ export const api = {
     checkedAt?: string;
     error?: string;
   }> {
-    return request("/admin/bot/webhook/status", { token });
+    return request(`/admin/bot/webhook/status?_t=${Date.now()}`, { token });
   },
 
   async setBotWebhook(

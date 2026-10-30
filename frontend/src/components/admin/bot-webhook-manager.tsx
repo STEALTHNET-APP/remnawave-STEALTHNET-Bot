@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Check, RefreshCw, Loader2, Radio, ShieldCheck, Trash2, Undo2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,7 @@ export function BotWebhookManager({ token }: { token: string }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [droppingQueue, setDroppingQueue] = useState(false);
+  const [lastChecked, setLastChecked] = useState<string | null>(null);
   const [url, setUrl] = useState(() => window.location.origin + "/api/bot/webhook");
   const [secret, setSecret] = useState("");
   const [error, setError] = useState("");
@@ -22,18 +24,37 @@ export function BotWebhookManager({ token }: { token: string }) {
   const [confirmDropQueue, setConfirmDropQueue] = useState(false);
   const [dropPendingOnPolling, setDropPendingOnPolling] = useState(false);
 
-  const refresh = useCallback(async (initialize = false) => {
+  const refresh = useCallback(async (initialize = false, manual = false) => {
     setLoading(true);
+    if (manual) {
+      setError("");
+      setMessage("");
+    }
     try {
       const next = await api.getBotWebhookStatus(token);
       setStatus(next);
+      const now = new Date().toLocaleTimeString("ru-RU");
+      setLastChecked(now);
       if (initialize && next.configuredUrl) setUrl(next.configuredUrl);
+      if (manual) {
+        const pending = next.webhookInfo?.pending_update_count ?? 0;
+        const modeLabel = next.enabled ? "Webhook" : "Long Polling";
+        const msg = `Статус проверен в ${now}: режим ${modeLabel}, в очереди Telegram: ${pending} шт.`;
+        setMessage(msg);
+        toast.success("Статус бота обновлён", `Режим: ${modeLabel}, в очереди: ${pending} шт.`);
+      }
       return next;
     } catch (error) {
       setStatus(null);
-      setError(error instanceof Error ? error.message : "Не удалось проверить статус");
+      const errStr = error instanceof Error ? error.message : "Не удалось проверить статус";
+      setError(errStr);
+      if (manual) {
+        toast.error("Ошибка проверки статуса", errStr);
+      }
       return null;
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, [token]);
 
   useEffect(() => { void refresh(true); }, [refresh]);
@@ -47,10 +68,14 @@ export function BotWebhookManager({ token }: { token: string }) {
       const result = webhook
         ? await api.setBotWebhook(token, { url: url.trim(), ...(secret.trim() ? { secretToken: secret.trim() } : {}) })
         : await api.deleteBotWebhook(token, dropPending);
-      setMessage(result.message || "Режим изменён");
+      const successMsg = result.message || "Режим изменён";
+      setMessage(successMsg);
+      toast.success("Режим бота изменён", successMsg);
       setSecret("");
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Не удалось переключить режим");
+      const errStr = error instanceof Error ? error.message : "Не удалось переключить режим";
+      setError(errStr);
+      toast.error("Ошибка смены режима", errStr);
     } finally {
       await refresh();
       setSaving(false);
@@ -64,9 +89,13 @@ export function BotWebhookManager({ token }: { token: string }) {
     setMessage("");
     try {
       const result = await api.dropBotWebhookPending(token);
-      setMessage(result.message || "Очередь сообщений сброшена");
+      const successMsg = result.message || "Очередь сообщений сброшена";
+      setMessage(successMsg);
+      toast.success("Очередь Telegram очищена", successMsg);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Не удалось сбросить очередь");
+      const errStr = e instanceof Error ? e.message : "Не удалось сбросить очередь";
+      setError(errStr);
+      toast.error("Ошибка очистки очереди", errStr);
     } finally {
       await refresh();
       setDroppingQueue(false);
@@ -92,15 +121,38 @@ export function BotWebhookManager({ token }: { token: string }) {
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="inline-flex items-center gap-2"><Radio className="h-4 w-4 shrink-0" />Получение сообщений бота</CardTitle>
-          <Button type="button" variant="outline" size="sm" disabled={loading || saving || droppingQueue} onClick={() => { setError(""); void refresh(); }}>
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />Проверить статус
-          </Button>
+          <div className="flex items-center gap-2">
+            {lastChecked && (
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                Проверено: {lastChecked}
+              </span>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || saving || droppingQueue}
+              onClick={() => void refresh(false, true)}
+              className="gap-1.5"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              Проверить статус
+            </Button>
+          </div>
         </div>
         <CardDescription>Webhook принимает события Telegram по HTTPS. Long Polling получает их через постоянное соединение бота с Telegram.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {message && <p role="status" className="inline-flex items-center gap-2 text-sm"><Check className="h-4 w-4" />{message}</p>}
+        {message && (
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-600 dark:text-emerald-400 flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-2">
+              <Check className="h-4 w-4 shrink-0" />
+              {message}
+            </span>
+            <button type="button" onClick={() => setMessage("")} className="hover:opacity-75 text-xs font-semibold">✕</button>
+          </div>
+        )}
         <dl className="grid gap-4 sm:grid-cols-3">
           <div><dt className="text-xs text-muted-foreground">Текущий режим</dt><dd className="mt-1 text-sm font-medium">{loading && !status ? "Проверяем…" : mode}</dd></div>
           <div>
