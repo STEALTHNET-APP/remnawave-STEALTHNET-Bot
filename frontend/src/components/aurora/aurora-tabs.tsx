@@ -17,6 +17,7 @@ import { Link, useLocation } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Globe, Wallet, UserPlus, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCabinetConfig } from "@/contexts/cabinet-config";
 
 interface Tab {
   to: string;
@@ -37,6 +38,10 @@ export function AuroraTabs() {
   const location = useLocation();
   const reduceMotion = useReducedMotion();
   const { t: translate } = useTranslation();
+  const config = useCabinetConfig();
+  const tabs: Tab[] = TABS.map((tab) =>
+    tab.label === "aurora.support" && !config?.ticketsEnabled ? { ...tab, to: "/cabinet/help" } : tab,
+  );
 
   return (
     <nav
@@ -56,7 +61,7 @@ export function AuroraTabs() {
             "0 8px 32px -8px rgba(17, 24, 39, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.85)",
         }}
       >
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const active =
             location.pathname === t.to || location.pathname.startsWith(t.to + "/");
           const Icon = t.icon;

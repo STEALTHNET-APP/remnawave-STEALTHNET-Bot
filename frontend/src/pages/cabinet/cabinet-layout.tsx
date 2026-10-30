@@ -9,7 +9,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useClientAuth } from "@/contexts/client-auth";
 import { CabinetConfigProvider, useCabinetConfig } from "@/contexts/cabinet-config";
-import { createContext, useContext } from "react";
+import { IsMiniappContext } from "@/contexts/miniapp";
 import { useIsMiniapp } from "@/hooks/use-is-miniapp";
 import { useLanguageSync } from "@/i18n/use-language-sync";
 import { api } from "@/lib/api";
@@ -56,10 +56,7 @@ function AnalyticsScripts() {
   return null;
 }
 
-const IsMiniappContext = createContext(false);
-export function useCabinetMiniapp() {
-  return useContext(IsMiniappContext);
-}
+export { useCabinetMiniapp } from "@/contexts/miniapp";
 
 /** Экран ввода кода 2FA после успешной проверки пароля или Telegram */
 function Client2FAStepScreen() {
