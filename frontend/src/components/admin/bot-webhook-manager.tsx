@@ -178,7 +178,22 @@ export function BotWebhookManager({ token }: { token: string }) {
         </dl>
         {status?.webhookInfo?.last_error_message && <p className="text-sm text-destructive break-words">Последняя ошибка Telegram: {status.webhookInfo.last_error_message}</p>}
         <div className="space-y-2">
-          <Label htmlFor="webhook-url">Адрес webhook</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="webhook-url">Адрес webhook</Label>
+            <button
+              type="button"
+              className="text-xs text-primary hover:underline cursor-pointer"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  const target = window.location.origin + "/api/bot/webhook";
+                  setUrl(target);
+                  toast.info("Адрес подставлен", target);
+                }
+              }}
+            >
+              Подставить адрес текущей панели
+            </button>
+          </div>
           <Input id="webhook-url" value={url} onChange={event => setUrl(event.target.value)} placeholder="https://example.com/api/bot/webhook" disabled={saving || droppingQueue} />
           <p className="text-xs text-muted-foreground">Укажите публичный HTTPS-адрес этой панели с путём /api/bot/webhook.</p>
         </div>
