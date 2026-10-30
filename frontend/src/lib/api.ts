@@ -1504,9 +1504,20 @@ export const api = {
   },
 
   async deleteBotWebhook(
+    token: string,
+    dropPendingUpdates?: boolean
+  ): Promise<{ ok: boolean; message?: string; error?: string }> {
+    return request("/admin/bot/webhook/delete", {
+      method: "POST",
+      body: JSON.stringify({ dropPendingUpdates: Boolean(dropPendingUpdates) }),
+      token,
+    });
+  },
+
+  async dropBotWebhookPending(
     token: string
   ): Promise<{ ok: boolean; message?: string; error?: string }> {
-    return request("/admin/bot/webhook/delete", { method: "POST", body: "{}", token });
+    return request("/admin/bot/webhook/drop-pending", { method: "POST", body: "{}", token });
   },
 
 

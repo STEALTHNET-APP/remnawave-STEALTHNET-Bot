@@ -93,14 +93,66 @@ botWebhookAdminRouter.post("/set", async (req, res) => {
   }
 });
 
-botWebhookAdminRouter.post("/delete", async (_req, res) => {
+botWebhookAdminRouter.post("/delete", async (req, res) => {
   try {
     if (!runtimeCredential()) return res.status(409).json({ ok: false, message: "BOT_TOKEN не задан" });
+    if (req.body?.dropPendingUpdates) {
+      const config = await getSystemConfig();
+      const token = (config.telegramBotToken || process.env.BOT_TOKEN || "").trim();
+      if (token) {
+        await fetch(`https://api.telegram.org/bot${token}/deleteWebhook`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ drop_pending_updates: true }),
+          signal: AbortSignal.timeout(10_000),
+        }).catch(() => {});
+      }
+    }
     await prisma.systemSetting.upsert({ where: { key: "bot_webhook_enabled" }, create: { key: "bot_webhook_enabled", value: "false" }, update: { value: "false" } });
     invalidateSystemConfigCache();
     await reloadBot("polling");
     return res.json({ ok: true, message: "Вебхук удалён, бот подтвердил запуск Long Polling" });
   } catch {
     return res.status(503).json({ ok: false, message: "Переключение не подтверждено. Проверьте статус и повторите. Очередь сообщений сохранена." });
+  }
+});
+
+botWebhookAdminRouter.post("/drop-pending", async (_req, res) => {
+  try {
+    const config = await getSystemConfig();
+    const token = (config.telegramBotToken || process.env.BOT_TOKEN || "").trim();
+    if (!token) return res.status(400).json({ ok: false, message: "Токен бота не задан" });
+
+    if (config.botWebhookEnabled && config.botWebhookUrl) {
+      const response = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: config.botWebhookUrl,
+          secret_token: config.botWebhookSecret || undefined,
+          allowed_updates: ["message", "callback_query", "pre_checkout_query", "my_chat_member"],
+          drop_pending_updates: true,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      const data = (await response.json()) as { ok: boolean; description?: string };
+      if (!response.ok || !data.ok) {
+        return res.status(502).json({ ok: false, message: data.description || "Не удалось сбросить очередь в Telegram" });
+      }
+    } else {
+      const response = await fetch(`https://api.telegram.org/bot${token}/deleteWebhook`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ drop_pending_updates: true }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      const data = (await response.json()) as { ok: boolean; description?: string };
+      if (!response.ok || !data.ok) {
+        return res.status(502).json({ ok: false, message: data.description || "Не удалось сбросить очередь в Telegram" });
+      }
+    }
+    return res.json({ ok: true, message: "Очередь сообщений Telegram успешно очищена" });
+  } catch {
+    return res.status(503).json({ ok: false, message: "Не удалось связаться с Telegram" });
   }
 });
