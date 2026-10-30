@@ -69,6 +69,7 @@ export function BotWebhookManager({ token }: { token: string }) {
 
   const changeMode = async (webhook: boolean, dropPending = false) => {
     setConfirmPolling(false);
+    setDropPendingOnPolling(false);
     setSaving(true);
     setError("");
     setMessage("");
@@ -334,7 +335,7 @@ export function BotWebhookManager({ token }: { token: string }) {
           <Button
             type="button"
             variant="outline"
-            disabled={saving || !activeWebhook || droppingQueue}
+            disabled={saving || !!activePolling || droppingQueue}
             onClick={() => setConfirmPolling(true)}
           >
             Перейти на Long Polling
@@ -354,7 +355,7 @@ export function BotWebhookManager({ token }: { token: string }) {
         <p className="text-xs text-muted-foreground">При переключении очередь сообщений сохраняется. Если переключение не подтвердилось, проверьте статус и повторите.</p>
       </CardContent>
     </Card>
-    <Dialog open={confirmPolling} onOpenChange={setConfirmPolling}>
+    <Dialog open={confirmPolling} onOpenChange={(open) => { setConfirmPolling(open); if (!open) setDropPendingOnPolling(false); }}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Перейти на Long Polling?</DialogTitle>
