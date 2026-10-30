@@ -30,9 +30,16 @@ app.use("/api/admin/bot/webhook", botWebhookAdminRouter);
 const server = app.listen(0, "127.0.0.1");
 await new Promise(resolve => server.once("listening", resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
+const telegramCalls = [];
+let telegramOk = true;
 globalThis.fetch = async (url, options) => {
   if (String(url).startsWith(base)) return nativeFetch(url, options);
-  if (String(url).includes("getWebhookInfo")) return new Response(JSON.stringify({ ok: true, result: { url: config.botWebhookUrl, pending_update_count: 0 } }));
+  if (String(url).includes("api.telegram.org")) {
+    const method = String(url).split("/").pop();
+    telegramCalls.push({ method, body: options?.body ? JSON.parse(options.body) : {} });
+    if (method === "getWebhookInfo") return new Response(JSON.stringify({ ok: true, result: { url: config.botWebhookUrl, pending_update_count: 3, allowed_updates: ["message", "callback_query"] } }));
+    return new Response(JSON.stringify(telegramOk ? { ok: true, result: true } : { ok: false, description: "Bad Request: fixture" }), { status: telegramOk ? 200 : 400 });
+  }
   assert.equal(options.headers["X-Bot-Internal-Auth"], internalBotCredential(process.env.BOT_TOKEN));
   return new Response(JSON.stringify({ ok: upstreamStatus === 200, mode: runtimeMode }), { status: upstreamStatus });
 };
@@ -89,6 +96,42 @@ try {
     const response = await fetch(base + "/api/admin/bot/webhook/status", { headers });
     assert.equal(response.status, 200);
     assert.equal((await response.json()).hasSecret, true);
+  });
+  await test("queue purge follows the bot runtime mode and reports Telegram failures", async () => {
+    const headers = { Authorization: "Bearer admin" };
+    config.botWebhookEnabled = true;
+    config.botWebhookUrl = "https://example.com/api/bot/webhook";
+    config.botWebhookSecret = "secret";
+
+    telegramOk = true;
+    runtimeMode = "webhook";
+    telegramCalls.length = 0;
+    assert.equal((await post("/api/admin/bot/webhook/drop-pending", {}, headers)).status, 200);
+    const setWebhook = telegramCalls.find(call => call.method === "setWebhook");
+    assert.ok(setWebhook, "webhook mode must re-register the webhook");
+    assert.equal(setWebhook.body.url, config.botWebhookUrl);
+    assert.equal(setWebhook.body.secret_token, "secret");
+    assert.equal(setWebhook.body.drop_pending_updates, true);
+    assert.deepEqual(setWebhook.body.allowed_updates, ["message", "callback_query"]);
+
+    runtimeMode = "polling";
+    telegramCalls.length = 0;
+    assert.equal((await post("/api/admin/bot/webhook/drop-pending", {}, headers)).status, 200);
+    assert.ok(telegramCalls.some(call => call.method === "deleteWebhook"), "polling mode must not set a webhook");
+    assert.equal(telegramCalls.some(call => call.method === "setWebhook"), false);
+
+    runtimeMode = "polling";
+    telegramOk = false;
+    telegramCalls.length = 0;
+    const failed = await post("/api/admin/bot/webhook/drop-pending", {}, headers);
+    assert.equal(failed.status, 502);
+    assert.match((await failed.json()).message, /Bad Request/);
+
+    telegramOk = true;
+    telegramCalls.length = 0;
+    assert.equal((await post("/api/admin/bot/webhook/delete", { dropPendingUpdates: true }, headers)).status, 200);
+    assert.ok(telegramCalls.some(call => call.method === "deleteWebhook" && call.body.drop_pending_updates === true));
+    assert.equal(config.botWebhookEnabled, false);
   });
 } finally {
   globalThis.fetch = nativeFetch;

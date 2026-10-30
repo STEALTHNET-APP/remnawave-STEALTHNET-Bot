@@ -93,14 +93,76 @@ botWebhookAdminRouter.post("/set", async (req, res) => {
   }
 });
 
-botWebhookAdminRouter.post("/delete", async (_req, res) => {
+const ALLOWED_UPDATES = ["message", "callback_query", "pre_checkout_query", "my_chat_member"];
+
+async function callTelegram(token: string, method: string, payload: Record<string, unknown> = {}): Promise<{ result?: unknown }> {
+  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const data = (await response.json().catch(() => ({}))) as { ok?: boolean; description?: string; result?: unknown };
+  if (!response.ok || !data.ok) throw new Error(data.description || "Не удалось выполнить запрос к Telegram");
+  return data;
+}
+
+async function botRuntimeMode(): Promise<string | null> {
+  return fetch(botInternalUrl("/health"), {
+    headers: { "X-Bot-Internal-Auth": runtimeCredential() },
+    signal: AbortSignal.timeout(3000),
+  }).then(async response => response.ok ? ((await response.json() as { mode?: string }).mode ?? null) : null).catch(() => null);
+}
+
+async function currentAllowedUpdates(token: string): Promise<string[]> {
+  const data = await callTelegram(token, "getWebhookInfo").catch(() => null);
+  const list = (data?.result as { allowed_updates?: unknown } | undefined)?.allowed_updates;
+  return Array.isArray(list) && list.length > 0 && list.every(item => typeof item === "string") ? list as string[] : ALLOWED_UPDATES;
+}
+
+botWebhookAdminRouter.post("/delete", async (req, res) => {
   try {
     if (!runtimeCredential()) return res.status(409).json({ ok: false, message: "BOT_TOKEN не задан" });
+    const dropPending = req.body?.dropPendingUpdates === true;
+    if (dropPending) {
+      const config = await getSystemConfig();
+      const token = (config.telegramBotToken || process.env.BOT_TOKEN || "").trim();
+      if (!token) return res.status(409).json({ ok: false, message: "Токен бота не задан" });
+      try {
+        await callTelegram(token, "deleteWebhook", { drop_pending_updates: true });
+      } catch (error) {
+        return res.status(502).json({ ok: false, message: error instanceof Error ? error.message : "Не удалось очистить очередь Telegram" });
+      }
+    }
     await prisma.systemSetting.upsert({ where: { key: "bot_webhook_enabled" }, create: { key: "bot_webhook_enabled", value: "false" }, update: { value: "false" } });
     invalidateSystemConfigCache();
     await reloadBot("polling");
-    return res.json({ ok: true, message: "Вебхук удалён, бот подтвердил запуск Long Polling" });
+    return res.json({ ok: true, message: dropPending ? "Вебхук удалён, очередь очищена, бот подтвердил запуск Long Polling" : "Вебхук удалён, бот подтвердил запуск Long Polling" });
   } catch {
     return res.status(503).json({ ok: false, message: "Переключение не подтверждено. Проверьте статус и повторите. Очередь сообщений сохранена." });
+  }
+});
+
+botWebhookAdminRouter.post("/drop-pending", async (_req, res) => {
+  try {
+    const config = await getSystemConfig();
+    const token = (config.telegramBotToken || process.env.BOT_TOKEN || "").trim();
+    if (!token) return res.status(409).json({ ok: false, message: "Токен бота не задан" });
+
+    const mode = await botRuntimeMode();
+    if (mode === "webhook") {
+      if (!config.botWebhookUrl) return res.status(409).json({ ok: false, message: "Адрес webhook не задан, проверьте настройки" });
+      await callTelegram(token, "setWebhook", {
+        url: config.botWebhookUrl,
+        secret_token: config.botWebhookSecret || undefined,
+        allowed_updates: await currentAllowedUpdates(token),
+        drop_pending_updates: true,
+      });
+    } else {
+      await callTelegram(token, "deleteWebhook", { drop_pending_updates: true });
+    }
+    return res.json({ ok: true, message: "Очередь сообщений Telegram успешно очищена" });
+  } catch (error) {
+    return res.status(502).json({ ok: false, message: error instanceof Error ? error.message : "Не удалось сбросить очередь в Telegram" });
   }
 });
