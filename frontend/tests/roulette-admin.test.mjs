@@ -40,8 +40,10 @@ try {
       if (width === 390) {
         const zone = page.getByLabel("Часовой пояс");
         assert.equal(await zone.inputValue(), "UTC");
+        await page.getByText(/00:00 UTC \(03:00 МСК\)/).waitFor();
         await page.getByRole("button", { name: "Москва" }).click();
         assert.equal(await zone.inputValue(), "Europe/Moscow");
+        assert.equal(await page.getByText(/00:00 UTC \(03:00 МСК\)/).count(), 0);
         const request = page.waitForRequest(req => req.method() === "PUT" && req.url().includes("/api/admin/roulette"));
         await page.getByRole("button", { name: "Сохранить настройки рулетки" }).click();
         const saved = await request;

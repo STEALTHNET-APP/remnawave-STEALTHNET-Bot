@@ -316,6 +316,11 @@ export function RouletteAdminTab() {
                     </Button>
                   </div>
                   <Input id="roulette-zone" value={timeZone} onChange={e => setTimeZone(e.target.value)} placeholder={DEFAULT_TIME_ZONE} />
+                  {timeZone.trim().toUpperCase() === "UTC" && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Сейчас сброс происходит в 00:00 UTC (03:00 МСК). Кнопка «Москва» переключит на московское время.
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     По умолчанию — Москва (UTC+3). Новая попытка в 00:00 выбранного пояса. Можно указать IANA-зону, например Europe/Berlin.
                   </p>
