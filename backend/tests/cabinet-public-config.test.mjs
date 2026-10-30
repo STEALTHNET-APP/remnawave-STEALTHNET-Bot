@@ -14,7 +14,17 @@ mock.module('../dist/config/index.js',{namedExports:{env:{}}});
 mock.module('../dist/modules/remna/remna.client.js',{namedExports:{setRemnaRuntimeConfig:()=>{},remnaGetUser:async()=>({}),remnaUpdateUser:async()=>({})}});
 mock.module('../dist/modules/bot/bot.service.js',{namedExports:{applyMarkup:value=>value}});
 const {getPublicConfig,invalidateSystemConfigCache}=await import('../dist/modules/client/client.service.js');
-const {updateRouletteSettings}=await import('../dist/modules/roulette/roulette.service.js');
+const {updateRouletteSettings,getRouletteSettings}=await import('../dist/modules/roulette/roulette.service.js');
+
+test('daily roulette defaults to Moscow timezone and keeps explicit zones',async()=>{
+  settings.clear();
+  await updateRouletteSettings({resetMode:'daily'});
+  assert.equal((await getRouletteSettings()).timeZone,'Europe/Moscow');
+  settings.set('roulette_time_zone','Invalid/Zone');
+  assert.equal((await getRouletteSettings()).timeZone,'Europe/Moscow');
+  settings.set('roulette_time_zone','Europe/Berlin');
+  assert.equal((await getRouletteSettings()).timeZone,'Europe/Berlin');
+});
 
 test('public cabinet config honors a disabled roulette and refreshes after administrator changes',async()=>{
   settings.clear();

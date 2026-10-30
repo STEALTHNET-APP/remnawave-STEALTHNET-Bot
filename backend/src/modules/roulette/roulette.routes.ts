@@ -14,6 +14,7 @@ export const rouletteClientRouter = Router();
 rouletteClientRouter.use(requireClientAuth);
 
 rouletteClientRouter.get("/", async (req: Request, res: Response) => {
+  res.setHeader("Cache-Control", "no-store");
   try {
     const clientId = (req as AuthedReq).clientId;
     const status = await getRouletteStatus(clientId);
@@ -39,6 +40,7 @@ rouletteAdminRouter.use(requireAuth);
 rouletteAdminRouter.use(requireAdminSection);
 
 rouletteAdminRouter.get("/", async (_req: Request, res: Response) => {
+  res.setHeader("Cache-Control", "no-store");
   try {
     const data = await getAdminRouletteStats();
     res.json(data);

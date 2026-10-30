@@ -256,7 +256,7 @@ export function StealthRoulette() {
         <p className="mt-4 text-center text-xs text-zinc-400 max-w-xs leading-relaxed">
           {canSpin
             ? "Жмите кнопку в центре колеса, чтобы запустить вращение!"
-            : data?.resetMode === "daily" ? `Новая попытка каждый день в 00:00 (${data.timeZone || "UTC"})` : `Крутить можно один раз в ${data?.cooldownHours || 24} ч. Таймер обратного отсчета выше.`}
+            : data?.resetMode === "daily" ? `Новая попытка каждый день в 00:00 (${data.timeZone || "Europe/Moscow"})` : `Крутить можно один раз в ${data?.cooldownHours || 24} ч. Таймер обратного отсчета выше.`}
         </p>
       </div>
 
