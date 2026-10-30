@@ -131,6 +131,7 @@ import {
   serializeAttachments,
   parseAttachments,
   pickField as pickTicketField,
+  pickBooleanField,
 } from "../ticket/attachments.js";
 import { notifyClientAboutSupportReply } from "../ticket/ticket-client-notify.service.js";
 import {
@@ -4762,12 +4763,7 @@ adminRouter.post("/tickets/bulk-status", asyncRoute(async (req, res) => {
 // Массовый ответ выбранным тикетам (с поддержкой фото-вложений и опции автозакрытия)
 adminRouter.post("/tickets/bulk-reply", uploadTicketAttachment.array("files", 5), asyncRoute(async (req, res) => {
   const content = pickTicketField(req, "content");
-  const rawClose = (req.body as Record<string, unknown> | undefined)?.closeAfterReply;
-  const closeAfterReply =
-    rawClose === true ||
-    rawClose === "true" ||
-    rawClose === "1" ||
-    rawClose === 1;
+  const closeAfterReply = pickBooleanField(req, "closeAfterReply");
 
   let ticketIds: string[] = [];
   const rawTicketIds = (req.body as Record<string, unknown> | undefined)?.ticketIds;
@@ -4797,7 +4793,7 @@ adminRouter.post("/tickets/bulk-reply", uploadTicketAttachment.array("files", 5)
 
   const tickets = await prisma.ticket.findMany({
     where: { id: { in: ticketIds } },
-    select: { id: true, clientId: true, status: true },
+    select: { id: true, clientId: true, status: true, closedAt: true },
   });
 
   if (tickets.length === 0) {
@@ -4807,9 +4803,14 @@ adminRouter.post("/tickets/bulk-reply", uploadTicketAttachment.array("files", 5)
   const serializedAtt = serializeAttachments(attachments);
   await prisma.$transaction(async tx => {
     for (const ticket of [...tickets].sort((a, b) => a.id.localeCompare(b.id))) {
+      const keepClosedAt = ticket.status === "closed" && ticket.closedAt !== null;
       await tx.ticket.update({
         where: { id: ticket.id },
-        data: { updatedAt: new Date(), status: closeAfterReply ? "closed" : "open", closedAt: closeAfterReply ? new Date() : null },
+        data: {
+          updatedAt: new Date(),
+          status: closeAfterReply ? "closed" : "open",
+          closedAt: closeAfterReply ? (keepClosedAt ? ticket.closedAt : new Date()) : null,
+        },
       });
       await tx.ticketMessage.create({ data: { ticketId: ticket.id, authorType: "support", content: trimmed, attachments: serializedAtt } });
     }

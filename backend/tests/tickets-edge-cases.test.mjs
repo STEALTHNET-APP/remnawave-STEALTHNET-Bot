@@ -46,18 +46,31 @@ try {
       assert.equal(ticket.messages.length, 1);
     }
   });
-  await test('bulk reply with boolean closeAfterReply in JSON closes all tickets and records closedAt', async () => {
-    const result = await request('/admin/tickets/bulk-reply', {
-      ticketIds: ids,
-      content: 'Mass response with closing',
-      closeAfterReply: true,
-    });
-    assert.equal(result.status, 200, JSON.stringify(result.data));
-    assert.equal(result.data.closedAfterReply, true);
-    for (const id of ids) {
-      const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id } });
-      assert.equal(ticket.status, 'closed');
-      assert.ok(ticket.closedAt instanceof Date);
+  await test('bulk reply with boolean closeAfterReply in JSON closes all tickets and preserves the old close date', async () => {
+    const closedBefore = new Date('2026-10-19T00:00:00.000Z');
+    const replyIds = [
+      (await prisma.ticket.create({ data: { clientId: client.id, subject: 'JSON reply open fixture', status: 'open' } })).id,
+      (await prisma.ticket.create({ data: { clientId: client.id, subject: 'JSON reply closed fixture', status: 'closed', closedAt: closedBefore } })).id,
+    ];
+    try {
+      const result = await request('/admin/tickets/bulk-reply', {
+        ticketIds: replyIds,
+        content: 'Mass response with closing',
+        closeAfterReply: true,
+      });
+      assert.equal(result.status, 200, JSON.stringify(result.data));
+      assert.equal(result.data.closedAfterReply, true);
+      assert.equal(result.data.count, 2);
+      const [openTicket, closedTicket] = await Promise.all(
+        replyIds.map((id) => prisma.ticket.findUniqueOrThrow({ where: { id } })),
+      );
+      assert.equal(openTicket.status, 'closed');
+      assert.ok(openTicket.closedAt instanceof Date);
+      assert.equal(closedTicket.status, 'closed');
+      assert.equal(closedTicket.closedAt.getTime(), closedBefore.getTime());
+      assert.equal(await prisma.ticketMessage.count({ where: { ticketId: { in: replyIds } } }), 2);
+    } finally {
+      await prisma.ticket.deleteMany({ where: { id: { in: replyIds } } });
     }
   });
   await test('client reply atomically reopens a closed ticket; another client cannot delete it', async () => {

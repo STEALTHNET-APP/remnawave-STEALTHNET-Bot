@@ -365,11 +365,9 @@ export function AdminTicketsPage() {
     }
   };
 
-  const toggleSelectTicket = (id: string, checked?: boolean) => {
+  const toggleSelectTicket = (id: string, checked: boolean) => {
     setSelectedIds((prev) =>
-      (checked !== undefined ? checked : !prev.includes(id))
-        ? Array.from(new Set([...prev, id]))
-        : prev.filter((item) => item !== id)
+      checked ? Array.from(new Set([...prev, id])) : prev.filter((item) => item !== id)
     );
   };
 
@@ -839,12 +837,15 @@ export function AdminTicketsPage() {
                   <div className="flex items-center gap-3">
                     {/* Multi-select checkbox */}
                     <div
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (e.target === e.currentTarget) toggleSelectTicket(t.id, !isSelected);
+                      }}
                       className="p-1 -m-1 cursor-pointer shrink-0"
                     >
                       <Checkbox
                         checked={isSelected}
-                        onCheckedChange={(checked) => toggleSelectTicket(t.id, !!checked)}
+                        onCheckedChange={(checked) => toggleSelectTicket(t.id, checked === true)}
                         className="rounded-md"
                       />
                     </div>
