@@ -66,7 +66,7 @@ export function AuroraLayout() {
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     if (!tg?.initData?.trim()) return;
-    try { tg.setHeaderColor?.(dark ? "#10131d" : "#ffffff"); tg.setBackgroundColor?.(dark ? "#10131d" : "#ffffff"); } catch { /* old Telegram */ }
+    try { tg.setHeaderColor?.(dark ? "#10131d" : "#f8f9fc"); tg.setBackgroundColor?.(dark ? "#10131d" : "#f8f9fc"); } catch {}
   }, [dark]);
   const links = [
     {to:"/cabinet/profile",label:t("aurora.my_profile"),icon:User,show:true},
@@ -81,7 +81,7 @@ export function AuroraLayout() {
     {to:"/cabinet/singbox",label:"Sing-box / AmneziaWG",icon:Network,show:!!config?.showSingboxEnabled},
     {to:"/cabinet/help",label:t("aurora.help"),icon:HelpCircle,show:true},
   ].filter(x=>x.show);
-  return <IsMiniappContext.Provider value={isMiniapp}><div className="au-client min-h-screen" data-au-theme={resolvedMode} style={{"--au-link":dark?`color-mix(in srgb, ${accent} 48%, white)`:accent,"--au-from":accent,"--au-to":gradientEnd,"--au-bg":dark?"#10131d":"#ffffff","--au-surface":dark?"#1b2030":"#f2f3f7","--au-nav":dark?"#202637":"#f2f3f7","--au-ink":dark?"#f1f3fa":"#0f1222","--au-muted":dark?"#adb6ce":"#606a80"} as React.CSSProperties}>
+  return <IsMiniappContext.Provider value={isMiniapp}><div className="au-client min-h-screen" data-au-theme={resolvedMode} style={{"--au-link":dark?`color-mix(in srgb, ${accent} 48%, white)`:accent,"--au-from":accent,"--au-to":gradientEnd,"--au-bg":dark?"#10131d":"#ffffff","--au-canvas":dark?"#10131d":"#f8f9fc","--au-surface":dark?"#1b2030":"#f2f3f7","--au-nav":dark?"#202637":"#ffffff","--au-ink":dark?"#f1f3fa":"#0f1222","--au-muted":dark?"#adb6ce":"#606a80"} as React.CSSProperties}>
     <header className="au-header"><Link to="/cabinet/dashboard" className="au-wordmark">{config?.serviceName || "Aurora"}</Link><button type="button" onClick={()=>setMenu(true)} aria-label={t("aurora.profile_appearance")}><Settings2 size={20}/><span>{t("aurora.settings")}</span></button></header>
     <main className="au-content"><div key={location.pathname} className="au-page"><Outlet/></div></main>
     <AuroraTabs/>

@@ -2,8 +2,6 @@ import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react
 import { Check, Copy, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** Мелкие переиспользуемые блоки экранов Aurora. */
-
 export function AuPage({ children }: { children: ReactNode }) {
   return <div className="space-y-3">{children}</div>;
 }
@@ -129,7 +127,7 @@ export function AuButton({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" | "danger" | "surface"; loading?: boolean }) {
   const styles =
     variant === "primary"
-      ? "bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white shadow-md"
+      ? "bg-[var(--au-from)] text-white"
       : variant === "danger"
         ? "border-2 border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-400"
         : variant === "surface"
@@ -197,7 +195,7 @@ export function CopyButton({
           await navigator.clipboard.writeText(value);
           onCopied();
         } catch {
-          /* буфер недоступен */
+          return;
         }
       }}
       className={cn(
