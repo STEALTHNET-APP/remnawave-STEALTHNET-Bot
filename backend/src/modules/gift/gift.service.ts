@@ -163,7 +163,7 @@ export async function createAdditionalSubscription(
     internalSquadUuids: string[];
     trafficResetMode?: string;
   },
-  options?: { skipConfigCheck?: boolean; extraDevices?: number; purchasedAsGift?: boolean },
+  options?: { skipConfigCheck?: boolean; extraDevices?: number; purchasedAsGift?: boolean; replacingSubscriptionId?: string },
 ): Promise<GiftResult<{ subscriptionId: string; subscriptionIndex: number }>> {
   if (!isRemnaConfigured()) {
     return { ok: false, error: "Сервис временно недоступен", status: 503 };
@@ -188,9 +188,25 @@ export async function createAdditionalSubscription(
     return { ok: false, error: "Клиент не найден", status: 404 };
   }
 
+  let targetSub: { id: string; subscriptionIndex: number; remnawaveUuid: string | null } | null = null;
+  if (options?.replacingSubscriptionId) {
+    targetSub = await prisma.subscription.findFirst({
+      where: {
+        id: options.replacingSubscriptionId,
+        ownerId: rootClientId,
+        trialId: { not: null },
+        purchasedAsGift: false,
+      },
+      select: { id: true, subscriptionIndex: true, remnawaveUuid: true },
+    });
+  }
+
   // Проверяем лимит
   const existingCount = await prisma.subscription.count({
-    where: { ownerId: rootClientId },
+    where: {
+      ownerId: rootClientId,
+      ...(targetSub ? { id: { not: targetSub.id } } : {}),
+    },
   });
   if (existingCount >= config.maxAdditionalSubscriptions) {
     return {
@@ -204,14 +220,14 @@ export async function createAdditionalSubscription(
   // (для генерации уникального имени в Remna) — это РАЗНЫЕ переменные. Раньше один и тот же
   // `index` инкрементировался при retry «username taken», что протекало в БД и подписка
   // получала subscription_index=1 вместо 0 для свежего клиента.
-  let subscriptionIndex = await getNextSubscriptionIndex(rootClientId);
-
-  // Подарочная подписка (purchasedAsGift=true) НИКОГДА не должна занимать primary-слот.
-  // T-gift-index-fix : берём ПЕРВЫЙ СВОБОДНЫЙ индекс ≥1 (а не тупо 1) —
-  // иначе у клиента с дырой на index 0 и уже занятым index 1 prisma.subscription.create падал
-  // с UNIQUE-конфликтом (ownerId, subscriptionIndex), и активация подарка после оплаты не проходила.
-  if (options?.purchasedAsGift === true && subscriptionIndex === 0) {
-    subscriptionIndex = await getNextSubscriptionIndex(rootClientId, 1);
+  let subscriptionIndex: number;
+  if (targetSub) {
+    subscriptionIndex = targetSub.subscriptionIndex;
+  } else {
+    subscriptionIndex = await getNextSubscriptionIndex(rootClientId);
+    if (options?.purchasedAsGift === true && subscriptionIndex === 0) {
+      subscriptionIndex = await getNextSubscriptionIndex(rootClientId, 1);
+    }
   }
 
   // Создаём пользователя в Remnawave
@@ -245,7 +261,7 @@ export async function createAdditionalSubscription(
   // Если это primary-подписка (subscriptionIndex === 0) и не покупка в подарок —
   // проверяем, не существует ли уже Remna-пользователь (привязан к клиенту или по TG/email).
   // Если существует — переиспользуем и обновляем его, избегая создания дубликата с тем же telegramId!
-  if (subscriptionIndex === 0 && options?.purchasedAsGift !== true && isRemnaConfigured()) {
+  if (subscriptionIndex === 0 && options?.purchasedAsGift !== true && !targetSub && isRemnaConfigured()) {
     let candidateUuid = rootClient.remnawaveUuid;
     if (!candidateUuid && rootClient.telegramId?.trim()) {
       try {
@@ -375,26 +391,46 @@ export async function createAdditionalSubscription(
   const isGiftPurchase = options?.purchasedAsGift === true;
   const defaultAutoRenew = !isGiftPurchase && config.defaultAutoRenewEnabled === true;
 
-  const subscription = await prisma.subscription.create({
-      data: {
-        ownerId: rootClientId,
-        subscriptionIndex,
-        remnawaveUuid: remnaUuid,
-        tariffId: tariff.id ?? null,
-        purchasedAsGift: isGiftPurchase,
-        autoRenewEnabled: defaultAutoRenew,
-        ...(tariff.price != null && tariff.price > 0 ? {
-          customPrice: tariff.price,
-          currentPricePerDay: tariff.durationDays > 0 ? tariff.price / tariff.durationDays : null,
-        } : {}),
-        ...(extraDevices > 0 ? {
-          extraDevices,
-          extraDevicesMonthlyPrice: extraDevicesMonthlyPrice,
-        } : {}),
-        ...(defaultAutoRenew && tariff.id ? { autoRenewTariffId: tariff.id } : {}),
-        expireAt: new Date(finalExpireAt),
-      },
-    });
+  const subscriptionData = {
+    ownerId: rootClientId,
+    subscriptionIndex,
+    remnawaveUuid: remnaUuid,
+    tariffId: tariff.id ?? null,
+    purchasedAsGift: isGiftPurchase,
+    autoRenewEnabled: defaultAutoRenew,
+    ...(tariff.price != null && tariff.price > 0 ? {
+      customPrice: tariff.price,
+      currentPricePerDay: tariff.durationDays > 0 ? tariff.price / tariff.durationDays : null,
+    } : {}),
+    ...(extraDevices > 0 ? {
+      extraDevices,
+      extraDevicesMonthlyPrice: extraDevicesMonthlyPrice,
+    } : {}),
+    ...(defaultAutoRenew && tariff.id ? { autoRenewTariffId: tariff.id } : {}),
+    expireAt: new Date(finalExpireAt),
+  };
+
+  let subscription: { id: string; subscriptionIndex: number };
+  try {
+    subscription = targetSub
+      ? await prisma.$transaction(async (tx) => {
+          await tx.cloudPaymentAgreement.updateMany({
+            where: { subscriptionId: targetSub!.id },
+            data: { subscriptionId: null },
+          });
+          await tx.subscription.delete({ where: { id: targetSub!.id } });
+          return tx.subscription.create({ data: subscriptionData });
+        })
+      : await prisma.subscription.create({ data: subscriptionData });
+  } catch (e) {
+    if (remnaUuid) await remnaDeleteUser(remnaUuid).catch(() => {});
+    console.error("[gift] subscription persist failed:", e);
+    return { ok: false, error: "Не удалось сохранить подписку", status: 500 };
+  }
+
+  if (targetSub?.remnawaveUuid && targetSub.remnawaveUuid !== remnaUuid) {
+    await remnaDeleteUser(targetSub.remnawaveUuid).catch((e) => console.error("[gift] old remna user delete failed:", e));
+  }
 
   // если это primary-подписка (idx=0) — синкаем
   // legacy-поля Client.{remnawaveUuid,currentTariffId,currentPricePerDay} для обратной
@@ -807,9 +843,6 @@ export async function redeemGiftCode(
   // Ограничение по maxAdditionalSubscriptions (выше) остаётся — нельзя превышать лимит подписок.
   const sub = giftCode.subscription;
 
-  // Определяем новый индекс у получателя
-  const newIndex = await getNextSubscriptionIndex(recipientRootClientId);
-
   // Главная дыра в редеме: $transaction([code.update, sub.update]) — НЕ лок.
   // Это просто два SQL'а в одной транзе. Параллельные /redeem с одним кодом
   // все видели status=ACTIVE, каждый писал REDEEMED поверх, каждый перепривязывал
@@ -834,17 +867,27 @@ export async function redeemGiftCode(
   // сбрасываем purchasedAsGift=false — после redeem подписка
   // у получателя считается «своей», а не «подарочной для передачи». Иначе она показывалась
   // бы в «🎁 Мои подарки» получателя с лейблом «(подарена)» — что неверно.
+  let newIndex = 0;
   try {
-    await prisma.subscription.update({
-      where: { id: giftCode.subscriptionId },
-      data: {
-        ownerId: recipientRootClientId,
-        subscriptionIndex: newIndex,
-        giftStatus: "GIFTED",
-        giftedToClientId: recipientRootClientId,
-        purchasedAsGift: false,
-      },
-    });
+    for (let attempt = 0; ; attempt++) {
+      newIndex = await getNextSubscriptionIndex(recipientRootClientId);
+      try {
+        await prisma.subscription.update({
+          where: { id: giftCode.subscriptionId },
+          data: {
+            ownerId: recipientRootClientId,
+            subscriptionIndex: newIndex,
+            giftStatus: "GIFTED",
+            giftedToClientId: recipientRootClientId,
+            purchasedAsGift: false,
+          },
+        });
+        break;
+      } catch (err) {
+        if ((err as { code?: string }).code === "P2002" && attempt < 4) continue;
+        throw err;
+      }
+    }
   } catch (err) {
     // Что-то пошло не так после claim — возвращаем код в ACTIVE,
     // чтобы юзер мог ретраить.

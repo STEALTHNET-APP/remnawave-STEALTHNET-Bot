@@ -156,7 +156,7 @@ async function calculateDevicesProrataPriceCoefficient(targetSubId: string | nul
     error.code = "SUBSCRIPTION_INACTIVE";
     throw error;
   }
-  return Math.max(1, daysLeft / 30);
+  return Math.max(1, daysLeft) / 30;
 }
 
 /**
@@ -182,7 +182,7 @@ async function calculateDevicesProrataPriceCoefficientForPrimary(clientId: strin
     error.code = "SUBSCRIPTION_INACTIVE";
     throw error;
   }
-  return Math.max(1, daysLeft / 30);
+  return Math.max(1, daysLeft) / 30;
 }
 
 /** Считает expireAt: если текущая подписка активна — добавляет дни к ней, иначе от now. */
@@ -2243,19 +2243,28 @@ clientRouter.post("/withdrawals", async (req, res) => {
     return res.status(400).json({ message: `Минимальная сумма вывода — ${minAmount}₽` });
   }
 
-  // Атомарный debit — либо есть баланс >= amount, либо отказ.
-  const debit = await prisma.client.updateMany({
-    where: { id: clientId, balance: { gte: amount } },
-    data: { balance: { decrement: amount } },
-  });
-  if (debit.count === 0) {
-    const c = await prisma.client.findUnique({ where: { id: clientId }, select: { balance: true } });
-    return res.status(400).json({ message: `Недостаточно средств. Доступно: ${(c?.balance ?? 0).toFixed(2)}₽` });
+  let wr: { id: string; status: string };
+  try {
+    wr = await prisma.$transaction(async (tx) => {
+      const debit = await tx.client.updateMany({
+        where: { id: clientId, balance: { gte: amount } },
+        data: { balance: { decrement: amount } },
+      });
+      if (debit.count === 0) {
+        throw Object.assign(new Error("INSUFFICIENT_FUNDS"), { code: "INSUFFICIENT_FUNDS" });
+      }
+      return tx.withdrawalRequest.create({
+        data: { clientId, amount, walletTrc20, status: "PENDING" },
+      });
+    });
+  } catch (e) {
+    if ((e as { code?: string }).code === "INSUFFICIENT_FUNDS") {
+      const c = await prisma.client.findUnique({ where: { id: clientId }, select: { balance: true } });
+      return res.status(400).json({ message: `Недостаточно средств. Доступно: ${(c?.balance ?? 0).toFixed(2)}₽` });
+    }
+    console.error("[withdrawals] create failed:", e);
+    return res.status(500).json({ message: "Не удалось создать заявку на вывод" });
   }
-
-  const wr = await prisma.withdrawalRequest.create({
-    data: { clientId, amount, walletTrc20, status: "PENDING" },
-  });
 
   // Notify админам в Telegram.
   try {
@@ -3434,11 +3443,18 @@ clientRouter.post("/subscription/:type/:id/reissue", requireRemnaOnline, async (
         where: { id: subId },
         select: { id: true, ownerId: true, giftedToClientId: true, remnawaveUuid: true },
       });
-  if (!sub) return res.status(404).json({ message: "Подписка не найдена" });
-  if (sub.ownerId !== clientId && sub.giftedToClientId !== clientId) {
+  if (!sub && subType === "secondary") return res.status(404).json({ message: "Подписка не найдена" });
+  if (sub && sub.ownerId !== clientId && sub.giftedToClientId !== clientId) {
     return res.status(403).json({ message: "Нет доступа" });
   }
-  const targetUuid = sub.remnawaveUuid;
+  let targetUuid = sub?.remnawaveUuid ?? null;
+  if (!targetUuid && subType === "root") {
+    const legacy = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { remnawaveUuid: true },
+    });
+    targetUuid = legacy?.remnawaveUuid ?? null;
+  }
   if (!targetUuid) return res.status(404).json({ message: "Подписка не привязана к Remnawave" });
 
   try {
@@ -3911,7 +3927,7 @@ clientRouter.post("/payments/platega", requireRemnaPaymentOnline, asyncHandler(a
         });
         if (primarySub?.expireAt) {
           const daysLeft = (primarySub.expireAt.getTime() - Date.now()) / 86_400_000;
-          prorataCoef = Math.max(1, daysLeft / 30);
+          prorataCoef = Math.max(1, daysLeft) / 30;
         }
       }
       finalAmount = Math.floor(product.price * prorataCoef);
@@ -4528,10 +4544,15 @@ clientRouter.post("/payments/balance", requireRemnaPaymentOnline, asyncHandler(a
         convertedDaysForNotify = activateResult.ok ? (activateResult.convertedDays ?? null) : null;
       }
     } else {
-      // покупка при активном триале ЗАМЕНЯЕТ его полностью
-      // (триал удаляется вместе с Remna-юзером). Выбор триала — replaceTrialSubId.
-      const { replaceTrialOnPurchase } = await import("../tariff/tariff-activation.service.js");
-      await replaceTrialOnPurchase(clientRaw.id, replaceTrialSubId ?? null);
+      let replacingTrialId = replaceTrialSubId ?? null;
+      if (!replacingTrialId) {
+        const oldestTrial = await prisma.subscription.findFirst({
+          where: { ownerId: clientRaw.id, trialId: { not: null }, purchasedAsGift: false },
+          orderBy: { createdAt: "asc" },
+          select: { id: true },
+        });
+        replacingTrialId = oldestTrial?.id ?? null;
+      }
       // Любая «новая покупка тарифа» — через единый createAdditionalSubscription.
       // Для свежего клиента она получит subscriptionIndex=0 (= главная). Для уже имеющего
       // подписки — следующий свободный индекс. Без затирания/смешивания.
@@ -4552,7 +4573,7 @@ clientRouter.post("/payments/balance", requireRemnaPaymentOnline, asyncHandler(a
         deviceDiscountTiers: tariff.deviceDiscountTiers,
         internalSquadUuids: tariff.internalSquadUuids,
         trafficResetMode: tariff.trafficResetMode ?? undefined,
-      }, { extraDevices: requestedExtras, skipConfigCheck: true });
+      }, { extraDevices: requestedExtras, skipConfigCheck: true, replacingSubscriptionId: replacingTrialId ?? undefined });
       activateResult = addResult.ok
         ? { ok: true, subscriptionId: addResult.data.subscriptionId }
         : { ok: false, error: addResult.error, status: addResult.status };
