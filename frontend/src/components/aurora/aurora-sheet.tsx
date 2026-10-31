@@ -18,7 +18,7 @@ import { useTranslation } from "react-i18next";
  * матричных сбоев JS-библиотек.
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,10 +31,14 @@ interface Props {
   children: ReactNode;
 }
 
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
 export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
   const { t } = useTranslation();
   const [mounted, setMounted] = useState(open);
   const [visible, setVisible] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+  const restoreFocus = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -57,16 +61,44 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const node = panel.current;
+      if (!node) return;
+      const items = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => el.offsetParent !== null || el === document.activeElement,
+      );
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.documentElement.dataset.auSheet = "1";
+    restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const timer = window.setTimeout(() => {
+      const node = panel.current;
+      if (!node) return;
+      const target = node.querySelector<HTMLElement>(FOCUSABLE) ?? node;
+      target.focus({ preventScroll: true });
+    }, 60);
     return () => {
       window.removeEventListener("keydown", onKey);
+      window.clearTimeout(timer);
       document.body.style.overflow = prev;
       delete document.documentElement.dataset.auSheet;
+      restoreFocus.current?.focus({ preventScroll: true });
     };
   }, [open, onClose]);
 
@@ -81,6 +113,11 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
       onClick={onClose}
     >
       <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-label={typeof title === "string" ? title : undefined}
+        tabIndex={-1}
         className={cn(
           "flex max-h-[min(88dvh,100%)] w-full max-w-md flex-col rounded-t-[28px] bg-[var(--au-bg)] pt-3 text-[var(--au-ink)] [backface-visibility:hidden] [isolation:isolate] transition-transform duration-300 ease-out",
           visible ? "translate-y-0" : "translate-y-full"

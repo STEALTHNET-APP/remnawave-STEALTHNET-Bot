@@ -1,11 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { AuroraAccountSheet } from "@/components/aurora/aurora-account-sheet";
 import { auroraProfileTab, formatAuroraBalance, type AuroraProfileTab } from "@/lib/aurora-profile";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Globe, HelpCircle, CreditCard, FileText, Wallet, ChevronRight,
-  User, Shield, LogOut, Lock, Wifi, Smartphone, type LucideIcon,
+  Globe, HelpCircle, FileText, Wallet, ChevronRight,
+  User, Shield, LogOut, Lock, Wifi, Smartphone, Gift, PlusCircle, KeyRound, Send, Coins, type LucideIcon,
 } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { getPublicConfigCached } from "@/lib/public-config";
@@ -14,6 +14,7 @@ import { AuroraTopUpSheet } from "@/components/aurora/aurora-topup-sheet";
 import { AuroraPaymentsSheet } from "@/components/aurora/aurora-payments-sheet";
 import { AuroraSecuritySheet } from "@/components/aurora/aurora-security-sheet";
 import { AuroraLanguageSheet } from "@/components/aurora/aurora-language-sheet";
+import { AuroraCurrencySheet } from "@/components/aurora/aurora-currency-sheet";
 import { AuroraDevicesSheet } from "@/components/aurora/aurora-devices-sheet";
 import { api } from "@/lib/api";
 
@@ -21,12 +22,10 @@ interface MenuRow {
   id: string;
   label: string;
   icon: LucideIcon;
-  /** Правый лейбл (текущее значение). */
-  right?: string;
+  right?: ReactNode;
   to?: string;
   href?: string;
   onClick?: () => void;
-  /** Красная строка (опасное действие). */
   danger?: boolean;
 }
 
@@ -102,8 +101,30 @@ export function AuroraProfile() {
   const agreementUrl = (config?.agreementLink as string | null)?.trim() || null;
   const offerUrl = (config?.offerLink as string | null)?.trim() || null;
   const instructionsUrl = (config?.instructionsLink as string | null)?.trim() || null;
+  const telegramLinked = Boolean(client?.telegramUsername || client?.telegramId);
 
   const groups: MenuGroup[] = [
+    {
+      title: t("aurora.account"),
+      rows: [
+        { id: "account", label: t("aurora.account_details"), icon: User, onClick: () => openTab("account") },
+        {
+          id: "telegram",
+          label: t("aurora.telegram"),
+          icon: Send,
+          right: (
+            <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11.5px] font-semibold", telegramLinked ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-[var(--au-bg)] text-[var(--au-muted)]")}>
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+              {telegramLinked ? t("aurora.telegram_linked_badge") : t("aurora.telegram_status_missing")}
+            </span>
+          ),
+          onClick: () => openTab("account"),
+        },
+        { id: "language", label: t("aurora.language"), icon: Globe, right: langLabel, onClick: () => openTab("language") },
+        { id: "currency", label: t("aurora.currency"), icon: Coins, right: currency.toUpperCase(), onClick: () => openTab("currency") },
+        { id: "security", label: t("aurora.security"), icon: Lock, onClick: () => openTab("security") },
+      ],
+    },
     {
       title: t("aurora.app"),
       rows: [
@@ -115,16 +136,12 @@ export function AuroraProfile() {
           right: devicesTotal != null ? String(devicesTotal) : undefined,
           onClick: () => openTab("devices"),
         },
-        { id: "payments", label: t("aurora.payments"), icon: CreditCard, onClick: () => openTab("payments") },
-        { id: "support", label: t("aurora.support"), icon: HelpCircle, to: "/cabinet/tickets" },
-      ],
-    },
-    {
-      title: t("aurora.account"),
-      rows: [
-        { id: "account", label: t("aurora.account_details"), icon: User, onClick: () => openTab("account") },
-        { id: "language", label: t("aurora.language"), icon: Globe, right: langLabel, onClick: () => openTab("language") },
-        { id: "security", label: t("aurora.security"), icon: Lock, onClick: () => openTab("security") },
+        { id: "history", label: t("aurora.history"), icon: Wallet, to: "/cabinet/history" },
+        ...(config?.giftSubscriptionsEnabled ? [{ id: "gifts", label: t("aurora.gifts"), icon: Gift, to: "/cabinet/gifts" } as MenuRow] : []),
+        ...(config?.sellOptionsEnabled ? [{ id: "options", label: t("aurora.extra_options"), icon: PlusCircle, to: "/cabinet/extra-options" } as MenuRow] : []),
+        ...(config?.showProxyEnabled ? [{ id: "proxy", label: t("aurora.proxy"), icon: Globe, to: "/cabinet/proxy" } as MenuRow] : []),
+        ...(config?.showSingboxEnabled ? [{ id: "singbox", label: "Sing-box / AmneziaWG", icon: KeyRound, to: "/cabinet/singbox" } as MenuRow] : []),
+        { id: "help", label: t("aurora.help"), icon: HelpCircle, to: "/cabinet/help" },
       ],
     },
     ...(agreementUrl || offerUrl || instructionsUrl
@@ -146,59 +163,47 @@ export function AuroraProfile() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <header className="px-1 pb-1">
         <h1 className="text-[26px] font-extrabold leading-tight tracking-tight text-[var(--au-ink)]">{t("aurora.profile")}</h1>
         <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">{serviceName} {t("aurora.profile_subtitle")}</p>
       </header>
 
-      {/* ── Карточка клиента: аватар + имя + баланс ── */}
-      <section className="relative overflow-hidden rounded-[26px] bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] p-5 text-white shadow-sm">
-        <div className="flex items-center gap-3.5">
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/20 text-[22px] font-extrabold">
-            {avatarLetter(display)}
-          </span>
-          <div className="min-w-0">
-            <div className="truncate text-[17px] font-bold leading-tight">{display}</div>
-            <div className="mt-0.5 text-[13px] text-white/75">
-              {t("aurora.account_id_label")}<span className="font-mono break-all select-all">{client?.id || "—"}</span>
-            </div>
-          </div>
-        </div>
-        <div className="mt-5 flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/20">
-            <Wallet className="h-[18px] w-[18px]" />
-          </span>
-          <div>
-            <div className="text-[17px] font-bold leading-tight tabular-nums">{balanceText}</div>
-            <div className="text-[13px] text-white/75">{t("aurora.balance_hint")}</div>
+      <section className="au-card flex items-center gap-3.5 p-5">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--au-from)_12%,var(--au-bg))] text-[22px] font-extrabold text-[var(--au-from)]">
+          {avatarLetter(display)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[17px] font-bold leading-tight text-[var(--au-ink)]">{display}</div>
+          <div className="mt-0.5 truncate text-[12.5px] text-[var(--au-muted)]">
+            {t("aurora.account_id_label")}<span className="font-mono select-all">{client?.id || "—"}</span>
           </div>
         </div>
       </section>
 
-      {/* ── Пополнить баланс ── */}
-      <button
-        type="button"
-        onClick={() => openTab("topup")}
-        className="flex w-full items-center gap-3 rounded-[22px] bg-[var(--au-surface)] p-4 text-left transition-transform active:scale-[0.99]"
-      >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--au-bg)] text-[var(--au-from)] shadow-sm">
-          <Wallet className="h-5 w-5" />
-        </span>
-        <span className="flex-1 min-w-0">
-          <span className="block text-[15px] font-semibold text-[var(--au-ink)]">{t("aurora.topup")}</span>
-          <span className="block text-[12.5px] text-[var(--au-muted)]">{t("aurora.topup_methods")}</span>
-        </span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-[var(--au-muted)]" />
-      </button>
+      <section className="au-card p-4">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--au-bg)] text-[var(--au-from)]">
+            <Wallet className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[12.5px] text-[var(--au-muted)]">{t("aurora.profile_balance_title")}</div>
+            <div className="mt-0.5 text-[20px] font-extrabold leading-tight tabular-nums text-[var(--au-ink)]">{balanceText}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => openTab("topup")}
+            className="flex min-h-10 shrink-0 items-center rounded-full bg-[var(--au-from)] px-4 text-[13px] font-bold text-white transition-transform active:scale-95"
+          >
+            {t("aurora.profile_topup_action")}
+          </button>
+        </div>
+      </section>
 
-      {/* ── Меню-группы ── */}
       {groups.map((g, gi) => (
-        <section key={gi} className="rounded-[22px] bg-[var(--au-surface)] p-2.5">
-          {g.title && (
-            <p className="px-2.5 pb-1.5 pt-1.5 text-[13px] font-semibold text-[var(--au-muted)]">{g.title}</p>
-          )}
-          <div className={cn(g.title && "space-y-1")}>
+        <section key={gi}>
+          {g.title && <p className="px-4 pb-1.5 text-[12.5px] font-semibold text-[var(--au-muted)]">{g.title}</p>}
+          <div className="au-card overflow-hidden p-0">
             {g.rows.map((r) => {
               const Icon = r.icon;
               return (
@@ -207,20 +212,14 @@ export function AuroraProfile() {
                   type="button"
                   onClick={() => openRow(r)}
                   disabled={!r.to && !r.href && !r.onClick}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-[16px] px-2.5 py-3 text-left transition-transform active:scale-[0.99] disabled:opacity-45",
-                    !g.title && "bg-[var(--au-surface)]",
-                  )}
+                  className="flex w-full items-center gap-3 border-b border-[color-mix(in_srgb,var(--au-muted)_14%,transparent)] px-4 py-3 text-left transition-colors last:border-b-0 enabled:active:bg-[var(--au-bg)] disabled:opacity-45"
                 >
-                  <span className={cn(
-                    "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                    r.danger ? "bg-red-500/15 text-red-500" : "bg-[var(--au-bg)]",
-                  )}>
-                    <Icon className={cn("h-[18px] w-[18px]", r.danger ? "text-red-500" : "text-[var(--au-muted)]")} />
+                  <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]", r.danger ? "bg-red-500/15 text-red-500" : "bg-[color-mix(in_srgb,var(--au-from)_10%,var(--au-bg))] text-[var(--au-from)]")}>
+                    <Icon className="h-[17px] w-[17px]" />
                   </span>
-                  <span className="flex-1 min-w-0 text-[14.5px] font-semibold text-[var(--au-ink)]">{r.label}</span>
-                  {r.right && <span className="max-w-[35%] break-words text-[13px] text-[var(--au-muted)]">{r.right}</span>}
-                  <ChevronRight className="h-4 w-4 shrink-0 text-[var(--au-muted)]" />
+                  <span className="min-w-0 flex-1 text-[14.5px] font-semibold text-[var(--au-ink)]">{r.label}</span>
+                  {r.right != null && <span className="max-w-[45%] shrink-0 truncate text-[13px] text-[var(--au-muted)]">{r.right}</span>}
+                  <ChevronRight className="h-4 w-4 shrink-0 text-[color-mix(in_srgb,var(--au-muted)_60%,transparent)]" />
                 </button>
               );
             })}
@@ -228,14 +227,14 @@ export function AuroraProfile() {
         </section>
       ))}
 
-      {/* ── Выйти ── */}
       <button
         type="button"
         onClick={() => { logout(); navigate("/cabinet/login"); }}
-        className="flex w-full items-center justify-center gap-2 rounded-[22px] border-2 border-red-500/25 bg-red-500/10 px-4 py-3.5 text-[15px] font-bold text-red-600 dark:text-red-400 transition-colors hover:bg-red-500/15 active:scale-[0.98]"
+        className="flex w-full items-center justify-center gap-2 rounded-[18px] bg-[var(--au-surface)] px-4 py-3.5 text-[15px] font-bold text-red-600 transition-colors active:bg-red-500/10 dark:text-red-400"
       >
         <LogOut className="h-[18px] w-[18px]" />
-        {t("aurora.logout")}</button>
+        {t("aurora.logout")}
+      </button>
 
       <AuroraDevicesSheet
         open={activeTab === "devices"}
@@ -249,18 +248,17 @@ export function AuroraProfile() {
         }}
       />
 
-      {/* ── Сервисная подпись ── */}
       <div className="pb-2 pt-1 text-center text-[11px] text-[var(--au-muted)]">
         <Shield className="mr-1 inline h-3 w-3" />
         {serviceName}
       </div>
 
-      {/* ── Шторки действий ── */}
       <AuroraAccountSheet open={activeTab === "account"} onClose={closeTab} />
       <AuroraTopUpSheet open={activeTab === "topup"} onClose={closeTab} />
       <AuroraPaymentsSheet open={activeTab === "payments"} onClose={closeTab} />
       <AuroraSecuritySheet open={activeTab === "security"} onClose={closeTab} />
       <AuroraLanguageSheet open={activeTab === "language"} onClose={closeTab} />
+      <AuroraCurrencySheet open={activeTab === "currency"} onClose={closeTab} />
     </div>
   );
 }

@@ -18,6 +18,8 @@ import {
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
 import { PayNowPanel } from "@/components/payment/pay-now-panel";
 import { cn } from "@/lib/utils";
+import { useCabinetDesign } from "@/lib/use-cabinet-design";
+import { AuroraCustomBuild } from "@/pages/cabinet/aurora/aurora-custom-build";
 
 function formatMoney(amount: number, currency: string) {
   return new Intl.NumberFormat("ru-RU", {
@@ -29,6 +31,12 @@ function formatMoney(amount: number, currency: string) {
 }
 
 export function ClientCustomBuildPage() {
+  const design = useCabinetDesign();
+  if (design === "aurora") return <AuroraCustomBuild />;
+  return <ClassicCustomBuildPage />;
+}
+
+function ClassicCustomBuildPage() {
   const { state, refreshProfile } = useClientAuth();
   const token = state.token;
   const balance = state.client?.balance ?? 0;

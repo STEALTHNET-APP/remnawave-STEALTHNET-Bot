@@ -2,8 +2,16 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight, MessageSquare, ShieldCheck, FileText, Wifi, CreditCard, Smartphone } from "lucide-react";
 import { useCabinetConfig } from "@/contexts/cabinet-config";
+import { useCabinetDesign } from "@/lib/use-cabinet-design";
+import { AuroraHelp } from "@/pages/cabinet/aurora/aurora-help";
 
 export function ClientHelpPage() {
+  const design = useCabinetDesign();
+  if (design === "aurora") return <AuroraHelp />;
+  return <ClassicHelpPage />;
+}
+
+function ClassicHelpPage() {
   const config = useCabinetConfig();
   const { t } = useTranslation();
   const support = config?.supportLink?.trim();

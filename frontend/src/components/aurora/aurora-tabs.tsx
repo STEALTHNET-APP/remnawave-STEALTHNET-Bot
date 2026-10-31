@@ -1,32 +1,18 @@
-/**
- * AuroraTabs — нижняя навигация дизайна Aurora.
- *
- * Стиль: iOS-подобная плавающая панель из «жидкого стекла» — только иконки,
- * без подписей. Стекло сделано ЧИСТЫМ CSS (backdrop-filter + полупрозрачная
- * заливка + внутренний блик), без сторонних библиотек: liquid-glass-обёртки
- * не рендерятся в WebKit (Telegram-вебвью, Safari).
- *
- * Активная вкладка — круглая градиентная кнопка со свечением, плавно
- * перетекающая между позициями (framer-motion layoutId).
- *
- * Fixed bottom + safe-area iOS.
- */
-
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Globe, Wallet, UserPlus, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCabinetConfig } from "@/contexts/cabinet-config";
 
 interface Tab {
   to: string;
-  /** доступное имя — подписи на экране нет, но скринридеру нужно */
   label: string;
   icon: typeof Globe;
 }
 
 const TABS: Tab[] = [
-  { to: "/cabinet/dashboard", label: "aurora.subscription", icon: Globe },
+  { to: "/cabinet/dashboard", label: "aurora.home", icon: Globe },
   { to: "/cabinet/tariffs", label: "aurora.tariffs", icon: Wallet },
   { to: "/cabinet/referral", label: "aurora.friends", icon: UserPlus },
   { to: "/cabinet/tickets", label: "aurora.support", icon: MessageCircle },
@@ -37,56 +23,66 @@ export function AuroraTabs() {
   const location = useLocation();
   const reduceMotion = useReducedMotion();
   const { t: translate } = useTranslation();
+  const config = useCabinetConfig();
+  const tabs: Tab[] = TABS.map((tab) =>
+    tab.label === "aurora.support" && !config?.ticketsEnabled ? { ...tab, to: "/cabinet/help" } : tab,
+  );
 
   return (
     <nav
       aria-label={translate("aurora.main_navigation")}
-      className="au-nav fixed inset-x-0 bottom-0 z-30 pointer-events-none px-5"
-      style={{ paddingBottom: "calc(max(env(safe-area-inset-bottom, 0px), var(--app-tg-bottom, 0px)) + 12px)" }}
+      className="au-nav fixed inset-x-0 bottom-0 z-30 pointer-events-none px-4"
+      style={{ paddingBottom: "calc(max(env(safe-area-inset-bottom, 0px), var(--app-tg-bottom, 0px)) + 10px)" }}
     >
       <div
-        className="pointer-events-auto mx-auto flex max-w-[340px] items-center justify-between gap-1 rounded-full px-2 py-2"
+        className="pointer-events-auto mx-auto flex max-w-[360px] items-stretch justify-between gap-0.5 rounded-[26px] px-1.5 py-1.5"
         style={{
-          // «Жидкое стекло»: размытие фона + лёгкая заливка + блик по верхней кромке
-          background: "color-mix(in srgb, var(--au-nav) 85%, transparent)",
+          background: "color-mix(in srgb, var(--au-nav) 82%, transparent)",
           backdropFilter: "blur(22px) saturate(180%)",
           WebkitBackdropFilter: "blur(22px) saturate(180%)",
-          border: "1px solid color-mix(in srgb, var(--au-muted) 20%, transparent)",
-          boxShadow:
-            "0 8px 32px -8px rgba(17, 24, 39, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.85)",
+          border: "1px solid color-mix(in srgb, var(--au-muted) 18%, transparent)",
+          boxShadow: "0 10px 34px -12px rgba(17, 24, 39, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.55)",
         }}
       >
-        {TABS.map((t) => {
-          const active =
-            location.pathname === t.to || location.pathname.startsWith(t.to + "/");
-          const Icon = t.icon;
+        {tabs.map((tab) => {
+          const active = location.pathname === tab.to || location.pathname.startsWith(tab.to + "/");
+          const Icon = tab.icon;
           return (
             <Link
-              key={t.to}
-              to={t.to}
-              aria-label={translate(t.label)}
+              key={tab.to}
+              to={tab.to}
+              aria-label={translate(tab.label)}
               aria-current={active ? "page" : undefined}
-              className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full active:scale-95 transition-transform"
+              className="flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-[20px] px-1 pb-1 pt-1.5 active:scale-95 transition-transform"
             >
-              {active && (
-                <motion.span
-                  layoutId="aurora-tab-dot"
-                  transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
-                  className="absolute inset-0 rounded-full"
-                  style={{
-                    background: "linear-gradient(135deg, var(--au-from), var(--au-to))",
-                    boxShadow:
-                      "0 6px 16px -4px color-mix(in srgb, var(--au-from) 55%, transparent), inset 0 1px 0 rgba(255,255,255,0.45)",
-                  }}
-                />
-              )}
-              <Icon
-                className={cn(
-                  "relative z-10 h-[22px] w-[22px] transition-colors",
-                  active ? "text-white" : "text-[color:var(--au-muted)]",
+              <span className="relative flex h-8 w-full items-center justify-center">
+                {active && (
+                  <motion.span
+                    layoutId="aurora-tab-pill"
+                    transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 34 }}
+                    className="absolute inset-x-2 inset-y-0 rounded-full"
+                    style={{
+                      background: "var(--au-from)",
+                      boxShadow: "0 5px 14px -5px color-mix(in srgb, var(--au-from) 60%, transparent), inset 0 1px 0 rgba(255,255,255,0.4)",
+                    }}
+                  />
                 )}
-                strokeWidth={active ? 2.5 : 2}
-              />
+                <Icon
+                  className={cn(
+                    "relative z-10 h-[19px] w-[19px] transition-colors",
+                    active ? "text-white" : "text-[color:var(--au-muted)]",
+                  )}
+                  strokeWidth={active ? 2.4 : 2}
+                />
+              </span>
+              <span
+                className={cn(
+                  "max-w-full truncate text-[10px] leading-[13px] tracking-tight transition-colors",
+                  active ? "font-bold text-[var(--au-ink)]" : "font-medium text-[var(--au-muted)]",
+                )}
+              >
+                {translate(tab.label)}
+              </span>
             </Link>
           );
         })}

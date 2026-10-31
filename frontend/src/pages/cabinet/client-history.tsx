@@ -7,8 +7,16 @@ import { useClientPayments } from "@/lib/queries";
 import { formatCabinetMoney } from "@/lib/cabinet-format";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { useCabinetDesign } from "@/lib/use-cabinet-design";
+import { AuroraHistory } from "@/pages/cabinet/aurora/aurora-history";
 
 export function ClientHistoryPage() {
+  const design = useCabinetDesign();
+  if (design === "aurora") return <AuroraHistory />;
+  return <ClassicHistoryPage />;
+}
+
+function ClassicHistoryPage() {
   const { state } = useClientAuth();
   const { t, i18n } = useTranslation();
   const [tab, setTab] = useState<"payments" | "actions">("payments");

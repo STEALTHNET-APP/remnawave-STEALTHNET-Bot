@@ -9,7 +9,7 @@ export function CloudPaymentsSubscriptions({ token }: { token: string }) {
   const [selected, setSelected] = useState<Agreement | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const load = () => api.cloudpaymentsSubscriptions(token).then(r => setItems(r.subscriptions)).catch(() => setError("Не удалось загрузить автоплатежи"));
+  const load = () => api.cloudpaymentsSubscriptions(token).then(r => setItems(r.subscriptions ?? [])).catch(() => setError("Не удалось загрузить автоплатежи"));
   useEffect(() => { void load(); }, [token]);
   const active = items.filter(r => ["PENDING", "ACTIVE", "PAST_DUE", "CANCEL_PENDING"].includes(r.state));
   if (!active.length && !error) return null;

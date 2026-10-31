@@ -1307,14 +1307,14 @@ adminRouter.get("/withdrawals", async (req, res) => {
 
 adminRouter.post("/withdrawals/:id/approve", async (req, res) => {
   const id = req.params.id;
-  const wr = await prisma.withdrawalRequest.findUnique({ where: { id } });
-  if (!wr) return res.status(404).json({ message: "Заявка не найдена" });
-  if (wr.status !== "PENDING") return res.status(400).json({ message: "Заявка уже обработана" });
-  await prisma.withdrawalRequest.update({
-    where: { id },
-    data: { status: "APPROVED", processedAt: new Date(), adminComment: typeof req.body?.comment === "string" ? req.body.comment.slice(0, 500) : null },
+  const comment = typeof req.body?.comment === "string" ? req.body.comment.slice(0, 500) : null;
+  const updated = await prisma.withdrawalRequest.updateMany({
+    where: { id, status: "PENDING" },
+    data: { status: "APPROVED", processedAt: new Date(), adminComment: comment },
   });
-  // Notify клиенту.
+  if (updated.count === 0) {
+    return res.status(400).json({ message: "Заявка уже обработана" });
+  }
   const { notifyClientAboutWithdrawalApproved } = await import("../notification/telegram-notify.service.js");
   await notifyClientAboutWithdrawalApproved(id).catch(() => {});
   return res.json({ message: "Заявка одобрена. Клиенту отправлено уведомление." });
@@ -1322,17 +1322,21 @@ adminRouter.post("/withdrawals/:id/approve", async (req, res) => {
 
 adminRouter.post("/withdrawals/:id/reject", async (req, res) => {
   const id = req.params.id;
+  const comment = typeof req.body?.comment === "string" ? req.body.comment.slice(0, 500) : null;
   const wr = await prisma.withdrawalRequest.findUnique({ where: { id } });
   if (!wr) return res.status(404).json({ message: "Заявка не найдена" });
-  if (wr.status !== "PENDING") return res.status(400).json({ message: "Заявка уже обработана" });
-  // Возвращаем баланс клиенту.
-  await prisma.$transaction([
-    prisma.withdrawalRequest.update({
-      where: { id },
-      data: { status: "REJECTED", processedAt: new Date(), adminComment: typeof req.body?.comment === "string" ? req.body.comment.slice(0, 500) : null },
-    }),
-    prisma.client.update({ where: { id: wr.clientId }, data: { balance: { increment: wr.amount } } }),
-  ]);
+  const result = await prisma.$transaction(async (tx) => {
+    const updated = await tx.withdrawalRequest.updateMany({
+      where: { id, status: "PENDING" },
+      data: { status: "REJECTED", processedAt: new Date(), adminComment: comment },
+    });
+    if (updated.count === 0) return false;
+    await tx.client.update({ where: { id: wr.clientId }, data: { balance: { increment: wr.amount } } });
+    return true;
+  });
+  if (!result) {
+    return res.status(400).json({ message: "Заявка уже обработана" });
+  }
   return res.json({ message: "Заявка отклонена. Баланс возвращён клиенту." });
 });
 

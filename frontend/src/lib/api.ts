@@ -2254,6 +2254,15 @@ export const api = {
     return request(`/client/subscription/${encodeURIComponent(id)}/name`, { token, method: "PATCH", body: JSON.stringify({ name }) });
   },
 
+  /** Перевыпуск ссылки подписки (старая ссылка перестаёт работать). */
+  async clientReissueSubscription(
+    token: string,
+    type: "root" | "secondary",
+    id: string,
+  ): Promise<{ message?: string; subscriptionUrl?: string | null }> {
+    return request(`/client/subscription/${type}/${encodeURIComponent(id)}/reissue`, { method: "POST", token });
+  },
+
   /** Все подписки клиента (root + secondary) с Remnawave-данными */
   async clientAllSubscriptions(token: string): Promise<{
     items: Array<{
@@ -2289,6 +2298,20 @@ export const api = {
 
   async clientPayments(token: string): Promise<{ items: ClientPayment[] }> {
     return request("/client/payments", { token });
+  },
+
+  async clientWithdrawals(token: string): Promise<{
+    items: Array<{
+      id: string;
+      amount: number;
+      walletTrc20: string;
+      status: string;
+      adminComment: string | null;
+      processedAt: string | null;
+      createdAt: string;
+    }>;
+  }> {
+    return request("/client/withdrawals", { token });
   },
 
   /** Список устройств (HWID) пользователя в Remna */
@@ -2412,7 +2435,7 @@ export const api = {
     data: { tariffId?: string; tariffPriceOptionId?: string;
       deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string;
       // мульти-подписки как в боте.
-      extendsSecondarySubId?: string; asAdditional?: boolean; asGift?: boolean; removeExtrasOnActivate?: boolean }
+      extendsSecondarySubId?: string; asAdditional?: boolean; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
   ): Promise<{ message: string; paymentId: string; newBalance: number }> {
     return request("/client/payments/balance", { method: "POST", body: JSON.stringify(data), token });
   },
@@ -5672,6 +5695,12 @@ export interface PublicConfig {
   botMenuMode?: "classic" | "web";
   supportLink?: string | null;
   instructionsLink?: string | null;
+  agreementLink?: string | null;
+  offerLink?: string | null;
+  refundLink?: string | null;
+  supportHoursFrom?: string | null;
+  supportHoursTo?: string | null;
+  helpIntroText?: string | null;
   tgProxyText?: string | null;
   tgProxyUrlPrimary?: string | null;
   tgProxyUrlBackup?: string | null;

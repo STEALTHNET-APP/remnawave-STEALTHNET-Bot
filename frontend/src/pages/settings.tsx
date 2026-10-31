@@ -1875,7 +1875,7 @@ export function SettingsPage() {
                       { v: "modern", title: "Новый кабинет", desc: "Новый интерфейс: компактные подписки, тарифы, баланс и поддержка. Оформление настраивается в редакторе кабинета.", swatch: "bg-muted" },
                       { v: "classic", title: "Classic", desc: "Совместимый вариант стандартного кабинета", swatch: "bg-muted" },
                       { v: "stealth", title: "Stealth", desc: "Тёмный неон с red-акцентом, network-фоном и stadium-кнопками", swatch: "bg-muted" },
-                      { v: "aurora", title: "Aurora", desc: "Светлый: крупная градиентная карточка подписки, плитки-метрики и плавающее меню из 4 вкладок", swatch: "bg-muted" },
+                      { v: "aurora", title: "Aurora", desc: "Мини-апп: градиентная карточка подписки, все разделы кабинета и плавающее меню из 5 вкладок", swatch: "bg-muted" },
                     ] as const).map((d) => {
                       const active = (settings.cabinetDesign ?? "classic") === d.v;
                       return (
