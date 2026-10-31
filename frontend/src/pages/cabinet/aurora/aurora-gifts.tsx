@@ -9,6 +9,8 @@ import { formatAuroraBalance } from "@/lib/aurora-profile";
 import { cn } from "@/lib/utils";
 import { AuroraSheet } from "@/components/aurora/aurora-sheet";
 import { AuroraConfirmSheet } from "@/components/aurora/aurora-confirm-sheet";
+import { AuroraPaymentSheet } from "@/components/aurora/aurora-payment-sheet";
+import { checkoutMethods } from "@/lib/cabinet-checkout";
 import { AuBadge, AuButton, AuEmpty, AuInput, AuLoading, AuNotice, AuPage, AuSection, CopyButton } from "@/components/aurora/aurora-ui";
 import { toast } from "@/components/ui/toast";
 
@@ -400,18 +402,30 @@ function AuroraGiftBuySheet({
 }) {
   const { t, i18n } = useTranslation();
   const { state } = useClientAuth();
+  const config = useCabinetConfig();
   const token = state.token ?? null;
+  const client = state.client;
   const locale = i18n.language || "ru";
   const [tariffId, setTariffId] = useState<string | null>(null);
   const [optionId, setOptionId] = useState<string | null>(null);
   const [extras, setExtras] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [payOpen, setPayOpen] = useState(false);
 
   const tariffs = useMemo(() => categories.flatMap((category) => category.tariffs.map((tariff) => ({ category, tariff }))), [categories]);
   const selected = tariffs.find((entry) => entry.tariff.id === tariffId)?.tariff ?? tariffs[0]?.tariff ?? null;
   const option = selected?.priceOptions.find((p) => p.id === optionId) ?? selected?.priceOptions[0];
   const total = (option?.price ?? selected?.price ?? 0) + (selected ? extrasPrice(selected, option, extras) : 0);
+  const checkoutCurrency = (selected?.currency ?? currency).toUpperCase();
+  const methods = useMemo(
+    () =>
+      checkoutMethods(config, checkoutCurrency, {
+        balanceAvailable: false,
+        hasTelegram: Boolean(client?.telegramId),
+      }),
+    [config, checkoutCurrency, client?.telegramId],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -448,6 +462,7 @@ function AuroraGiftBuySheet({
   const notEnough = total > balance;
 
   return (
+    <>
     <AuroraSheet open={open} onClose={busy ? () => {} : onClose} title={t("aurora.gift_buy")}>
       <div className="space-y-3 pb-2">
         {tariffs.length === 0 ? (
@@ -539,13 +554,39 @@ function AuroraGiftBuySheet({
             </div>
             {notEnough && <AuNotice tone="error">{t("aurora.insufficient_balance")}</AuNotice>}
             {error && <AuNotice tone="error">{error}</AuNotice>}
-            <AuButton onClick={buy} disabled={busy || notEnough || !selected}>
+            <AuButton onClick={buy} disabled={busy || notEnough || !selected} variant={notEnough ? "surface" : "primary"}>
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-              {t("aurora.gift_buy")}
+              {t("aurora.gift_pay_balance")}
+            </AuButton>
+            <AuButton variant={notEnough ? "primary" : "surface"} onClick={() => setPayOpen(true)} disabled={!selected}>
+              {t("aurora.gift_pay_external")}
             </AuButton>
           </>
         )}
       </div>
     </AuroraSheet>
+    <AuroraPaymentSheet
+      open={payOpen}
+      onClose={() => setPayOpen(false)}
+      title={t("aurora.gift_buy")}
+      methods={methods}
+      amountText={formatAuroraBalance(total, checkoutCurrency, locale)}
+      product={
+        selected
+          ? {
+              kind: "tariff",
+              amount: total,
+              currency: selected.currency,
+              tariffId: selected.id,
+              tariffPriceOptionId: optionId ?? undefined,
+              deviceCount: extras,
+              asGift: true,
+              asAdditional: true,
+            }
+          : { kind: "tariff", amount: 0, currency: checkoutCurrency, tariffId: "" }
+      }
+      onSuccess={onBought}
+    />
+    </>
   );
 }

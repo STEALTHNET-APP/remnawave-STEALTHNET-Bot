@@ -2751,6 +2751,9 @@
     "telegram_status_linked": "Linked",
     "telegram_status_missing": "Not linked",
     "telegram_why": "Needed for Mini App sign-in, notifications and account recovery.",
-    "telegram_link_steps": "Open the bot via the link and send the code — the status refreshes when you return to the cabinet."
+    "telegram_link_steps": "Open the bot via the link and send the code — the status refreshes when you return to the cabinet.",
+    "offline_snapshot": "The VPN panel is temporarily unavailable — cached subscription data is shown.",
+    "gift_pay_balance": "Pay from balance",
+    "gift_pay_external": "Pay by card or crypto"
   }
 }

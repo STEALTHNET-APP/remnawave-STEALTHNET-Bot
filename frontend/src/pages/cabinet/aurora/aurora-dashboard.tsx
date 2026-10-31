@@ -80,21 +80,28 @@ export function AuroraDashboard() {
 
   useEffect(() => {
     const payment = searchParams.get("payment");
+    const paymentId = searchParams.get("paymentId") || searchParams.get("orderId") || searchParams.get("id");
     const providerReturn = ["yookassa", "heleket", "rollypay", "paritypay", "lava", "lavatop", "yoomoney_form"].some(
       (key) => searchParams.get(key) === "success",
     ) || searchParams.get("overpay") === "return";
-    if (payment === "success" || providerReturn) {
-      toast.success(t("aurora.payment_success"));
-      refreshProfile().catch(() => {});
-      setSearchParams({}, { replace: true });
-      void load();
-      return;
-    }
+
     if (payment === "failed") {
       toast.error(t("aurora.payment_failed"));
       setSearchParams({}, { replace: true });
+      return;
     }
-  }, [searchParams, setSearchParams, refreshProfile, load, t]);
+
+    if (paymentId && (payment === "success" || providerReturn)) {
+      navigate(`/cabinet/payment-wait?id=${encodeURIComponent(paymentId)}`, { replace: true });
+      return;
+    }
+
+    if (payment === "success" || providerReturn) {
+      setSearchParams({}, { replace: true });
+      refreshProfile().catch(() => {});
+      void load();
+    }
+  }, [searchParams, setSearchParams, refreshProfile, load, navigate, t]);
 
   useEffect(() => {
     if (!token || loading) return;
@@ -116,6 +123,7 @@ export function AuroraDashboard() {
   const balanceText = formatAuroraBalance(client?.balance ?? 0, currency, locale);
 
   const hasAnySubscription = items.length > 0;
+  const hasOfflineSnapshot = items.some((item) => item.isOfflineSnapshot === true);
   const trialAvailable = Boolean(config?.trialEnabled) && !client?.trialUsed;
   const canBuyAdditional = config?.multiSubscriptionsEnabled !== false;
 
@@ -193,6 +201,10 @@ export function AuroraDashboard() {
 
       {error && <AuNotice tone="error">{error}</AuNotice>}
 
+      {hasOfflineSnapshot && (
+        <AuNotice>{t("aurora.offline_snapshot")}</AuNotice>
+      )}
+
       {items.some((item) => item.isBanned) && (
         <AuNotice tone="error">
           {items.find((item) => item.isBanned)?.banReason || t("aurora.banned_hint")}
@@ -246,7 +258,8 @@ export function AuroraDashboard() {
       {items.map((item) => {
         const info = remnaInfo(item.subscription);
         const days = remnaDaysLeft(info.expireAt);
-        const active = remnaIsActive(info, days);
+        const offline = item.isOfflineSnapshot === true;
+        const active = offline ? days == null || days > 0 : remnaIsActive(info, days);
         const isMain = main?.id === item.id;
         const deviceCount = deviceCounts[item.id] ?? 0;
         const limit = info.deviceLimit;

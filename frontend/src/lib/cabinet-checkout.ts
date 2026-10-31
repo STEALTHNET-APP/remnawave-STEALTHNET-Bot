@@ -23,6 +23,7 @@ export type CheckoutProduct =
       deviceCount?: number;
       promoCode?: string;
       asAdditional?: boolean;
+      asGift?: boolean;
       extendsSecondarySubId?: string;
       removeExtrasOnActivate?: boolean;
       replaceTrialSubId?: string;
@@ -62,6 +63,7 @@ interface PaymentBase {
   extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string; targetSubscriptionId?: string };
   customBuild?: { days: number; devices: number; trafficGb?: number };
   asAdditional?: boolean;
+  asGift?: boolean;
   extendsSecondarySubId?: string;
   removeExtrasOnActivate?: boolean;
   replaceTrialSubId?: string;
@@ -80,6 +82,7 @@ function paymentBase(product: CheckoutProduct): PaymentBase {
         deviceCount: product.deviceCount,
         promoCode: product.promoCode,
         asAdditional: product.asAdditional,
+        asGift: product.asGift,
         extendsSecondarySubId: product.extendsSecondarySubId,
         removeExtrasOnActivate: product.removeExtrasOnActivate,
         replaceTrialSubId: product.replaceTrialSubId,
@@ -135,7 +138,8 @@ export async function startCheckout(
     }
     case "cryptopay": {
       const res = await api.cryptopayCreatePayment(token, base);
-      return { url: res.payUrl, provider: method.label, paymentId: res.paymentId };
+      const url = res.miniAppPayUrl ?? res.webAppPayUrl ?? res.payUrl;
+      return { url, provider: method.label, paymentId: res.paymentId };
     }
     case "heleket": {
       const res = await api.heleketCreatePayment(token, base);
@@ -175,8 +179,10 @@ async function payFromBalance(token: string, product: CheckoutProduct): Promise<
         deviceCount: product.deviceCount,
         promoCode: product.promoCode,
         asAdditional: product.asAdditional,
+        asGift: product.asGift,
         extendsSecondarySubId: product.extendsSecondarySubId,
         removeExtrasOnActivate: product.removeExtrasOnActivate,
+        replaceTrialSubId: product.replaceTrialSubId,
       });
       return { balanceApplied: true, message: res.message };
     }

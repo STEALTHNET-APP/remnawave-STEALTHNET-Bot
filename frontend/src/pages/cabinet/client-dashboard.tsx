@@ -127,13 +127,7 @@ export function ClientDashboardPage() {
   const design = useCabinetDesign();
   const { t } = useTranslation();
   if (design === "aurora") {
-    return (
-      <>
-        <LinkTelegramPrompt />
-        <CloudPaymentsTrial />
-        <AuroraDashboard />
-      </>
-    );
+    return <AuroraDashboard />;
   }
   return (
     <>

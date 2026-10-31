@@ -5,7 +5,7 @@ import { ExternalLink, Smartphone, Wifi } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { api, type SubscriptionPageConfig } from "@/lib/api";
-import { remnaInfo } from "@/lib/subscription-remna";
+import { remnaDaysLeft, remnaInfo } from "@/lib/subscription-remna";
 import { DEFAULT_SUBSCRIPTION_PAGE_CONFIG, detectPlatform, getText } from "@/lib/subscription-page";
 import { AuroraSheet } from "@/components/aurora/aurora-sheet";
 import { AuEmpty, AuLoading, AuNotice, AuPage, AuSection, CopyButton } from "@/components/aurora/aurora-ui";
@@ -34,15 +34,36 @@ export function AuroraSubscribe() {
     if (!token) return;
     let alive = true;
     setLoading(true);
-    const subscription = uuid
-      ? api.clientSubscriptionByUuid(token, uuid)
-      : api.clientSubscription(token);
-    Promise.all([subscription, api.getPublicSubscriptionPageConfig().catch(() => null)])
-      .then(([sub, page]) => {
-        if (!alive) return;
+
+    async function resolveSubscription(): Promise<{ url: string | null; title: string | null }> {
+      if (uuid) {
+        const sub = await api.clientSubscriptionByUuid(token!, uuid);
         const info = remnaInfo(sub.subscription);
-        setUrl(info.subscriptionUrl);
-        setTitle(info.productName);
+        return { url: info.subscriptionUrl, title: info.productName };
+      }
+      const all = await api.clientAllSubscriptions(token!);
+      const items = all.items ?? [];
+      if (items.length === 0) return { url: null, title: null };
+      const enriched = items.map((item) => {
+        const info = remnaInfo(item.subscription);
+        return { item, info, days: remnaDaysLeft(info.expireAt) };
+      });
+      const primaryActive = enriched.find((entry) => (entry.item.subscriptionIndex ?? 0) === 0 && (entry.days ?? 0) > 0 && entry.info.subscriptionUrl);
+      const active = enriched.find((entry) => (entry.days ?? 0) > 0 && entry.info.subscriptionUrl);
+      const primary = enriched.find((entry) => (entry.item.subscriptionIndex ?? 0) === 0 && entry.info.subscriptionUrl);
+      const any = enriched.find((entry) => entry.info.subscriptionUrl);
+      const pick = primaryActive ?? active ?? primary ?? any ?? enriched[0];
+      return {
+        url: pick.info.subscriptionUrl,
+        title: pick.info.productName ?? pick.item.tariffDisplayName ?? null,
+      };
+    }
+
+    Promise.all([resolveSubscription(), api.getPublicSubscriptionPageConfig().catch(() => null)])
+      .then(([resolved, page]) => {
+        if (!alive) return;
+        setUrl(resolved.url);
+        setTitle(resolved.title);
         setPageConfig(page);
       })
       .catch(() => {})

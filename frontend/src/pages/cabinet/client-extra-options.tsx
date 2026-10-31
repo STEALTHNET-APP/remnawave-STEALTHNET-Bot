@@ -152,7 +152,7 @@ function ClassicExtraOptionsPage() {
     const exp = new Date(sub.expireAt).getTime();
     if (Number.isNaN(exp)) return { price: base, daysLeft: 0, coef: 1 };
     const daysLeft = Math.max(0, (exp - Date.now()) / 86_400_000);
-    const coef = Math.max(1, daysLeft / 30);
+    const coef = Math.max(1, daysLeft) / 30;
     return { price: Math.floor(base * coef), daysLeft: Math.round(daysLeft), coef: Math.round(coef * 10) / 10 };
   }
 

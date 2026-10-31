@@ -76,18 +76,19 @@ export function AuroraExtraOptions() {
     const expireAt = info.expireAt;
     if (!expireAt) return option.price;
     const daysLeft = Math.max(0, (new Date(expireAt).getTime() - Date.now()) / 86_400_000);
-    const coef = Math.max(1, daysLeft / 30);
+    const coef = Math.max(1, daysLeft) / 30;
     return Math.floor(option.price * coef);
   }
 
+  const checkoutCurrency = (paid?.currency ?? client?.preferredCurrency ?? "RUB").toUpperCase();
   const methods = useMemo(
     () =>
-      checkoutMethods(config, "RUB", {
+      checkoutMethods(config, checkoutCurrency, {
         balanceAvailable: true,
         balanceLabel: t("aurora.pay_balance"),
         hasTelegram: Boolean(client?.telegramId),
       }),
-    [config, client?.telegramId, t],
+    [config, checkoutCurrency, client?.telegramId, t],
   );
 
   if (loading) return <AuLoading rows={3} />;

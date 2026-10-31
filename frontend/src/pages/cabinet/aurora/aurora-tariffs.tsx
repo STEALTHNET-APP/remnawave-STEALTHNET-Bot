@@ -410,7 +410,7 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
         tariffPriceOptionId: selectedPriceOptionId ?? undefined,
         promoCode: promoApplied ?? undefined,
         ...(extraDevices > 0 && !extendTarget ? { deviceCount: extraDevices } : {}),
-        ...(!extendTarget && !convPreview?.willConvert && mySubs.length > 0 ? { asAdditional: true } : {}),
+        ...(config?.multiSubscriptionsEnabled !== false && !extendTarget && !convPreview?.willConvert && mySubs.length > 0 ? { asAdditional: true } : {}),
         // режим продления конкретной подписки (?extend=) —
         // оплата продлевает ИМЕННО её, а не создаёт новую.
         ...(extendTarget ? { extendsSecondarySubId: extendTarget.id } : {}),

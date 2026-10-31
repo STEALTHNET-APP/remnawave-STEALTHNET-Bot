@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Clock, Download, KeyRound, Loader2, RefreshCw, Server } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
@@ -34,6 +35,9 @@ export function AuroraSingbox() {
   const token = state.token ?? null;
   const client = state.client;
   const locale = i18n.language || "ru";
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab");
+  const mySectionRef = useRef<HTMLDivElement>(null);
 
   const [categories, setCategories] = useState<SingboxCategory[]>([]);
   const [slots, setSlots] = useState<SingboxSlot[]>([]);
@@ -65,6 +69,11 @@ export function AuroraSingbox() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (loading || initialTab !== "my") return;
+    mySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [loading, initialTab]);
 
   const pending = slots.some((slot) => slot.status === "PENDING");
   useEffect(() => {
@@ -145,6 +154,7 @@ export function AuroraSingbox() {
 
       {error && <AuNotice tone="error">{error}</AuNotice>}
 
+      <div ref={mySectionRef}>
       <AuSection title={t("aurora.singbox_my")}>
         {slots.length === 0 ? (
           <AuEmpty icon={<KeyRound className="h-6 w-6" />} title={t("aurora.singbox_empty")} hint={t("aurora.singbox_empty_hint")} />
@@ -202,6 +212,7 @@ export function AuroraSingbox() {
           </div>
         )}
       </AuSection>
+      </div>
 
       {categories.length === 0 ? (
         <AuEmpty icon={<Server className="h-6 w-6" />} title={t("aurora.singbox_no_tariffs")} />

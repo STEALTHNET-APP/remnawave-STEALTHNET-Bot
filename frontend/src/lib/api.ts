@@ -2435,7 +2435,7 @@ export const api = {
     data: { tariffId?: string; tariffPriceOptionId?: string;
       deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string;
       // мульти-подписки как в боте.
-      extendsSecondarySubId?: string; asAdditional?: boolean; asGift?: boolean; removeExtrasOnActivate?: boolean }
+      extendsSecondarySubId?: string; asAdditional?: boolean; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
   ): Promise<{ message: string; paymentId: string; newBalance: number }> {
     return request("/client/payments/balance", { method: "POST", body: JSON.stringify(data), token });
   },
