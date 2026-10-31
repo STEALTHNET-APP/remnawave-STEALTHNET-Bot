@@ -1176,6 +1176,13 @@ export async function activateTariffByPaymentId(paymentId: string): Promise<Acti
 
     // ── Ветка 2: новая подписка (любая покупка тарифа без extendsSecondaryId) ──
     let replacingTrialId = !isGiftPurchase ? getReplaceTrialSubId(payment.metadata) : null;
+    if (replacingTrialId) {
+      const target = await prisma.subscription.findFirst({
+        where: { id: replacingTrialId, ownerId: client.id, trialId: { not: null }, purchasedAsGift: false },
+        select: { id: true },
+      });
+      if (!target) replacingTrialId = null;
+    }
     if (!isGiftPurchase && !replacingTrialId) {
       const oldestTrial = await prisma.subscription.findFirst({
         where: { ownerId: client.id, trialId: { not: null }, purchasedAsGift: false },

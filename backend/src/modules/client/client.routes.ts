@@ -4545,6 +4545,13 @@ clientRouter.post("/payments/balance", requireRemnaPaymentOnline, asyncHandler(a
       }
     } else {
       let replacingTrialId = replaceTrialSubId ?? null;
+      if (replacingTrialId) {
+        const target = await prisma.subscription.findFirst({
+          where: { id: replacingTrialId, ownerId: clientRaw.id, trialId: { not: null }, purchasedAsGift: false },
+          select: { id: true },
+        });
+        if (!target) replacingTrialId = null;
+      }
       if (!replacingTrialId) {
         const oldestTrial = await prisma.subscription.findFirst({
           where: { ownerId: clientRaw.id, trialId: { not: null }, purchasedAsGift: false },
