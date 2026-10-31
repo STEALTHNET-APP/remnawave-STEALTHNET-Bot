@@ -153,7 +153,7 @@ export function AuInput({ className, ...rest }: InputHTMLAttributes<HTMLInputEle
     <input
       {...rest}
       className={cn(
-        "w-full rounded-[16px] border-2 border-transparent bg-[var(--au-bg)] px-4 py-3 text-[15px] text-[var(--au-ink)] outline-none transition-colors placeholder:text-[var(--au-muted)] focus:border-[var(--au-from)]",
+        "w-full rounded-[16px] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] px-4 py-3 text-[15px] text-[var(--au-ink)] outline-none transition-all placeholder:text-[var(--au-muted)] focus:border-[var(--au-from)] focus:ring-2 focus:ring-[var(--au-from)]/25",
         className,
       )}
     />

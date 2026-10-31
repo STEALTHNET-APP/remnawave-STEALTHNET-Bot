@@ -4,7 +4,7 @@ import { auroraProfileTab, formatAuroraBalance, type AuroraProfileTab } from "@/
 import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Globe, HelpCircle, CreditCard, FileText, Wallet, ChevronRight,
+  Globe, HelpCircle, FileText, Wallet, ChevronRight,
   User, Shield, LogOut, Lock, Wifi, Smartphone, Gift, PlusCircle, KeyRound, Send, Coins, type LucideIcon,
 } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
@@ -136,7 +136,6 @@ export function AuroraProfile() {
           right: devicesTotal != null ? String(devicesTotal) : undefined,
           onClick: () => openTab("devices"),
         },
-        { id: "payments", label: t("aurora.payments"), icon: CreditCard, onClick: () => openTab("payments") },
         { id: "history", label: t("aurora.history"), icon: Wallet, to: "/cabinet/history" },
         ...(config?.giftSubscriptionsEnabled ? [{ id: "gifts", label: t("aurora.gifts"), icon: Gift, to: "/cabinet/gifts" } as MenuRow] : []),
         ...(config?.sellOptionsEnabled ? [{ id: "options", label: t("aurora.extra_options"), icon: PlusCircle, to: "/cabinet/extra-options" } as MenuRow] : []),
