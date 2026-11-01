@@ -344,7 +344,7 @@ export function AuroraDashboard() {
               </div>
               {info.expireAt && (
                 <div className={cn("pb-0.5 text-right text-[12px]", muted)}>
-                  <div>{t("aurora.expires")}</div>
+                  <div>{item.trialId ? t("aurora.expires_trial") : t("aurora.expires")}</div>
                   <div className={cn("mt-0.5 text-[13px] font-semibold", strong)}>
                     {new Date(info.expireAt).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}
                   </div>
@@ -420,6 +420,22 @@ export function AuroraDashboard() {
                 {t("aurora.renew")}
               </button>
             </div>
+
+            {item.trialId && active && (
+              <button
+                type="button"
+                onClick={() => openRenew(item)}
+                className={cn(
+                  "mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-[16px] px-4 text-[15px] font-bold transition-transform active:scale-[0.98]",
+                  isMain
+                    ? "bg-white/20 text-white ring-1 ring-white/40"
+                    : "bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white",
+                )}
+              >
+                <Zap className="h-4 w-4" />
+                {t("aurora.trial_upgrade")}
+              </button>
+            )}
           </section>
         );
       })}

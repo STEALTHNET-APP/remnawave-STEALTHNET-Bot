@@ -8,7 +8,6 @@ import { useClientAuth } from "@/contexts/client-auth";
 import { api, type PublicTariff, type PublicTariffCategory, type PublicConfig, type TariffConversionPreview } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { AuroraSheet } from "@/components/aurora/aurora-sheet";
-import { AuroraConfirmSheet } from "@/components/aurora/aurora-confirm-sheet";
 import { AuroraTrialsSheet } from "@/components/aurora/aurora-trials-sheet";
 import { AuButton, AuNotice } from "@/components/aurora/aurora-ui";
 import { AuroraTariffCard, auroraPrice, auroraPeriodLabel, auroraTraffic, auroraDevices } from "./aurora-tariff-card";
@@ -57,7 +56,7 @@ export function AuroraTariffs() {
   });
   const availableTrials = trialsQuery.data?.items ?? [];
   const hasTrials = availableTrials.length > 0;
-  const [extendTarget, setExtendTarget] = useState<{ id: string; label: string; tariffId: string | null; isTrial: boolean; convertTariffIds: string[]; trialConvertAllTariffs: boolean; extraDevices: number; extraDevicesMonthlyPrice: number } | null>(null);
+  const [extendTarget, setExtendTarget] = useState<{ id: string; label: string; tariffId: string | null; isTrial: boolean; trialName: string | null; convertTariffIds: string[]; trialConvertAllTariffs: boolean; extraDevices: number; extraDevicesMonthlyPrice: number } | null>(null);
   const [extKeepExtras, setExtKeepExtras] = useState(true);
 
   const [categories, setCategories] = useState<PublicTariffCategory[]>([]);
@@ -116,6 +115,12 @@ export function AuroraTariffs() {
 
   const [mySubs, setMySubs] = useState<{ id: string; label: string; tariffId: string | null; expireAt: string | null; isTrial: boolean; trialName: string | null }[]>([]);
   const [replaceTrialChoice, setReplaceTrialChoice] = useState<string | null>(null);
+  const activeTrial = mySubs.find((sub) => sub.isTrial && (!sub.expireAt || Date.parse(sub.expireAt) > Date.now())) ?? null;
+  const checkoutTrial = (replaceTrialChoice ? mySubs.find((sub) => sub.id === replaceTrialChoice) : null) ?? activeTrial;
+  const checkoutIsTrial = extendTarget?.isTrial === true
+    || convPreview?.subscription?.isTrial === true
+    || convPreview?.subscription?.trialId != null
+    || (!extendTarget && checkoutTrial != null);
   useEffect(() => {
     if (!state.token) { setExtendTarget(null); setMySubs([]); return; }
     let alive = true;
@@ -145,6 +150,7 @@ export function AuroraTariffs() {
         label: it.tariffDisplayName?.trim() || t("aurora.subscription_index", { index: idx }),
         tariffId: it.tariffId ?? null,
         isTrial: Boolean(it.trialId),
+        trialName: it.trialName ?? null,
         convertTariffIds: it.convertTariffIds ?? [],
         trialConvertAllTariffs: it.trialConvertAllTariffs ?? false,
         extraDevices: it.extraDevices ?? 0,
@@ -170,9 +176,12 @@ export function AuroraTariffs() {
   }, [categories, extendTarget]);
 
   useEffect(() => {
-    if (!extendTarget?.tariffId || categories.length === 0) return;
-    const cat = categories.find((c) => c.tariffs.some((t) => t.id === extendTarget.tariffId));
-    const tariff = cat?.tariffs.find((t) => t.id === extendTarget.tariffId) as TariffLite | undefined;
+    if (!extendTarget || categories.length === 0) return;
+    const preferredId = extendTarget.tariffId
+      ?? (extendTarget.isTrial && extendTarget.convertTariffIds.length > 0 ? extendTarget.convertTariffIds[0] : null);
+    if (!preferredId) return;
+    const cat = categories.find((c) => c.tariffs.some((t) => t.id === preferredId));
+    const tariff = cat?.tariffs.find((t) => t.id === preferredId) as TariffLite | undefined;
     if (!cat || !tariff) return;
     setSelectedCatId(cat.id);
     setSelectedTariffId(tariff.id);
@@ -181,12 +190,20 @@ export function AuroraTariffs() {
       const def = opts.find((o) => o.durationDays === 30) ?? opts[0];
       setSelectedPriceOptionId(def.id);
     }
-  }, [extendTarget?.tariffId, categories]);
+  }, [extendTarget?.tariffId, extendTarget?.isTrial, extendTarget?.convertTariffIds, categories]);
 
   const currentCat = selectedCatId === "__all"
     ? { id: "__all", name: t("aurora.all_categories"), emojiKey: null, emoji: "", tariffs: displayCategories.flatMap((category) => category.tariffs) } as PublicTariffCategory
     : displayCategories.find((c) => c.id === selectedCatId) ?? displayCategories[0];
   const currentTariff = currentCat?.tariffs.find((t) => t.id === selectedTariffId) as TariffLite | undefined;
+  const checkoutTariffName = currentTariff?.name ?? t("aurora.checkout_tariff_fallback");
+  const checkoutTrialName = extendTarget?.trialName
+    || convPreview?.subscription?.trialName
+    || checkoutTrial?.trialName
+    || extendTarget?.label
+    || checkoutTrial?.label
+    || convPreview?.subscription?.tariffName
+    || t("aurora.trial_badge");
   const priceOptions: PriceOption[] = currentTariff?.priceOptions ?? [];
   const currentOption = priceOptions.find((o) => o.id === selectedPriceOptionId);
   const basePrice = currentOption?.price ?? currentTariff?.price ?? 0;
@@ -263,7 +280,7 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
   }, [canPayByBalance]);
 
   useEffect(() => {
-    if (!paySheet || !state.token || !selectedTariffId || extendTarget) { setConvPreview(null); return; }
+    if (!paySheet || !state.token || !selectedTariffId) { setConvPreview(null); return; }
     let alive = true;
     setConvKeepExtras(true);
     setPreviewKey(null);
@@ -272,11 +289,12 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
     api.clientTariffConversionPreview(state.token, {
       tariffId: selectedTariffId,
       priceOptionId: selectedPriceOptionId ?? undefined,
+      replaceTrialSubId: extendTarget?.id,
     })
       .then((p) => { if (alive) { setConvPreview(p); setPreviewKey(requestedPreviewKey); } })
       .catch(() => { if (alive) { setConvPreview(null); setPreviewError(true); } });
     return () => { alive = false; };
-  }, [state.token, selectedTariffId, selectedPriceOptionId, extendTarget, paySheet, previewRetry, requestedPreviewKey]);
+  }, [state.token, selectedTariffId, selectedPriceOptionId, extendTarget?.id, paySheet, previewRetry, requestedPreviewKey]);
 
   async function applyPromo() {
     if (!state.token || !promoInput.trim()) return;
@@ -308,21 +326,43 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
       const prev = await api.clientTariffConversionPreview(state.token, {
         tariffId: selectedTariffId,
         priceOptionId: selectedPriceOptionId ?? undefined,
+        replaceTrialSubId: extendTarget?.id,
       }).catch(() => null);
       setPaying(false);
       const willReplace = !!(prev && prev.willConvert && (prev.mode !== "extend" || (prev.othersToRemove ?? 0) > 0));
-      if (willReplace) {
-        const subName = prev!.subscription?.tariffName ? `«${prev!.subscription.tariffName}»` : t("aurora.balance_current_subscription");
-        const bodyMain = prev!.mode === "replace"
-          ? t("aurora.balance_replace_body", { remaining: prev!.remainingDays ?? 0, purchased: prev!.purchasedDays ?? 0 })
-          : prev!.mode === "extend"
-            ? t("aurora.balance_extend_body")
-            : t("aurora.balance_convert_body", { remaining: prev!.remainingDays ?? 0, converted: prev!.convertedDays ?? 0 });
-        const othersLine = (prev!.othersToRemove ?? 0) > 0 ? `\n${t("aurora.balance_others", { count: prev!.othersToRemove ?? 0 })}` : "";
+      const isTrial = extendTarget?.isTrial === true
+        || (!extendTarget && checkoutTrial != null)
+        || prev?.subscription?.isTrial === true
+        || prev?.subscription?.trialId != null;
+      if (willReplace || isTrial) {
+        const trialName = extendTarget?.trialName
+          || prev?.subscription?.trialName
+          || checkoutTrial?.trialName
+          || extendTarget?.label
+          || checkoutTrial?.label
+          || prev?.subscription?.tariffName
+          || t("aurora.trial_badge");
+        const subName = prev?.subscription?.tariffName ? `«${prev.subscription.tariffName}»` : t("aurora.balance_current_subscription");
+        const bodyMain = isTrial
+          ? t("aurora.convert_trial_body", {
+              trial: trialName,
+              tariff: checkoutTariffName,
+              days: t("aurora.trial_days", { count: prev?.purchasedDays ?? days }),
+            })
+          : prev!.mode === "replace"
+            ? t("aurora.balance_replace_body", { remaining: prev!.remainingDays ?? 0, purchased: prev!.purchasedDays ?? 0 })
+            : prev!.mode === "extend"
+              ? t("aurora.balance_extend_body")
+              : (prev!.remainingDays ?? 0) > 0
+                ? t("aurora.balance_convert_body", { remaining: prev!.remainingDays ?? 0, converted: prev!.convertedDays ?? 0 })
+                : t("aurora.balance_convert_body_zero");
+        const othersLine = (prev?.othersToRemove ?? 0) > 0 ? `\n${t("aurora.balance_others", { count: prev!.othersToRemove ?? 0 })}` : "";
         setBalConfirm({
-          title: prev!.mode === "extend"
-            ? t("aurora.balance_extend_title", { name: subName })
-            : t("aurora.balance_replace_title", { name: subName }),
+          title: isTrial
+            ? t("aurora.balance_trial_title", { tariff: checkoutTariffName })
+            : prev!.mode === "extend"
+              ? t("aurora.balance_extend_title", { name: subName })
+              : t("aurora.balance_replace_title", { name: subName }),
           body: bodyMain + othersLine,
         });
         return;
@@ -463,12 +503,20 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
         className={noticeCls("accent")}
       >
         <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--au-from)]">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--au-from),var(--au-to))]">
             <RefreshCw className="h-4 w-4 text-white" />
           </span>
           <div className="min-w-0">
-            <p className="text-[14px] font-bold">{t("aurora.renewal_title")}</p>
-            <p className="truncate text-[12.5px] text-[var(--au-muted)]">{extendTarget.label}</p>
+            <p className="text-[14px] font-bold">
+              {extendTarget.isTrial ? t("aurora.renewal_trial_title") : t("aurora.renewal_title")}
+            </p>
+            {extendTarget.isTrial ? (
+              <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--au-muted)]">
+                {t("aurora.renewal_trial_body", { label: extendTarget.label })}
+              </p>
+            ) : (
+              <p className="truncate text-[12.5px] text-[var(--au-muted)]">{extendTarget.label}</p>
+            )}
           </div>
         </div>
         {extendTarget.extraDevices > 0 && (
@@ -556,31 +604,43 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
           </span>
           <div className="min-w-0 space-y-1.5">
             <p className="text-[14px] font-bold">
-              {convPreview.mode === "extend"
-                ? t("aurora.convert_extend_title")
-                : convPreview.mode === "replace"
-                  ? t("aurora.convert_replace_title")
-                  : convPreview.subscription.isTrial ? t("aurora.convert_trial_title") : t("aurora.convert_update_title")}
+              {convPreview.subscription.isTrial
+                ? t("aurora.convert_trial_title")
+                : convPreview.mode === "extend"
+                  ? t("aurora.convert_extend_title")
+                  : convPreview.mode === "replace"
+                    ? t("aurora.convert_replace_title")
+                    : t("aurora.convert_update_title")}
             </p>
             <p className="text-[13px] leading-relaxed text-[var(--au-muted)]">
-              {convPreview.mode === "extend"
-                ? t("aurora.convert_extend_body", {
-                    remaining: convPreview.remainingDays ?? 0,
-                    purchased: convPreview.purchasedDays ?? 0,
-                    total: convPreview.totalDays ?? 0,
+              {convPreview.subscription.isTrial
+                ? t("aurora.convert_trial_body", {
+                    trial: extendTarget?.trialName
+                      || convPreview.subscription.trialName
+                      || extendTarget?.label
+                      || convPreview.subscription.tariffName
+                      || t("aurora.trial_badge"),
+                    tariff: checkoutTariffName,
+                    days: t("aurora.trial_days", { count: convPreview.purchasedDays ?? days }),
                   })
-                : convPreview.mode === "replace"
-                  ? t("aurora.convert_replace_body", {
-                      name: convPreview.subscription.tariffName ? t("aurora.convert_name", { name: convPreview.subscription.tariffName }) : "",
+                : convPreview.mode === "extend"
+                  ? t("aurora.convert_extend_body", {
                       remaining: convPreview.remainingDays ?? 0,
                       purchased: convPreview.purchasedDays ?? 0,
+                      total: convPreview.totalDays ?? 0,
                     })
-                  : t("aurora.convert_update_body", {
-                      name: convPreview.subscription.tariffName ? t("aurora.convert_name", { name: convPreview.subscription.tariffName }) : t("aurora.convert_update_current"),
-                      days: (convPreview.convertedDays ?? 0) > 0 && (convPreview.remainingDays ?? 0) > 0 && !(convPreview.extras && convPreview.extras.extraDevices > 0)
-                        ? t("aurora.convert_update_days", { remaining: convPreview.remainingDays, converted: convPreview.convertedDays })
-                        : "",
-                    })}
+                  : convPreview.mode === "replace"
+                    ? t("aurora.convert_replace_body", {
+                        name: convPreview.subscription.tariffName ? t("aurora.convert_name", { name: convPreview.subscription.tariffName }) : "",
+                        remaining: convPreview.remainingDays ?? 0,
+                        purchased: convPreview.purchasedDays ?? 0,
+                      })
+                    : t("aurora.convert_update_body", {
+                        name: convPreview.subscription.tariffName ? t("aurora.convert_name", { name: convPreview.subscription.tariffName }) : t("aurora.convert_update_current"),
+                        days: (convPreview.convertedDays ?? 0) > 0 && (convPreview.remainingDays ?? 0) > 0 && !(convPreview.extras && convPreview.extras.extraDevices > 0)
+                          ? t("aurora.convert_update_days", { remaining: convPreview.remainingDays, converted: convPreview.convertedDays })
+                          : "",
+                      })}
             </p>
             {(convPreview.othersToRemove ?? 0) > 0 && (
               <p className="text-[13px] font-bold text-amber-700 dark:text-amber-300">
@@ -647,11 +707,27 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
       <header className="px-1 pb-1">
         <h1 className="text-[26px] font-extrabold leading-tight tracking-tight text-[var(--au-ink)]">{t("aurora.tariffs")}</h1>
         <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">
-          {extendTarget ? t("aurora.renewal_subtitle") : t("aurora.tariffs_subtitle")}
+          {extendTarget?.isTrial
+            ? t("aurora.renewal_trial_subtitle")
+            : extendTarget ? t("aurora.renewal_subtitle") : t("aurora.tariffs_subtitle")}
         </p>
       </header>
 
       {renewalNotice}
+
+      {!extendTarget && activeTrial && (
+        <section className={noticeCls("accent")}>
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white">
+              <Gift className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[14px] font-bold">{t("aurora.trial_active_title")}</p>
+              <p className="mt-0.5 text-[12.5px] leading-relaxed opacity-80">{t("aurora.trial_active_body")}</p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {mySubs.length === 0 && hasTrials && (
         <section className={noticeCls("accent")}>
@@ -710,39 +786,59 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
         </section>}
       </div>
 
-      <AuroraConfirmSheet
-        open={balConfirm !== null}
-        onClose={() => setBalConfirm(null)}
-        title={balConfirm?.title ?? ""}
-        description={balConfirm && (
-          <span className="whitespace-pre-line">
-            {balConfirm.body}
-            {"\n"}
-            {t("aurora.checkout_charge_confirm", { amount: fmtPrice(totalPrice, currency) })}
-          </span>
-        )}
-        confirmLabel={t("aurora.checkout_continue")}
-        loading={paying}
-        onConfirm={() => { setBalConfirm(null); void doPay(); }}
-      />
-
       <AuroraSheet
         open={paySheet && !!currentTariff}
-        onClose={() => { setPaySheet(false); setPayError(null); }}
-        title={t("aurora.checkout_title")}
+        onClose={() => { setPaySheet(false); setPayError(null); setBalConfirm(null); }}
+        title={balConfirm ? t("aurora.checkout_confirm_title") : t("aurora.checkout_title")}
         footer={
           <div className="space-y-2 pb-1">
             {payError && <AuNotice tone="error">{payError}</AuNotice>}
-            <AuButton
-              onClick={pay}
-              disabled={paying || !selectedMethod || !currentTariff || !previewReady}
-              loading={paying}
-            >
-              {paying ? t("aurora.pay_creating") : t("aurora.pay_for", { amount: fmtPrice(totalPrice, currency) })}
-            </AuButton>
+            {balConfirm ? (
+              <>
+                <AuButton
+                  onClick={() => void doPay()}
+                  disabled={paying || !selectedMethod}
+                  loading={paying}
+                >
+                  {paying
+                    ? t("aurora.pay_creating")
+                    : t("aurora.balance_confirm_pay", { amount: fmtPrice(totalPrice, currency) })}
+                </AuButton>
+                <AuButton
+                  variant="surface"
+                  onClick={() => { setBalConfirm(null); setPayError(null); }}
+                  disabled={paying}
+                >
+                  {t("aurora.balance_back_to_methods")}
+                </AuButton>
+              </>
+            ) : (
+              <AuButton
+                onClick={pay}
+                disabled={paying || !selectedMethod || !currentTariff || !previewReady}
+                loading={paying}
+              >
+                {paying ? t("aurora.pay_creating") : t("aurora.pay_for", { amount: fmtPrice(totalPrice, currency) })}
+              </AuButton>
+            )}
           </div>
         }
       >
+        {balConfirm ? (
+          <div className="space-y-3 pb-2">
+            <div className="rounded-[22px] bg-[var(--au-surface)] p-5">
+              <h3 className="text-[19px] font-extrabold leading-tight text-[var(--au-ink)]">{balConfirm.title}</h3>
+              <p className="mt-2.5 whitespace-pre-line text-[14px] leading-relaxed text-[var(--au-muted)]">{balConfirm.body}</p>
+              <div className="mt-4 flex items-center justify-between gap-3 rounded-[16px] bg-[var(--au-bg)] px-4 py-3">
+                <span className="text-[13px] font-semibold text-[var(--au-muted)]">{t("aurora.checkout_total")}</span>
+                <span className="text-[21px] font-extrabold tabular-nums text-[var(--au-ink)]">{fmtPrice(totalPrice, currency)}</span>
+              </div>
+              <p className="mt-3 text-[12.5px] leading-relaxed text-[var(--au-muted)]">
+                {t("aurora.checkout_charge_confirm", { amount: fmtPrice(totalPrice, currency) })}
+              </p>
+            </div>
+          </div>
+        ) : (
         <div className="space-y-4 pb-2">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -817,6 +913,18 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
             <p className={cn("px-1 text-[13px]", promoApplied ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>{promoMsg}</p>
           )}
 
+          {checkoutIsTrial && (
+            <div className="rounded-[20px] bg-[color-mix(in_srgb,var(--au-from)_9%,var(--au-bg))] p-4">
+              <p className="flex items-center gap-2 text-[14px] font-bold text-[var(--au-ink)]">
+                <RefreshCw className="h-4 w-4 shrink-0 text-[var(--au-from)]" />
+                {t("aurora.checkout_trial_notice_title")}
+              </p>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-[var(--au-muted)]">
+                {t("aurora.checkout_trial_notice_body", { trial: checkoutTrialName, tariff: checkoutTariffName })}
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <p className="px-1 text-[13px] font-semibold text-[var(--au-muted)]">{t("aurora.pay_method")}</p>
             {availableMethods.length > 0 ? (
@@ -873,6 +981,7 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
             )}
           </div>
         </div>
+        )}
       </AuroraSheet>
 
       <AuroraTrialsSheet

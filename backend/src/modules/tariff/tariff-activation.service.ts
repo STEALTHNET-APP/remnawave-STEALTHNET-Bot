@@ -863,7 +863,7 @@ export async function findConvertibleSubscription(
     /** config.trialSquadUuid — по нему опознаётся легаси-триал (trialId=null, tariffId=null) */
     trialSquadUuid?: string | null;
   } = {},
-): Promise<{ id: string; subscriptionIndex: number; tariffId: string | null; tariffName: string | null; expireAt: Date | null; currentPricePerDay: number | null; trialId: string | null; promoGranted: boolean; /** легаси-триал (POST /trial): конвертируется на месте, как триал */ isLegacyTrial: boolean; /** покупается ТОТ ЖЕ тариф → это продление (стек дней), а не конвертация */ sameTariff: boolean } | null> {
+): Promise<{ id: string; subscriptionIndex: number; tariffId: string | null; tariffName: string | null; expireAt: Date | null; currentPricePerDay: number | null; trialId: string | null; trialName: string | null; promoGranted: boolean; /** легаси-триал (POST /trial): конвертируется на месте, как триал */ isLegacyTrial: boolean; /** покупается ТОТ ЖЕ тариф → это продление (стек дней), а не конвертация */ sameTariff: boolean } | null> {
   const tariff = await prisma.tariff.findUnique({
     where: { id: tariffId },
     select: { categoryId: true, category: { select: { singleSubscriptionMode: true } } },
@@ -887,6 +887,7 @@ export async function findConvertibleSubscription(
       giftStatus: true,
       remnawaveUuid: true,
       tariff: { select: { name: true, categoryId: true } },
+      trial: { select: { name: true } },
     },
   });
 
@@ -941,6 +942,7 @@ export async function findConvertibleSubscription(
     expireAt: candidate.expireAt,
     currentPricePerDay: candidate.currentPricePerDay,
     trialId: candidate.trialId,
+    trialName: candidate.trial?.name ?? null,
     isLegacyTrial: picked.isLegacyTrial,
     promoGranted: candidate.promoGranted,
     // тот же тариф = продление (дни складываются, сквады/трафик

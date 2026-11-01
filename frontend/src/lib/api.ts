@@ -2445,10 +2445,11 @@ export const api = {
    *  пересчитается остаток дней. */
   async clientTariffConversionPreview(
     token: string,
-    params: { tariffId: string; priceOptionId?: string }
+    params: { tariffId: string; priceOptionId?: string; replaceTrialSubId?: string }
   ): Promise<TariffConversionPreview> {
     const q = new URLSearchParams({ tariffId: params.tariffId });
     if (params.priceOptionId) q.set("priceOptionId", params.priceOptionId);
+    if (params.replaceTrialSubId) q.set("replaceTrialSubId", params.replaceTrialSubId);
     return request(`/client/tariff-conversion-preview?${q.toString()}`, { token });
   },
 
@@ -5461,6 +5462,8 @@ export interface TariffConversionPreview {
     tariffName: string | null;
     expireAt: string | null;
     isTrial: boolean;
+    trialId?: string | null;
+    trialName?: string | null;
   };
   remainingDays?: number;
   convertedDays?: number;
