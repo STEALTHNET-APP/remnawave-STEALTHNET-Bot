@@ -833,13 +833,13 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
               {/* ── Промокод ── */}
               {/* min-w-0 на input обязателен: flex-item с дефолтным min-width:auto
                   не сжимался на узких экранах и выталкивал кнопку за край контейнера. */}
-              <div className="flex items-center gap-2 rounded-[18px] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[color-mix(in_srgb,var(--au-surface)_85%,var(--au-bg))] p-1.5 transition-all focus-within:border-[var(--au-from)] focus-within:ring-2 focus-within:ring-[var(--au-from)]/25">
+              <div className="flex items-center gap-2 rounded-[18px] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[color-mix(in_srgb,var(--au-surface)_85%,var(--au-bg))] p-1.5 transition-all focus-within:border-[var(--au-from)]">
                 <Tag className="ml-3 h-4 w-4 shrink-0 text-[var(--au-muted)]" />
                 <input
                   value={promoInput}
                   onChange={(e) => { setPromoInput(e.target.value); setPromoMsg(null); }}
                   placeholder="Промокод"
-                  className="min-w-0 flex-1 bg-transparent px-1 py-2.5 text-[16px] text-[var(--au-ink)] outline-none placeholder:text-[var(--au-muted)]"
+                  className="min-w-0 flex-1 border-none bg-transparent px-1 py-2.5 text-[16px] text-[var(--au-ink)] shadow-none outline-none ring-0 placeholder:text-[var(--au-muted)] focus:outline-none focus:ring-0 focus-visible:!outline-none focus-visible:!ring-0"
                 />
                 <button
                   onClick={applyPromo}

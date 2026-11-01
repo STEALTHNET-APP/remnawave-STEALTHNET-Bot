@@ -18,7 +18,7 @@ import { useTranslation } from "react-i18next";
  * матричных сбоев JS-библиотек.
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +35,8 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
   const { t } = useTranslation();
   const [mounted, setMounted] = useState(open);
   const [visible, setVisible] = useState(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (open) {
@@ -57,7 +59,7 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
@@ -68,7 +70,7 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
       document.body.style.overflow = prev;
       delete document.documentElement.dataset.auSheet;
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!mounted) return null;
 
