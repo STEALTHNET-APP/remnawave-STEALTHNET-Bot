@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { api } from "@/lib/api";
+import { openPaymentInBrowser } from "@/lib/open-payment-url";
 import { Button } from "@/components/ui/button";
 
 export function CloudPaymentsTrial() {
@@ -15,7 +16,7 @@ export function CloudPaymentsTrial() {
     <Button variant="outline" disabled={busy} onClick={async () => {
       if (!state.token || !config.cloudpaymentsTrialTariffId) return;
       setBusy(true); setError("");
-      try { const payment = await api.cloudpaymentsCreatePayment(state.token, { tariffId: config.cloudpaymentsTrialTariffId, paidTrial: true }); window.location.assign(payment.payUrl); }
+      try { const payment = await api.cloudpaymentsCreatePayment(state.token, { tariffId: config.cloudpaymentsTrialTariffId, paidTrial: true }); openPaymentInBrowser(payment.payUrl); }
       catch (e) { setError(e instanceof Error ? e.message : "Не удалось создать счёт"); }
       finally { setBusy(false); }
     }}>{busy ? "Подготовка…" : "Посмотреть условия"}</Button>

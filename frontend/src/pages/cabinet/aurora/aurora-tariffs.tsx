@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { AuroraSheet } from "@/components/aurora/aurora-sheet";
 import { AuroraTrialsSheet } from "@/components/aurora/aurora-trials-sheet";
 import { AuButton, AuNotice } from "@/components/aurora/aurora-ui";
+import { openPaymentInBrowser, getTelegramWebApp } from "@/lib/open-payment-url";
 import { AuroraTariffCard, auroraPrice, auroraPeriodLabel, auroraTraffic, auroraDevices } from "./aurora-tariff-card";
 
 interface PriceOption {
@@ -431,49 +432,68 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
           : {}),
       };
       let url: string | null = null;
+      let paymentId: string | null = null;
       if (selectedMethod.kind === "platega") {
         const r = await api.clientCreatePlategaPayment(state.token, { ...base, paymentMethod: selectedMethod.id });
         url = r.paymentUrl;
+        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "yookassa") {
         const r = await api.yookassaCreatePayment(state.token, base);
         url = r.confirmationUrl;
+        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "yoomoney") {
         const r = await api.yoomoneyCreateFormPayment(state.token, { ...base, paymentType: "AC" });
         url = r.paymentUrl;
+        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "telegram_stars") {
         const r = await api.starsCreatePayment(state.token, base);
         url = r.payUrl;
+        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "cryptopay") {
         const r = await api.cryptopayCreatePayment(state.token, base);
         url = r.miniAppPayUrl ?? r.webAppPayUrl ?? r.payUrl;
+        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "heleket") {
         const r = await api.heleketCreatePayment(state.token, base);
         url = r.payUrl;
+        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "cloudpayments") {
         const r = await api.cloudpaymentsCreatePayment(state.token, base);
         url = r.payUrl;
+        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "paritypay") {
         const r = await api.paritypayCreatePayment(state.token, base);
         url = r.payUrl;
+        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "rollypay") {
         const r = await api.rollypayCreatePayment(state.token, base);
         url = r.payUrl;
+        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "lava") {
         const r = await api.lavaCreatePayment(state.token, base);
         url = r.payUrl;
+        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "lavatop") {
         const r = await api.lavatopCreatePayment(state.token, { ...base, amount: totalPrice, currency });
         url = r.payUrl;
+        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "overpay") {
         const r = await api.overpayCreatePayment(state.token, { ...base, amount: totalPrice, currency });
         url = r.payUrl;
+        paymentId = r.paymentId;
       } else if (selectedMethod.kind === "balance") {
         await api.clientPayByBalance(state.token, base);
         await refreshProfile();
         navigate("/cabinet/dashboard?paid=balance");
         return;
       }
-      if (url) window.location.href = url;
+      if (url) {
+        openPaymentInBrowser(url);
+        if (paymentId && getTelegramWebApp()) {
+          setPaySheet(false);
+          navigate(`/cabinet/payment-wait?id=${encodeURIComponent(paymentId)}&kind=tariff`, { state: { url, provider: selectedMethod.label } });
+        }
+      }
     } catch (e) {
       setPayError(e instanceof Error ? e.message : t("aurora.pay_error"));
     } finally {
