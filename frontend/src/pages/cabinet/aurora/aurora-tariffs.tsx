@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Wallet, Bitcoin, Check, Loader2, RefreshCw, ArrowRight, Tag } from "lucide-react";
+import { Wallet, Bitcoin, Check, Gift, Loader2, RefreshCw, ArrowRight, Tag } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type PublicTariff, type PublicTariffCategory, type PublicConfig, type TariffConversionPreview } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { AuroraSheet } from "@/components/aurora/aurora-sheet";
 import { AuroraConfirmSheet } from "@/components/aurora/aurora-confirm-sheet";
+import { AuroraTrialsSheet } from "@/components/aurora/aurora-trials-sheet";
 import { AuButton, AuNotice } from "@/components/aurora/aurora-ui";
 import { AuroraTariffCard, auroraPrice, auroraPeriodLabel, auroraTraffic, auroraDevices } from "./aurora-tariff-card";
 
@@ -47,6 +49,14 @@ export function AuroraTariffs() {
   const [searchParams] = useSearchParams();
 
   const extendParam = searchParams.get("extend");
+  const [trialsSheetOpen, setTrialsSheetOpen] = useState(false);
+  const trialsQuery = useQuery({
+    queryKey: ["aurora", "trials-available", state.token],
+    queryFn: () => api.getClientAvailableTrials(state.token!),
+    enabled: !!state.token,
+  });
+  const availableTrials = trialsQuery.data?.items ?? [];
+  const hasTrials = availableTrials.length > 0;
   const [extendTarget, setExtendTarget] = useState<{ id: string; label: string; tariffId: string | null; isTrial: boolean; convertTariffIds: string[]; trialConvertAllTariffs: boolean; extraDevices: number; extraDevicesMonthlyPrice: number } | null>(null);
   const [extKeepExtras, setExtKeepExtras] = useState(true);
 
@@ -643,6 +653,27 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
 
       {renewalNotice}
 
+      {mySubs.length === 0 && hasTrials && (
+        <section className={noticeCls("accent")}>
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white">
+              <Gift className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-bold">{t("aurora.trial_banner_title")}</p>
+              <p className="mt-0.5 text-[12.5px] leading-snug opacity-80">{t("aurora.trial_banner_hint")}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTrialsSheetOpen(true)}
+              className="shrink-0 rounded-full bg-[var(--au-from)] px-4 py-2 text-[13px] font-bold text-white transition-transform active:scale-[0.98]"
+            >
+              {t("aurora.try_trial")}
+            </button>
+          </div>
+        </section>
+      )}
+
       <div className="au-tariff-catalog" data-tour="tariff-list">
         <nav className="au-tariff-categories" aria-label={t("aurora.categories_label")}>
           {displayCategories.length > 1 && <button type="button" aria-pressed={currentCat?.id === "__all"} aria-controls="au-category-plans" onClick={() => setSelectedCatId("__all")}>
@@ -843,6 +874,15 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
           </div>
         </div>
       </AuroraSheet>
+
+      <AuroraTrialsSheet
+        open={trialsSheetOpen}
+        onClose={() => setTrialsSheetOpen(false)}
+        onActivated={() => {
+          void trialsQuery.refetch();
+          void refreshProfile();
+        }}
+      />
     </div>
   );
 }

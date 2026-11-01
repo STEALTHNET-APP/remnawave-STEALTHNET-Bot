@@ -1,6 +1,7 @@
 import { SubscriptionQrButton } from "@/components/subscription-link-actions";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   ChevronRight, Check, Copy, Gift, History, Loader2, MoreHorizontal, Pencil, Plus, RefreshCw, RotateCcw,
@@ -46,7 +47,7 @@ export function AuroraDashboard() {
   const [menuItemId, setMenuItemId] = useState<string | null>(null);
 
   const [devicesOpen, setDevicesOpen] = useState(false);
-  const [trialsOpen, setTrialsOpen] = useState(false);
+  const [trialsSheetOpen, setTrialsSheetOpen] = useState(false);
   const [promoOpen, setPromoOpen] = useState(false);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -54,6 +55,14 @@ export function AuroraDashboard() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const locale = i18n.language || "ru";
+
+  const trialsQuery = useQuery({
+    queryKey: ["aurora", "trials-available", token],
+    queryFn: () => api.getClientAvailableTrials(token!),
+    enabled: !!token,
+  });
+  const availableTrials = trialsQuery.data?.items ?? [];
+  const hasTrials = availableTrials.length > 0;
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -126,7 +135,6 @@ export function AuroraDashboard() {
 
   const hasAnySubscription = items.length > 0;
   const hasOfflineSnapshot = items.some((item) => item.isOfflineSnapshot === true);
-  const trialAvailable = Boolean(config?.trialEnabled) && !client?.trialUsed;
   const canBuyAdditional = config?.multiSubscriptionsEnabled !== false;
   const quickActions = [
     ...(config?.giftSubscriptionsEnabled
@@ -241,15 +249,25 @@ export function AuroraDashboard() {
         </div>
       </section>
 
-      {!hasAnySubscription && (
+      {!main && (
         <AuEmpty
           icon={<Zap className="h-6 w-6" />}
           title={t("aurora.no_subscription")}
           hint={t("aurora.no_subscription_hint")}
           action={
             <div className="mt-1 w-full space-y-2">
-              <AuButton onClick={() => navigate("/cabinet/tariffs")}>{t("aurora.choose_tariff")}</AuButton>
-              {trialAvailable && <AuButton variant="surface" onClick={() => setTrialsOpen(true)}>{t("aurora.try_trial")}</AuButton>}
+              {hasTrials && (
+                <AuButton
+                  className="bg-[linear-gradient(135deg,var(--au-from),var(--au-to))]"
+                  onClick={() => setTrialsSheetOpen(true)}
+                >
+                  <Gift className="h-4 w-4" />
+                  {t("aurora.try_trial")}
+                </AuButton>
+              )}
+              <AuButton variant={hasTrials ? "surface" : "primary"} onClick={() => navigate("/cabinet/tariffs")}>
+                {t("aurora.choose_tariff")}
+              </AuButton>
             </div>
           }
         />
@@ -406,28 +424,16 @@ export function AuroraDashboard() {
         );
       })}
 
-      {hasAnySubscription && (
+      {hasAnySubscription && canBuyAdditional && (
         <div className="grid grid-cols-2 gap-2">
-          {canBuyAdditional && (
-            <button
-              type="button"
-              onClick={() => navigate("/cabinet/tariffs")}
-              className="flex min-h-12 items-center justify-center gap-2 rounded-[18px] bg-[var(--au-surface)] px-3 text-[13.5px] font-bold text-[var(--au-ink)] transition-transform active:scale-[0.99]"
-            >
-              <Plus className="h-4 w-4" />
-              {t("aurora.add_subscription")}
-            </button>
-          )}
-          {trialAvailable && (
-            <button
-              type="button"
-              onClick={() => setTrialsOpen(true)}
-              className="flex min-h-12 items-center justify-center gap-2 rounded-[18px] bg-[var(--au-surface)] px-3 text-[13.5px] font-bold text-[var(--au-ink)] transition-transform active:scale-[0.99]"
-            >
-              <Gift className="h-4 w-4" />
-              {t("aurora.try_trial")}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => navigate("/cabinet/tariffs")}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-[18px] bg-[var(--au-surface)] px-3 text-[13.5px] font-bold text-[var(--au-ink)] transition-transform active:scale-[0.99]"
+          >
+            <Plus className="h-4 w-4" />
+            {t("aurora.add_subscription")}
+          </button>
         </div>
       )}
 
@@ -455,6 +461,29 @@ export function AuroraDashboard() {
         </section>
       )}
 
+      {main && hasTrials && (
+        <button
+          type="button"
+          onClick={() => setTrialsSheetOpen(true)}
+          className="flex w-full items-center justify-between gap-3 rounded-[20px] border border-white/40 bg-[var(--au-surface)] px-4 py-3.5 text-left transition-transform active:scale-[0.99] dark:border-white/5"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white shadow-md">
+              <Gift size={20} className="text-white" />
+            </span>
+            <div>
+              <div className="text-[15px] font-bold text-[var(--au-ink)]">{t("aurora.trials")}</div>
+              <div className="text-[12px] text-[var(--au-muted)]">
+                {availableTrials.length === 1
+                  ? t("aurora.trial_free_days", { count: availableTrials[0]?.durationDays ?? 0 })
+                  : t("aurora.trial_available_count", { count: availableTrials.length })}
+              </div>
+            </div>
+          </div>
+          <ChevronRight className="h-5 w-5 shrink-0 text-[var(--au-muted)]" />
+        </button>
+      )}
+
       {config?.botInfoBlock?.trim() && (
         <section className="au-card whitespace-pre-line p-4 text-[13.5px] leading-relaxed text-[var(--au-ink)]">
           {config.botInfoBlock.trim()}
@@ -471,10 +500,12 @@ export function AuroraDashboard() {
         }}
       />
       <AuroraTrialsSheet
-        open={trialsOpen}
-        onClose={() => setTrialsOpen(false)}
+        open={trialsSheetOpen}
+        onClose={() => setTrialsSheetOpen(false)}
         onActivated={() => {
+          void trialsQuery.refetch();
           void load();
+          void refreshProfile();
         }}
       />
       <AuroraPromoSheet open={promoOpen} onClose={() => setPromoOpen(false)} />

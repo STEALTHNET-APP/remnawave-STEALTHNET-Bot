@@ -248,6 +248,20 @@ export const TEMPLATES: TemplateDef[] = [
 export function subjectKey(k: string) { return `email_template_${k}_subject`; }
 export function bodyKey(k: string) { return `email_template_${k}_body`; }
 
+function isLegacyVerificationSubject(subject: string): boolean {
+  return subject.includes("{{code}}") || subject.trim().toLowerCase().startsWith("код подтверждения");
+}
+
+export async function migrateLegacyEmailVerificationSubject(): Promise<boolean> {
+  const def = TEMPLATES.find((t) => t.key === "email_verification");
+  if (!def) return false;
+  const key = subjectKey("email_verification");
+  const stored = await prisma.systemSetting.findUnique({ where: { key } });
+  if (!stored || !isLegacyVerificationSubject(stored.value)) return false;
+  await prisma.systemSetting.update({ where: { key }, data: { value: def.defaultSubject } });
+  return true;
+}
+
 export interface StoredTemplate {
   key: string;
   label: string;
@@ -268,12 +282,16 @@ export async function getStoredTemplate(key: string): Promise<StoredTemplate | n
     prisma.systemSetting.findUnique({ where: { key: subjectKey(key) } }),
     prisma.systemSetting.findUnique({ where: { key: bodyKey(key) } }),
   ]);
+  let subject = s?.value ?? def.defaultSubject;
+  if (key === "email_verification" && isLegacyVerificationSubject(subject)) {
+    subject = def.defaultSubject;
+  }
   return {
     key: def.key,
     label: def.label,
     description: def.description,
     variables: def.variables,
-    subject: s?.value ?? def.defaultSubject,
+    subject,
     body: b?.value ?? def.defaultBody,
     isDefault: !s && !b,
     wired: def.wired,
@@ -281,7 +299,10 @@ export async function getStoredTemplate(key: string): Promise<StoredTemplate | n
 }
 
 export function renderTemplate(template: string, vars: Record<string, string>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_m, name) => vars[name] ?? `{{${name}}}`);
+  return template
+    .replace(/\{\{(\w+)\}\}/g, (_m, name) => vars[name] ?? (name === "code" ? "" : `{{${name}}}`))
+    .replace(/\s*:\s*$/, "")
+    .trim();
 }
 
 /**

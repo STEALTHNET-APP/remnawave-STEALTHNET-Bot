@@ -6,6 +6,13 @@ import { api, type ClientTrialOption } from "@/lib/api";
 import { AuroraSheet } from "@/components/aurora/aurora-sheet";
 import { AuBadge, AuButton, AuEmpty, AuNotice } from "@/components/aurora/aurora-ui";
 import { formatCheckoutAmount } from "@/lib/cabinet-checkout";
+import { cn } from "@/lib/utils";
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  onActivated?: () => void;
+}
 
 function trafficLabel(bytes: string | null, t: (key: string) => string): string {
   if (bytes == null) return t("aurora.unlimited");
@@ -19,15 +26,7 @@ function trafficLabel(bytes: string | null, t: (key: string) => string): string 
   return `${(value / 1024).toFixed(0)} ${t("aurora.kb")}`;
 }
 
-export function AuroraTrialsSheet({
-  open,
-  onClose,
-  onActivated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onActivated: () => void;
-}) {
+export function AuroraTrialsSheet({ open, onClose, onActivated }: Props) {
   const { t, i18n } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
   const token = state.token;
@@ -35,6 +34,7 @@ export function AuroraTrialsSheet({
   const [loading, setLoading] = useState(false);
   const [activating, setActivating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!open || !token) return;
@@ -54,16 +54,19 @@ export function AuroraTrialsSheet({
     return () => {
       alive = false;
     };
-  }, [open, token, t]);
+  }, [open, token, t, reloadKey]);
 
   async function activate(trial: ClientTrialOption) {
     if (!token || activating) return;
+    const price = trial.price ?? 0;
+    const amount = formatCheckoutAmount(price, "RUB", i18n.language);
+    if (price > 0 && !window.confirm(t("aurora.trial_confirm_paid", { name: trial.name, amount }))) return;
     setActivating(trial.id);
     setError(null);
     try {
-      await api.clientActivateTrialById(token, trial.id, trial.price ?? 0);
+      await api.clientActivateTrialById(token, trial.id, price);
       await refreshProfile().catch(() => {});
-      onActivated();
+      onActivated?.();
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : t("aurora.trial_error"));
@@ -81,7 +84,14 @@ export function AuroraTrialsSheet({
             <Loader2 className="h-6 w-6 animate-spin text-[var(--au-muted)]" />
           </div>
         )}
-        {error && <AuNotice tone="error">{error}</AuNotice>}
+        {!loading && error && (
+          <div className="space-y-2">
+            <AuNotice tone="error">{error}</AuNotice>
+            <AuButton variant="surface" onClick={() => setReloadKey((value) => value + 1)}>
+              {t("aurora.retry")}
+            </AuButton>
+          </div>
+        )}
         {!loading && !error && items.length === 0 && (
           <AuEmpty
             icon={<Gift className="h-6 w-6" />}
@@ -95,14 +105,24 @@ export function AuroraTrialsSheet({
             const price = trial.price ?? 0;
             const busy = activating === trial.id;
             return (
-              <article key={trial.id} className="rounded-[22px] bg-[var(--au-bg)] p-4">
+              <button
+                key={trial.id}
+                type="button"
+                onClick={() => void activate(trial)}
+                disabled={activating !== null}
+                aria-busy={busy}
+                className={cn(
+                  "w-full cursor-pointer rounded-[20px] border border-transparent bg-[var(--au-surface)] p-4 text-left transition-all active:scale-[0.98] hover:border-[var(--au-from)]/30 disabled:cursor-default disabled:opacity-60 disabled:active:scale-100",
+                  busy && "border-[var(--au-from)]/40",
+                )}
+              >
                 <div className="flex items-start gap-3">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--au-surface)] text-[var(--au-from)]">
-                    <Gift className="h-5 w-5" />
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--au-bg)] text-[var(--au-from)]">
+                    {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Gift className="h-5 w-5" />}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-[15px] font-bold text-[var(--au-ink)]">{trial.name}</h3>
+                      <h3 className="text-[16px] font-bold text-[var(--au-ink)]">{trial.name}</h3>
                       {price > 0 && <AuBadge tone="accent">{formatCheckoutAmount(price, "RUB", i18n.language)}</AuBadge>}
                     </div>
                     {trial.tariffName && (
@@ -127,11 +147,18 @@ export function AuroraTrialsSheet({
                     </div>
                   </div>
                 </div>
-                <AuButton className="mt-3" onClick={() => activate(trial)} disabled={busy || activating !== null}>
+                <span
+                  className={cn(
+                    "mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-[16px] px-4 text-[14px] font-bold",
+                    price > 0 ? "bg-[var(--au-from)] text-white" : "bg-[var(--au-bg)] text-[var(--au-ink)]",
+                  )}
+                >
                   {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {price > 0 ? t("aurora.trial_buy_for", { amount: formatCheckoutAmount(price, "RUB", i18n.language) }) : t("aurora.trial_activate")}
-                </AuButton>
-              </article>
+                  {price > 0
+                    ? t("aurora.trial_buy_for", { amount: formatCheckoutAmount(price, "RUB", i18n.language) })
+                    : t("aurora.trial_activate")}
+                </span>
+              </button>
             );
           })}
       </div>
