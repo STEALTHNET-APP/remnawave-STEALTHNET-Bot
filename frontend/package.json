@@ -37,7 +37,8 @@
     "react-router-dom": "^6.28.0",
     "recharts": "^3.7.0",
     "tailwind-merge": "^2.5.4",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.15",
+    "workbox-window": "^7.1.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

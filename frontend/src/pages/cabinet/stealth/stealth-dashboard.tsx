@@ -16,7 +16,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import gsap from "gsap";
 import { EASE_OUT, EASE_SPRING, reducedMotion } from "@/lib/gsap-utils";
-import { Zap, Settings2, Smartphone, Gift, Users, ChevronRight, Shield, Calendar, Clock, Plus, Check, Sparkles } from "lucide-react";
+import { Zap, Settings2, Smartphone, Gift, Users, ChevronRight, Shield, Calendar, Clock, Plus, Check } from "lucide-react";
+import { RouletteIcon } from "@/components/icons/roulette-icon";
 import { StealthPromocodeModal } from "@/components/stealth/stealth-promocode-modal";
 import { StealthDevicesModal } from "@/components/stealth/stealth-devices-modal";
 import { StealthTrialsModal } from "@/components/stealth/stealth-trials-modal";
@@ -528,13 +529,13 @@ export function StealthDashboard() {
               size="md"
               iconLeft={
                 <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-saccent-500/15 border border-saccent-500/30">
-                  <Sparkles className="h-3.5 w-3.5 text-saccent-400" />
+                  <RouletteIcon className="h-3.5 w-3.5 text-saccent-400" />
                 </span>
               }
               iconRight={<ChevronRight className="h-4 w-4 text-zinc-500" />}
               onClick={() => navigate("/cabinet/roulette")}
             >
-              <span className="flex-1 text-left">🎰 Рулетка удачи</span>
+              <span className="flex-1 text-left">Рулетка удачи</span>
             </StadiumButton>
           )}
 

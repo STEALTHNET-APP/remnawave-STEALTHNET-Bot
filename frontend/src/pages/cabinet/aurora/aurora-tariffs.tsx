@@ -6,7 +6,7 @@ import { useLocation } from "react-router-dom";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Wallet, Bitcoin, Check, AlertCircle, Loader2, RefreshCw, X } from "lucide-react";
+import { Wallet, Bitcoin, Check, AlertCircle, Loader2, RefreshCw, X, Tag } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type PublicTariff, type PublicTariffCategory, type PublicConfig, type TariffConversionPreview } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -833,22 +833,20 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
               {/* ── Промокод ── */}
               {/* min-w-0 на input обязателен: flex-item с дефолтным min-width:auto
                   не сжимался на узких экранах и выталкивал кнопку за край контейнера. */}
-              <div className="flex items-center gap-2 rounded-[20px] bg-[var(--au-surface)] p-2">
+              <div className="flex items-center gap-2 rounded-[18px] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[color-mix(in_srgb,var(--au-surface)_85%,var(--au-bg))] p-1.5 transition-all focus-within:border-[var(--au-from)] focus-within:ring-2 focus-within:ring-[var(--au-from)]/25">
+                <Tag className="ml-3 h-4 w-4 shrink-0 text-[var(--au-muted)]" />
                 <input
                   value={promoInput}
                   onChange={(e) => { setPromoInput(e.target.value); setPromoMsg(null); }}
                   placeholder="Промокод"
-                  // 16px обязательны: при меньшем размере iOS Safari принудительно
-                  // приближает страницу, когда поле получает фокус, и вернуть
-                  // масштаб обратно пользователь уже не может.
-                  className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-[16px] outline-none placeholder:text-[var(--au-muted)]"
+                  className="min-w-0 flex-1 bg-transparent px-1 py-2.5 text-[16px] text-[var(--au-ink)] outline-none placeholder:text-[var(--au-muted)]"
                 />
                 <button
                   onClick={applyPromo}
                   disabled={promoBusy || !promoInput.trim()}
-                  className="shrink-0 whitespace-nowrap rounded-[15px] bg-[var(--au-surface)] px-4 py-2.5 text-[13px] font-bold transition disabled:opacity-45"
+                  className="shrink-0 whitespace-nowrap rounded-[13px] border border-[color-mix(in_srgb,var(--au-muted)_18%,transparent)] bg-[var(--au-bg)] px-4 py-2.5 text-[13px] font-bold text-[var(--au-ink)] transition-all hover:bg-[color-mix(in_srgb,var(--au-from)_15%,var(--au-bg))] disabled:opacity-45"
                 >
-                  {promoBusy ? "…" : promoApplied ? <Check className="inline h-4 w-4" /> : "Применить"}
+                  {promoBusy ? "…" : promoApplied ? <Check className="inline h-4 w-4 text-emerald-500" /> : "Применить"}
                 </button>
               </div>
               {promoMsg && (

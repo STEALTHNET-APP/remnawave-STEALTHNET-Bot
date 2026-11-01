@@ -16,6 +16,7 @@ import { CopyLinkButton, SubscriptionQrButton } from "@/components/subscription-
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
+import { RouletteIcon } from "@/components/icons/roulette-icon";
 import { useClientAuth } from "@/contexts/client-auth";
 import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { api } from "@/lib/api";
@@ -256,8 +257,8 @@ export function AuroraDashboard() {
           className="flex w-full items-center justify-between gap-3 rounded-[20px] bg-[var(--au-surface)] px-4 py-3.5 text-left active:scale-[0.99] transition-transform border border-white/40 dark:border-white/5"
         >
           <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white shadow-md text-lg">
-              🎰
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white shadow-md">
+              <RouletteIcon size={20} className="text-white" />
             </span>
             <div>
               <div className="text-[15px] font-bold text-[var(--au-ink)]">Рулетка удачи</div>
