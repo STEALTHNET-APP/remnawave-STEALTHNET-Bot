@@ -17,3 +17,8 @@ test('existing hour-based and pending reward plans retain their cooldown', () =>
   const last = new Date('2026-10-25T23:00:00Z');
   assert.equal(nextRouletteSpinAt(last, { cooldownHours: 24 }), Date.parse('2026-10-26T23:00:00Z'));
 });
+test('daily mode without an explicit timezone defaults to Moscow', () => {
+  // 23:00 МСК 25 октября → ближайшая полночь по Москве наступает через час.
+  const last = new Date('2026-10-25T20:00:00Z');
+  assert.equal(nextRouletteSpinAt(last, { cooldownHours: 24, resetMode: 'daily' }), Date.parse('2026-10-25T21:00:00Z'));
+});

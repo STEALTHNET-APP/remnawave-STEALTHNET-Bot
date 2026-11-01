@@ -1,5 +1,5 @@
 import { invalidateSystemConfigCache } from "../client/client.service.js";
-import { nextRouletteSpinAt } from "./roulette-cooldown.js";
+import { nextRouletteSpinAt, DEFAULT_ROULETTE_TIME_ZONE } from "./roulette-cooldown.js";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../db.js";
@@ -169,8 +169,8 @@ export async function getRouletteSettings(db: Prisma.TransactionClient = prisma)
     } catch {}
   }
   const resetMode = map.roulette_reset_mode === "daily" ? "daily" : "hours";
-  let timeZone = map.roulette_time_zone || "UTC";
-  try { new Intl.DateTimeFormat("en", { timeZone }); } catch { timeZone = "UTC"; }
+  let timeZone = map.roulette_time_zone || DEFAULT_ROULETTE_TIME_ZONE;
+  try { new Intl.DateTimeFormat("en", { timeZone }); } catch { timeZone = DEFAULT_ROULETTE_TIME_ZONE; }
   return { enabled, cooldownHours, sectors, resetMode, timeZone };
 }
 

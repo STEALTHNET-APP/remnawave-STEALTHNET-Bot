@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Sparkles, Clock, Save, History, Loader2, Plus, Trash2, RotateCcw } from "lucide-react";
+import { Sparkles, Clock, MapPin, Save, History, Loader2, Plus, Trash2, RotateCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ import { useAuth } from "@/contexts/auth";
 import { RouletteWheel, type WheelSector } from "./roulette-wheel";
 
 export type RouletteRewardType = "days" | "balance" | "traffic" | "discount" | "empty";
+
+const DEFAULT_TIME_ZONE = "Europe/Moscow";
 
 export interface SectorItem {
   id: string;
@@ -68,7 +70,7 @@ export function RouletteAdminTab() {
   const [enabled, setEnabled] = useState(true);
   const [cooldownHours, setCooldownHours] = useState(24);
   const [resetMode, setResetMode] = useState<"hours" | "daily">("hours");
-  const [timeZone, setTimeZone] = useState("UTC");
+  const [timeZone, setTimeZone] = useState(DEFAULT_TIME_ZONE);
   const [sectors, setSectors] = useState<SectorItem[]>([]);
   const [totalSpins, setTotalSpins] = useState(0);
   const [spinsByType, setSpinsByType] = useState<any[]>([]);
@@ -83,7 +85,7 @@ export function RouletteAdminTab() {
         setEnabled(res.settings?.enabled ?? true);
         setCooldownHours(res.settings?.cooldownHours ?? 24);
         setResetMode(res.settings?.resetMode ?? "hours");
-        setTimeZone(res.settings?.timeZone ?? "UTC");
+        setTimeZone(res.settings?.timeZone ?? DEFAULT_TIME_ZONE);
         setSectors(res.settings?.sectors?.length > 0 ? res.settings.sectors : DEFAULT_SECTORS);
         setTotalSpins(res.totalSpins ?? 0);
         setSpinsByType(res.spinsByType ?? []);
@@ -108,9 +110,16 @@ export function RouletteAdminTab() {
     }
     try {
       setSaving(true);
+      const effectiveTimeZone = timeZone.trim() || DEFAULT_TIME_ZONE;
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: effectiveTimeZone });
+      } catch {
+        toast.error("Неверный часовой пояс", "Укажите IANA-зону, например Europe/Moscow или Europe/Berlin");
+        return;
+      }
       await api.updateAdminRoulette(token, {
         enabled,
-        cooldownHours, resetMode, timeZone,
+        cooldownHours, resetMode, timeZone: effectiveTimeZone,
         sectors,
       });
       toast.success("Сохранено", "Настройки рулетки успешно обновлены");
@@ -291,23 +300,50 @@ export function RouletteAdminTab() {
             <div className="space-y-1.5">
               <Label htmlFor="roulette-reset-mode">Обновление попыток</Label>
               <select id="roulette-reset-mode" value={resetMode} onChange={e => setResetMode(e.target.value as "hours" | "daily")} className="w-full rounded-lg border bg-background p-2"><option value="hours">Кулдаун в часах</option><option value="daily">Раз в календарные сутки</option></select>
-              {resetMode === "daily" && <div className="space-y-2"><Label htmlFor="roulette-zone">Часовой пояс</Label><Input id="roulette-zone" value={timeZone} onChange={e => setTimeZone(e.target.value)} placeholder="Europe/Moscow" /><p className="text-xs text-muted-foreground">Новая попытка в 00:00 выбранного пояса. Например: UTC, Europe/Moscow, Europe/Berlin.</p></div>}
-              <Label htmlFor="cooldown-input">Кулдаун между вращениями (часы)</Label>
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="cooldown-input"
-                  disabled={resetMode === "daily"}
-                  type="number"
-                  min={1}
-                  max={720}
-                  value={cooldownHours}
-                  onChange={(e) => setCooldownHours(parseInt(e.target.value, 10) || 24)}
-                />
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                По умолчанию 24 часа (одно бесплатное вращение в сутки).
-              </p>
+              {resetMode === "daily" ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="roulette-zone">Часовой пояс</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 px-2 text-xs"
+                      disabled={timeZone === DEFAULT_TIME_ZONE}
+                      onClick={() => setTimeZone(DEFAULT_TIME_ZONE)}
+                    >
+                      <MapPin className="h-3.5 w-3.5" /> Москва
+                    </Button>
+                  </div>
+                  <Input id="roulette-zone" value={timeZone} onChange={e => setTimeZone(e.target.value)} placeholder={DEFAULT_TIME_ZONE} />
+                  {timeZone.trim().toUpperCase() === "UTC" && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Сейчас сброс происходит в 00:00 UTC (03:00 МСК). Кнопка «Москва» переключит на московское время.
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    По умолчанию — Москва (UTC+3). Новая попытка в 00:00 выбранного пояса. Можно указать IANA-зону, например Europe/Berlin.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="cooldown-input">Кулдаун между вращениями (часы)</Label>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="cooldown-input"
+                      type="number"
+                      min={1}
+                      max={720}
+                      value={cooldownHours}
+                      onChange={(e) => setCooldownHours(parseInt(e.target.value, 10) || 24)}
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    По умолчанию 24 часа. Для ежедневного сброса в полночь выберите «Раз в календарные сутки».
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
