@@ -10,18 +10,13 @@ import { activateTariffByPaymentId } from "../tariff/tariff-activation.service.j
 import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.service.js";
 import { createSingboxSlotsByPaymentId } from "../singbox/singbox-slots-activation.service.js";
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
-import { notifyProxySlotsCreated, notifySingboxSlotsCreated } from "../notification/telegram-notify.service.js";
+import { notifyProxySlotsCreated, notifySingboxSlotsCreated, notifyBalanceToppedUp } from "../notification/telegram-notify.service.js";
 import { auditPaymentClientBotAlignment } from "./payment-webhook-audit.util.js";
 import { extinguishOneTimeDiscount } from "../client/personal-discount.js";
 
-function hasExtraOptionInMetadata(metadata: string | null): boolean {
-  if (!metadata?.trim()) return false;
-  try {
-    const obj = JSON.parse(metadata) as Record<string, unknown>;
-    return obj?.extraOption != null && typeof obj.extraOption === "object";
-  } catch {
-    return false;
-  }
+function parseMetadata(raw: string | null): Record<string, unknown> {
+  if (!raw?.trim()) return {};
+  try { return JSON.parse(raw) as Record<string, unknown>; } catch { return {}; }
 }
 
 export type MarkPaymentPaidResult = {
@@ -50,35 +45,42 @@ export async function markPaymentPaid(paymentId: string): Promise<MarkPaymentPai
     return { ok: true, payment: updated ?? payment, referral: result };
   }
   const now = new Date();
-  const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
-  const isTopUp =
-    (payment.provider === "yoomoney_form" || payment.provider === "platega" || payment.provider === "yookassa") &&
-    !payment.tariffId &&
-    !payment.proxyTariffId &&
-    !payment.singboxTariffId &&
-    !isExtraOption;
+  const meta = parseMetadata(payment.metadata);
+  const isExtraOption = Boolean(meta.extraOption);
+  const isCustomBuild = Boolean(meta.customBuild);
+  const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption && !isCustomBuild;
 
-  // Idempotent flip: PENDING → PAID. Если параллельный webhook (или повторный
-  // ретрай провайдера) уже зафлипнул — count=0, сюда не лезем второй раз.
-  // Без этой проверки: 2 webhook'а на один payment → 2 раза +balance.increment
-  // (двойной топап). На бесподписном webhook'е (см. отчёт) — атакер мог фигачить
-  // /webhooks/platega с одним paymentId сколько хочет.
-  const flip = await prisma.payment.updateMany({
-    where: { id: paymentId, status: "PENDING" },
-    data: { status: "PAID", paidAt: now },
-  });
-  if (flip.count === 0) {
-    // Уже PAID параллельным запросом — выходим как идемпотент.
+  let claimed = false;
+  if (isTopUp) {
+    claimed = await prisma.$transaction(async (tx) => {
+      const flip = await tx.payment.updateMany({
+        where: { id: paymentId, status: "PENDING" },
+        data: { status: "PAID", paidAt: now },
+      });
+      if (flip.count > 0) {
+        await tx.client.update({
+          where: { id: payment.clientId },
+          data: { balance: { increment: payment.amount } },
+        });
+      }
+      return flip.count > 0;
+    });
+  } else {
+    const flip = await prisma.payment.updateMany({
+      where: { id: paymentId, status: "PENDING" },
+      data: { status: "PAID", paidAt: now },
+    });
+    claimed = flip.count > 0;
+  }
+
+  if (!claimed) {
     const updated = await prisma.payment.findUnique({ where: { id: paymentId } });
     const result = await distributeReferralRewards(paymentId);
     return { ok: true, payment: updated ?? payment, referral: result };
   }
+
   if (isTopUp) {
-    // Списание баланса делаем ТОЛЬКО если flip нам "достался" (count=1).
-    await prisma.client.update({
-      where: { id: payment.clientId },
-      data: { balance: { increment: payment.amount } },
-    });
+    await notifyBalanceToppedUp(payment.clientId, payment.amount, payment.currency || "RUB", payment.provider || "Manual").catch(() => {});
   }
 
   let activation: { ok: boolean; error?: string } = { ok: false, error: "no tariff" };
@@ -90,7 +92,7 @@ export async function markPaymentPaid(paymentId: string): Promise<MarkPaymentPai
       const { notifyExtraOptionApplied } = await import("../notification/telegram-notify.service.js");
       await notifyExtraOptionApplied(payment.clientId, paymentId).catch(() => {});
     }
-  } else if (payment.tariffId) {
+  } else if (payment.tariffId || isCustomBuild) {
     activation = await activateTariffByPaymentId(paymentId);
   } else if (payment.proxyTariffId) {
     const proxyResult = await createProxySlotsByPaymentId(paymentId);
@@ -126,15 +128,13 @@ export async function markPaymentPaid(paymentId: string): Promise<MarkPaymentPai
     }
   }
 
-  if (payment.tariffId || payment.proxyTariffId || payment.singboxTariffId) {
+  if (payment.tariffId || payment.proxyTariffId || payment.singboxTariffId || isCustomBuild) {
     await prisma.client.update({
       where: { id: payment.clientId },
       data: { trialUsed: true },
     }).catch(() => {});
   }
 
-  // сжигаем одноразовую персональную
-  // скидку после продуктовой покупки. Топ-ап баланса НЕ сжигает.
   if (!isTopUp) {
     await extinguishOneTimeDiscount(payment.clientId);
   }

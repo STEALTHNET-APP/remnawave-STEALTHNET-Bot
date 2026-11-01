@@ -128,67 +128,48 @@ paymentActionsRouter.post(
       return res.json({ ok: true, payment: updated, summary: { creditedToBalance: 0, reversedReferralAmount: 0, reversedReferralCount: 0 } });
     }
 
-    let creditedToBalance = 0;
-    let reversedReferralAmount = 0;
-    let reversedReferralCount = 0;
-
-    // 1. Зачисление на баланс — если pay-by-balance, увеличиваем (откатываем decrement).
-    //    Для других провайдеров — это будет «возврат на счёт» как goodwill credit.
-    if (refundToBalance && payment.amount > 0) {
-      await prisma.client.update({
-        where: { id: payment.clientId },
-        data: { balance: { increment: payment.amount } },
+    const refundResult = await prisma.$transaction(async (tx) => {
+      const claim = await tx.payment.updateMany({
+        where: { id, status: { notIn: ["REFUNDED", "FAILED"] } },
+        data: { status: "REFUNDED" },
       });
-      creditedToBalance = payment.amount;
-    }
+      if (claim.count === 0) return null;
 
-    // 2. Откат referral-наград.
-    if (reverseReferrals) {
-      try {
-        const credits = await prisma.referralCredit.findMany({ where: { paymentId: id } });
+      let creditedToBalance = 0;
+      if (refundToBalance && payment.amount > 0) {
+        await tx.client.update({
+          where: { id: payment.clientId },
+          data: { balance: { increment: payment.amount } },
+        });
+        creditedToBalance = payment.amount;
+      }
+
+      let reversedReferralAmount = 0;
+      let reversedReferralCount = 0;
+      if (reverseReferrals) {
+        const credits = await tx.referralCredit.findMany({ where: { paymentId: id } });
         for (const c of credits) {
-          // Откатываем баланс реферера на сумму награды (если она была credited).
           if (c.amount > 0) {
-            await prisma.client.update({
+            await tx.client.update({
               where: { id: c.referrerId },
               data: { balance: { decrement: c.amount } },
-            }).catch((e) => console.error("[refund] failed to reverse referral credit:", e));
+            }).catch(() => {});
             reversedReferralAmount += c.amount;
             reversedReferralCount += 1;
           }
         }
-        // Удаляем сами кредиты.
-        await prisma.referralCredit.deleteMany({ where: { paymentId: id } });
-      } catch (e) {
-        console.error("[refund] referral_credits processing failed:", e);
+        await tx.referralCredit.deleteMany({ where: { paymentId: id } });
       }
+
+      const updated = await tx.payment.findUnique({ where: { id } });
+      return { updated, creditedToBalance, reversedReferralAmount, reversedReferralCount };
+    });
+
+    if (!refundResult) {
+      return res.status(400).json({ message: "Платёж уже возвращён или отклонён" });
     }
 
-    // 3. Статус → REFUNDED (если БД позволяет такой статус; иначе FAILED + metadata.refunded).
-    let updated;
-    try {
-      updated = await prisma.payment.update({
-        where: { id },
-        data: { status: "REFUNDED" },
-      });
-    } catch {
-      // Status enum-like: используем FAILED + помечаем в metadata.
-      const meta = payment.metadata ? (() => {
-        try { return JSON.parse(payment.metadata) as Record<string, unknown>; } catch { return {}; }
-      })() : {};
-      updated = await prisma.payment.update({
-        where: { id },
-        data: {
-          status: "FAILED",
-          metadata: JSON.stringify({
-            ...meta,
-            refundedAt: new Date().toISOString(),
-            refundedToBalance: creditedToBalance,
-            reversedReferralAmount,
-          }),
-        },
-      });
-    }
+    const { updated, creditedToBalance, reversedReferralAmount, reversedReferralCount } = refundResult;
 
     await logAdmin(req, "payment.refund", { type: "payment", id }, {
       amount: payment.amount,

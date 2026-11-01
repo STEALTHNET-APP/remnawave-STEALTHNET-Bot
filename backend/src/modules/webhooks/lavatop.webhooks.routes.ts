@@ -40,14 +40,9 @@ import {
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
 
-function hasExtraOptionInMetadata(metadata: string | null): boolean {
-  if (!metadata?.trim()) return false;
-  try {
-    const obj = JSON.parse(metadata) as Record<string, unknown>;
-    return obj?.extraOption != null && typeof obj.extraOption === "object";
-  } catch {
-    return false;
-  }
+function parseMetadata(metadata: string | null): Record<string, unknown> {
+  if (!metadata?.trim()) return {};
+  try { return JSON.parse(metadata) as Record<string, unknown>; } catch { return {}; }
 }
 
 export const lavatopWebhooksRouter = Router();
@@ -69,18 +64,17 @@ async function activatePayment(paymentId: string) {
   });
   if (!payment) return;
 
-  const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
+  const meta = parseMetadata(payment.metadata);
+  const isExtraOption = Boolean(meta.extraOption);
+  const isCustomBuild = Boolean(meta.customBuild);
   const isTopUp =
     !payment.tariffId &&
     !payment.proxyTariffId &&
     !payment.singboxTariffId &&
-    !isExtraOption;
+    !isExtraOption &&
+    !isCustomBuild;
 
   if (isTopUp) {
-    await prisma.client.update({
-      where: { id: payment.clientId },
-      data: { balance: { increment: payment.amount } },
-    });
     await notifyBalanceToppedUp(payment.clientId, payment.amount, payment.currency || "RUB", "Lava.top").catch(() => {});
   } else if (isExtraOption) {
     const r = await applyExtraOptionByPaymentId(payment.id);
@@ -117,21 +111,31 @@ async function activatePayment(paymentId: string) {
 /** Recurring renewal: клонирует исходный payment, создаёт новый PAID и активирует. */
 async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<void> {
   const parentOrderId = event.parentContractId?.trim();
-  const childOrderId = event.contractId?.trim();
-  if (!parentOrderId || !childOrderId) {
+  const rawChildOrderId = event.contractId?.trim();
+  if (!parentOrderId || !rawChildOrderId) {
     console.warn("[Lava.top Webhook] recurring без parentContractId/contractId", event);
     return;
   }
 
-  // Идемпотентность: уже создали payment для этого contractId?
-  const alreadyProcessed = await prisma.payment.findFirst({
-    where: { orderId: childOrderId, provider: "lavatop" },
+  const raw = event.raw as Record<string, unknown>;
+  const eventRecord = event as unknown as Record<string, unknown>;
+  const recurringKey = eventRecord.invoiceId ?? eventRecord.id
+    ?? raw.invoiceId ?? raw.id ?? eventRecord.timestamp ?? raw.timestamp ?? Date.now();
+  const recurringOrderId = rawChildOrderId !== parentOrderId
+    ? rawChildOrderId
+    : `lavatop-rec-${parentOrderId}-${String(recurringKey)}`;
+
+  const alreadyProcessed = await prisma.payment.findUnique({
+    where: { orderId: recurringOrderId },
     select: { id: true, status: true },
   });
   if (alreadyProcessed) {
     if (alreadyProcessed.status !== "PAID") {
-      await prisma.payment.update({ where: { id: alreadyProcessed.id }, data: { status: "PAID", paidAt: new Date() } });
-      await activatePayment(alreadyProcessed.id);
+      const flipped = await prisma.payment.updateMany({
+        where: { id: alreadyProcessed.id, status: { not: "PAID" } },
+        data: { status: "PAID", paidAt: new Date() },
+      });
+      if (flipped.count > 0) await activatePayment(alreadyProcessed.id);
     }
     return;
   }
@@ -160,11 +164,10 @@ async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<void>
   const amount = event.amount ?? 0;
   const currency = (event.currency || parent.currency || "RUB").toLowerCase();
 
-  // Помечаем в metadata что это recurring
-  let metadata: Record<string, unknown> = {};
-  if (parent.metadata) {
-    try { metadata = JSON.parse(parent.metadata) as Record<string, unknown>; } catch { /* ignore */ }
-  }
+  let metadata = parseMetadata(parent.metadata);
+  const isExtraOption = Boolean(metadata.extraOption);
+  const isCustomBuild = Boolean(metadata.customBuild);
+  const isTopUp = !parent.tariffId && !parent.proxyTariffId && !parent.singboxTariffId && !isExtraOption && !isCustomBuild;
   metadata = {
     ...metadata,
     recurring: true,
@@ -175,25 +178,38 @@ async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<void>
 
   // Создаём новый payment для этого месяца (расширение подписки)
   const newPaymentId = `cm_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
-  await prisma.payment.create({
-    data: {
-      id: newPaymentId,
-      clientId: parent.clientId,
-      orderId: childOrderId,
-      amount,
-      currency,
-      status: "PAID",
-      provider: "lavatop",
-      externalId: event.productId || null,
-      tariffId: parent.tariffId,
-      tariffPriceOptionId: parent.tariffPriceOptionId,
-      proxyTariffId: parent.proxyTariffId,
-      singboxTariffId: parent.singboxTariffId,
-      deviceCount: parent.deviceCount,
-      metadata: JSON.stringify(metadata),
-      paidAt: new Date(),
-    },
-  });
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.payment.create({
+        data: {
+          id: newPaymentId,
+          clientId: parent.clientId,
+          orderId: recurringOrderId,
+          amount,
+          currency,
+          status: "PAID",
+          provider: "lavatop",
+          externalId: event.productId || null,
+          tariffId: parent.tariffId,
+          tariffPriceOptionId: parent.tariffPriceOptionId,
+          proxyTariffId: parent.proxyTariffId,
+          singboxTariffId: parent.singboxTariffId,
+          deviceCount: parent.deviceCount,
+          metadata: JSON.stringify(metadata),
+          paidAt: new Date(),
+        },
+      });
+      if (isTopUp) {
+        await tx.client.update({
+          where: { id: parent.clientId },
+          data: { balance: { increment: amount } },
+        });
+      }
+    });
+  } catch (e) {
+    if ((e as { code?: string })?.code === "P2002") return;
+    throw e;
+  }
 
   console.log("[Lava.top Webhook] recurring renewal — создан payment", { id: newPaymentId, amount, currency });
 
@@ -275,12 +291,28 @@ lavatopWebhooksRouter.post("/", async (req: Request, res: Response) => {
   }
 
   await auditPaymentClientBotAlignment(payment);
-  if (payment.status === "PAID") return res.status(200).send("OK"); // already processed
 
-  await prisma.payment.update({
-    where: { id: payment.id },
-    data: { status: "PAID", paidAt: new Date(), externalId: event.productId || null },
-  });
+  const meta = parseMetadata(payment.metadata);
+  const isExtraOption = Boolean(meta.extraOption);
+  const isCustomBuild = Boolean(meta.customBuild);
+  const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption && !isCustomBuild;
+  const paidData = { status: "PAID", paidAt: new Date(), externalId: event.productId || null };
+  const where = { id: payment.id, status: { not: "PAID" } };
+  const claimed = isTopUp
+    ? await prisma.$transaction(async (tx) => {
+        const updated = await tx.payment.updateMany({ where, data: paidData });
+        if (updated.count > 0) {
+          await tx.client.update({
+            where: { id: payment.clientId },
+            data: { balance: { increment: payment.amount } },
+          });
+        }
+        return updated.count > 0;
+      })
+    : (await prisma.payment.updateMany({ where, data: paidData })).count > 0;
+
+  if (!claimed) return res.status(200).send("OK");
+
   await recordPromoCodeUsageFromPayment(payment.id);
   await activatePayment(payment.id);
 

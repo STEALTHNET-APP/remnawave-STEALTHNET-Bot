@@ -19,14 +19,9 @@ import { createNalogReceipt } from "../nalog/nalog.service.js";
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
 
-function hasExtraOptionInMetadata(metadata: string | null): boolean {
-  if (!metadata?.trim()) return false;
-  try {
-    const obj = JSON.parse(metadata) as Record<string, unknown>;
-    return obj?.extraOption != null && typeof obj.extraOption === "object";
-  } catch {
-    return false;
-  }
+function parseMetadata(metadata: string | null): Record<string, unknown> {
+  if (!metadata?.trim()) return {};
+  try { return JSON.parse(metadata) as Record<string, unknown>; } catch { return {}; }
 }
 
 export const yookassaWebhooksRouter = Router();
@@ -171,16 +166,30 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
 
   await auditPaymentClientBotAlignment(payment);
 
-  if (payment.status === "PAID") {
+  const yookassaId = body.object?.id ?? null;
+  const meta = parseMetadata(payment.metadata);
+  const isExtraOption = Boolean(meta.extraOption);
+  const isCustomBuild = Boolean(meta.customBuild);
+  const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption && !isCustomBuild;
+  const paidData = { status: "PAID", paidAt: new Date(), externalId: yookassaId };
+  const where = { id: payment.id, status: { not: "PAID" } };
+  const claimed = isTopUp
+    ? await prisma.$transaction(async (tx) => {
+        const updated = await tx.payment.updateMany({ where, data: paidData });
+        if (updated.count > 0) {
+          await tx.client.update({
+            where: { id: payment.clientId },
+            data: { balance: { increment: payment.amount } },
+          });
+        }
+        return updated.count > 0;
+      })
+    : (await prisma.payment.updateMany({ where, data: paidData })).count > 0;
+
+  if (!claimed) {
     console.log("[YooKassa Webhook] Already processed", { paymentId });
     return res.status(200).send("OK");
   }
-
-  const yookassaId = body.object?.id ?? null;
-  await prisma.payment.update({
-    where: { id: payment.id },
-    data: { status: "PAID", paidAt: new Date(), externalId: yookassaId },
-  });
   await recordPromoCodeUsageFromPayment(payment.id);
 
   // Сохраняем способ оплаты для рекуррентных платежей
@@ -201,14 +210,7 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
     });
   }
 
-  const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
-  const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption;
-
   if (isTopUp) {
-    await prisma.client.update({
-      where: { id: payment.clientId },
-      data: { balance: { increment: payment.amount } },
-    });
     console.log("[YooKassa Webhook] Payment PAID, balance credited (top-up)", {
       paymentId: payment.id,
       clientId: payment.clientId,

@@ -2651,6 +2651,11 @@ clientRouter.post("/promo/activate", async (req, res) => {
       activeInternalSquads: [group.squadUuid],
     });
     if (updateRes.error) {
+      if (activationCreated) {
+        await prisma.promoActivation.delete({
+          where: { promoGroupId_clientId: { promoGroupId: group.id, clientId: client.id } },
+        }).catch(() => {});
+      }
       return res.status(updateRes.status >= 400 ? updateRes.status : 500).json({ message: updateRes.error });
     }
   } else {
@@ -2686,7 +2691,14 @@ clientRouter.post("/promo/activate", async (req, res) => {
       });
       existingUuid = extractRemnaUuid(createRes.data);
     }
-    if (!existingUuid) return res.status(502).json({ message: "Ошибка создания пользователя VPN" });
+    if (!existingUuid) {
+      if (activationCreated) {
+        await prisma.promoActivation.delete({
+          where: { promoGroupId_clientId: { promoGroupId: group.id, clientId: client.id } },
+        }).catch(() => {});
+      }
+      return res.status(502).json({ message: "Ошибка создания пользователя VPN" });
+    }
 
     await remnaUpdateUser({ uuid: existingUuid, expireAt, trafficLimitBytes, hwidDeviceLimit, activeInternalSquads: [group.squadUuid] });
 

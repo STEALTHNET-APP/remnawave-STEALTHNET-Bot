@@ -115,12 +115,18 @@ async function tryApplyPromoForAutoRenew(
 /**
  * Планировщик автопродления. Запуск раз в минуту для точности UPCOMING-уведомлений.
  */
+let isAutoRenewRunning = false;
+
 export function startAutoRenewScheduler() {
   cron.schedule("* * * * *", async () => {
+    if (isAutoRenewRunning) return;
+    isAutoRenewRunning = true;
     try {
       await processAutoRenewals();
     } catch (e) {
       console.error("[auto-renew] Error in cron job:", e);
+    } finally {
+      isAutoRenewRunning = false;
     }
   });
 }
@@ -244,7 +250,7 @@ export async function processAutoRenewals() {
           await tryApplyPromoForAutoRenew(client.id, client.autoRenewPromoCode, priceAfterPersonal);
 
         const debitGuard = await prisma.client.updateMany({
-          where: { id: client.id, balance: { gte: tariffPrice - 0.01 } },
+          where: { id: client.id, balance: { gte: tariffPrice } },
           data: {
             balance: { decrement: tariffPrice },
             autoRenewRetryCount: 0,
@@ -381,30 +387,42 @@ export async function processAutoRenewals() {
               }
               yookassaPaid = true;
             } else {
-              const balancePortion = Math.min(client.balance, tariffPrice);
-              const cardPortion = tariffPrice - balancePortion;
+              const balancePortion = Math.min(Math.max(0, client.balance), tariffPrice);
+              let cardPortion = tariffPrice;
+              let paidViaBalance = 0;
+
+              if (balancePortion > 0) {
+                const partialDebit = await prisma.client.updateMany({
+                  where: { id: client.id, balance: { gte: balancePortion } },
+                  data: { balance: { decrement: balancePortion } },
+                });
+                if (partialDebit.count > 0) {
+                  paidViaBalance = balancePortion;
+                  cardPortion = tariffPrice - balancePortion;
+                }
+              }
+
               const orderId = randomUUID();
               const serviceName = config.serviceName?.trim() || "STEALTHNET";
               const tgIdSuffix = client.telegramId ? ` tg:${client.telegramId}` : "";
-              const autopayResult = await createYookassaAutopayment({
-                shopId: config.yookassaShopId.trim(),
-                secretKey: config.yookassaSecretKey.trim(),
-                amount: cardPortion,
-                currency: client.autoRenewTariff!.currency.toUpperCase(),
-                paymentMethodId: client.yookassaPaymentMethodId,
-                description: `Автопродление ${serviceName}${tgIdSuffix}`,
-                metadata: { auto_renew: "true", client_id: client.id },
-                customerEmail: client.email,
-                customerTelegramUsername: client.telegramUsername ?? null,
-              });
+              let autopayResult: Awaited<ReturnType<typeof createYookassaAutopayment>>;
+              try {
+                autopayResult = await createYookassaAutopayment({
+                  shopId: config.yookassaShopId.trim(),
+                  secretKey: config.yookassaSecretKey.trim(),
+                  amount: cardPortion,
+                  currency: client.autoRenewTariff!.currency.toUpperCase(),
+                  paymentMethodId: client.yookassaPaymentMethodId,
+                  description: `Автопродление ${serviceName}${tgIdSuffix}`,
+                  metadata: { auto_renew: "true", client_id: client.id },
+                  customerEmail: client.email,
+                  customerTelegramUsername: client.telegramUsername ?? null,
+                });
+              } catch (e) {
+                autopayResult = { ok: false, error: e instanceof Error ? e.message : String(e) };
+              }
 
               if (autopayResult.ok) {
-                if (balancePortion > 0) {
-                  await prisma.client.updateMany({
-                    where: { id: client.id, balance: { gte: balancePortion } },
-                    data: { balance: { decrement: balancePortion } },
-                  });
-                }
                 const payment = await prisma.$transaction(async (tx) => {
                   const ypMeta: Record<string, unknown> = { autoRenew: true };
                   if (autoRenewPromoCodeId) {
@@ -415,9 +433,8 @@ export async function processAutoRenewals() {
                     ypMeta.personalDiscountPercent = personalPct;
                     if (!ypMeta.originalPrice) ypMeta.originalPrice = baseTariffPrice;
                   }
-                  if (balancePortion > 0) {
-                    // Смешанная оплата: реферальный бонус считается только от cardPortion (issue #201).
-                    ypMeta.balancePortion = balancePortion;
+                  if (paidViaBalance > 0) {
+                    ypMeta.balancePortion = paidViaBalance;
                     ypMeta.cardPortion = cardPortion;
                   }
                   const p = await tx.payment.create({
@@ -471,12 +488,19 @@ export async function processAutoRenewals() {
                     tariffPrice,
                     client.autoRenewTariff!.currency,
                     client.yookassaPaymentMethodTitle ?? undefined,
-                    balancePortion > 0 ? balancePortion : undefined,
+                    paidViaBalance > 0 ? paidViaBalance : undefined,
                     cardPortion,
                   );
                 }
                 yookassaPaid = true;
               } else {
+                if (paidViaBalance > 0) {
+                  await prisma.client.update({
+                    where: { id: client.id },
+                    data: { balance: { increment: paidViaBalance } },
+                  }).catch(() => {});
+                  paidViaBalance = 0;
+                }
                 await notifyAutoRenewYookassaFailed(
                   client.id,
                   client.autoRenewTariff!.name,

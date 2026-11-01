@@ -22,14 +22,9 @@ import { notifyBalanceToppedUp, notifyTariffActivated, notifyProxySlotsCreated, 
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
 
-function hasExtraOptionInMetadata(metadata: string | null): boolean {
-  if (!metadata?.trim()) return false;
-  try {
-    const obj = JSON.parse(metadata) as Record<string, unknown>;
-    return obj?.extraOption != null && typeof obj.extraOption === "object";
-  } catch {
-    return false;
-  }
+function parseMetadata(metadata: string | null): Record<string, unknown> {
+  if (!metadata?.trim()) return {};
+  try { return JSON.parse(metadata) as Record<string, unknown>; } catch { return {}; }
 }
 
 export const lavaWebhooksRouter = Router();
@@ -129,26 +124,30 @@ lavaWebhooksRouter.post("/", async (req: Request, res: Response) => {
     return res.status(200).send("OK");
   }
 
-  // Идемпотентность: если уже PAID — просто OK.
-  if (payment.status === "PAID") {
-    return res.status(200).send("OK");
-  }
-
   const invoiceId = body.invoice_id ?? null;
-  await prisma.payment.update({
-    where: { id: payment.id },
-    data: { status: "PAID", paidAt: new Date(), externalId: invoiceId },
-  });
+  const meta = parseMetadata(payment.metadata);
+  const isExtraOption = Boolean(meta.extraOption);
+  const isCustomBuild = Boolean(meta.customBuild);
+  const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption && !isCustomBuild;
+  const paidData = { status: "PAID", paidAt: new Date(), externalId: invoiceId };
+  const where = { id: payment.id, status: { not: "PAID" } };
+  const claimed = isTopUp
+    ? await prisma.$transaction(async (tx) => {
+        const updated = await tx.payment.updateMany({ where, data: paidData });
+        if (updated.count > 0) {
+          await tx.client.update({
+            where: { id: payment.clientId },
+            data: { balance: { increment: payment.amount } },
+          });
+        }
+        return updated.count > 0;
+      })
+    : (await prisma.payment.updateMany({ where, data: paidData })).count > 0;
+
+  if (!claimed) return res.status(200).send("OK");
   await recordPromoCodeUsageFromPayment(payment.id);
 
-  const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
-  const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption;
-
   if (isTopUp) {
-    await prisma.client.update({
-      where: { id: payment.clientId },
-      data: { balance: { increment: payment.amount } },
-    });
     await notifyBalanceToppedUp(payment.clientId, payment.amount, payment.currency || "RUB", "Lava").catch(() => {});
   } else if (isExtraOption) {
     const r = await applyExtraOptionByPaymentId(payment.id);
