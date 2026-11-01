@@ -4,10 +4,11 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   ChevronRight, Check, Copy, Gift, History, Loader2, MoreHorizontal, Pencil, Plus, RefreshCw, RotateCcw,
-  Smartphone, Sparkles, Tag, Trash2, Wallet, Wifi, Zap,
+  Smartphone, Tag, Trash2, Wallet, Wifi, Zap,
 } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { useCabinetConfig } from "@/contexts/cabinet-config";
+import { RouletteIcon } from "@/components/icons/roulette-icon";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatAuroraBalance } from "@/lib/aurora-profile";
@@ -132,7 +133,7 @@ export function AuroraDashboard() {
       ? [{ key: "gifts", label: t("aurora.gifts"), hint: t("aurora.quick_gifts_hint"), icon: Gift, to: "/cabinet/gifts" }]
       : []),
     ...(config?.rouletteEnabled !== false
-      ? [{ key: "roulette", label: t("aurora.roulette"), hint: t("aurora.quick_roulette_hint"), icon: Sparkles, to: "/cabinet/roulette" }]
+      ? [{ key: "roulette", label: t("aurora.roulette"), hint: t("aurora.quick_roulette_hint"), icon: RouletteIcon, to: "/cabinet/roulette" }]
       : []),
     { key: "promo", label: t("aurora.promo"), hint: t("aurora.quick_promo_hint"), icon: Tag, to: null },
     ...(config?.sellOptionsEnabled

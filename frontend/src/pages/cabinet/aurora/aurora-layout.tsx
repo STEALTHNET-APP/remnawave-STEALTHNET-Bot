@@ -2,8 +2,9 @@ import { useTranslation } from "react-i18next";
 import { formatAuroraBalance } from "@/lib/aurora-profile";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import { Settings2, User, Gift, SlidersHorizontal, Shield, Network, LogOut, X, ChevronRight, Sparkles, HelpCircle, History, Wallet } from "lucide-react";
+import { Settings2, User, Gift, SlidersHorizontal, Shield, Network, LogOut, X, ChevronRight, HelpCircle, History, Wallet } from "lucide-react";
 import { AuroraTabs } from "@/components/aurora/aurora-tabs";
+import { RouletteIcon } from "@/components/icons/roulette-icon";
 import { IsMiniappContext } from "@/contexts/miniapp";
 import { useIsMiniapp } from "@/hooks/use-is-miniapp";
 import { api } from "@/lib/api";
@@ -74,7 +75,7 @@ export function AuroraLayout() {
     {to:"/cabinet/history",label:t("aurora.payments"),icon:History,show:true},
     {to:"/cabinet/subscribe",label:t("aurora.connection"),icon:Shield,show:true},
     {to:"/cabinet/gifts",label:t("aurora.gifts"),icon:Gift,show:!!config?.giftSubscriptionsEnabled},
-    {to:"/cabinet/roulette",label:t("aurora.roulette"),icon:Sparkles,show:config?.rouletteEnabled !== false},
+    {to:"/cabinet/roulette",label:t("aurora.roulette"),icon:RouletteIcon,show:config?.rouletteEnabled !== false},
     {to:"/cabinet/custom-build",label:t("aurora.custom_tariff"),icon:SlidersHorizontal,show:!!config?.customBuildConfig},
     {to:"/cabinet/extra-options",label:t("aurora.extra_options"),icon:Settings2,show:!!config?.sellOptionsEnabled},
     {to:"/cabinet/proxy",label:t("aurora.proxy"),icon:Network,show:!!config?.showProxyEnabled},

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Wallet, Bitcoin, Check, Loader2, RefreshCw, ArrowRight } from "lucide-react";
+import { Wallet, Bitcoin, Check, Loader2, RefreshCw, ArrowRight, Tag } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type PublicTariff, type PublicTariffCategory, type PublicConfig, type TariffConversionPreview } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -766,17 +766,18 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
             )}
           </div>
 
-          <div className="flex items-center gap-2 rounded-[18px] bg-[var(--au-surface)] p-1.5">
+          <div className="flex items-center gap-2 rounded-[18px] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[color-mix(in_srgb,var(--au-surface)_85%,var(--au-bg))] p-1.5 transition-all focus-within:border-[var(--au-from)] focus-within:ring-2 focus-within:ring-[var(--au-from)]/25">
+            <Tag className="ml-3 h-4 w-4 shrink-0 text-[var(--au-muted)]" />
             <input
               value={promoInput}
               onChange={(e) => { setPromoInput(e.target.value); setPromoMsg(null); }}
               placeholder={t("aurora.promo_placeholder")}
-              className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-[16px] text-[var(--au-ink)] outline-none placeholder:text-[var(--au-muted)]"
+              className="min-w-0 flex-1 bg-transparent px-1 py-2.5 text-[16px] text-[var(--au-ink)] outline-none placeholder:text-[var(--au-muted)]"
             />
             <button
               onClick={applyPromo}
               disabled={promoBusy || !promoInput.trim()}
-              className="shrink-0 whitespace-nowrap rounded-[13px] bg-[var(--au-bg)] px-4 py-2.5 text-[13px] font-bold text-[var(--au-ink)] transition disabled:opacity-45"
+              className="shrink-0 whitespace-nowrap rounded-[13px] border border-[color-mix(in_srgb,var(--au-muted)_18%,transparent)] bg-[var(--au-bg)] px-4 py-2.5 text-[13px] font-bold text-[var(--au-ink)] transition-all hover:bg-[color-mix(in_srgb,var(--au-from)_15%,var(--au-bg))] disabled:opacity-45"
             >
               {promoBusy ? "…" : promoApplied ? <Check className="inline h-4 w-4 text-emerald-500" /> : <span className="inline-flex items-center gap-1">{t("aurora.promo_check")}<ArrowRight className="h-3.5 w-3.5" /></span>}
             </button>

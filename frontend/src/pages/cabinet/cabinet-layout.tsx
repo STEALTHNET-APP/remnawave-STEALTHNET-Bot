@@ -15,7 +15,8 @@ import { useLanguageSync } from "@/i18n/use-language-sync";
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, User, LogOut, Shield, Users, PanelLeftOpen, PanelLeftClose, PlusCircle, Globe, KeyRound, MessageSquare, Coins, Check, Loader2, Settings, Layers, MoreHorizontal, Wallet, Gift, Sparkles, History } from "lucide-react";
+import { LayoutDashboard, Package, User, LogOut, Shield, Users, PanelLeftOpen, PanelLeftClose, PlusCircle, Globe, KeyRound, MessageSquare, Coins, Check, Loader2, Settings, Layers, MoreHorizontal, Wallet, Gift, History } from "lucide-react";
+import { RouletteIcon } from "@/components/icons/roulette-icon";
 import { FloatingChat } from "@/components/floating-chat";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DashboardTour } from "@/components/tour/dashboard-tour";
@@ -157,7 +158,7 @@ function useNavItems() {
     { to: "/cabinet/referral", label: t("cabinet.nav.referrals"), icon: Users },
     { to: "/cabinet/tickets", label: t("cabinet.nav.tickets"), icon: MessageSquare },
     { to: "/cabinet/gifts", label: t("cabinet.workspace.gifts"), icon: Gift },
-    { to: "/cabinet/roulette", label: t("cabinet.nav.roulette", "Рулетка"), icon: Sparkles },
+    { to: "/cabinet/roulette", label: t("cabinet.nav.roulette", "Рулетка"), icon: RouletteIcon },
     { to: "/cabinet/profile", label: t("cabinet.nav.profile"), icon: User },
   ], [t]);
 }
@@ -251,7 +252,7 @@ function SettingsPopover() {
   );
 }
 
-function resolveNavItems(allNavItems: { to: string; label: string; icon: typeof LayoutDashboard }[], config: { sellOptionsEnabled?: boolean; showProxyEnabled?: boolean; showSingboxEnabled?: boolean; ticketsEnabled?: boolean; customBuildConfig?: { enabled: true } | null; giftSubscriptionsEnabled?: boolean; rouletteEnabled?: boolean } | null) {
+function resolveNavItems(allNavItems: { to: string; label: string; icon: typeof LayoutDashboard | typeof RouletteIcon }[], config: { sellOptionsEnabled?: boolean; showProxyEnabled?: boolean; showSingboxEnabled?: boolean; ticketsEnabled?: boolean; customBuildConfig?: { enabled: true } | null; giftSubscriptionsEnabled?: boolean; rouletteEnabled?: boolean } | null) {
   let items = allNavItems;
   // Убираем вкладку тикетов, так как теперь поддержка внутри виджета чата
   items = items.filter((i) => i.to !== "/cabinet/tickets");
