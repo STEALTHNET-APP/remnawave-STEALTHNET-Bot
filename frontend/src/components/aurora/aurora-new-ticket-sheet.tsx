@@ -1,11 +1,3 @@
-/**
- * AuroraNewTicketSheet — создание обращения в поддержку (дизайн Aurora).
- *
- * Поля те же, что в остальных дизайнах: тема (необязательно, до 500 знаков),
- * сообщение (обязательно, до 4000) и до пяти картинок. Логика отправки
- * повторяет Stealth-версию — отличается только оформление.
- */
-
 import { useRef, useState } from "react";
 import { Loader2, AlertCircle, Paperclip, X, ImageIcon } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
@@ -94,8 +86,7 @@ export function AuroraNewTicketSheet({ open, onClose, onCreated }: Props) {
             value={subject}
             onChange={(e) => setSubject(e.target.value.slice(0, MAX_SUBJECT))}
             placeholder="Например: не подключается на iPhone"
-            // 16px — иначе iOS приближает страницу на фокусе
-            className="mt-1.5 w-full rounded-[16px] bg-[var(--au-surface)] px-4 py-3.5 text-[16px] outline-none placeholder:text-[var(--au-muted)]"
+            className="mt-1.5 w-full rounded-[16px] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] px-4 py-3.5 text-[16px] text-[var(--au-ink)] outline-none transition-all placeholder:text-[var(--au-muted)] focus:border-[var(--au-from)] focus:ring-2 focus:ring-[var(--au-from)]/25"
           />
         </div>
 
@@ -106,7 +97,7 @@ export function AuroraNewTicketSheet({ open, onClose, onCreated }: Props) {
             onChange={(e) => setBody(e.target.value.slice(0, MAX_BODY))}
             rows={5}
             placeholder="Опишите, что случилось — чем подробнее, тем быстрее поможем"
-            className="mt-1.5 w-full resize-none rounded-[16px] bg-[var(--au-surface)] px-4 py-3.5 text-[16px] leading-relaxed outline-none placeholder:text-[var(--au-muted)]"
+            className="mt-1.5 w-full resize-none rounded-[16px] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] px-4 py-3.5 text-[16px] leading-relaxed text-[var(--au-ink)] outline-none transition-all placeholder:text-[var(--au-muted)] focus:border-[var(--au-from)] focus:ring-2 focus:ring-[var(--au-from)]/25"
           />
           <p className="px-1 pt-1 text-right text-[12px] tabular-nums text-[var(--au-muted)]">
             {body.length} / {MAX_BODY}
@@ -139,7 +130,7 @@ export function AuroraNewTicketSheet({ open, onClose, onCreated }: Props) {
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={files.length >= MAX_FILES}
-          className="flex w-full items-center justify-center gap-2 rounded-[16px] bg-[var(--au-surface)] px-4 py-3 text-[14px] font-semibold text-[var(--au-muted)] transition-transform enabled:active:scale-[0.98] disabled:opacity-45"
+          className="flex w-full items-center justify-center gap-2 rounded-[16px] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] px-4 py-3 text-[14px] font-semibold text-[var(--au-ink)] transition-all enabled:active:scale-[0.98] disabled:opacity-45 hover:border-[var(--au-from)]/40"
         >
           <Paperclip className="h-[18px] w-[18px]" />
           {files.length > 0 ? `Ещё фото (${files.length}/${MAX_FILES})` : "Прикрепить фото"}

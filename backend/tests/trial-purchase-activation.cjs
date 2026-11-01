@@ -184,6 +184,23 @@ const cases = [
     assert.equal(r.ok, false); assert.equal(r.status, 503);
     assert.ok(!kinds().some((k) => k === 'create' || k === 'remna.update' || k === 'consolidate.delete'));
   }],
+  ['trial replacement is delegated to createAdditionalSubscription, not deleted upfront', async () => {
+    reset({ multiRaw: 'true' });
+    addSub({ id: 'T0', trialId: 'trial-x', remnawaveUuid: null, subscriptionIndex: 0 });
+    assert.equal((await pay()).ok, true);
+    const create = state.calls.find((c) => c[0] === 'create');
+    assert.ok(create, 'subscription is created');
+    assert.equal(create[3].replacingSubscriptionId, 'T0');
+    assert.ok(!kinds().includes('remna.delete'));
+  }],
+  ['replaceTrialSubId pointing at a paid subscription is not forwarded', async () => {
+    reset({ multiRaw: 'true' });
+    addSub({ id: 'P0', tariffId: 'paid', remnawaveUuid: 'u-P0', expireAt: new Date(Date.now() + 9 * DAY) });
+    assert.equal((await pay({ replaceTrialSubId: 'P0' })).ok, true);
+    const create = state.calls.find((c) => c[0] === 'create');
+    assert.ok(create, 'subscription is created');
+    assert.equal(create[3].replacingSubscriptionId, undefined);
+  }],
 ];
 (async () => {
   let failed = 0;

@@ -13,6 +13,10 @@ export function ClientRoulettePage() {
     return <StealthRoulette />;
   }
 
+  if (design === "aurora") {
+    return <AuroraRoulette />;
+  }
+
   // Для classic (браузерный веб-кабинет) оборачиваем в стили Aurora с адаптивным центрированием
   const dark = resolvedMode === "dark";
   const accent = dark ? "#21854f" : config?.stealthAccent || "#5b4be8";

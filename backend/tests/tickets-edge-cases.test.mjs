@@ -9,7 +9,7 @@ const admin = await prisma.admin.findFirstOrThrow();
 const token = signAccessToken({ adminId: admin.id, email: admin.email }, process.env.JWT_SECRET, '10m');
 const client = await prisma.client.create({ data: { email: `http-${randomUUID()}@example.invalid` } });
 const other = await prisma.client.create({ data: { email: `other-${randomUUID()}@example.invalid` } });
-const base = 'http://127.0.0.1:5000/api';
+const base = process.env.TEST_API_BASE || 'http://127.0.0.1:5000/api';
 async function request(route, body, method = 'POST', credential = token) {
   const form = body instanceof FormData;
   const response = await fetch(base + route, { method, headers: { Authorization: `Bearer ${credential}`, ...(form ? {} : { 'Content-Type': 'application/json' }) }, body: body === undefined ? undefined : form ? body : JSON.stringify(body) });

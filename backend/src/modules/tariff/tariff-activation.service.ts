@@ -863,7 +863,7 @@ export async function findConvertibleSubscription(
     /** config.trialSquadUuid — по нему опознаётся легаси-триал (trialId=null, tariffId=null) */
     trialSquadUuid?: string | null;
   } = {},
-): Promise<{ id: string; subscriptionIndex: number; tariffId: string | null; tariffName: string | null; expireAt: Date | null; currentPricePerDay: number | null; trialId: string | null; promoGranted: boolean; /** легаси-триал (POST /trial): конвертируется на месте, как триал */ isLegacyTrial: boolean; /** покупается ТОТ ЖЕ тариф → это продление (стек дней), а не конвертация */ sameTariff: boolean } | null> {
+): Promise<{ id: string; subscriptionIndex: number; tariffId: string | null; tariffName: string | null; expireAt: Date | null; currentPricePerDay: number | null; trialId: string | null; trialName: string | null; promoGranted: boolean; /** легаси-триал (POST /trial): конвертируется на месте, как триал */ isLegacyTrial: boolean; /** покупается ТОТ ЖЕ тариф → это продление (стек дней), а не конвертация */ sameTariff: boolean } | null> {
   const tariff = await prisma.tariff.findUnique({
     where: { id: tariffId },
     select: { categoryId: true, category: { select: { singleSubscriptionMode: true } } },
@@ -887,6 +887,7 @@ export async function findConvertibleSubscription(
       giftStatus: true,
       remnawaveUuid: true,
       tariff: { select: { name: true, categoryId: true } },
+      trial: { select: { name: true } },
     },
   });
 
@@ -941,6 +942,7 @@ export async function findConvertibleSubscription(
     expireAt: candidate.expireAt,
     currentPricePerDay: candidate.currentPricePerDay,
     trialId: candidate.trialId,
+    trialName: candidate.trial?.name ?? null,
     isLegacyTrial: picked.isLegacyTrial,
     promoGranted: candidate.promoGranted,
     // тот же тариф = продление (дни складываются, сквады/трафик
@@ -1175,10 +1177,21 @@ export async function activateTariffByPaymentId(paymentId: string): Promise<Acti
     }
 
     // ── Ветка 2: новая подписка (любая покупка тарифа без extendsSecondaryId) ──
-    // покупка при активном триале ЗАМЕНЯЕТ его (триал удаляется,
-    // новая подписка занимает слот). Выбор триала — metadata.replaceTrialSubId.
-    if (!isGiftPurchase) {
-      await replaceTrialOnPurchase(client.id, getReplaceTrialSubId(payment.metadata));
+    let replacingTrialId = !isGiftPurchase ? getReplaceTrialSubId(payment.metadata) : null;
+    if (replacingTrialId) {
+      const target = await prisma.subscription.findFirst({
+        where: { id: replacingTrialId, ownerId: client.id, trialId: { not: null }, purchasedAsGift: false },
+        select: { id: true },
+      });
+      if (!target) replacingTrialId = null;
+    }
+    if (!isGiftPurchase && !replacingTrialId) {
+      const oldestTrial = await prisma.subscription.findFirst({
+        where: { ownerId: client.id, trialId: { not: null }, purchasedAsGift: false },
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+      });
+      replacingTrialId = oldestTrial?.id ?? null;
     }
     const result = await createAdditionalSubscription(client.id, {
       id: tariff.id,
@@ -1193,12 +1206,17 @@ export async function activateTariffByPaymentId(paymentId: string): Promise<Acti
       deviceDiscountTiers: tariff.deviceDiscountTiers,
       internalSquadUuids: tariff.internalSquadUuids,
       trafficResetMode: tariff.trafficResetMode ?? undefined,
-    }, { extraDevices: payment.deviceCount ?? 0, purchasedAsGift: isGiftPurchase, skipConfigCheck: true });
+    }, {
+      extraDevices: payment.deviceCount ?? 0,
+      purchasedAsGift: isGiftPurchase,
+      skipConfigCheck: true,
+      replacingSubscriptionId: replacingTrialId ?? undefined,
+    });
     if (result.ok) {
       await prisma.payment.update({ where: { id: payment.id }, data: { subscriptionId: result.data.subscriptionId } }).catch(() => {});
       await resetOneTimeDiscount();
       // Single-режим: подчищаем любые прочие подписки клиента (оставляем эту).
-      if (!multiSubEnabled) {
+      if (!multiSubEnabled && !isGiftPurchase) {
         await consolidateToSingleSubscription(client.id, result.data.subscriptionId).catch(() => {});
       }
     }

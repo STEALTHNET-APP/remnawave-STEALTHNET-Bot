@@ -133,6 +133,19 @@ try {
     assert.ok(telegramCalls.some(call => call.method === "deleteWebhook" && call.body.drop_pending_updates === true));
     assert.equal(config.botWebhookEnabled, false);
   });
+  await test("queue purge leaves Telegram unchanged when runtime mode is unknown", async () => {
+    config.botWebhookEnabled = true;
+    config.botWebhookUrl = "https://example.com/api/bot/webhook";
+    for (const [status, mode] of [[503, "webhook"], [200, null], [200, "starting"]]) {
+      upstreamStatus = status;
+      runtimeMode = mode;
+      telegramCalls.length = 0;
+      const response = await post("/api/admin/bot/webhook/drop-pending", {}, { Authorization: "Bearer admin" });
+      assert.equal(response.status, 503);
+      assert.equal(telegramCalls.length, 0);
+      assert.equal(config.botWebhookEnabled, true);
+    }
+  });
 } finally {
   globalThis.fetch = nativeFetch;
   await new Promise(resolve => server.close(resolve));

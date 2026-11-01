@@ -91,7 +91,10 @@ const client = {
   },
 };
 
+const quarantined = [];
+let quarantineFails = false;
 const prisma = {
+  webhookEvent: { create: async ({ data }) => { if (quarantineFails) throw Error("inbox unavailable"); quarantined.push(data); return { id: "event" }; } },
   payment,
   client,
   proxyTariff: { findUnique: async () => null },
@@ -395,6 +398,38 @@ async function runRecurringScenario() {
   assert.equal(state.activations, 1, 'repeated recurring webhook must not activate again');
 }
 
+async function runRecurringIdentityScenarios() {
+  const event = { eventType: 'subscription.recurring.payment.success', contractId: 'contract-parent', parentContractId: 'contract-parent', amount: 100, currency: 'USD', status: 'success', timestamp: null, raw: {} };
+  const handler = lavatopRoutes(() => event)['POST /'];
+  const reset = () => resetState({ id: 'parent', orderId: 'contract-parent', status: 'PAID', tariffId: 'tariff1', provider: 'lavatop' });
+  reset();
+  for (let i = 0; i < 2; i++) assert.equal((await sendLavatop(handler)).statusCode, 200);
+  assert.equal(state.payments.length, 1);
+  assert.equal(state.activations, 0);
+  assert.equal(quarantined.length, 2);
+  assert.equal(quarantined[0].outcome, 'rejected_payload');
+  quarantineFails = true;
+  assert.equal((await sendLavatop(handler)).statusCode, 503);
+  quarantineFails = false;
+  for (const raw of [{ event_id: 'evt1' }, { invoice_id: 'invoice1' }]) {
+    reset(); event.raw = raw;
+    await Promise.all([sendLavatop(handler), sendLavatop(handler)]);
+    await sendLavatop(handler);
+    assert.equal(state.payments.length, 2);
+    assert.equal(state.activations, 1);
+  }
+  reset(); event.raw = {}; event.timestamp = '2026-11-01T12:00:00Z';
+  await Promise.all([sendLavatop(handler), sendLavatop(handler)]);
+  assert.equal(state.payments.length, 2);
+  event.timestamp = '2026-12-01T12:00:00Z';
+  await sendLavatop(handler);
+  assert.equal(state.payments.length, 3);
+  reset(); event.timestamp = null; event.contractId = 'child-invoice';
+  await Promise.all([sendLavatop(handler), sendLavatop(handler)]);
+  assert.equal(state.payments.length, 2);
+  assert.equal(state.activations, 1);
+}
+
 async function runRefundScenario() {
   const routes = refundRoutes();
   const handler = routes['POST /:id/refund'];
@@ -468,6 +503,7 @@ async function runMarkPaidScenario() {
 (async () => {
   await runWebhookScenarios();
   await runRecurringScenario();
+  await runRecurringIdentityScenarios();
   await runRefundScenario();
   await runMarkPaidScenario();
   console.log('PASS: webhook concurrency, customBuild detection, recurring dedup, atomic refund and provider-agnostic markPaymentPaid');

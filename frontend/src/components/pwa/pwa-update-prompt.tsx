@@ -81,7 +81,12 @@ export function isSafeUrlForAutoUpdate(location: SafeLocation): boolean {
   const pathname = location.pathname || "/";
   const search = location.search || "";
 
-  if (search && (search.includes("payment=") || search.includes("invoice=") || search.includes("order="))) {
+  const paymentKeywords = [
+    "payment=", "invoice=", "order=", "yookassa=", "heleket=",
+    "rollypay=", "paritypay=", "lava=", "lavatop=", "overpay=",
+    "yoomoney_form=", "cryptopay=",
+  ];
+  if (search && paymentKeywords.some((key) => search.includes(key))) {
     return false;
   }
   const unsafePaths = [

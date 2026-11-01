@@ -15,10 +15,18 @@ import { formatCabinetMoney } from "@/lib/cabinet-format";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { useCabinetDesign } from "@/lib/use-cabinet-design";
+import { AuroraGifts } from "@/pages/cabinet/aurora/aurora-gifts";
 
 const formatMoney = formatCabinetMoney;
 
 export function ClientGiftsPage() {
+  const design = useCabinetDesign();
+  if (design === "aurora") return <AuroraGifts />;
+  return <ClassicGiftsPage />;
+}
+
+function ClassicGiftsPage() {
   const { state, refreshProfile } = useClientAuth();
   const config = useCabinetConfig();
   const token = state.token ?? null;

@@ -1,16 +1,3 @@
-/**
- * AuroraTicketChatSheet — переписка по обращению (дизайн Aurora).
- *
- * Сообщения клиента — справа градиентным пузырём, ответы поддержки — слева
- * светлым. Вложения показываем миниатюрами со ссылкой на оригинал.
- *
- * Поведение перенесено из Stealth-версии: загрузка `getTicket`, опрос раз в
- * 8 секунд (чтобы видеть ответы поддержки без ручного обновления),
- * автопрокрутка вниз при новых сообщениях, отправка через `replyTicket`
- * с возможностью приложить до пяти картинок. У закрытого обращения поле
- * ввода скрыто.
- */
-
 import { useEffect, useRef, useState } from "react";
 import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X, Trash2 } from "lucide-react";
 import { askConfirm } from "@/lib/confirm";
@@ -71,14 +58,12 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose }: Props) {
     }
   }
 
-  // Первая загрузка + опрос: ответ поддержки должен появляться сам.
   useEffect(() => {
     if (!open || !ticketId) return;
     setLoading(true);
     load().finally(() => setLoading(false));
     const timer = setInterval(load, POLL_MS);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, ticketId, state.token]);
 
   useEffect(() => {
@@ -190,7 +175,7 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose }: Props) {
                 onClick={() => fileInputRef.current?.click()}
                 disabled={files.length >= MAX_FILES || sending}
                 aria-label="Прикрепить фото"
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[var(--au-surface)] text-[var(--au-muted)] transition-transform enabled:active:scale-95 disabled:opacity-45"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] text-[var(--au-muted)] transition-all hover:text-[var(--au-ink)] enabled:active:scale-95 disabled:opacity-45"
               >
                 <Paperclip className="h-[20px] w-[20px]" />
               </button>
@@ -210,8 +195,7 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose }: Props) {
                 onChange={(e) => setReply(e.target.value)}
                 rows={1}
                 placeholder="Сообщение"
-                // 16px — иначе iOS приближает страницу на фокусе
-                className="max-h-28 min-h-[48px] min-w-0 flex-1 resize-none rounded-[20px] bg-[var(--au-surface)] px-4 py-3 text-[16px] outline-none placeholder:text-[var(--au-muted)]"
+                className="max-h-28 min-h-[48px] min-w-0 flex-1 resize-none rounded-[20px] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] px-4 py-3 text-[16px] text-[var(--au-ink)] outline-none transition-all placeholder:text-[var(--au-muted)] focus:border-[var(--au-from)] focus:ring-2 focus:ring-[var(--au-from)]/25"
               />
               <button
                 type="button"
@@ -296,7 +280,6 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose }: Props) {
               </div>
             );
           })}
-          {/* якорь автопрокрутки */}
           <div ref={bottomRef} />
 
           {err && (

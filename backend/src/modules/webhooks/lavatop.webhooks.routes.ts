@@ -108,6 +108,8 @@ async function activatePayment(paymentId: string) {
   await distributeReferralRewards(payment.id).catch(() => {});
 }
 
+class RecurringIdentityError extends Error {}
+
 /** Recurring renewal: клонирует исходный payment, создаёт новый PAID и активирует. */
 async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<void> {
   const parentOrderId = event.parentContractId?.trim();
@@ -118,12 +120,17 @@ async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<void>
   }
 
   const raw = event.raw as Record<string, unknown>;
-  const eventRecord = event as unknown as Record<string, unknown>;
-  const recurringKey = eventRecord.invoiceId ?? eventRecord.id
-    ?? raw.invoiceId ?? raw.id ?? eventRecord.timestamp ?? raw.timestamp ?? Date.now();
+  const identity = [raw.invoiceId, raw.invoice_id, raw.event_id, raw.eventId, raw.id]
+    .find(value => typeof value === "string" && value.trim().length > 0);
+  const timestamp = event.timestamp?.trim();
+  const recurringKey = typeof identity === "string" ? identity.trim()
+    : timestamp && Number.isFinite(Date.parse(timestamp)) ? timestamp : null;
+  if (rawChildOrderId === parentOrderId && !recurringKey) {
+    throw new RecurringIdentityError("Recurring webhook has no stable payment identity");
+  }
   const recurringOrderId = rawChildOrderId !== parentOrderId
     ? rawChildOrderId
-    : `lavatop-rec-${parentOrderId}-${String(recurringKey)}`;
+    : `lavatop-rec-${parentOrderId}-${recurringKey}`;
 
   const alreadyProcessed = await prisma.payment.findUnique({
     where: { orderId: recurringOrderId },
@@ -268,7 +275,21 @@ lavatopWebhooksRouter.post("/", async (req: Request, res: Response) => {
     try {
       await handleRecurringRenewal(event);
     } catch (e) {
+      if (e instanceof RecurringIdentityError) {
+        try {
+          await prisma.webhookEvent.create({
+            data: {
+              provider: "lavatop", rawBody: JSON.stringify(body), headers: {},
+              responseStatus: 200, outcome: "rejected_payload", errorMessage: e.message,
+            },
+          });
+          return res.status(200).send("OK");
+        } catch {
+          return res.status(503).send("Unable to retain webhook for review");
+        }
+      }
       console.error("[Lava.top Webhook] ошибка recurring renewal:", e);
+      return res.status(503).send("Recurring payment processing failed");
     }
     return res.status(200).send("OK");
   }

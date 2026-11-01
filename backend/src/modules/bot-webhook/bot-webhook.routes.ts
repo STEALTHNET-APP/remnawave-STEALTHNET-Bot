@@ -139,7 +139,7 @@ botWebhookAdminRouter.post("/delete", async (req, res) => {
     await reloadBot("polling");
     return res.json({ ok: true, message: dropPending ? "Вебхук удалён, очередь очищена, бот подтвердил запуск Long Polling" : "Вебхук удалён, бот подтвердил запуск Long Polling" });
   } catch {
-    return res.status(503).json({ ok: false, message: "Переключение не подтверждено. Проверьте статус и повторите. Очередь сообщений сохранена." });
+    return res.status(503).json({ ok: false, message: "Переключение не подтверждено. Проверьте статус перед повтором. Если была выбрана очистка очереди, Telegram мог уже выполнить её." });
   }
 });
 
@@ -150,6 +150,9 @@ botWebhookAdminRouter.post("/drop-pending", async (_req, res) => {
     if (!token) return res.status(409).json({ ok: false, message: "Токен бота не задан" });
 
     const mode = await botRuntimeMode();
+    if (mode !== "webhook" && mode !== "polling") {
+      return res.status(503).json({ ok: false, message: "Не удалось подтвердить режим бота. Очередь и webhook не изменены. Повторите проверку статуса." });
+    }
     if (mode === "webhook") {
       if (!config.botWebhookUrl) return res.status(409).json({ ok: false, message: "Адрес webhook не задан, проверьте настройки" });
       await callTelegram(token, "setWebhook", {

@@ -1,11 +1,18 @@
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Wallet, ArrowUpRight } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { formatCabinetMoney } from "@/lib/cabinet-format";
+import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { ClassicProfilePage } from "./client-profile";
 
 export function ClientWalletPage() {
+  const design = useCabinetDesign();
+  if (design === "aurora") return <Navigate to="/cabinet/profile?tab=topup" replace />;
+  return <ClassicWalletPage />;
+}
+
+function ClassicWalletPage() {
   const { state } = useClientAuth();
   const { t } = useTranslation();
   return <div className="cabinet-page cabinet-wallet">

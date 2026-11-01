@@ -19,7 +19,8 @@ const formatMoney = formatCabinetMoney;
 export function ClientReferralPage() {
   const design = useCabinetDesign();
   if (design === "stealth") return <StealthReferral />;
-  return <ClassicReferralPage aurora={design === "aurora"} />;
+  if (design === "aurora") return <AuroraReferral />;
+  return <ClassicReferralPage />;
 }
 
 function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {

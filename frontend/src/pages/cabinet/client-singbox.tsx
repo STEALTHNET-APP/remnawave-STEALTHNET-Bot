@@ -20,6 +20,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
 import { PayNowPanel } from "@/components/payment/pay-now-panel";
 import { cn } from "@/lib/utils";
+import { useCabinetDesign } from "@/lib/use-cabinet-design";
+import { AuroraSingbox } from "@/pages/cabinet/aurora/aurora-singbox";
 import { getPublicConfigCached } from "@/lib/public-config";
 
 type SingboxTariff = { protocol?: string; id: string; name: string; description?: string; slotCount: number; durationDays: number; trafficLimitBytes: string | null; price: number; currency: string };
@@ -69,6 +71,12 @@ function formatDate(iso: string) {
 }
 
 export function ClientSingboxPage() {
+  const design = useCabinetDesign();
+  if (design === "aurora") return <AuroraSingbox />;
+  return <ClassicSingboxPage />;
+}
+
+function ClassicSingboxPage() {
   const { state, refreshProfile } = useClientAuth();
   const token = state.token;
   const client = state.client;

@@ -1,4 +1,4 @@
-export const auroraProfileTabs = ["account", "payments", "security", "language", "devices", "topup"] as const;
+export const auroraProfileTabs = ["account", "payments", "security", "language", "devices", "topup", "currency"] as const;
 export type AuroraProfileTab = typeof auroraProfileTabs[number];
 
 export function auroraProfileTab(search: string, hash: string): AuroraProfileTab | null {

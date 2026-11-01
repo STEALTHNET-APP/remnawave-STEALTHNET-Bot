@@ -1,39 +1,45 @@
-.au-tariff-catalog { min-width: 0; display: grid; gap: 20px; }
-.au-tariff-categories { display: flex; gap: 8px; overflow-x: auto; padding: 4px 3px 8px; min-width: 0; }
-.au-tariff-categories button { display: flex; align-items: center; gap: 9px; flex-shrink: 0; max-width: 280px; min-height: 44px; padding: 11px 16px; border-radius: 24px; background: var(--au-surface); color: var(--au-muted); text-align: left; font-size: 14px; font-weight: 650; }
-.au-tariff-categories button[aria-pressed=true] { background: linear-gradient(135deg,var(--au-from),var(--au-to)); color: white; }
-.au-tariff-categories button small { display: grid; place-items: center; min-width: 22px; height: 22px; padding-inline: 5px; border-radius: 50%; background: #ffffff20; color: inherit; font-size: 11px; }
+.au-tariff-catalog { min-width: 0; display: grid; gap: 18px; }
+.au-tariff-categories { display: flex; gap: 8px; overflow-x: auto; padding: 2px 1px 6px; min-width: 0; scrollbar-width: none; }
+.au-tariff-categories::-webkit-scrollbar { display: none; }
+.au-tariff-categories button { display: flex; align-items: center; gap: 8px; flex-shrink: 0; max-width: 280px; min-height: 40px; padding: 9px 14px; border: 1px solid transparent; border-radius: 999px; background: var(--au-surface); color: var(--au-muted); text-align: left; font-size: 13.5px; font-weight: 600; transition: background-color 180ms ease, color 180ms ease, transform 150ms ease; }
+.au-tariff-categories button:active { transform: scale(.97); }
+.au-tariff-categories button[aria-pressed=true] { background: var(--au-ink); color: var(--au-bg); }
+.au-tariff-categories button small { display: grid; place-items: center; min-width: 20px; height: 20px; padding-inline: 5px; border-radius: 50%; background: color-mix(in srgb, currentColor 12%, transparent); color: inherit; font-size: 11px; }
 .au-tariff-category-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-inline: 3px; }
-.au-tariff-category-heading h2 { min-width: 0; font-size: 18px; font-weight: 750; overflow-wrap: anywhere; }
+.au-tariff-category-heading h2 { min-width: 0; font-size: 18px; font-weight: 750; overflow-wrap: anywhere; color: var(--au-ink); }
 .au-tariff-category-heading span { color: var(--au-muted); font-size: 12px; flex-shrink: 0; }
-.au-tariff-cards { display: grid; gap: 20px; min-width: 0; }
-.au-tariff-card { min-width: 0; padding: 22px; border-radius: 26px; background: linear-gradient(135deg,var(--au-from),var(--au-to)); color: white; overflow-wrap: anywhere; }
-.au-tariff-card-heading h3 { font-size: 21px; line-height: 1.25; font-weight: 750; letter-spacing: -.02em; }
-.au-tariff-description { margin-top: 10px; color: #ffffffe6; font-size: 13px; line-height: 1.55; white-space: pre-line; }
-.au-tariff-owned { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 20px; background: #ffffff20; font-size: 11px; font-weight: 600; margin-bottom: 12px; }
-.au-tariff-includes { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-block: 20px; }
-.au-tariff-includes > div { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px; border-radius: 16px; background: #ffffff14; }
-.au-tariff-includes svg { margin-bottom: 4px; opacity: .9; }
-.au-tariff-includes strong { font-size: 15px; line-height: 1.35; }
-.au-tariff-includes span { font-size: 11px; line-height: 1.5; color: #ffffffe6; }
-.au-tariff-periods { min-width: 0; margin-bottom: 20px; }
-.au-tariff-periods legend { margin-bottom: 9px; font-size: 12px; color: #ffffffe6; }
-.au-tariff-periods > div { display: flex; flex-wrap: wrap; gap: 7px; }
-.au-tariff-periods label { position: relative; flex: 1 1 74px; cursor: pointer; }
+.au-tariff-cards { display: grid; gap: 14px; min-width: 0; }
+.au-tariff-card { min-width: 0; padding: 20px; border-radius: 24px; background: var(--au-surface); border: 1px solid color-mix(in srgb, var(--au-muted) 14%, transparent); color: var(--au-ink); overflow-wrap: anywhere; }
+.au-tariff-card-heading h3 { font-size: 20px; line-height: 1.25; font-weight: 750; letter-spacing: -.02em; }
+.au-tariff-description { margin-top: 8px; color: var(--au-muted); font-size: 13px; line-height: 1.55; white-space: pre-line; }
+.au-tariff-owned { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 20px; background: color-mix(in srgb, var(--au-from) 12%, var(--au-bg)); color: var(--au-from); font-size: 11px; font-weight: 650; margin-bottom: 10px; }
+.au-tariff-includes { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-block: 16px; }
+.au-tariff-includes > div { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 12px; border-radius: 16px; background: var(--au-bg); }
+.au-tariff-includes svg { margin-bottom: 2px; color: var(--au-from); opacity: .95; }
+.au-tariff-includes strong { font-size: 14.5px; line-height: 1.35; }
+.au-tariff-includes span { font-size: 11px; line-height: 1.45; color: var(--au-muted); }
+.au-tariff-periods { min-width: 0; margin: 0 0 18px; padding: 0; border: 0; }
+.au-tariff-periods legend { margin-bottom: 8px; font-size: 12px; color: var(--au-muted); }
+.au-tariff-periods > div { display: flex; gap: 4px; padding: 4px; border-radius: 16px; background: var(--au-bg); }
+.au-tariff-periods label { position: relative; flex: 1 1 0; min-width: 0; cursor: pointer; }
 .au-tariff-periods input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.au-tariff-periods label > span { min-height: 44px; display: flex; align-items: center; justify-content: center; padding: 9px; border-radius: 16px; background: #ffffff20; font-size: 13px; font-weight: 650; text-align: center; }
-.au-tariff-periods input:checked + span { background: white; color: var(--au-from); }
-.au-tariff-periods input:focus-visible + span { outline: 2px solid white; outline-offset: 3px; }
-.au-tariff-card-price { border-top: 1px solid #ffffff30; padding-top: 18px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.au-tariff-periods label > span { min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 6px 4px; border-radius: 12px; color: var(--au-ink); font-size: 13px; font-weight: 650; text-align: center; transition: background-color 160ms ease, color 160ms ease; }
+.au-tariff-periods .au-tariff-period-value { display: block; white-space: nowrap; }
+.au-tariff-periods .au-tariff-period-discount { display: block; font-size: 10px; font-weight: 700; color: #0f9d58; }
+.au-tariff-periods input:checked + span { background: var(--au-surface); color: var(--au-from); box-shadow: 0 1px 3px rgba(16, 19, 29, .14); }
+.au-tariff-periods input:checked + span .au-tariff-period-discount { color: #0f9d58; }
+.au-tariff-periods input:focus-visible + span { outline: 2px solid var(--au-from); outline-offset: 2px; }
+.au-tariff-card-price { border-top: 1px solid color-mix(in srgb, var(--au-muted) 16%, transparent); padding-top: 16px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
 .au-tariff-card-price > div { min-width: 0; }
-.au-tariff-card-price span { display: block; font-size: 12px; color: #ffffffe6; }
-.au-tariff-card-price strong { display: block; margin-top: 5px; font-size: clamp(32px,9vw,44px); line-height: 1.1; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
-.au-tariff-card-price > p { text-align: right; font-size: 15px; font-variant-numeric: tabular-nums; max-width: 40%; }
+.au-tariff-card-price span { display: block; font-size: 12px; color: var(--au-muted); }
+.au-tariff-card-price strong { display: block; margin-top: 4px; font-size: clamp(30px,9vw,40px); line-height: 1.1; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.au-tariff-card-price > p { text-align: right; font-size: 14px; font-variant-numeric: tabular-nums; max-width: 42%; color: var(--au-ink); }
 .au-tariff-card-price b { font-weight: 650; }
-.au-tariff-breakdown { margin-top: 12px; font-size: 12px; line-height: 1.5; color: #ffffffe6; }
-.au-tariff-choose { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 50px; padding: 14px 17px; margin-top: 20px; border-radius: 18px; background: white; color: var(--au-from); font-size: 14px; font-weight: 700; }
+.au-tariff-breakdown { margin-top: 10px; font-size: 12px; line-height: 1.5; color: var(--au-muted); }
+.au-tariff-choose { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 50px; padding: 14px 17px; margin-top: 18px; border-radius: 16px; background: var(--au-from); color: white; font-size: 14.5px; font-weight: 700; transition: transform 150ms ease, opacity 150ms ease; }
+.au-tariff-choose:active:not(:disabled) { transform: scale(.99); }
 .au-tariff-choose svg { flex-shrink: 0; }
-.au-tariff-choose:disabled { opacity: .55; }
+.au-tariff-choose:disabled { opacity: .5; }
 .au-tariff-checkout-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-top: 16px; border-top: 1px solid color-mix(in srgb,var(--au-muted) 20%,transparent); padding-top: 16px; }
 .au-tariff-checkout-facts dt { color: var(--au-muted); font-size: 12px; }
 .au-tariff-checkout-facts dd { font-size: 14px; margin-top: 3px; font-weight: 650; }
@@ -42,7 +48,7 @@
 .au-tariff-checkout-breakdown dt { color: var(--au-muted); }
 .au-tariff-checkout-breakdown dd { font-variant-numeric: tabular-nums; }
 @media (max-width: 359px) {
-  .au-tariff-card { padding: 18px; }
-  .au-tariff-includes > div { padding: 12px; }
+  .au-tariff-card { padding: 16px; }
+  .au-tariff-includes > div { padding: 10px; }
   .au-tariff-card-price { flex-wrap: wrap; }
 }

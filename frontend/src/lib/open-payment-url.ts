@@ -20,8 +20,10 @@
 
 type TelegramWebAppMinimal = {
   initData?: string;
+  platform?: string;
   openInvoice?: (url: string) => void;
   openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
+  openTelegramLink?: (url: string) => void;
 };
 
 /**
@@ -31,7 +33,7 @@ type TelegramWebAppMinimal = {
  * Надёжный признак Mini App — непустой `initData`, который Telegram заполняет
  * только при реальном запуске WebApp.
  */
-function getTelegramWebApp(): TelegramWebAppMinimal | null {
+export function getTelegramWebApp(): TelegramWebAppMinimal | null {
   if (typeof window === "undefined") return null;
   const raw = (window as {
     Telegram?: { WebApp?: false | TelegramWebAppMinimal };
@@ -39,7 +41,11 @@ function getTelegramWebApp(): TelegramWebAppMinimal | null {
   if (!raw || typeof raw !== "object") return null;
   const webApp = raw as TelegramWebAppMinimal;
   if (typeof webApp.openLink !== "function") return null;
-  if (!webApp.initData || !webApp.initData.trim()) return null;
+  const isTg = Boolean(webApp.initData?.trim())
+    || (typeof webApp.platform === "string" && webApp.platform.length > 0 && webApp.platform !== "unknown")
+    || typeof (window as unknown as { TelegramWebviewProxy?: unknown }).TelegramWebviewProxy !== "undefined"
+    || (typeof navigator !== "undefined" && /Telegram/i.test(navigator.userAgent));
+  if (!isTg) return null;
   return webApp;
 }
 
@@ -70,8 +76,13 @@ export function preparePaymentRedirect(): PaymentRedirect {
     return {
       open: (url) => {
         try {
-          if (/^https:\/\/t\.me\/\$[A-Za-z0-9_-]+$/.test(url) && webApp.openInvoice) webApp.openInvoice(url);
-          else webApp.openLink!(url);
+          if (/^https:\/\/t\.me\/\$[A-Za-z0-9_-]+$/.test(url) && typeof webApp.openInvoice === "function") {
+            webApp.openInvoice(url);
+          } else if (/^https:\/\/t\.me\//.test(url) && typeof webApp.openTelegramLink === "function") {
+            webApp.openTelegramLink(url);
+          } else {
+            webApp.openLink!(url, { try_instant_view: false });
+          }
         } catch {
           window.location.assign(url);
         }

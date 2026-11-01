@@ -3,24 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-type TelegramWebAppMinimal = {
-  initData?: string;
-  openInvoice?: (url: string) => void;
-  openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
-};
-
-function getTelegramMiniApp(): TelegramWebAppMinimal | null {
-  if (typeof window === "undefined") return null;
-  const raw = (window as {
-    Telegram?: { WebApp?: false | TelegramWebAppMinimal };
-  }).Telegram?.WebApp;
-  if (!raw || typeof raw !== "object") return null;
-  const webApp = raw as TelegramWebAppMinimal;
-  if (typeof webApp.openLink !== "function") return null;
-  if (!webApp.initData || !webApp.initData.trim()) return null;
-  return webApp;
-}
+import { openPaymentInBrowser, getTelegramWebApp } from "@/lib/open-payment-url";
 
 export type PayNowPanelProps = {
   /** URL платёжной страницы, возвращённый провайдером. */
@@ -51,20 +34,12 @@ export function PayNowPanel({ url, provider, onBack, onPaid, compact }: PayNowPa
   const { t } = useTranslation();
 
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    const miniApp = getTelegramMiniApp();
-    if (miniApp) {
-      e.preventDefault();
-      try {
-        if (/^https:\/\/t\.me\/\$[A-Za-z0-9_-]+$/.test(url) && miniApp.openInvoice) miniApp.openInvoice(url);
-        else miniApp.openLink!(url);
-      } catch {
-        window.location.assign(url);
-      }
-    }
+    e.preventDefault();
+    openPaymentInBrowser(url);
     if (onPaid) onPaid();
   };
 
-  const isMiniapp = typeof window !== "undefined" && Boolean(getTelegramMiniApp());
+  const isMiniapp = typeof window !== "undefined" && Boolean(getTelegramWebApp());
   const hint = isMiniapp
     ? t("cabinet.common.ready_to_pay_hint_miniapp")
     : t("cabinet.common.ready_to_pay_hint");
