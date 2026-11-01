@@ -1,3 +1,5 @@
+import { cloudTrialUsed } from "./cloudpayments-trial.js";
+import { resizeCloudReceipt } from "./cloudpayments-receipt.js";
 import { Router } from "express";
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
@@ -36,7 +38,7 @@ export async function validateCloudPayment(body: Record<string, unknown>, check:
         orderId: `cp-${transactionId}`, clientId: agreement.clientId, provider: "cloudpayments", externalId: transactionId,
         amount: quote.amount, currency: agreement.currency, tariffId: agreement.tariffId,
         tariffPriceOptionId: agreement.priceOptionId, subscriptionId: agreement.subscriptionId,
-        metadata: JSON.stringify({ extendsSecondarySubId: agreement.subscriptionId, cloudAgreementId: agreement.id, cloudCycle: cycle, cloudRecurring: true, cloudPeriodDays: agreement.periodDays, cloudTerminalId: cfg.publicId, cloudTestMode: cfg.cloudpaymentsTestMode }),
+        metadata: JSON.stringify({ extendsSecondarySubId: agreement.subscriptionId, cloudAgreementId: agreement.id, cloudCycle: cycle, cloudReceipt: resizeCloudReceipt(agreement.receiptJson ? JSON.parse(agreement.receiptJson) : null, quote.amount), cloudRecurring: true, cloudPeriodDays: agreement.periodDays, cloudTerminalId: cfg.publicId, cloudTestMode: cfg.cloudpaymentsTestMode }),
       } });
       return 0;
     });
@@ -50,6 +52,11 @@ export async function validateCloudPayment(body: Record<string, unknown>, check:
   if (payment.externalId && payment.externalId !== transactionId) return 13;
   if (payment.status === "PAID") return check ? 13 : 0;
   if (payment.status !== "PENDING") return 13;
+  if (check && meta.cloudAgreementId) {
+    const agreement = await prisma.cloudPaymentAgreement.findUnique({ where: { id: meta.cloudAgreementId } });
+    if (!agreement || agreement.state !== "PENDING") return 13;
+    if (meta.cloudTrialDays && await cloudTrialUsed(payment.clientId)) return 13;
+  }
   if (check && Date.now() - payment.createdAt.getTime() > 86_400_000) return 20;
   const claim = await prisma.payment.updateMany({ where: { id: payment.id, status: "PENDING", OR: [{ externalId: null }, { externalId: transactionId }] }, data: { externalId: transactionId } });
   return claim.count ? 0 : 13;

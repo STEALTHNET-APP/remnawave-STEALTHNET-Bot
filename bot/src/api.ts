@@ -102,7 +102,7 @@ export async function getActiveContest(): Promise<{
 }
 
 /** Публичный конфиг (тарифы, кнопки, способы оплаты, trial и т.д.) */
-export async function getPublicConfig(): Promise<{
+export async function getPublicConfig(force = false): Promise<{
   maintenanceEnabled?: boolean;
   maintenanceMessage?: string;
   serviceName?: string | null;
@@ -123,6 +123,8 @@ export async function getPublicConfig(): Promise<{
   cryptopayEnabled?: boolean;
   heleketEnabled?: boolean;
   rollypayEnabled?: boolean;
+  cloudpaymentsBotDirect?: boolean;
+  botCommands?: { command: string; description: string; visible: boolean }[];
   cloudpaymentsEnabled?: boolean;
   cloudpaymentsTrialDays?: number;
   cloudpaymentsTrialAmount?: number;
@@ -211,7 +213,7 @@ export async function getPublicConfig(): Promise<{
   translations?: Record<string, Record<string, unknown>>;
 } | null> {
   const now = Date.now();
-  if (cachedConfig && now - configCacheTime < CACHE_TTL) {
+  if (!force && cachedConfig && now - configCacheTime < CACHE_TTL) {
     return cachedConfig;
   }
 
@@ -1250,6 +1252,7 @@ export async function getBotRuntimeConfig(): Promise<RuntimeConfig> {
 }
 
 export interface BotBootstrapData {
+  cloudTrialAvailable: boolean;
   client: {
     id: string;
     email?: string | null;
@@ -1291,3 +1294,10 @@ export interface BotBootstrapData {
 export async function getBotBootstrap(token: string): Promise<BotBootstrapData> {
   return fetchJson("/api/client/bot-bootstrap", { token });
 }
+
+export type CloudCheckoutQuote = { product: string; amount: number; currency: string; recurring: boolean; requiredRecurring: boolean; terms: string; receiptRequired: boolean; revision: string };
+export const cloudCheckoutQuote = (token: string, id: string) => fetchJson<CloudCheckoutQuote>(`/api/client/cloudpayments/checkout/${encodeURIComponent(id)}`, { token });
+export const cloudHostedCheckout = (token: string, id: string, body: { revision: string; recurring: boolean; email?: string }) => fetchJson<{ payUrl: string }>(`/api/client/cloudpayments/checkout/${encodeURIComponent(id)}/hosted`, { method: "POST", token, body });
+export type CloudAgreement = { id: string; state: string; amount: number; currency: string; periodDays: number; nextChargeAt: string | null; trialEndsAt: string | null };
+export const cloudSubscriptions = (token: string) => fetchJson<{ subscriptions: CloudAgreement[] }>("/api/client/cloudpayments/subscriptions", { token });
+export const cloudCancel = (token: string, id: string) => fetchJson<{ ok: boolean }>(`/api/client/cloudpayments/subscriptions/${encodeURIComponent(id)}/cancel`, { method: "POST", token });

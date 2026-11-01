@@ -1,3 +1,4 @@
+import { resizeCloudReceipt } from "./cloudpayments-receipt.js";
 import { prisma } from "../../db.js";
 import { cloudConfig, readMetadata } from "./cloudpayments.service.js";
 import { cloudRequest, money } from "./cloudpayments-api.js";
@@ -13,9 +14,9 @@ export async function requestCloudRefund(paymentId: string) {
     const amount = meta.cloudRefundRequestAmount ?? money(p.amount - Number(meta.cloudRefundedAmount || 0));
     if (amount <= 0) throw new Error("Сумма уже возвращена");
     await tx.payment.update({ where: { id: p.id }, data: { metadata: JSON.stringify({ ...meta, cloudRefundRequestAt: meta.cloudRefundRequestAt ?? new Date().toISOString(), cloudRefundRequestAmount: amount }) } });
-    return { transactionId: p.externalId, amount };
+    return { transactionId: p.externalId, amount, receipt: resizeCloudReceipt(meta.cloudReceipt, amount) };
   });
-  await cloudRequest(cfg, "payments/refund", { TransactionId: request.transactionId, Amount: request.amount }, `refund-${paymentId}`);
+  await cloudRequest(cfg, "payments/refund", { TransactionId: request.transactionId, Amount: request.amount, ...(request.receipt ? { JsonData: { cloudpayments: { CustomerReceipt: request.receipt } } } : {}) }, `refund-${paymentId}`);
   return { ok: true, payment: await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } }), summary: { creditedToBalance: 0, reversedReferralAmount: 0, reversedReferralCount: 0 } };
 }
 

@@ -11,7 +11,7 @@ const { verifyCloudPaymentsSignature, parseCloudNotification, sameAmount, subscr
 const { syncCloudAgreement, cancelCloudAgreement, DAY } = await import('../dist/modules/cloudpayments/cloudpayments.service.js');
 const { processCloudPayments } = await import('../dist/modules/cloudpayments/cloudpayments.worker.js');
 const { cloudWebhooksRouter, validateCloudPayment } = await import('../dist/modules/cloudpayments/cloudpayments.webhooks.js');
-const { cloudPublicRouter, prepareCloudCheckout } = await import('../dist/modules/cloudpayments/cloudpayments.routes.js');
+const { cloudPublicRouter, cloudClientRouter, prepareCloudCheckout } = await import('../dist/modules/cloudpayments/cloudpayments.routes.js');
 const { setRemnaRuntimeConfig } = await import('../dist/modules/remna/remna.client.js');
 const { default: express } = await import('express');
 const realFetch = globalThis.fetch;
@@ -38,6 +38,7 @@ globalThis.fetch = async (input, options = {}) => {
     else if (method === 'subscriptions/get') result = plans.get(body.Id);
     else if (method === 'subscriptions/update') { result = plans.get(body.Id); assert.ok(['Active', 'PastDue'].includes(result.Status)); Object.assign(result, body); }
     else if (method === 'subscriptions/cancel') { result = plans.get(body.Id); result.Status = 'Cancelled'; }
+    else if (method === 'orders/create') result = { Id: body.InvoiceId, Url: `https://orders.cloudpayments.ru/d/${body.InvoiceId}` };
     else if (method === 'payments/refund') result = { TransactionId: txid() };
     else throw Error(`Unexpected provider call: ${method}`);
     return json({ Success: true, Model: result });
@@ -101,6 +102,7 @@ before(async () => {
   const app = express();
   app.use('/api/cloudpayments/webhook', express.raw({ type: ['application/json', 'application/x-www-form-urlencoded'] }), cloudWebhooksRouter);
   app.use(express.json()); app.use('/api/cloudpayments', cloudPublicRouter);
+  app.use('/api/client/cloudpayments', (req, res, next) => { req.clientId = req.headers['x-test-client']; next(); }, cloudClientRouter);
   app.use((err, req, res, next) => res.status(400).json({ message: err.message }));
   server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve)); origin = `http://127.0.0.1:${server.address().port}`;
 });
@@ -334,4 +336,75 @@ test('admin refund retries use the same request key and await the bank notificat
   await processCloudPayments();
   assert.equal((await prisma.payment.findUnique({ where: { id: p.id } })).status, 'REFUNDED');
   assert.equal((await prisma.client.findUnique({ where: { id: client.id } })).balance, 0);
+});
+
+const receiptSettings = { enabled: true, taxationSystem: 1, vat: null, method: 4, object: 4, label: '{product}' };
+const receiptStart = (p, recurring = true) => realFetch(`${origin}/api/cloudpayments/checkout/${p.orderId}/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recurring, email: 'receipt@example.org' }) });
+const clientCall = (client, path, body) => realFetch(`${origin}/api/client/cloudpayments${path}`, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', 'x-test-client': client.id }, ...(body ? { body: JSON.stringify(body) } : {}) });
+test('receipts cover the actual trial amount, recurring price updates, and refunds using original tax data', async () => {
+  await settings({ cloudpayments_receipt: JSON.stringify(receiptSettings) });
+  try {
+    const { p, client } = await makeOrder({ trial: true });
+    assert.equal((await start(p, true)).response.status, 400);
+    const result = await receiptStart(p); assert.equal(result.status, 200);
+    const { widget } = await result.json();
+    assert.equal(widget.receipt.email, 'receipt@example.org');
+    assert.equal(widget.receipt.Items[0].amount, 1); assert.equal(widget.receipt.amounts.electronic, 1);
+    const body = payBody(p, widget.userInfo.accountId, { Token: 'test-token' });
+    await notify('pay', body); await processCloudPayments();
+    const agreement = await prisma.cloudPaymentAgreement.findUniqueOrThrow({ where: { id: widget.userInfo.accountId } });
+    const plan = plans.get(agreement.providerId);
+    assert.equal(plan.CustomerReceipt.Items[0].amount, agreement.amount);
+    await prisma.tariff.update({ where: { id: tariff.id }, data: { price: 410 } });
+    await syncCloudAgreement(agreement.id);
+    assert.equal(plan.CustomerReceipt.Items[0].amount, 410); assert.equal(plan.CustomerReceipt.amounts.electronic, 410);
+    await settings({ cloudpayments_receipt: JSON.stringify({ ...receiptSettings, taxationSystem: 2, vat: 22 }) });
+    const { requestCloudRefund } = await import('../dist/modules/cloudpayments/cloudpayments-refund.js');
+    await requestCloudRefund(p.id);
+    const refund = calls.filter(c => c.url.endsWith('/payments/refund')).at(-1);
+    assert.equal(refund.body.JsonData.cloudpayments.CustomerReceipt.taxationSystem, 1);
+    assert.equal(refund.body.JsonData.cloudpayments.CustomerReceipt.Items[0].vat, null);
+    assert.equal(refund.body.JsonData.cloudpayments.CustomerReceipt.amounts.electronic, 1);
+    const { cloudTrialUsed } = await import('../dist/modules/cloudpayments/cloudpayments-trial.js');
+    assert.equal(await cloudTrialUsed(client.id), true);
+  } finally { await settings({ cloudpayments_receipt: JSON.stringify({ ...receiptSettings, enabled: false }) }); await prisma.tariff.update({ where: { id: tariff.id }, data: { price: 300 } }); }
+});
+test('direct checkout enforces ownership, consent and revision; repeated clicks reuse one provider order', async () => {
+  await settings({ cloudpayments_bot_direct: true });
+  const { p, client } = await makeOrder({ trial: true });
+  const other = await prisma.client.create({ data: {} });
+  assert.equal((await clientCall(other, `/checkout/${p.id}`)).status, 404);
+  const quote = await (await clientCall(client, `/checkout/${p.id}`)).json();
+  assert.equal(quote.requiredRecurring, true);
+  assert.equal((await clientCall(client, `/checkout/${p.id}/hosted`, { revision: 'stale', recurring: true })).status, 409);
+  assert.equal((await clientCall(client, `/checkout/${p.id}/hosted`, { revision: quote.revision, recurring: false })).status, 400);
+  const before = calls.filter(c => c.url.endsWith('/orders/create')).length;
+  const result = await clientCall(client, `/checkout/${p.id}/hosted`, { revision: quote.revision, recurring: true });
+  assert.equal(result.status, 200); const first = await result.json();
+  assert.equal((await (await clientCall(client, `/checkout/${p.id}`)).json()).revision, quote.revision);
+  assert.equal((await clientCall(client, `/checkout/${p.id}/hosted`, { revision: quote.revision, recurring: false })).status, 400);
+  const again = await clientCall(client, `/checkout/${p.id}/hosted`, { revision: quote.revision, recurring: true });
+  assert.deepEqual(await again.json(), first);
+  assert.equal(calls.filter(c => c.url.endsWith('/orders/create')).length - before, 1);
+  const providerOrder = calls.filter(c => c.url.endsWith('/orders/create')).at(-1);
+  assert.equal(providerOrder.body.SubscriptionBehavior, undefined);
+  assert.match(providerOrder.body.Description, /300.*30/);
+  const { cloudTrialUsed } = await import('../dist/modules/cloudpayments/cloudpayments-trial.js');
+  assert.equal(await cloudTrialUsed(client.id), false);
+  const agreement = await prisma.cloudPaymentAgreement.findFirstOrThrow({ where: { clientId: client.id } });
+  await cancelCloudAgreement(agreement.id);
+  assert.equal(await validateCloudPayment(payBody(p, agreement.id), true), 13);
+  assert.equal(await cloudTrialUsed(client.id), false);
+  await settings({ cloudpayments_bot_direct: false });
+  assert.equal((await clientCall(client, `/checkout/${p.id}/hosted`, { recurring: true })).status, 404);
+});
+test('ordinary paid tariffs and failed orders do not consume the paid trial', async () => {
+  const { client, p } = await makeOrder({ topup: true });
+  await prisma.payment.update({ where: { id: p.id }, data: { status: 'PAID', tariffId: tariff.id } });
+  const trial = await makeOrder({ trial: true, client });
+  assert.equal(trial.p.amount, 1);
+  const { cloudTrialUsed } = await import('../dist/modules/cloudpayments/cloudpayments-trial.js');
+  assert.equal(await cloudTrialUsed(client.id), false);
+  await prisma.payment.update({ where: { id: trial.p.id }, data: { status: 'FAILED' } });
+  assert.equal(await cloudTrialUsed(client.id), false);
 });

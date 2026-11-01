@@ -1,3 +1,4 @@
+import { resizeCloudReceipt } from "./cloudpayments-receipt.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { prisma } from "../../db.js";
 import { env } from "../../config/index.js";
@@ -90,6 +91,7 @@ export async function syncCloudAgreement(id: string) {
   }
   if (!row.tokenEncrypted) throw new Error("CloudPayments не передал токен карты. Проверьте сохранение токена в настройках терминала.");
   const quote = await currentAgreementPrice(id);
+  const receipt = resizeCloudReceipt(row.receiptJson ? JSON.parse(row.receiptJson) : null, quote.amount);
   if (!provider) {
     if (row.createRequestedAt && Date.now() - row.createRequestedAt.getTime() > 55 * 60_000) throw new Error("Неопределённый результат создания автоплатежа: требуется сверка");
     const started = row.createRequestedAt ?? new Date();
@@ -100,6 +102,7 @@ export async function syncCloudAgreement(id: string) {
       Currency: row.currency, RequireConfirmation: false,
       StartDate: new Date(Math.max(row.nextChargeAt.getTime(), started.getTime() + 60_000)).toISOString(),
       Interval: "Day", Period: quote.days,
+      ...(receipt ? { CustomerReceipt: receipt, Email: receipt.email } : {}),
     }, `agreement-${id}`);
   } else {
     const dateText = provider.NextTransactionDateIso;
@@ -107,7 +110,7 @@ export async function syncCloudAgreement(id: string) {
     const adjustDate = row.nextChargeAt.getTime() > Date.now() + 60_000 && Number.isFinite(providerDate) && Math.abs(providerDate - row.nextChargeAt.getTime()) > 60_000;
     if (money(provider.Amount) !== quote.amount || adjustDate) {
       if (provider.Status !== "Active" && provider.Status !== "PastDue") throw new Error("Автоплатёж не активен");
-      provider = await cloudRequest<CloudSubscription>(cfg, "subscriptions/update", { Id: provider.Id, Amount: quote.amount, ...(adjustDate ? { StartDate: row.nextChargeAt.toISOString() } : {}) }, `price-${id}-${quote.amount}-${row.nextChargeAt.getTime()}`);
+      provider = await cloudRequest<CloudSubscription>(cfg, "subscriptions/update", { Id: provider.Id, Amount: quote.amount, ...(receipt ? { CustomerReceipt: receipt } : {}), ...(adjustDate ? { StartDate: row.nextChargeAt.toISOString() } : {}) }, `price-${id}-${quote.amount}-${row.nextChargeAt.getTime()}`);
     }
   }
   const latest = await prisma.cloudPaymentAgreement.findUniqueOrThrow({ where: { id } });

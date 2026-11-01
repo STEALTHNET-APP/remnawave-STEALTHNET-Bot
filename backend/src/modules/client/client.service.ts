@@ -1,3 +1,5 @@
+import { loadReceiptSettings } from "../cloudpayments/cloudpayments-receipt.js";
+import { loadBotCommands } from "../bot/bot-commands.js";
 import { setRemnaRuntimeConfig } from "../remna/remna.client.js";
 import { parseConfiguredBotButtons } from "../bot/menu-buttons.js";
 import bcrypt from "bcryptjs";
@@ -136,6 +138,7 @@ export const SYSTEM_CONFIG_KEYS = [
   "cryptopay_api_token", "cryptopay_testnet",
   "telegram_stars_enabled", "telegram_stars_rub_per_star",
   "heleket_merchant_id", "heleket_api_key",
+  "cloudpayments_receipt", "cloudpayments_bot_direct", "bot_commands",
   "cloudpayments_public_id", "cloudpayments_api_secret", "cloudpayments_enabled", "cloudpayments_trial_days", "cloudpayments_trial_amount", "cloudpayments_trial_tariff_id", "cloudpayments_grace_days", "cloudpayments_test_mode",
   "paritypay_shop_id", "paritypay_api_key", "paritypay_signing_secret", "paritypay_enabled",
   "rollypay_api_key", "rollypay_signing_secret", "rollypay_test_mode", "rollypay_enabled",
@@ -297,6 +300,8 @@ const DEFAULT_BOT_BUTTONS: BotButtonConfig[] = [
   { id: "devices", visible: true, label: "📱 Устройства", order: 1.5, style: "primary", emojiKey: "DEVICES" },
   { id: "topup", visible: true, label: "💳 Пополнить баланс", order: 2, style: "success", emojiKey: "CARD" },
   { id: "referral", visible: true, label: "🔗 Реферальная программа", order: 3, style: "primary", emojiKey: "LINK" },
+  { id: "cloudtrial", visible: true, label: "Пробный доступ: {days} дн. за {amount} ₽", order: -1, style: "" },
+  { id: "autopay", visible: true, label: "Автоплатежи", order: 4.6, style: "" },
   { id: "trial", visible: true, label: "🎁 Попробовать бесплатно", order: 4, style: "success", emojiKey: "TRIAL" },
   { id: "renew", visible: true, label: "🔄 Продлить подписку", order: 4.5, style: "primary" },
   { id: "vpn", visible: true, label: "🌐 Подключиться к VPN", order: 5, style: "danger", emojiKey: "SERVERS", onePerRow: true },
@@ -741,6 +746,9 @@ async function loadSystemConfigFromDb() {
     cryptopayTestnet: map.cryptopay_testnet === "true" || map.cryptopay_testnet === "1",
     heleketMerchantId: (map.heleket_merchant_id ?? "").trim() || null,
     heleketApiKey: (map.heleket_api_key ?? "").trim() || null,
+    cloudpaymentsReceipt: loadReceiptSettings(map.cloudpayments_receipt),
+    cloudpaymentsBotDirect: map.cloudpayments_bot_direct === "true",
+    botCommands: loadBotCommands(map.bot_commands),
     cloudpaymentsPublicId: (map.cloudpayments_public_id ?? "").trim(),
     cloudpaymentsApiSecret: (map.cloudpayments_api_secret ?? "").trim(),
     cloudpaymentsEnabled: map.cloudpayments_enabled === "true",
@@ -1396,6 +1404,8 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     // RollyPay считаем настроенным, когда есть и ключ кассы, и секрет подписи:
     // без секрета вебхук всё равно будет отвергнут, кнопка была бы обманом.
     cloudpaymentsEnabled: Boolean(full.cloudpaymentsEnabled && full.cloudpaymentsPublicId && full.cloudpaymentsApiSecret),
+    cloudpaymentsBotDirect: full.cloudpaymentsBotDirect,
+    botCommands: full.botCommands,
     cloudpaymentsTrialDays: full.cloudpaymentsTrialDays,
     cloudpaymentsTrialAmount: full.cloudpaymentsTrialAmount,
     cloudpaymentsTrialTariffId: full.cloudpaymentsTrialTariffId,

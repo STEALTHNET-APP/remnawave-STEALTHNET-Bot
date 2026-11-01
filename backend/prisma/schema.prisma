@@ -1694,6 +1694,7 @@ model SingboxRenewal {
 }
 
 model CloudPaymentAgreement {
+  receiptJson String? @map("receipt_json") @db.Text
   id String @id @default(cuid())
   clientId String @map("client_id")
   subscriptionId String? @map("subscription_id")

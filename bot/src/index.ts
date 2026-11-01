@@ -1,3 +1,5 @@
+import { registerCloudPaymentsFlow, showCloudCheckout, clearCloudEmail } from "./cloudpayments-flow.js";
+import { createCommandSync } from "./bot-commands.js";
 import { registerStarsPayments } from "./stars.js";
 import { referralRewardLines } from "./referral-rewards.js";
 import { createTermsGate } from "./terms.js";
@@ -1942,6 +1944,7 @@ setInterval(() => {
 }, 60 * 1000).unref?.();
 
 async function handleStart(ctx: Context, payload: string) {
+  if (ctx.from) clearCloudEmail(ctx.from.id);
   const from = ctx.from;
   if (!from) return;
   const now = Date.now();
@@ -2238,7 +2241,7 @@ async function handleStart(ctx: Context, payload: string) {
     const vpnUrl = getSubscriptionUrl(subRes.subscription);
     const showTrial = trialAvail.hasAnyEnabled
       ? trialAvail.items.length > 0
-      : Boolean(config?.trialEnabled && !client?.trialUsed);
+      : Boolean(config?.trialEnabled && !(bootstrap?.client.trialUsed ?? client?.trialUsed));
     const showProxy = proxyRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
     const showSingbox = singboxRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
     const appUrl = config?.publicAppUrl?.replace(/\/$/, "") ?? null;
@@ -2265,7 +2268,7 @@ async function handleStart(ctx: Context, payload: string) {
     const markup = mainMenu({
       liteMode: config?.liteMode === true,
       showTrial,
-      paidTrial: config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
+      paidTrial: bootstrap?.cloudTrialAvailable === true && config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
       showVpn: connectableSubscriptions(allSubsRes.items ?? []).length > 0,
       showRenew: renewableSubscriptions(allSubsRes.items ?? []).length > 0,
       connectTarget: directConnectionTarget(allSubsRes.items ?? [], config?.publicAppUrl, config?.useRemnaSubscriptionPage === true),
@@ -2380,6 +2383,8 @@ composer.command("link", async (ctx) => {
 // «Открыть [меню]» — команды сразу рендерят финальный контент (список / экран).
 // Логика дублирует соответствующие callback handler'ы (menu:my_subs / menu:referral /
 // menu:support), но вместо editMessageContent отправляет новое сообщение через ctx.reply.
+
+registerCloudPaymentsFlow(composer, getOrRestoreToken);
 
 composer.command("subscriptions", async (ctx) => {
   const userId = ctx.from?.id;
@@ -2845,7 +2850,7 @@ composer.on("callback_query:data", async (ctx) => {
       // T15: новый/legacy flow.
       const showTrial = trialAvail.hasAnyEnabled
         ? trialAvail.items.length > 0
-        : Boolean(config?.trialEnabled && !me.trialUsed);
+        : Boolean(config?.trialEnabled && !(bootstrap?.client.trialUsed ?? me.trialUsed));
       const showProxy = proxyRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
       const showSingbox = singboxRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
       const appUrl = config?.publicAppUrl?.replace(/\/$/, "") ?? null;
@@ -2869,7 +2874,7 @@ composer.on("callback_query:data", async (ctx) => {
       const markup = mainMenu({
       liteMode: config?.liteMode === true,
         showTrial,
-      paidTrial: config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
+      paidTrial: bootstrap?.cloudTrialAvailable === true && config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
         showVpn: connectableSubscriptions(allSubsRes.items ?? []).length > 0,
         showRenew: renewableSubscriptions(allSubsRes.items ?? []).length > 0,
         connectTarget: directConnectionTarget(allSubsRes.items ?? [], config?.publicAppUrl, config?.useRemnaSubscriptionPage === true),
@@ -3495,7 +3500,7 @@ composer.on("callback_query:data", async (ctx) => {
       // кнопку когда юзер всё взял); иначе fallback на legacy single-trial.
       const showTrial = trialAvail.hasAnyEnabled
         ? trialAvail.items.length > 0
-        : Boolean(config?.trialEnabled && !client?.trialUsed);
+        : Boolean(config?.trialEnabled && !(bootstrap?.client.trialUsed ?? client?.trialUsed));
       const showProxy = proxyRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
       const showSingbox = singboxRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
       const name = config?.serviceName?.trim() || "Кабинет";
@@ -3519,7 +3524,7 @@ composer.on("callback_query:data", async (ctx) => {
       const backMarkup = mainMenu({
       liteMode: config?.liteMode === true,
         showTrial,
-      paidTrial: config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
+      paidTrial: bootstrap?.cloudTrialAvailable === true && config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
         showVpn: connectableSubscriptions(allSubsRes.items ?? []).length > 0,
         showRenew: renewableSubscriptions(allSubsRes.items ?? []).length > 0,
         connectTarget: directConnectionTarget(allSubsRes.items ?? [], config?.publicAppUrl, config?.useRemnaSubscriptionPage === true),
@@ -5039,11 +5044,7 @@ if (data.startsWith("pay_tariff_rollypay:")) {
         if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
         convDropExtras.delete(userId);
         trialReplaceChoice.delete(userId);
-        const nameWithDays = (opts.length > 1 || (sel?.tariffId === tariff.id))
-          ? `${tariff.name} · ${formatRuDays(effectiveDays)}`
-          : tariff.name;
-        const msg = buildPaymentMessage(config, { name: nameWithDays, price: formatMoney(priceWithDiscountHeleket, tariff.currency), amount: String(priceWithDiscountHeleket), currency: tariff.currency, action: "Нажмите кнопку ниже для оплаты:" }, discountArg);
-        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
+        await showCloudCheckout(ctx, token, payment, config?.cloudpaymentsBotDirect === true);
       } catch (e: unknown) {
         const m = e instanceof Error ? e.message : "Ошибка создания платежа CloudPayments";
         await editMessageContent(ctx, `❌ ${m}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
@@ -6822,8 +6823,7 @@ if (data.startsWith("topup_cloudpayments:")) {
       const client = await api.getMe(token);
       try {
         const payment = await api.createCloudpaymentsPayment(token, { amount, currency: client.preferredCurrency ?? "RUB" });
-        const rpTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
-        await editMessageContent(ctx, rpTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), rpTopup.entities);
+        await showCloudCheckout(ctx, token, payment, config?.cloudpaymentsBotDirect === true);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Ошибка создания платежа CloudPayments";
         await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
@@ -7142,13 +7142,20 @@ if (data.startsWith("topup_paritypay:")) {
       if (!config?.cloudpaymentsEnabled || !config.cloudpaymentsTrialTariffId || !config.cloudpaymentsTrialDays) return;
       try {
         const payment = await api.createCloudpaymentsPayment(token, { tariffId: config.cloudpaymentsTrialTariffId, paidTrial: true });
-        await editMessageContent(ctx, `Пробный доступ: ${config.cloudpaymentsTrialDays} дн. за ${config.cloudpaymentsTrialAmount ?? 1} ₽.\nПосле пробного периода — регулярная оплата тарифа. Перед оплатой вы увидите сумму и сможете подтвердить условия.`, { inline_keyboard: [[{ text: "Посмотреть условия и оплатить", url: payment.payUrl }], [{ text: "Назад", callback_data: "menu:main" }]] });
+        await showCloudCheckout(ctx, token, payment, config?.cloudpaymentsBotDirect === true);
       } catch (e) { await editMessageContent(ctx, e instanceof Error ? e.message : "Не удалось создать счёт", backToMenu()); }
       return;
     }
     if (data === "menu:trial") {
       try {
-        const { items } = await api.getAvailableTrials(token);
+        const { items, hasAnyEnabled } = await api.getAvailableTrials(token);
+        if (!hasAnyEnabled && config?.trialEnabled) {
+          const current = await api.getMe(token);
+          if (!current.trialUsed) {
+            await editMessageContent(ctx, (config.botTrialText ?? "").trim() || "Активировать бесплатный пробный доступ?", { inline_keyboard: [[{ text: "Активировать пробный доступ", callback_data: "trial:confirm" }], [{ text: config.botBackLabel || "В меню", callback_data: "menu:main" }]] });
+            return;
+          }
+        }
         if (items.length === 0) {
           // текст редактируется в админке («Тексты бота» → bot_trial_used_text).
           await editMessageContent(
@@ -8132,7 +8139,9 @@ if (data.startsWith("topup_paritypay:")) {
           payUrl = p.payUrl;
         } else if (provider === "cloudpayments") {
           const p = await api.createCloudpaymentsPayment(token, { amount: effectivePrice, currency: "RUB", tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
-          payUrl = p.payUrl;
+          selectedGiftOption.delete(userId);
+          await showCloudCheckout(ctx, token, p, config?.cloudpaymentsBotDirect === true);
+          return;
         } else if (provider === "paritypay") {
           const p = await api.createParitypayPayment(token, { amount: effectivePrice, currency: "RUB", tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
           payUrl = p.payUrl;
@@ -8927,17 +8936,9 @@ try {
   /* ignore */
 }
 
-try {
-  await b.api.setMyCommands([
-    { command: "start", description: "Главное меню" },
-    { command: "subscriptions", description: "Моя подписка / инструкции" },
-    { command: "referral", description: "Реферальная программа" },
-    { command: "support", description: "Поддержка" },
-    { command: "paysupport", description: "Помощь с оплатой Stars" },
-  ]);
-} catch (e) {
-  console.error(`[Bot @${b.botInfo.username}] setMyCommands failed:`, e);
-}
+const syncCommands = createCommandSync((commands, options) => b.api.setMyCommands(commands, options));
+const refreshCommands = async () => { const config = await api.getPublicConfig(true); if (config) await syncCommands(config.botCommands); };
+await refreshCommands().catch(() => console.error("[Bot] Command menu update failed; retrying"));
 
 const modeController = createModeController({
   config: () => api.getBotRuntimeConfig(),
@@ -8967,6 +8968,7 @@ const internalPort = Number(process.env.BOT_INTERNAL_PORT) || 8080;
 internalServer.listen(internalPort, "0.0.0.0");
 await modeController.reload().catch(() => console.error("[Bot] Delivery mode not confirmed; retrying"));
 const modeTimer = setInterval(() => {
+  void refreshCommands().catch(() => console.error("[Bot] Command menu update failed"));
   void modeController.reload().catch(() => console.error("[Bot] Delivery mode reconciliation failed"));
 }, 30_000);
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => {
@@ -8988,8 +8990,8 @@ async function groupedProfileMenu(config: Awaited<ReturnType<typeof api.getPubli
   return mainMenu({
     liteMode: config.liteMode === true,
     section: "profile", groupCabinet: true,
-    paidTrial: config.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
-    showTrial: trials.hasAnyEnabled ? trials.items.length > 0 : Boolean(config.trialEnabled && !trialUsed),
+    paidTrial: bootstrap?.cloudTrialAvailable === true && config.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
+    showTrial: trials.hasAnyEnabled ? trials.items.length > 0 : Boolean(config.trialEnabled && !(bootstrap?.client.trialUsed ?? trialUsed)),
     showVpn: connectableSubscriptions(subscriptions.items).length > 0,
     showRenew: renewableSubscriptions(subscriptions.items).length > 0,
     connectTarget: directConnectionTarget(subscriptions.items, config.publicAppUrl, config.useRemnaSubscriptionPage === true),

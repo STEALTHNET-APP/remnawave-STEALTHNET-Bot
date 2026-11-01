@@ -1,3 +1,4 @@
+import { cloudTrialUsed } from "../cloudpayments/cloudpayments-trial.js";
 import { prepareCloudCheckout, cloudClientRouter } from "../cloudpayments/cloudpayments.routes.js";
 import { deleteTickets } from "../ticket/ticket-delete.service.js";
 import { asyncHandler } from "../../lib/async-handler.js";
@@ -3296,7 +3297,7 @@ clientRouter.get("/subscription/all", async (req, res) => {
  */
 clientRouter.get("/bot-bootstrap", async (req, res) => {
   const clientId = (req as unknown as { clientId: string }).clientId;
-  const [full, subsResult, trialsResult] = await Promise.all([
+  const [full, subsResult, trialsResult, paidTrialUsed] = await Promise.all([
     prisma.client.findUnique({
       where: { id: clientId },
       select: {
@@ -3311,6 +3312,7 @@ clientRouter.get("/bot-bootstrap", async (req, res) => {
     }),
     fetchClientSubscriptionsAll(clientId),
     fetchAvailableTrialsForClient(clientId),
+    cloudTrialUsed(clientId),
   ]);
 
   if (!full) {
@@ -3335,6 +3337,7 @@ clientRouter.get("/bot-bootstrap", async (req, res) => {
   };
 
   return res.json({
+    cloudTrialAvailable: !paidTrialUsed,
     client,
     subscription: primarySubscription,
     allSubscriptions: subsResult,
@@ -6924,6 +6927,19 @@ clientRouter.post("/cloudpayments/create-payment", asyncHandler(async (req, res)
     if (!parsed.success) return res.status(400).json({ message: "Неверные параметры", errors: parsed.error.flatten() });
     const config = await getSystemConfig();
     if (!config.cloudpaymentsEnabled || !config.cloudpaymentsPublicId || !config.cloudpaymentsApiSecret) return res.status(503).json({ message: "CloudPayments не настроен" });
+    if (req.body?.paidTrial === true) {
+      if (await cloudTrialUsed(clientId)) return res.status(400).json({ message: "Пробный период уже использован" });
+      const pending = await prisma.payment.findMany({ where: { clientId, provider: "cloudpayments", status: "PENDING", tariffId: config.cloudpaymentsTrialTariffId, createdAt: { gte: new Date(Date.now() - 86_400_000) }, metadata: { contains: '"cloudTrialDays"' } }, orderBy: { createdAt: "desc" }, take: 10 });
+      for (const p of pending) {
+        const meta = JSON.parse(p.metadata || "{}");
+        if (!meta.cloudTrialDays) continue;
+        if (meta.cloudAgreementId) {
+          const agreement = await prisma.cloudPaymentAgreement.findUnique({ where: { id: meta.cloudAgreementId } });
+          if (!agreement || agreement.state !== "PENDING") continue;
+        }
+        return res.json({ paymentId: p.id, payUrl: `${config.publicAppUrl?.replace(/\/$/, "")}/api/cloudpayments/checkout/${p.orderId}` });
+      }
+    }
     const { extendsSecondarySubId, removeExtrasOnActivate, asGift, asAdditional } = parsed.data;
 
     const { amount: amountBody, currency: currencyBody, tariffId: tariffIdBody, proxyTariffId: proxyTariffIdBody, singboxTariffId: singboxTariffIdBody, promoCode: promoCodeStr, extraOption, customBuild: customBuildBody } = parsed.data;
