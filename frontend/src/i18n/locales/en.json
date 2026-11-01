@@ -2684,6 +2684,8 @@
     "trial_activate": "Activate for free",
     "trial_active_title": "You have an active trial subscription",
     "trial_active_body": "When you purchase any plan, it will automatically switch to the selected plan without changing your VPN key.",
+    "trial_convert_disabled_title": "Trial conversion is unavailable",
+    "trial_convert_disabled_body": "Switching this trial to a paid plan is disabled. You can choose and purchase a regular plan below.",
     "trial_available_count": "{{count}} trial plans available",
     "trial_badge": "Trial",
     "trial_banner_hint": "Try the service before choosing a plan.",

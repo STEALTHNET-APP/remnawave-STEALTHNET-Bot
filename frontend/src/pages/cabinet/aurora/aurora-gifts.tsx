@@ -435,6 +435,10 @@ function AuroraGiftBuySheet({
   }, [open, tariffs]);
 
   useEffect(() => {
+    if (!open) setPayOpen(false);
+  }, [open]);
+
+  useEffect(() => {
     if (!selected) return;
     setOptionId((current) => (current && selected.priceOptions.some((p) => p.id === current) ? current : selected.priceOptions[0]?.id ?? null));
     setExtras((current) => Math.min(current, selected.maxExtraDevices ?? 0));
@@ -463,7 +467,7 @@ function AuroraGiftBuySheet({
 
   return (
     <>
-    <AuroraSheet open={open} onClose={busy ? () => {} : onClose} title={t("aurora.gift_buy")}>
+    <AuroraSheet open={open && !payOpen} onClose={busy ? () => {} : onClose} title={t("aurora.gift_buy")}>
       <div className="space-y-3 pb-2">
         {tariffs.length === 0 ? (
           <AuEmpty title={t("aurora.tariffs_empty")} />
@@ -566,7 +570,7 @@ function AuroraGiftBuySheet({
       </div>
     </AuroraSheet>
     <AuroraPaymentSheet
-      open={payOpen}
+      open={open && payOpen}
       onClose={() => setPayOpen(false)}
       title={t("aurora.gift_buy")}
       methods={methods}

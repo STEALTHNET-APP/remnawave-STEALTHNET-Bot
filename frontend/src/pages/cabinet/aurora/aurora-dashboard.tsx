@@ -287,6 +287,7 @@ export function AuroraDashboard() {
         const rest = unlimited ? null : Math.max(0, trafficLimit - used);
         const usedPercent = unlimited ? 0 : Math.min(100, Math.round((used / Math.max(1, trafficLimit)) * 100));
         const title = item.customName?.trim() || item.tariffDisplayName?.trim() || info.productName || t("aurora.subscription");
+        const trialConvertible = item.trialId ? item.trialConvertEnabled !== false : true;
         const muted = isMain ? "text-white/75" : "text-[var(--au-muted)]";
         const strong = isMain ? "text-white" : "text-[var(--au-ink)]";
         const utility = isMain
@@ -408,20 +409,22 @@ export function AuroraDashboard() {
               ) : (
                 <span className="flex-1" />
               )}
-              <button
-                type="button"
-                onClick={() => openRenew(item)}
-                className={cn(
-                  "flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-[16px] px-3.5 text-[13px] font-bold transition-transform active:scale-95",
-                  utility,
-                )}
-              >
-                <RefreshCw className="h-4 w-4" />
-                {t("aurora.renew")}
-              </button>
+              {trialConvertible && (
+                <button
+                  type="button"
+                  onClick={() => openRenew(item)}
+                  className={cn(
+                    "flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-[16px] px-3.5 text-[13px] font-bold transition-transform active:scale-95",
+                    utility,
+                  )}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  {t("aurora.renew")}
+                </button>
+              )}
             </div>
 
-            {item.trialId && active && (
+            {item.trialId && active && trialConvertible && (
               <button
                 type="button"
                 onClick={() => openRenew(item)}

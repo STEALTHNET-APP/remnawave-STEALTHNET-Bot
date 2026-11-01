@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -57,6 +57,7 @@ export function AuroraTariffs() {
   const availableTrials = trialsQuery.data?.items ?? [];
   const hasTrials = availableTrials.length > 0;
   const [extendTarget, setExtendTarget] = useState<{ id: string; label: string; tariffId: string | null; isTrial: boolean; trialName: string | null; convertTariffIds: string[]; trialConvertAllTariffs: boolean; extraDevices: number; extraDevicesMonthlyPrice: number } | null>(null);
+  const [trialConversionBlocked, setTrialConversionBlocked] = useState(false);
   const [extKeepExtras, setExtKeepExtras] = useState(true);
 
   const [categories, setCategories] = useState<PublicTariffCategory[]>([]);
@@ -113,19 +114,25 @@ export function AuroraTariffs() {
     return () => { alive = false; };
   }, []);
 
-  const [mySubs, setMySubs] = useState<{ id: string; label: string; tariffId: string | null; expireAt: string | null; isTrial: boolean; trialName: string | null }[]>([]);
+  const [mySubs, setMySubs] = useState<{ id: string; label: string; tariffId: string | null; expireAt: string | null; isTrial: boolean; trialName: string | null; trialConvertEnabled: boolean }[]>([]);
   const [replaceTrialChoice, setReplaceTrialChoice] = useState<string | null>(null);
-  const activeTrial = mySubs.find((sub) => sub.isTrial && (!sub.expireAt || Date.parse(sub.expireAt) > Date.now())) ?? null;
+  const activeTrial = mySubs.find((sub) => sub.isTrial && sub.trialConvertEnabled && (!sub.expireAt || Date.parse(sub.expireAt) > Date.now())) ?? null;
   const checkoutTrial = (replaceTrialChoice ? mySubs.find((sub) => sub.id === replaceTrialChoice) : null) ?? activeTrial;
+  const selectedTrialSubId = extendTarget?.id ?? replaceTrialChoice ?? activeTrial?.id ?? undefined;
   const checkoutIsTrial = extendTarget?.isTrial === true
     || convPreview?.subscription?.isTrial === true
     || convPreview?.subscription?.trialId != null
     || (!extendTarget && checkoutTrial != null);
-  useEffect(() => {
-    if (!state.token) { setExtendTarget(null); setMySubs([]); return; }
-    let alive = true;
-    api.clientAllSubscriptions(state.token).then((r) => {
-      if (!alive) return;
+
+  const loadMySubs = useCallback(async () => {
+    if (!state.token) {
+      setExtendTarget(null);
+      setMySubs([]);
+      setTrialConversionBlocked(false);
+      return;
+    }
+    try {
+      const r = await api.clientAllSubscriptions(state.token);
       const items = r.items ?? [];
       setMySubs(items.map((it) => {
         const raw = it.subscription as Record<string, unknown> | null;
@@ -139,11 +146,25 @@ export function AuroraTariffs() {
           expireAt: payload && typeof payload.expireAt === "string" ? payload.expireAt : null,
           isTrial: Boolean(it.trialId),
           trialName: it.trialName ?? null,
+          trialConvertEnabled: it.trialConvertEnabled !== false,
         };
       }));
-      if (!extendParam) { setExtendTarget(null); return; }
+      if (!extendParam) {
+        setExtendTarget(null);
+        setTrialConversionBlocked(false);
+        return;
+      }
       const it = items.find((s) => s.id === extendParam);
-      if (!it) { setExtendTarget(null); return; }
+      if (!it) {
+        setExtendTarget(null);
+        setTrialConversionBlocked(false);
+        return;
+      }
+      if (it.trialId && it.trialConvertEnabled === false) {
+        setExtendTarget(null);
+        setTrialConversionBlocked(true);
+        return;
+      }
       const idx = it.subscriptionIndex ?? 0;
       setExtendTarget({
         id: it.id,
@@ -156,10 +177,18 @@ export function AuroraTariffs() {
         extraDevices: it.extraDevices ?? 0,
         extraDevicesMonthlyPrice: it.extraDevicesMonthlyPrice ?? 0,
       });
+      setTrialConversionBlocked(false);
       setExtKeepExtras(true);
-    }).catch(() => { if (alive) { setExtendTarget(null); setMySubs([]); } });
-    return () => { alive = false; };
+    } catch {
+      setExtendTarget(null);
+      setMySubs([]);
+      setTrialConversionBlocked(false);
+    }
   }, [extendParam, state.token, t]);
+
+  useEffect(() => {
+    void loadMySubs();
+  }, [loadMySubs]);
 
   const displayCategories = useMemo(() => {
     if (!extendTarget) return categories;
@@ -289,12 +318,12 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
     api.clientTariffConversionPreview(state.token, {
       tariffId: selectedTariffId,
       priceOptionId: selectedPriceOptionId ?? undefined,
-      replaceTrialSubId: extendTarget?.id,
+      replaceTrialSubId: selectedTrialSubId,
     })
       .then((p) => { if (alive) { setConvPreview(p); setPreviewKey(requestedPreviewKey); } })
       .catch(() => { if (alive) { setConvPreview(null); setPreviewError(true); } });
     return () => { alive = false; };
-  }, [state.token, selectedTariffId, selectedPriceOptionId, extendTarget?.id, paySheet, previewRetry, requestedPreviewKey]);
+  }, [state.token, selectedTariffId, selectedPriceOptionId, selectedTrialSubId, paySheet, previewRetry, requestedPreviewKey]);
 
   async function applyPromo() {
     if (!state.token || !promoInput.trim()) return;
@@ -326,7 +355,7 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
       const prev = await api.clientTariffConversionPreview(state.token, {
         tariffId: selectedTariffId,
         priceOptionId: selectedPriceOptionId ?? undefined,
-        replaceTrialSubId: extendTarget?.id,
+        replaceTrialSubId: selectedTrialSubId,
       }).catch(() => null);
       setPaying(false);
       const willReplace = !!(prev && prev.willConvert && (prev.mode !== "extend" || (prev.othersToRemove ?? 0) > 0));
@@ -395,13 +424,11 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
         ...(convPreview?.willConvert && convPreview.mode !== "extend" && (convPreview.extras?.extraDevices ?? 0) > 0 && !convKeepExtras
           ? { removeExtrasOnActivate: true }
           : {}),
-        ...(() => {
-          if (extendTarget || convPreview?.willConvert) return {};
-          const trialsOwned = mySubs.filter((s) => s.isTrial);
-          return trialsOwned.length > 0
-            ? { replaceTrialSubId: replaceTrialChoice ?? trialsOwned[0].id }
-            : {};
-        })(),
+        ...(!extendTarget
+          && selectedTrialSubId
+          && (!convPreview?.willConvert || convPreview?.subscription?.isTrial === true || convPreview?.subscription?.trialId != null)
+          ? { replaceTrialSubId: selectedTrialSubId }
+          : {}),
       };
       let url: string | null = null;
       if (selectedMethod.kind === "platega") {
@@ -715,7 +742,14 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
 
       {renewalNotice}
 
-      {!extendTarget && activeTrial && (
+      {trialConversionBlocked && (
+        <section className={noticeCls("amber")}>
+          <p className="text-[14px] font-bold">{t("aurora.trial_convert_disabled_title")}</p>
+          <p className="mt-1 text-[13px] leading-relaxed opacity-80">{t("aurora.trial_convert_disabled_body")}</p>
+        </section>
+      )}
+
+      {!extendTarget && !trialConversionBlocked && activeTrial && (
         <section className={noticeCls("accent")}>
           <div className="flex items-start gap-3">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white">
@@ -989,6 +1023,7 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
         onClose={() => setTrialsSheetOpen(false)}
         onActivated={() => {
           void trialsQuery.refetch();
+          void loadMySubs();
           void refreshProfile();
         }}
       />
