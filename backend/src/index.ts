@@ -15,6 +15,7 @@ import { prisma } from "./db.js";
 import { ensureFirstAdmin } from "./modules/auth/auth.service.js";
 import { ensureConsoleAccess } from "./modules/console/console.service.js";
 import { ensureSystemSettings } from "./scripts/seed-system-settings.js";
+import { migrateLegacyEmailVerificationSubject } from "./modules/email-templates/email-templates.service.js";
 import { startAutoBroadcastScheduler, stopAutoBroadcastScheduler } from "./modules/auto-broadcast/auto-broadcast-scheduler.js";
 import { startContestDailyReminderScheduler, stopContestDailyReminderScheduler } from "./modules/contest/contest-daily-reminder-scheduler.js";
 import { startAutoRenewScheduler } from "./modules/payment/auto-renew.cron.js";
@@ -47,6 +48,12 @@ async function main() {
   await ensureSystemSettings();
   await ensureConsoleAccess();
   await ensureTheme();
+  try {
+    const fixed = await migrateLegacyEmailVerificationSubject();
+    if (fixed) console.log("[email-templates] legacy email verification subject migrated");
+  } catch (e) {
+    console.error("[email-templates] legacy subject migration failed:", e);
+  }
   try {
     const { syncExistingTrialUsagesFlag } = await import("./modules/trial/trial.service.js");
     const fixed = await syncExistingTrialUsagesFlag();
