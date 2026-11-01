@@ -2633,7 +2633,8 @@ export const api = {
   ): Promise<{ paymentId: string; payUrl: string }> {
     return request("/client/paritypay/create-payment", { method: "POST", body: JSON.stringify(data), token });
   },
-  cloudpaymentsStatus: (token: string) => request<{ agreements: { id: string; clientId: string; state: string; amount: number; nextChargeAt: string | null; lastError: string | null }[]; jobs: { paymentId: string; state: string; error: string | null }[]; pendingEvents: number; eventErrors: { id: string; kind: string; error: string | null }[] }>("/admin/settings/cloudpayments-status", { token }),
+  cloudpaymentsAdminCancel: (token: string, id: string) => request<{ ok: boolean }>(`/admin/settings/cloudpayments-subscriptions/${encodeURIComponent(id)}/cancel`, { method: "POST", token }),
+  cloudpaymentsStatus: (token: string, clientId = "") => request<{ agreements: { id: string; clientId: string; state: string; amount: number; nextChargeAt: string | null; lastError: string | null }[]; jobs: { paymentId: string; state: string; error: string | null }[]; pendingEvents: number; eventErrors: { id: string; kind: string; error: string | null }[] }>(`/admin/settings/cloudpayments-status${clientId.trim() ? `?clientId=${encodeURIComponent(clientId.trim())}` : ""}`, { token }),
   async cloudpaymentsSubscriptions(token: string): Promise<{ subscriptions: { id: string; state: string; amount: number; currency: string; periodDays: number; nextChargeAt: string | null; trialEndsAt: string | null }[] }> {
     return request("/client/cloudpayments/subscriptions", { token });
   },
@@ -3635,6 +3636,9 @@ export type UpdateSettingsPayload = {
   rollypayApiKey?: string | null;
   paritypayShopId?: string | null;
   cloudpaymentsEnabled?: boolean;
+  cloudpaymentsReceipt?: { enabled: boolean; taxationSystem: number; vat: number | null; method: number; object: number; label: string };
+  cloudpaymentsBotDirect?: boolean;
+  botCommands?: { command: string; description: string; visible: boolean }[];
   cloudpaymentsPublicId?: string;
   cloudpaymentsApiSecret?: string;
   cloudpaymentsTestMode?: boolean;
@@ -4172,6 +4176,9 @@ export interface AdminSettings {
   rollypayApiKey?: string | null;
   paritypayShopId?: string | null;
   cloudpaymentsEnabled?: boolean;
+  cloudpaymentsReceipt?: { enabled: boolean; taxationSystem: number; vat: number | null; method: number; object: number; label: string };
+  cloudpaymentsBotDirect?: boolean;
+  botCommands?: { command: string; description: string; visible: boolean }[];
   cloudpaymentsPublicId?: string;
   cloudpaymentsApiSecret?: string;
   cloudpaymentsTestMode?: boolean;

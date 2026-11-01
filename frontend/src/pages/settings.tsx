@@ -1,3 +1,4 @@
+import { BotCommandsSettings } from "@/components/admin/bot-commands-settings";
 import { CloudPaymentsSettings } from "@/components/admin/cloudpayments-settings";
 import { adminAlert } from "@/lib/admin-dialogs";
 import { isBotButtonUrl } from "@/lib/bot-button-url";
@@ -71,6 +72,8 @@ const DEFAULT_PLATEGA_METHODS: { id: number; enabled: boolean; label: string }[]
 
 type BotButtonItem = { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean; url?: string };
 const DEFAULT_BOT_BUTTONS: BotButtonItem[] = [
+  { id: "cloudtrial", visible: true, label: "Пробный доступ: {days} дн. за {amount} ₽", order: -1, style: "" },
+  { id: "autopay", visible: true, label: "Автоплатежи", order: 4.6, style: "" },
   { id: "tariffs", visible: true, label: " Купить доступ / Продлить", order: 2, style: "" },
   { id: "proxy", visible: true, label: " Прокси", order: 0.5, style: "primary", emojiKey: "SERVERS" },
   { id: "my_proxy", visible: true, label: " Мои прокси", order: 0.6, style: "primary", emojiKey: "SERVERS" },
@@ -916,6 +919,7 @@ export function SettingsPage() {
     setMessage("");
     saveSettingsMut.mutate({
       botButtons: JSON.stringify(settings.botButtons ?? DEFAULT_BOT_BUTTONS),
+      botCommands: settings.botCommands,
       botMenuMode: settings.botMenuMode ?? "classic",
       botGroupCabinet: settings.botGroupCabinet ?? false,
       botButtonsPerRow: settings.botButtonsPerRow ?? 1,
@@ -1038,6 +1042,8 @@ export function SettingsPage() {
         cloudpaymentsTrialDays: settings.cloudpaymentsTrialDays ?? 0,
         cloudpaymentsTrialAmount: settings.cloudpaymentsTrialAmount ?? 1,
         cloudpaymentsTrialTariffId: settings.cloudpaymentsTrialTariffId ?? null,
+        cloudpaymentsReceipt: settings.cloudpaymentsReceipt,
+        cloudpaymentsBotDirect: settings.cloudpaymentsBotDirect,
         cloudpaymentsGraceDays: settings.cloudpaymentsGraceDays ?? 0,
         paritypayShopId: settings.paritypayShopId ?? null,
         paritypayApiKey: settings.paritypayApiKey === "********" ? undefined : (settings.paritypayApiKey || null),
@@ -1068,7 +1074,8 @@ export function SettingsPage() {
         groqFallback3: settings.groqFallback3 ?? undefined,
         aiSystemPrompt: settings.aiSystemPrompt ?? undefined,
         botButtons: settings.botButtons != null ? JSON.stringify(settings.botButtons) : undefined,
-        botMenuMode: settings.botMenuMode ?? "classic",
+        botCommands: settings.botCommands,
+      botMenuMode: settings.botMenuMode ?? "classic",
       botGroupCabinet: settings.botGroupCabinet ?? false,
         botButtonsPerRow: settings.botButtonsPerRow ?? 1,
         botEmojis: settings.botEmojis != null ? settings.botEmojis : undefined,
@@ -2092,6 +2099,7 @@ export function SettingsPage() {
 
                   {/* === ВКЛАДКА: МЕНЮ === */}
                   <TabsContent value="menu" className="space-y-5 mt-5">
+                    <BotCommandsSettings value={settings.botCommands} onChange={botCommands => setSettings(s => s ? { ...s, botCommands } : s)}/>
                     <div className="rounded-xl border border-sky-500/20 bg-muted p-4 space-y-3">
                       <div className="flex items-center gap-2.5">
                         <h3 className="text-base font-semibold">Кнопка возврата</h3>

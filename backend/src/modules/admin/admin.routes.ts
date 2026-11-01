@@ -1,3 +1,6 @@
+import { cancelCloudAgreement } from "../cloudpayments/cloudpayments.service.js";
+import { receiptSettingsSchema } from "../cloudpayments/cloudpayments-receipt.js";
+import { botCommandsSchema } from "../bot/bot-commands.js";
 import { deleteTickets } from "../ticket/ticket-delete.service.js";
 import { ClientProfileError, updateClientSchema, updateAdminClientProfile } from "./client-profile.service.js";
 import { botButtonsJsonSchema } from "../bot/menu-buttons.js";
@@ -148,9 +151,14 @@ adminRouter.use(requireAuth);
 // 🔒 SECURITY: секционный RBAC ДОЛЖЕН стоять ДО регистрации под-роутеров — иначе backup
 // (pg_dump/restore БД) и /languages обходят requireAdminSection (менеджер дампит/перезаписывает БД).
 adminRouter.use(requireAdminSection);
-adminRouter.get("/settings/cloudpayments-status", asyncRoute(async (_req, res) => {
+adminRouter.post("/settings/cloudpayments-subscriptions/:id/cancel", asyncRoute(async (req, res) => {
+  await cancelCloudAgreement(req.params.id);
+  return res.json({ ok: true });
+}));
+adminRouter.get("/settings/cloudpayments-status", asyncRoute(async (req, res) => {
+  const clientId = typeof req.query.clientId === "string" ? req.query.clientId.trim().slice(0, 128) : "";
   const [agreements, jobs, events, eventErrors] = await Promise.all([
-    prisma.cloudPaymentAgreement.findMany({ orderBy: { updatedAt: "desc" }, take: 50, select: { id: true, clientId: true, state: true, amount: true, nextChargeAt: true, lastError: true } }),
+    prisma.cloudPaymentAgreement.findMany({ where: clientId ? { clientId } : {}, orderBy: { updatedAt: "desc" }, take: 50, select: { id: true, clientId: true, state: true, amount: true, nextChargeAt: true, lastError: true } }),
     prisma.cloudPaymentJob.findMany({ where: { state: { not: "DONE" } }, orderBy: { createdAt: "asc" }, take: 50, select: { paymentId: true, state: true, error: true } }),
     prisma.cloudPaymentEvent.count({ where: { processedAt: null } }),
     prisma.cloudPaymentEvent.findMany({ where: { processedAt: null, error: { not: null } }, orderBy: { receivedAt: "asc" }, take: 50, select: { id: true, kind: true, error: true } }),
@@ -1900,7 +1908,7 @@ adminRouter.delete("/clients/:id", async (req, res) => {
   if (!client) return res.status(404).json({ message: "Клиент не найден" });
 
   if (await prisma.cloudPaymentAgreement.count({ where: { clientId: parsed.data.id } }) || await prisma.payment.count({ where: { clientId: parsed.data.id, provider: "cloudpayments" } })) {
-    return res.status(409).json({ message: "У клиента есть история CloudPayments. Отмените автоплатежи и заблокируйте аккаунт; удаление платёжной истории недоступно." });
+    return res.status(409).json({ message: "У клиента сохранена история CloudPayments. Отмените его автоплатежи в Настройки → Платежи → CloudPayments, затем заблокируйте аккаунт. История платежей останется доступной." });
   }
 
   // T (11.05.2026): удалять ВСЕ Remna-юзеры клиента,
@@ -3129,6 +3137,9 @@ const updateSettingsSchema = z.object({
   cryptopayTestnet: z.boolean().optional(),
   heleketMerchantId: z.string().max(500).nullable().optional(),
   heleketApiKey: z.string().max(500).nullable().optional(),
+  cloudpaymentsReceipt: receiptSettingsSchema.optional(),
+  cloudpaymentsBotDirect: z.boolean().optional(),
+  botCommands: botCommandsSchema.optional(),
   cloudpaymentsPublicId: z.string().max(150).optional(),
   cloudpaymentsApiSecret: z.string().max(500).optional(),
   cloudpaymentsEnabled: z.boolean().optional(),
@@ -3838,6 +3849,11 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.cloudpaymentsTrialTariffId !== undefined && String(updates.cloudpaymentsTrialTariffId) !== "********") {
     const value = String(updates.cloudpaymentsTrialTariffId ?? "");
     await prisma.systemSetting.upsert({ where: { key: "cloudpayments_trial_tariff_id" }, create: { key: "cloudpayments_trial_tariff_id", value }, update: { value } });
+  }
+  for (const [field, key] of [["cloudpaymentsReceipt", "cloudpayments_receipt"], ["cloudpaymentsBotDirect", "cloudpayments_bot_direct"], ["botCommands", "bot_commands"]] as const) {
+    if (updates[field] === undefined) continue;
+    const value = JSON.stringify(updates[field]);
+    await prisma.systemSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
   }
   if (updates.cloudpaymentsGraceDays !== undefined && String(updates.cloudpaymentsGraceDays) !== "********") {
     const value = String(updates.cloudpaymentsGraceDays ?? "");

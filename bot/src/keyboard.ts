@@ -152,6 +152,8 @@ const MENU_IDS: Record<string, string> = {
   devices: "menu:devices",
   topup: "menu:topup",
   referral: "menu:referral",
+  cloudtrial: "menu:cloudtrial",
+  autopay: "menu:autopay",
   trial: "menu:trial",
   vpn: "menu:vpn",
   renew: "menu:renew",
@@ -167,6 +169,8 @@ const MENU_IDS: Record<string, string> = {
 };
 
 const DEFAULT_BUTTONS: BotButtonConfig[] = [
+  { id: "cloudtrial", visible: true, label: "Пробный доступ: {days} дн. за {amount} ₽", order: -1, style: "" },
+  { id: "autopay", visible: true, label: "Автоплатежи", order: 4.6, style: "" },
   { id: "tariffs", visible: true, label: "📦 Тарифы", order: 0, style: "success" },
   // «Мои подписки» — order 0.05, чтобы стояло сразу после «Тарифы» и перед прокси/singbox.
   { id: "my_subs", visible: true, label: "📋 Мои подписки", order: 0.05, style: "primary" },
@@ -248,6 +252,7 @@ export function mainMenu(opts: {
   const configButtons = opts.botButtons ?? [];
   const fromConfig = configButtons.length > 0;
   let list = (fromConfig ? configButtons : DEFAULT_BUTTONS).map(b => ({ ...b }));
+  for (const id of ["cloudtrial", "autopay"]) if (!list.some(b => b.id === id)) list.push({ ...DEFAULT_BUTTONS.find(b => b.id === id)! });
   if (fromConfig && !list.some((b) => b.id === "renew")) {
     list.push({ ...DEFAULT_BUTTONS.find(b => b.id === "renew")! });
   }
@@ -275,7 +280,7 @@ export function mainMenu(opts: {
   if (fromConfig && !!opts.appUrl?.trim() && !list.some((b) => b.id === "site")) {
     list.push({ id: "site", visible: true, label: "🌐 Сайт", order: 10, style: "primary", onePerRow: true });
   }
-  const cabinetIds = new Set(["tariffs", "my_subs", "proxy", "my_proxy", "singbox", "my_singbox", "devices", "topup", "referral", "trial", "vpn", "promocode", "extra_options", "gift", "roulette", "tg_proxy"]);
+  const cabinetIds = new Set(["cloudtrial", "autopay", "tariffs", "my_subs", "proxy", "my_proxy", "singbox", "my_singbox", "devices", "topup", "referral", "trial", "vpn", "promocode", "extra_options", "gift", "roulette", "tg_proxy"]);
   if (!opts.liteMode && opts.groupCabinet && opts.section !== "profile") {
     const profile = list.find(b => b.id === "profile");
     if (profile) profile.visible = true;
@@ -285,6 +290,7 @@ export function mainMenu(opts: {
     .filter(b => opts.liteMode || (opts.section === "profile" ? cabinetIds.has(b.id) : !opts.groupCabinet || !cabinetIds.has(b.id)))
     .filter((b) => b.visible)
     .filter((b) => {
+      if (b.id === "cloudtrial") return !!opts.paidTrial;
       if (b.id === "trial") return opts.showTrial;
       if (b.id === "vpn") return opts.showVpn;
       if (b.id === "renew") return opts.showRenew === true;
@@ -298,11 +304,12 @@ export function mainMenu(opts: {
       return true;
     })
     .sort((a, b) => a.order - b.order);
-  if (opts.liteMode) list = list.filter(b => ["tariffs", "my_subs", "vpn", "renew", "cabinet", "topup", "trial", "support"].includes(b.id));
+  if (opts.liteMode) list = list.filter(b => ["cloudtrial", "autopay", "tariffs", "my_subs", "vpn", "renew", "cabinet", "topup", "trial", "support"].includes(b.id));
   const base = opts.appUrl?.replace(/\/$/, "") ?? "";
   const perRow = opts.buttonsPerRow === 2 ? 2 : 1;
   const items: { node: InlineButton | WebAppButton | UrlButton; onePerRow: boolean }[] = [];
   for (const b of list) {
+    if (b.id === "cloudtrial" && opts.paidTrial) b.label = b.label.replaceAll("{days}", String(opts.paidTrial.days)).replaceAll("{amount}", String(opts.paidTrial.amount));
     const iconId = b.iconCustomEmojiId;
     const onePerRow = b.onePerRow === true;
     const labelForIcon = iconId ? stripLeadingEmoji(b.label) : b.label;
@@ -378,7 +385,7 @@ export function mainMenu(opts: {
     }
   }
   if (currentRow.length > 0) rows.push(currentRow);
-  if (opts.paidTrial) rows.unshift([btn(`Пробный доступ: ${opts.paidTrial.days} дн. за ${opts.paidTrial.amount} ₽`, "menu:cloudtrial")]);
+
   return { inline_keyboard: rows };
 }
 
