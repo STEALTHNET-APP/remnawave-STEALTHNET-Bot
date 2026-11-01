@@ -39,6 +39,8 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
   const [visible, setVisible] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const restoreFocus = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (open) {
@@ -62,7 +64,7 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab") return;
@@ -90,6 +92,7 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
     const timer = window.setTimeout(() => {
       const node = panel.current;
       if (!node) return;
+      if (node.contains(document.activeElement)) return;
       const target = node.querySelector<HTMLElement>(FOCUSABLE) ?? node;
       target.focus({ preventScroll: true });
     }, 60);
@@ -100,7 +103,7 @@ export function AuroraSheet({ open, onClose, title, footer, children }: Props) {
       delete document.documentElement.dataset.auSheet;
       restoreFocus.current?.focus({ preventScroll: true });
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!mounted) return null;
 
