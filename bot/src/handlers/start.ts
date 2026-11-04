@@ -1,9 +1,9 @@
 import { Composer } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
-import { clearUserState, startThrottle, tokenStore } from "../state-store.js";
-import { RICH_BUTTONS_MAX, TELEGRAM_CAPTION_MAX, _t, backButton, backToMenu, blockUnsubscribedCallback, botLogoUrl, buildMainMenuRichBlocks, buildMainMenuRichMarkdown, buildMainMenuText, callbackUi, checkUserSubscription, clearCloudEmail, connectableSubscriptions, directConnectionTarget, documentsSubMenu, editMessageContent, enforceSubscription, flattenMenuButtons, getOrRestoreToken, getSubscriptionUrl, getToken, getUserLang, instructionFallbackText, logoToMediaSource, mainMenu, rememberMediaFileId, renewableSubscriptions, sendRichBlocks, sendRichMarkdown, setToken, setTranslations, setUserLang, subscribeKeyboard, t } from "./shared.js";
-import type { RichInlineKeyboard, TariffCategory, TariffItem } from "./shared.js";
+import { clearUserState, invalidateSubscriptionCache, startThrottle, tokenStore } from "../state-store.js";
+import { RICH_BUTTONS_MAX, TELEGRAM_CAPTION_MAX, _t, backButton, backToMenu, blockUnsubscribedCallback, botLogoUrl, buildMainMenuRichBlocks, buildMainMenuRichMarkdown, buildMainMenuText, callbackUi, checkUserSubscription, clearCloudEmail, connectableSubscriptions, directConnectionTarget, documentsSubMenu, editMessageContent, enforceSubscription, flattenMenuButtons, getOrRestoreToken, getSubscriptionUrl, getToken, getUserLang, instructionFallbackText, logoToMediaSource, mainMenu, rememberMediaFileId, renewableSubscriptions, sendRichBlocks, sendRichMarkdown, setToken, setTranslations, setUserLang, t } from "./shared.js";
+import type { ConfigSnapshot, RichInlineKeyboard, TariffCategory, TariffItem } from "./shared.js";
 import { resolveCallbackDomain } from "./routing.js";
 
 function parseStartPayload(payload: string): {
@@ -468,6 +468,97 @@ export async function handleStart(ctx: Context, payload: string) {
   }
 }
 
+async function showMainMenuScreen(
+  ctx: Context,
+  userId: number,
+  token: string,
+  config: ConfigSnapshot | null,
+  appUrl: string | null,
+): Promise<void> {
+  clearUserState(userId);
+  const [bootstrap, proxyRes, singboxRes] = await Promise.all([
+    api.getBotBootstrap(token),
+    api.getPublicProxyTariffs().catch(() => ({ items: [] })),
+    api.getPublicSingboxTariffs().catch(() => ({ items: [] })),
+  ]);
+  const client = bootstrap?.client;
+  const subRes = bootstrap?.subscription ?? { subscription: null };
+  const allSubsRes = bootstrap?.allSubscriptions ?? { items: [] };
+  const trialAvail = bootstrap?.availableTrials ?? { items: [], hasAnyEnabled: false };
+  if (client?.preferredLang) setUserLang(userId, client.preferredLang);
+  const vpnUrl = getSubscriptionUrl(subRes.subscription);
+  // если в админке настроены trials → используем их (скрываем
+  // кнопку когда юзер всё взял); иначе fallback на legacy single-trial.
+  const showTrial = trialAvail.hasAnyEnabled
+    ? trialAvail.items.length > 0
+    : Boolean(config?.trialEnabled && !(bootstrap?.client.trialUsed ?? client?.trialUsed));
+  const showProxy = proxyRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
+  const showSingbox = singboxRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
+  const name = config?.serviceName?.trim() || "Кабинет";
+  const { text, entities } = buildMainMenuText({
+    serviceName: name,
+    telegramId: userId,
+    balance: client?.balance ?? 0,
+    currency: client?.preferredCurrency ?? config?.defaultCurrency ?? "usd",
+    subscription: subRes.subscription,
+    tariffDisplayName: (subRes as { tariffDisplayName?: string | null }).tariffDisplayName ?? null,
+    menuTexts: config?.botMenuTexts ?? config?.resolvedBotMenuTexts ?? null,
+    menuLineVisibility: config?.botMenuLineVisibility ?? null,
+    menuTextCustomEmojiIds: config?.menuTextCustomEmojiIds ?? null,
+    botEmojis: config?.botEmojis ?? null,
+    infoBlock: config?.botInfoBlock ?? null,
+    multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
+    allSubs: allSubsRes,
+  });
+  const hasVideoInstructionsCb = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
+  const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructionsCb);
+  const backMarkup = mainMenu({
+  liteMode: config?.liteMode === true,
+    showTrial,
+  paidTrial: bootstrap?.cloudTrialAvailable === true && config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
+    showVpn: connectableSubscriptions(allSubsRes.items ?? []).length > 0,
+    showRenew: renewableSubscriptions(allSubsRes.items ?? []).length > 0,
+    connectTarget: directConnectionTarget(allSubsRes.items ?? [], config?.publicAppUrl, config?.useRemnaSubscriptionPage === true),
+    showProxy,
+    showSingbox,
+    showGift: config?.giftSubscriptionsEnabled === true,
+    appUrl,
+    botButtons: config?.botButtons ?? null,
+    botBackLabel: config?.botBackLabel ?? null,
+    hasSupportLinks,
+    showTickets: config?.ticketsEnabled === true,
+    showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
+    menuMode: config?.botMenuMode ?? "classic",
+  groupCabinet: config?.botGroupCabinet === true,
+    buttonsPerRow: config?.botButtonsPerRow ?? 1,
+    remnaSubscriptionUrl: config?.useRemnaSubscriptionPage ? vpnUrl : null,
+  });
+  if (config?.botAdminTelegramIds?.includes(String(userId))) {
+    backMarkup.inline_keyboard.push([{ text: "⚙️ Панель админа", callback_data: "admin:menu" }]);
+  }
+
+  // If current message is text-only (no photo/animation) but logo is configured,
+  // delete the text message and re-send the main menu with the logo image.
+  const cbMsg = ctx.callbackQuery?.message;
+  const cbHasPhoto = cbMsg && typeof cbMsg === "object" && "photo" in cbMsg && Array.isArray((cbMsg as { photo: unknown[] }).photo) && (cbMsg as { photo: unknown[] }).photo.length > 0;
+  const cbHasAnimation = cbMsg && typeof cbMsg === "object" && "animation" in cbMsg && (cbMsg as { animation: unknown }).animation != null;
+  const media = logoToMediaSource(config?.logoBot);
+  if (!cbHasPhoto && !cbHasAnimation && media && ctx.chat?.id) {
+    await ctx.deleteMessage().catch(() => {});
+    const caption = text.length > TELEGRAM_CAPTION_MAX ? text.slice(0, TELEGRAM_CAPTION_MAX - 3) + "..." : text;
+    const captionEntities = text.length > TELEGRAM_CAPTION_MAX && entities ? entities.filter((e) => e.offset + e.length <= TELEGRAM_CAPTION_MAX - 3) : entities;
+    const opts = { caption, caption_entities: captionEntities?.length ? captionEntities : undefined, reply_markup: backMarkup };
+    const sentMsg = media.isGif
+      ? await ctx.api.sendAnimation(ctx.chat.id, media.source, opts)
+      : await ctx.api.sendPhoto(ctx.chat.id, media.source, opts);
+    rememberMediaFileId(config?.logoBot, sentMsg);
+    return;
+  }
+
+  await editMessageContent(ctx, text, backMarkup, entities);
+  return;
+}
+
 export function createStartHandlers(): Composer<Context> {
   const composer = new Composer<Context>();
 
@@ -498,7 +589,6 @@ composer.command("link", async (ctx) => {
     if (!userId) return;
     if (resolveCallbackDomain(data) !== "start") return next();
     if (data === "welcome:continue") {
-  if (data === "welcome:continue") {
     const token = getToken(userId);
     if (!token) {
       await ctx.reply("Сессия истекла. Отправьте /start ещё раз.");
@@ -588,7 +678,6 @@ composer.command("link", async (ctx) => {
       await ctx.reply("Не удалось открыть меню. Попробуйте /start.");
     }
     return;
-  }
     }
     const token = await getOrRestoreToken(userId, ctx.from?.username);
     if (!token) {
@@ -599,118 +688,32 @@ composer.command("link", async (ctx) => {
       const config = await api.getPublicConfig();
       if (config?.translations) setTranslations(config.translations);
       if (data === "check_subscribe") {
-    if (data === "check_subscribe") {
-      const lang = getUserLang(userId);
-      const channelId = config?.forceSubscribeChannelId?.trim();
-      if (channelId && config?.forceSubscribeEnabled) {
-        const result = await checkUserSubscription(ctx.api, userId, channelId);
-        if (result.state === "cannot_verify") {
-          await ctx.answerCallbackQuery({
-            text: _t("subscribe.cannot_verify", lang).slice(0, 200),
-            show_alert: true,
-          }).catch(() => {});
-          await editMessageContent(
-            ctx,
-            `⚠️ ${_t("subscribe.cannot_verify", lang)}`,
-            subscribeKeyboard(channelId, lang)
-          );
-          return;
+        const lang = getUserLang(userId);
+        const channelId = config?.forceSubscribeChannelId?.trim();
+        if (channelId && config?.forceSubscribeEnabled) {
+          invalidateSubscriptionCache(userId);
+          const result = await checkUserSubscription(ctx.api, userId, channelId);
+          if (result.state === "cannot_verify") {
+            await ctx.answerCallbackQuery({
+              text: _t("subscribe.cannot_verify", lang).slice(0, 200),
+              show_alert: true,
+            }).catch(() => {});
+            return;
+          }
+          if (result.state !== "subscribed") {
+            await ctx.answerCallbackQuery({ text: _t("subscribe.not_subscribed", lang), show_alert: true }).catch(() => {});
+            return;
+          }
         }
-        if (result.state !== "subscribed") {
-          await ctx.answerCallbackQuery({ text: _t("subscribe.not_subscribed", lang), show_alert: true }).catch(() => {});
-          return;
-        }
-      }
-      await ctx.answerCallbackQuery({ text: _t("subscribe.confirmed", lang) }).catch(() => {});
-      await ctx.reply(_t("subscribe.send_start", lang));
-      return;
-    }
+        await ctx.answerCallbackQuery({ text: _t("subscribe.confirmed", lang) }).catch(() => {});
+        await showMainMenuScreen(ctx, userId, token, config, config?.publicAppUrl?.replace(/\/$/, "") ?? null);
+        return;
       }
       if (await blockUnsubscribedCallback(ctx, userId, config)) return;
       const { appUrl, innerStyles, botEmojis, innerEmojiIds } = callbackUi(config);
 
     if (data === "menu:main") {
-      clearUserState(userId);
-      const [bootstrap, proxyRes, singboxRes] = await Promise.all([
-        api.getBotBootstrap(token),
-        api.getPublicProxyTariffs().catch(() => ({ items: [] })),
-        api.getPublicSingboxTariffs().catch(() => ({ items: [] })),
-      ]);
-      const client = bootstrap?.client;
-      const subRes = bootstrap?.subscription ?? { subscription: null };
-      const allSubsRes = bootstrap?.allSubscriptions ?? { items: [] };
-      const trialAvail = bootstrap?.availableTrials ?? { items: [], hasAnyEnabled: false };
-      if (client?.preferredLang) setUserLang(userId, client.preferredLang);
-      const vpnUrl = getSubscriptionUrl(subRes.subscription);
-      // если в админке настроены trials → используем их (скрываем
-      // кнопку когда юзер всё взял); иначе fallback на legacy single-trial.
-      const showTrial = trialAvail.hasAnyEnabled
-        ? trialAvail.items.length > 0
-        : Boolean(config?.trialEnabled && !(bootstrap?.client.trialUsed ?? client?.trialUsed));
-      const showProxy = proxyRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
-      const showSingbox = singboxRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
-      const name = config?.serviceName?.trim() || "Кабинет";
-      const { text, entities } = buildMainMenuText({
-        serviceName: name,
-        telegramId: userId,
-        balance: client?.balance ?? 0,
-        currency: client?.preferredCurrency ?? config?.defaultCurrency ?? "usd",
-        subscription: subRes.subscription,
-        tariffDisplayName: (subRes as { tariffDisplayName?: string | null }).tariffDisplayName ?? null,
-        menuTexts: config?.botMenuTexts ?? config?.resolvedBotMenuTexts ?? null,
-        menuLineVisibility: config?.botMenuLineVisibility ?? null,
-        menuTextCustomEmojiIds: config?.menuTextCustomEmojiIds ?? null,
-        botEmojis: config?.botEmojis ?? null,
-        infoBlock: config?.botInfoBlock ?? null,
-        multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
-        allSubs: allSubsRes,
-      });
-      const hasVideoInstructionsCb = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
-      const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructionsCb);
-      const backMarkup = mainMenu({
-      liteMode: config?.liteMode === true,
-        showTrial,
-      paidTrial: bootstrap?.cloudTrialAvailable === true && config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
-        showVpn: connectableSubscriptions(allSubsRes.items ?? []).length > 0,
-        showRenew: renewableSubscriptions(allSubsRes.items ?? []).length > 0,
-        connectTarget: directConnectionTarget(allSubsRes.items ?? [], config?.publicAppUrl, config?.useRemnaSubscriptionPage === true),
-        showProxy,
-        showSingbox,
-        showGift: config?.giftSubscriptionsEnabled === true,
-        appUrl,
-        botButtons: config?.botButtons ?? null,
-        botBackLabel: config?.botBackLabel ?? null,
-        hasSupportLinks,
-        showTickets: config?.ticketsEnabled === true,
-        showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
-        menuMode: config?.botMenuMode ?? "classic",
-      groupCabinet: config?.botGroupCabinet === true,
-        buttonsPerRow: config?.botButtonsPerRow ?? 1,
-        remnaSubscriptionUrl: config?.useRemnaSubscriptionPage ? vpnUrl : null,
-      });
-      if (config?.botAdminTelegramIds?.includes(String(userId))) {
-        backMarkup.inline_keyboard.push([{ text: "⚙️ Панель админа", callback_data: "admin:menu" }]);
-      }
-
-      // If current message is text-only (no photo/animation) but logo is configured,
-      // delete the text message and re-send the main menu with the logo image.
-      const cbMsg = ctx.callbackQuery?.message;
-      const cbHasPhoto = cbMsg && typeof cbMsg === "object" && "photo" in cbMsg && Array.isArray((cbMsg as { photo: unknown[] }).photo) && (cbMsg as { photo: unknown[] }).photo.length > 0;
-      const cbHasAnimation = cbMsg && typeof cbMsg === "object" && "animation" in cbMsg && (cbMsg as { animation: unknown }).animation != null;
-      const media = logoToMediaSource(config?.logoBot);
-      if (!cbHasPhoto && !cbHasAnimation && media && ctx.chat?.id) {
-        await ctx.deleteMessage().catch(() => {});
-        const caption = text.length > TELEGRAM_CAPTION_MAX ? text.slice(0, TELEGRAM_CAPTION_MAX - 3) + "..." : text;
-        const captionEntities = text.length > TELEGRAM_CAPTION_MAX && entities ? entities.filter((e) => e.offset + e.length <= TELEGRAM_CAPTION_MAX - 3) : entities;
-        const opts = { caption, caption_entities: captionEntities?.length ? captionEntities : undefined, reply_markup: backMarkup };
-        const sentMsg = media.isGif
-          ? await ctx.api.sendAnimation(ctx.chat.id, media.source, opts)
-          : await ctx.api.sendPhoto(ctx.chat.id, media.source, opts);
-        rememberMediaFileId(config?.logoBot, sentMsg);
-        return;
-      }
-
-      await editMessageContent(ctx, text, backMarkup, entities);
+      await showMainMenuScreen(ctx, userId, token, config, appUrl);
       return;
     }
 

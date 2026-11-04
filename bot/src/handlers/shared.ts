@@ -67,7 +67,7 @@ import {
   RECEIPT_OK_LINE,
   isValidEmail,
 } from "../yk-receipt.js";
-import { userLangCache, tokenStore, activeDiscountCode, selectedTariffOption, trialReplaceChoice, awaitingPromoCode, awaitingGiftCode, awaitingWithdrawAmount, awaitingWithdrawWallet, awaitingCustomTopup, awaitingAdminSearch, lastAdminSearch, awaitingAdminBalance, awaitingBroadcastMessage, lastBroadcastMessage, lastSquadsForAdd, lastSquadsForRemove, tariffOptionsCache, selectedGiftOption, giftOptionsCache, addsubPending, extendingSecondaryPending, pendingDropExtras, extraOptionTargetSub, extraOptionPending, trialConvertPickCache, convDropExtras, type DiscountInfo, type BroadcastPayload } from "../state-store.js";
+import { isSubscriptionCached, cacheSubscription, userLangCache, tokenStore, activeDiscountCode, selectedTariffOption, trialReplaceChoice, awaitingPromoCode, awaitingGiftCode, awaitingWithdrawAmount, awaitingWithdrawWallet, awaitingCustomTopup, awaitingAdminSearch, lastAdminSearch, awaitingAdminBalance, awaitingBroadcastMessage, lastBroadcastMessage, lastSquadsForAdd, lastSquadsForRemove, tariffOptionsCache, selectedGiftOption, giftOptionsCache, addsubPending, extendingSecondaryPending, pendingDropExtras, extraOptionTargetSub, extraOptionPending, trialConvertPickCache, convDropExtras, type DiscountInfo, type BroadcastPayload } from "../state-store.js";
 export * from "../keyboard.js";
 export { t as _t, formatDays as _formatDays, setTranslations } from "../i18n.js";
 export { DeviceFlow, formatDeviceCount, subscriptionDeviceLimit } from "../device-flow.js";
@@ -145,6 +145,26 @@ export function parseForceChannelTarget(channelInput: string): ForceChannelTarge
   return { chatId: null, joinUrl: null };
 }
 
+function telegramErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isTransientTelegramError(error: unknown): boolean {
+  const candidate = error as { error_code?: unknown; code?: unknown; message?: unknown; description?: unknown } | null;
+  const errorCode = typeof candidate?.error_code === "number" ? candidate.error_code : 0;
+  if (errorCode >= 500) return true;
+  const code = typeof candidate?.code === "string" ? candidate.code.toUpperCase() : "";
+  if (["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN", "ENETUNREACH"].includes(code)) return true;
+  const text = `${typeof candidate?.message === "string" ? candidate.message : ""} ${typeof candidate?.description === "string" ? candidate.description : ""}`.toLowerCase();
+  return /network request|fetch failed|timed? ?out|socket hang up|econnreset|etimedout|eai_again|und_err/.test(text);
+}
+
+function isNotParticipantError(error: unknown): boolean {
+  const candidate = error as { message?: unknown; description?: unknown } | null;
+  const text = `${typeof candidate?.message === "string" ? candidate.message : ""} ${typeof candidate?.description === "string" ? candidate.description : ""}`.toLowerCase();
+  return /user_not_participant|user not found|participant_id_invalid|chat member not found/.test(text);
+}
+
 /** Проверяет, подписан ли пользователь на указанный канал/группу. */
 export async function checkUserSubscription(
   telegramApi: Api,
@@ -155,15 +175,35 @@ export async function checkUserSubscription(
   if (!target.chatId) {
     return { state: "cannot_verify", target, error: "invalid_channel_id" };
   }
-  try {
-    const member = await telegramApi.getChatMember(target.chatId, userId);
-    const subscribed = ["member", "administrator", "creator", "restricted"].includes(member.status);
-    return { state: subscribed ? "subscribed" : "not_subscribed", target };
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.warn("getChatMember error:", msg, { channelInput, parsedChatId: target.chatId });
-    return { state: "cannot_verify", target, error: msg };
+  if (isSubscriptionCached(userId)) {
+    return { state: "subscribed", target };
   }
+  let lastError = "";
+  let lastWasTransient = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const member = await telegramApi.getChatMember(target.chatId, userId);
+      if (["member", "administrator", "creator", "restricted"].includes(member.status)) {
+        cacheSubscription(userId);
+        return { state: "subscribed", target };
+      }
+      return { state: "not_subscribed", target };
+    } catch (e: unknown) {
+      lastError = telegramErrorMessage(e);
+      if (isNotParticipantError(e)) {
+        return { state: "not_subscribed", target };
+      }
+      lastWasTransient = isTransientTelegramError(e);
+      if (!lastWasTransient || attempt === 2) break;
+      await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 300 : 600));
+    }
+  }
+  if (lastWasTransient) {
+    console.warn("getChatMember network error after retries:", lastError);
+  } else {
+    console.warn("getChatMember error:", lastError, { channelInput, parsedChatId: target.chatId });
+  }
+  return { state: "cannot_verify", target, error: lastError };
 }
 
 export function subscribeKeyboard(channelInput: string, lang = "ru"): InlineMarkup {

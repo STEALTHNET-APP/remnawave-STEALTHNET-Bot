@@ -164,6 +164,21 @@ export const lastSquadsForRemove = userMap<{ clientId: string; items: { uuid: st
 
 export const startThrottle = userCache<number>(60_000);
 
+const verifiedSubscriptions = new TtlSet<number>(10 * 60_000);
+registered.push(verifiedSubscriptions);
+
+export function isSubscriptionCached(userId: number): boolean {
+  return verifiedSubscriptions.has(userId);
+}
+
+export function cacheSubscription(userId: number): void {
+  verifiedSubscriptions.add(userId);
+}
+
+export function invalidateSubscriptionCache(userId: number): void {
+  verifiedSubscriptions.delete(userId);
+}
+
 export function clearUserState(userId: number): void {
   for (const collection of ephemeral) collection.delete(userId);
 }
