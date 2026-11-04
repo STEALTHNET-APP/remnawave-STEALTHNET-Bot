@@ -555,7 +555,7 @@ export function createAdminHandlers(): Composer<Context> {
 
   composer.on("message:text", async (ctx, next) => {
     const userId = textInputUserId(ctx);
-    if (!userId) return;
+    if (!userId) return next();
     if (!awaitingBroadcastMessage.has(userId) && !awaitingAdminBalance.has(userId) && !awaitingAdminSearch.has(userId)) return next();
 
   if (awaitingBroadcastMessage.has(userId)) {

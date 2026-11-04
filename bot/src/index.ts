@@ -98,12 +98,12 @@ composer.use(createTermsGate(api, async (ctx, payload) => {
   await handleStart(ctx, payload);
 }));
 
-composer.use(createPaymentEmailHandlers());
-composer.use(createAdminHandlers());
 composer.use(createStartHandlers());
+composer.use(createAdminHandlers());
 composer.use(createTariffHandlers());
 composer.use(createSubscriptionHandlers());
 composer.use(createGiftHandlers());
+composer.use(createPaymentEmailHandlers());
 composer.use(createPaymentCustomTopupHandlers());
 composer.use(createProfileHandlers());
 composer.use(createPaymentHandlers());

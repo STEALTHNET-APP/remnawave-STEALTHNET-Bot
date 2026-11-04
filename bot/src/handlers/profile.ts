@@ -398,7 +398,7 @@ composer.command("referral", async (ctx) => {
 
   composer.on("message:text", async (ctx, next) => {
     const userId = textInputUserId(ctx);
-    if (!userId) return;
+    if (!userId) return next();
     if (!awaitingWithdrawAmount.has(userId) && !awaitingWithdrawWallet.has(userId) && !awaitingPromoCode.has(userId)) return next();
 
     const token = await getOrRestoreToken(userId, ctx.from?.username);
