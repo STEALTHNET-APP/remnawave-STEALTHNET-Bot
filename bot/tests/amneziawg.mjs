@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { InputFile } from 'grammy';
-const source = fs.readFileSync(new URL('../dist/index.js', import.meta.url), 'utf8');
+const source = fs.readFileSync(new URL('../dist/handlers/subscriptions.js', import.meta.url), 'utf8');
 const start = source.indexOf('if (data.startsWith("singbox:conf:"))');
-const end = source.indexOf('if (data === "menu:my_singbox")', start);
+const end = source.indexOf('if (data === "menu:vpn")', start);
 assert(start > 0 && end > start);
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const handler = new AsyncFunction('data', 'api', 'token', 'ctx', 'InputFile', 'Buffer', source.slice(start, end));
