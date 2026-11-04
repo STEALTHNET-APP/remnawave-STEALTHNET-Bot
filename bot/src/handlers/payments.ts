@@ -2360,7 +2360,7 @@ export function createPaymentEmailHandlers(): Composer<Context> {
 
   composer.on("message:text", async (ctx, next) => {
     const userId = textInputUserId(ctx);
-    if (!userId) return;
+    if (!userId) return next();
     if (!hasPendingEmailInput(userId)) return next();
 
   if (hasPendingEmailInput(userId)) {
@@ -2396,7 +2396,7 @@ export function createPaymentCustomTopupHandlers(): Composer<Context> {
 
   composer.on("message:text", async (ctx, next) => {
     const userId = textInputUserId(ctx);
-    if (!userId) return;
+    if (!userId) return next();
     if (!awaitingCustomTopup.has(userId)) return next();
 
     const token = await getOrRestoreToken(userId, ctx.from?.username);
@@ -2449,7 +2449,7 @@ export function createPaymentNumericHandlers(): Composer<Context> {
 
   composer.on("message:text", async (ctx, next) => {
     const userId = textInputUserId(ctx);
-    if (!userId) return;
+    if (!userId) return next();
 
     const token = await getOrRestoreToken(userId, ctx.from?.username);
     if (!token) return;

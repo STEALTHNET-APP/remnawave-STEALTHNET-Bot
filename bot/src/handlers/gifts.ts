@@ -557,7 +557,7 @@ export function createGiftHandlers(): Composer<Context> {
 
   composer.on("message:text", async (ctx, next) => {
     const userId = textInputUserId(ctx);
-    if (!userId) return;
+    if (!userId) return next();
     if (!awaitingGiftCode.has(userId)) return next();
 
     const token = await getOrRestoreToken(userId, ctx.from?.username);
