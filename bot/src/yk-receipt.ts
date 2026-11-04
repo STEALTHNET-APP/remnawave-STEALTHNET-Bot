@@ -1,3 +1,5 @@
+import { escapeHtml } from "./html.js";
+
 /**
  * 19.05.2026 — поток получения чека ЮКассы (54-ФЗ).
  *
@@ -133,12 +135,4 @@ export function isValidEmail(s: string): boolean {
   const trimmed = s.trim();
   if (!trimmed || trimmed.length > 254) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }

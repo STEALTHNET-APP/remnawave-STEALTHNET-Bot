@@ -6,21 +6,98 @@ import ts from 'typescript';
 
 process.env.API_URL = 'https://api.example.invalid';
 const root = new URL('../', import.meta.url);
-let source = fs.readFileSync(new URL('src/index.ts', root), 'utf8');
-const boot = source.indexOf('\nawait waitForApi();');
-const tail = source.indexOf('\nasync function groupedProfileMenu', boot);
-assert(boot > 0 && tail > boot);
-source = source.slice(0, boot) + source.slice(tail);
-const modules = new Map();
-for (const match of source.matchAll(/(?:from\s+|import\s*)["']([^"']+)["']/g)) {
-  const name = match[1];
-  if (['./api.js', 'grammy', 'dotenv/config'].includes(name)) continue;
-  modules.set(name, await import(name.startsWith('.') ? new URL(`dist/${name.slice(2)}`, root) : name));
+const transpiled = new Map();
+
+function readTranspiled(relative) {
+  if (!transpiled.has(relative)) {
+    const source = fs.readFileSync(new URL(`src/${relative}.ts`, root), 'utf8');
+    transpiled.set(relative, ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText);
+  }
+  return transpiled.get(relative);
 }
-const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+
+const distModules = new Map();
+for (const name of [
+  'device-flow', 'title-emoji', 'subscription-actions', 'keyboard', 'i18n', 'yk-receipt',
+  'cloudpayments-flow', 'referral-rewards', 'purchase-choice',
+]) {
+  distModules.set(`../${name}.js`, await import(new URL(`dist/${name}.js`, root)));
+}
+const nodeCrypto = await import('node:crypto');
+
+function createLoader(fixtureApi) {
+  const cache = new Map();
+  const loading = new Set();
+  let callbackHandlers = [];
+
+  class Composer {
+    on(event, fn) {
+      if (event === 'callback_query:data') callbackHandlers.push(fn);
+      return this;
+    }
+    command() { return this; }
+    use() { return this; }
+  }
+  class InputFile {}
+
+  function evaluate(relative) {
+    if (cache.has(relative)) return cache.get(relative).exports;
+    if (loading.has(relative)) throw new Error(`Circular import ${relative}`);
+    loading.add(relative);
+    const module = { exports: {} };
+    cache.set(relative, module);
+    const requireFn = (name) => {
+      if (name === '../api.js') return fixtureApi;
+      if (name === 'grammy') return { Composer, InputFile };
+      if (name === 'node:crypto') return nodeCrypto;
+      if (name === './shared.js') return evaluate('handlers/shared');
+      if (name === './routing.js') return evaluate('handlers/routing');
+      if (name === './subscriptions.js') return evaluate('handlers/subscriptions');
+      if (name === '../state-store.js') return evaluate('state-store');
+      if (name === '../html.js') return evaluate('html');
+      if (distModules.has(name)) return distModules.get(name);
+      if (name.startsWith('./') || name.startsWith('../')) return evaluate(name.replace(/^\.\.?\//, '').replace(/\.js$/, ''));
+      throw new Error(`Unexpected import ${name}`);
+    };
+    const fn = vm.runInNewContext(
+      `(function (exports, require, module) {\n${readTranspiled(relative)}\n})`,
+      { process: { env: { BOT_TOKEN: 'fixture-only' } }, console: { log() {}, warn() {}, error(...args) { throw new Error(args.join(' ')); } }, setInterval() { return { unref() {} }; }, clearInterval() {}, setTimeout, clearTimeout, URL, Buffer },
+      { filename: `${relative}.cjs` },
+    );
+    fn.call(module.exports, module.exports, requireFn, module);
+    loading.delete(relative);
+    return module.exports;
+  }
+
+  return {
+    load() {
+      callbackHandlers = [];
+      const admin = evaluate('handlers/admin');
+      const start = evaluate('handlers/start');
+      const tariffs = evaluate('handlers/tariffs');
+      const subscriptions = evaluate('handlers/subscriptions');
+      const profile = evaluate('handlers/profile');
+      const gifts = evaluate('handlers/gifts');
+      const payments = evaluate('handlers/payments');
+      const support = evaluate('handlers/support');
+      for (const factory of [
+        admin.createAdminHandlers,
+        start.createStartHandlers,
+        tariffs.createTariffHandlers,
+        subscriptions.createSubscriptionHandlers,
+        profile.createProfileHandlers,
+        gifts.createGiftHandlers,
+        payments.createPaymentHandlers,
+        support.createSupportHandlers,
+      ]) {
+        factory();
+      }
+      return callbackHandlers;
+    },
+  };
+}
 
 function setup({ count = 1, periods = 1, multi = false, blocked = false, extras = 0, expired = false, failRead = false, standaloneTrial = false, cloudpayments = false } = {}) {
-  let callback;
   const payments = [], messages = [], cooldownIds = [];
   const subscriptions = Array.from({ length: count }, (_, i) => ({
     id: `subscription-${i}`, tariffId: standaloneTrial ? null : 'standard', type: i ? 'secondary' : 'root', subscriptionIndex: i,
@@ -42,31 +119,21 @@ function setup({ count = 1, periods = 1, multi = false, blocked = false, extras 
     createCloudpaymentsPayment: async (_, purchase) => { payments.push(purchase); return { payUrl: "https://panel.example/api/cloudpayments/checkout/test" }; },
     payByBalance: async (_, purchase) => { payments.push(purchase); return { message: 'paid' }; },
   };
-  class Composer {
-    on(event, fn) { if (event === 'callback_query:data') callback = fn; return this; }
-    command() { return this; }
-    use() { return this; }
-  }
-  vm.runInNewContext(js, {
-    exports: {}, process: { env: { BOT_TOKEN: 'fixture-only' } }, console: { log() {}, warn() {}, error(...args) { throw new Error(args.join(' ')); } },
-    setInterval() { return { unref() {} }; }, setTimeout, clearTimeout, URL, Buffer,
-    require(name) {
-      if (name === './api.js') return api;
-      if (name === 'grammy') return { Composer };
-      if (name === 'dotenv/config') return {};
-      if (!modules.has(name)) throw new Error(`Unexpected import ${name}`);
-      return modules.get(name);
-    },
-  }, { filename: 'bot-index-fixture.cjs' });
-  assert.equal(typeof callback, 'function');
+  const callbackHandlers = createLoader(api).load();
   return {
     payments, messages, cooldownIds,
     async click(data) {
-      await callback({ from: { id: 123 }, callbackQuery: { data, message: {} }, api: {},
-        answerCallbackQuery: async () => {},
-        editMessageText: async (text, options) => messages.push({ text, buttons: options?.reply_markup?.inline_keyboard.flat() ?? [] }),
-        reply: async (text, options) => messages.push({ text, buttons: options?.reply_markup?.inline_keyboard.flat() ?? [] }),
-      });
+      let index = 0;
+      const next = async () => {
+        const handler = callbackHandlers[index++];
+        if (handler) await handler({
+          from: { id: 123 }, callbackQuery: { data, message: {} }, api: {},
+          answerCallbackQuery: async () => {},
+          editMessageText: async (text, options) => messages.push({ text, buttons: options?.reply_markup?.inline_keyboard.flat() ?? [] }),
+          reply: async (text, options) => messages.push({ text, buttons: options?.reply_markup?.inline_keyboard.flat() ?? [] }),
+        }, next);
+      };
+      await next();
       assert(messages.length > 0);
       return messages.at(-1);
     },
