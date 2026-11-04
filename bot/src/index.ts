@@ -1,3 +1,4 @@
+import dns from "node:dns";
 import "dotenv/config";
 import { Bot, Composer, Context } from "grammy";
 import { run, sequentialize } from "@grammyjs/runner";
@@ -21,6 +22,8 @@ import { createSupportHandlers } from "./handlers/support.js";
 import { getOrRestoreToken, tryAutoDeleteUnknown } from "./handlers/shared.js";
 import { setTranslations } from "./i18n.js";
 import { startThrottle } from "./state-store.js";
+
+dns.setDefaultResultOrder?.("ipv4first");
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 if (!BOT_TOKEN) {
@@ -51,14 +54,14 @@ async function createBotWithProxy(token: string): Promise<Bot> {
       if (lower.startsWith("http://") || lower.startsWith("https://")) {
         console.log("[Proxy] Telegram Bot API через HTTP прокси");
         return new Bot(token, {
-          client: { timeoutSeconds: 15, baseFetchConfig: { dispatcher: new UndiciProxyAgent(url) } as any },
+          client: { timeoutSeconds: 20, baseFetchConfig: { dispatcher: new UndiciProxyAgent(url) } as any },
         });
       }
       if (lower.startsWith("socks5://") || lower.startsWith("socks4://") || lower.startsWith("socks://")) {
         console.log("[Proxy] Telegram Bot API через SOCKS прокси");
         const agent = new SocksProxyAgent(url);
         return new Bot(token, {
-          client: { timeoutSeconds: 15, baseFetchConfig: { agent } as any },
+          client: { timeoutSeconds: 20, baseFetchConfig: { agent } as any },
         });
       }
       console.warn(`[Proxy] Неизвестный протокол прокси: ${url}, запуск без прокси`);
@@ -66,7 +69,7 @@ async function createBotWithProxy(token: string): Promise<Bot> {
   } catch {
     console.warn("[Bot] Не удалось получить конфиг, запуск без прокси");
   }
-  return new Bot(token, { client: { timeoutSeconds: 15 } });
+  return new Bot(token, { client: { timeoutSeconds: 20 } });
 }
 
 const composer = new Composer<Context>();
