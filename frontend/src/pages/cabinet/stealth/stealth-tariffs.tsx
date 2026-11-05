@@ -956,7 +956,7 @@ if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kin
       )}
 
       {balConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-4" onClick={() => setBalConfirm(null)}>
+        <div data-pwa-block-update className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-4" onClick={() => setBalConfirm(null)}>
           <div className="w-full max-w-sm rounded-2xl bg-zinc-900 border border-saccent-500/40 p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start gap-3">
               <AlertCircle className="h-6 w-6 text-amber-400 shrink-0 mt-0.5" />

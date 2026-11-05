@@ -318,7 +318,7 @@ function TrialFormDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div data-pwa-block-update className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-card border-border rounded-2xl p-4 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-muted border border-border flex items-center justify-center shrink-0">

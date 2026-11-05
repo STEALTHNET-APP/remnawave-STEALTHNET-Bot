@@ -10,7 +10,7 @@ const bundled = await build({
   absWorkingDir: root,
   tsconfig: root + "tsconfig.app.json",
   stdin: {
-    contents: `import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {PwaUpdatePrompt} from './src/components/pwa/pwa-update-prompt';function App(){const [value,setValue]=useState('initial');return <><input id="controlled" value={value} onChange={e=>setValue(e.target.value)}/><select id="select"><option>A</option><option>B</option></select><div id="rich" contentEditable suppressContentEditableWarning>initial</div><PwaUpdatePrompt/></>};createRoot(document.getElementById('root')).render(<App/>);`,
+    contents: `import React,{useEffect,useState} from 'react';import {createRoot} from 'react-dom/client';import {BrowserRouter,Link} from 'react-router-dom';import {PwaUpdatePrompt} from './src/components/pwa/pwa-update-prompt';function Ready(){useEffect(()=>{window.promptReady=true;},[]);return null;}function App(){const [value,setValue]=useState('initial');return <BrowserRouter><input id="name"/><input id="check" type="checkbox"/><input id="controlled" value={value} onChange={e=>setValue(e.target.value)}/><select id="select"><option>A</option><option>B</option></select><div id="rich" contentEditable suppressContentEditableWarning>initial</div><Link id="to-dashboard" to="/cabinet/dashboard">Dashboard</Link><Link id="to-referral" to="/cabinet/referral">Referral</Link><Link id="to-payment" to="/cabinet/payment-wait?payment=success">Payment</Link><PwaUpdatePrompt/><Ready/></BrowserRouter>};createRoot(document.getElementById('root')).render(<App/>);`,
     resolveDir: root, loader: "tsx",
   },
   bundle: true, write: false, jsx: "automatic", define: { "process.env.NODE_ENV": '"production"' },
@@ -23,126 +23,254 @@ const bundled = await build({
 });
 const server = createServer((req, res) => {
   res.setHeader("Content-Type", req.url === "/bundle.js" ? "text/javascript" : "text/html");
-  res.end(req.url === "/bundle.js" ? bundled.outputFiles[0].text : '<meta charset="utf-8"><input id="name"><input id="check" type="checkbox"><div id="root"></div><script src="/bundle.js"></script>');
+  res.end(req.url === "/bundle.js" ? bundled.outputFiles[0].text : '<meta charset="utf-8"><div id="root"></div><script src="/bundle.js"></script>');
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const browser = await playwright.chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || undefined });
 const base = `http://127.0.0.1:${server.address().port}`;
 
-async function scenario(path, run) {
+async function openPage(path, { endColdStart = true } = {}) {
   const page = await browser.newPage();
-  try {
-    await page.clock.install({ time: new Date("2026-10-25T12:00:00Z") });
-    await page.goto(base + path);
-    await page.waitForFunction(() => !!window.offerUpdate);
-    await page.evaluate(() => window.offerUpdate());
-    await page.getByText("Доступно обновление", { exact: true }).waitFor();
-    await run(page);
-  } finally { await page.close(); }
+  await page.clock.install({ time: new Date("2026-10-25T12:00:00Z") });
+  await page.goto(base + path);
+  await page.waitForFunction(() => window.promptReady === true);
+  if (endColdStart) {
+    await page.evaluate(() => { window.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); });
+  }
+  return page;
+}
+
+async function offerUpdate(page) {
+  await page.evaluate(() => window.offerUpdate());
+}
+
+async function updateCount(page) {
+  return page.evaluate(() => window.updates || 0);
+}
+
+async function reloadCount(page) {
+  return page.evaluate(() => window.reloads || 0);
 }
 
 try {
-  await test("idle dashboard updates once after 7s idle threshold and preserves URL", () => scenario("/cabinet/dashboard", async page => {
-    await page.clock.runFor(6000);
-    assert.equal(await page.evaluate(() => window.updates || 0), 0);
-    await page.clock.runFor(7000);
-    assert.equal(await page.evaluate(() => window.updates), 1);
-    assert.equal(page.url(), base + "/cabinet/dashboard");
-    await page.clock.runFor(70000);
-    assert.equal(await page.evaluate(() => window.updates), 1);
-  }));
-  await test("edited field remains protected after blur", () => scenario("/admin", async page => {
-    await page.locator("#name").fill("unsaved");
-    await page.locator("#name").blur();
-    await page.clock.runFor(120000);
-    assert.equal(await page.evaluate(() => window.updates || 0), 0);
+  await test("cold start applies a waiting update immediately", async () => {
+    const page = await openPage("/cabinet/dashboard", { endColdStart: false });
+    try {
+      await offerUpdate(page);
+      await page.clock.runFor(2000);
+      assert.equal(await updateCount(page), 1);
+      assert.equal(await reloadCount(page), 1);
+    } finally { await page.close(); }
+  });
 
-    await page.getByRole("button", { name: "Обновить сейчас" }).click();
-    await page.getByRole("dialog").waitFor();
-    await page.getByRole("button", { name: "Остаться", exact: true }).click();
-    assert.equal(await page.evaluate(() => window.updates || 0), 0);
-  }));
-  await test("Telegram without native confirmation requires explicit consent", () => scenario("/cabinet/profile", async page => {
-    await page.evaluate(() => { window.Telegram = { WebApp: { initData: "fixture" } }; window.confirm = () => { throw Error("unsupported"); }; });
-    await page.locator("#name").fill("keep me");
-    await page.locator("#name").blur();
-    await page.clock.runFor(120000);
-    await page.getByRole("button", { name: "Обновить сейчас" }).click();
-    await page.getByRole("dialog").waitFor();
-    assert.equal(await page.evaluate(() => window.updates || 0), 0);
-    await page.getByRole("button", { name: "Обновить без сохранения" }).click();
-    assert.equal(await page.evaluate(() => window.updates), 1);
-    await page.clock.runFor(2000);
-    assert.equal(await page.evaluate(() => window.reloads), 1);
-  }));
-  await test("checkbox changes are protected", () => scenario("/admin", async page => {
-    await page.locator("#check").check();
-    await page.locator("#check").blur();
-    await page.clock.runFor(120000);
-    assert.equal(await page.evaluate(() => window.updates || 0), 0);
-  }));
-  await test("controlled React value remains protected when defaultValue follows state", () => scenario("/admin", async page => {
-    await page.locator("#controlled").fill("unsaved React state");
-    await page.locator("#controlled").blur();
-    assert.equal(await page.locator("#controlled").evaluate(el => el.value === el.defaultValue), true);
-    await page.clock.runFor(120000);
-    assert.equal(await page.evaluate(() => window.updates || 0), 0);
-  }));
-  await test("select and rich text edits remain protected after blur", async () => {
-    for (const id of ["select", "rich"]) {
-      await scenario("/admin", async page => {
-        if (id === "select") await page.locator("#select").selectOption("B");
+  await test("route transition applies the update and keeps the target URL", async () => {
+    const page = await openPage("/cabinet/dashboard");
+    try {
+      await offerUpdate(page);
+      assert.equal(await updateCount(page), 0);
+      await page.locator("#to-referral").click();
+      await page.waitForFunction(() => window.updates === 1);
+      assert.equal(page.url(), base + "/cabinet/referral");
+      await page.clock.runFor(2000);
+      assert.equal(await reloadCount(page), 1);
+    } finally { await page.close(); }
+  });
+
+  await test("hiding the tab applies the update in the background", async () => {
+    const page = await openPage("/cabinet/dashboard");
+    try {
+      await offerUpdate(page);
+      assert.equal(await updateCount(page), 0);
+      await page.evaluate(() => {
+        Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      await page.waitForFunction(() => window.updates === 1);
+      await page.clock.runFor(2000);
+      assert.equal(await reloadCount(page), 1);
+    } finally { await page.close(); }
+  });
+
+  await test("hiding the tab does not apply the update over unsaved input", async () => {
+    const page = await openPage("/cabinet/dashboard");
+    try {
+      await page.locator("#name").fill("unsaved");
+      await page.locator("#name").blur();
+      await offerUpdate(page);
+      await page.evaluate(() => {
+        Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      await page.clock.runFor(60000);
+      assert.equal(await updateCount(page), 0);
+    } finally { await page.close(); }
+  });
+
+  await test("payment routes and payment query parameters are never updated automatically", async () => {
+    for (const path of [
+      "/cabinet/payment-wait",
+      "/cabinet/payment-wait?payment=success",
+      "/cabinet/payment?status=fail",
+      "/cabinet/subscribe",
+      "/cabinet/yoomoney-pay?invoice=1",
+      "/cabinet/dashboard?payment=success",
+      "/cabinet/dashboard?redirect=https%3A%2F%2Fexample.com",
+      "/cabinet/dashboard?stars=1",
+    ]) {
+      const page = await openPage(path);
+      try {
+        await offerUpdate(page);
+        await page.clock.runFor(5000);
+        assert.equal(await updateCount(page), 0, path);
+      } finally { await page.close(); }
+    }
+  });
+
+  await test("an open Telegram Stars invoice blocks automatic updates", async () => {
+    const page = await openPage("/cabinet/dashboard");
+    try {
+      await page.evaluate(() => sessionStorage.setItem("stealthnet_telegram_invoice_open", String(Date.now())));
+      await offerUpdate(page);
+      await page.clock.runFor(5000);
+      assert.equal(await updateCount(page), 0);
+    } finally { await page.close(); }
+  });
+
+  await test("a safe navigation after a payment route applies the waiting update", async () => {
+    const page = await openPage("/cabinet/payment-wait?payment=success");
+    try {
+      await offerUpdate(page);
+      await page.clock.runFor(5000);
+      assert.equal(await updateCount(page), 0);
+      await page.locator("#to-dashboard").click();
+      await page.waitForFunction(() => window.updates === 1);
+    } finally { await page.close(); }
+  });
+
+  await test("an open dialog or sheet blocks automatic updates", async () => {
+    const page = await openPage("/cabinet/dashboard");
+    try {
+      await page.evaluate(() => {
+        const dialog = document.createElement("div");
+        dialog.setAttribute("role", "dialog");
+        dialog.textContent = "payment";
+        document.body.append(dialog);
+      });
+      await offerUpdate(page);
+      await page.clock.runFor(60000);
+      assert.equal(await updateCount(page), 0);
+    } finally { await page.close(); }
+  });
+
+  await test("dirty form input blocks automatic updates and asks before a manual reload", async () => {
+    const page = await openPage("/cabinet/dashboard");
+    try {
+      await page.locator("#name").fill("unsaved");
+      await page.locator("#name").blur();
+      await offerUpdate(page);
+      await page.clock.runFor(122000);
+      assert.equal(await updateCount(page), 0);
+
+      await page.getByRole("button", { name: "Обновить сейчас" }).click();
+      await page.getByText("Обновить страницу?", { exact: true }).waitFor();
+      await page.getByText("Несохранённые изменения будут потеряны. Сначала сохраните их или подтвердите обновление.").waitFor();
+      await page.getByRole("button", { name: "Остаться", exact: true }).click();
+      assert.equal(await updateCount(page), 0);
+
+      await page.getByRole("button", { name: "Обновить сейчас" }).click();
+      await page.getByRole("button", { name: "Обновить без сохранения" }).click();
+      await page.waitForFunction(() => window.updates === 1);
+    } finally { await page.close(); }
+  });
+
+  await test("checkbox, select and rich text edits remain protected after blur", async () => {
+    for (const id of ["check", "select", "rich"]) {
+      const page = await openPage("/cabinet/dashboard");
+      try {
+        if (id === "check") await page.locator("#check").check();
+        else if (id === "select") await page.locator("#select").selectOption("B");
         else await page.locator("#rich").fill("edited document");
         await page.locator(`#${id}`).blur();
-        await page.clock.runFor(120000);
-        assert.equal(await page.evaluate(() => window.updates || 0), 0);
-      });
+        await offerUpdate(page);
+        await page.clock.runFor(60000);
+        assert.equal(await updateCount(page), 0, id);
+      } finally { await page.close(); }
     }
   });
-  await test("reverted and unmounted edits stop blocking automatic updates", async () => {
+
+  await test("reverted and unmounted edits stop blocking background updates", async () => {
     for (const action of ["revert", "remove"]) {
-      await scenario("/admin", async page => {
+      const page = await openPage("/cabinet/dashboard");
+      try {
         await page.locator("#controlled").fill("unsaved");
-        if (action === "revert") await page.locator("#controlled").fill("initial");
-        else await page.locator("#controlled").evaluate(el => el.remove());
-        if (action === "revert") await page.locator("#controlled").blur();
-        await page.clock.runFor(30000);
-        assert.equal(await page.evaluate(() => window.updates), 1);
-      });
+        if (action === "revert") {
+          await page.locator("#controlled").fill("initial");
+          await page.locator("#controlled").blur();
+        } else {
+          await page.locator("#controlled").evaluate(el => el.remove());
+        }
+        await page.clock.runFor(16000);
+        await offerUpdate(page);
+        await page.evaluate(() => {
+          Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+        await page.waitForFunction(() => window.updates === 1);
+      } finally { await page.close(); }
     }
   });
-  await test("Aurora sheet prevents reload", () => scenario("/cabinet/dashboard", async page => {
-    await page.evaluate(() => { const sheet = document.createElement("div"); sheet.className = "au-sheet-overlay"; sheet.textContent = "payment"; document.body.append(sheet); });
-    await page.clock.runFor(120000);
-    assert.equal(await page.evaluate(() => window.updates || 0), 0);
-  }));
-  await test("payment URLs and settings never reload automatically", async () => {
-    for (const path of ["/cabinet/dashboard?payment=success", "/cabinet/tariffs", "/admin/settings"]) {
-      await scenario(path, async page => {
-        await page.clock.runFor(120000);
-        assert.equal(await page.evaluate(() => window.updates || 0), 0);
-      });
-    }
+
+  await test("a long session shows a quiet prompt without a countdown", async () => {
+    const page = await openPage("/cabinet/dashboard");
+    try {
+      await offerUpdate(page);
+      await page.clock.runFor(119000);
+      assert.equal(await updateCount(page), 0);
+      assert.equal(await page.getByText("Доступна новая версия", { exact: true }).count(), 0);
+
+      await page.clock.runFor(3000);
+      await page.getByText("Доступна новая версия", { exact: true }).waitFor();
+      assert.equal(await page.getByText(/Применяем обновление \(/).count(), 0);
+
+      await page.getByRole("button", { name: "Обновить сейчас" }).click();
+      await page.waitForFunction(() => window.updates === 1);
+      await page.clock.runFor(2000);
+      assert.equal(await reloadCount(page), 1);
+    } finally { await page.close(); }
   });
-  await test("snooze reappears after ten minutes without another SW event", () => scenario("/admin/settings", async page => {
-    await page.getByRole("button", { name: "Отложить", exact: true }).click();
-    await page.clock.runFor(599000);
-    assert.equal(await page.getByText("Доступно обновление", { exact: true }).count(), 0);
-    await page.clock.runFor(2000);
-    await page.getByText("Доступно обновление", { exact: true }).waitFor();
-  }));
-  await test("failed update requires manual retry", () => scenario("/cabinet/dashboard", async page => {
-    await page.evaluate(() => { window.failUpdate = true; });
-    await page.clock.runFor(70000);
-    assert.equal(await page.evaluate(() => window.updates), 1);
-    await page.getByText("Не удалось обновить. Попробуйте ещё раз.").waitFor();
-    await page.clock.runFor(360000);
-    assert.equal(await page.evaluate(() => window.updates), 1);
-    await page.evaluate(() => { window.failUpdate = false; });
-    await page.getByRole("button", { name: "Обновить сейчас" }).click();
-    assert.equal(await page.evaluate(() => window.updates), 2);
-  }));
+
+  await test("a snoozed prompt returns after fifteen minutes without a new SW event", async () => {
+    const page = await openPage("/cabinet/dashboard");
+    try {
+      await offerUpdate(page);
+      await page.clock.runFor(122000);
+      await page.getByText("Доступна новая версия", { exact: true }).waitFor();
+      await page.getByRole("button", { name: "Позже", exact: true }).click();
+      await page.clock.runFor(899000);
+      assert.equal(await page.getByText("Доступна новая версия", { exact: true }).count(), 0);
+      await page.clock.runFor(2000);
+      await page.getByText("Доступна новая версия", { exact: true }).waitFor();
+    } finally { await page.close(); }
+  });
+
+  await test("a failed update requires a manual retry", async () => {
+    const page = await openPage("/cabinet/dashboard");
+    try {
+      await offerUpdate(page);
+      await page.clock.runFor(122000);
+      await page.evaluate(() => { window.failUpdate = true; });
+      await page.getByRole("button", { name: "Обновить сейчас" }).click();
+      await page.waitForFunction(() => window.updates === 1);
+      await page.getByText("Не удалось обновить. Попробуйте ещё раз.").waitFor();
+      await page.clock.runFor(360000);
+      assert.equal(await updateCount(page), 1);
+
+      await page.evaluate(() => { window.failUpdate = false; });
+      await page.getByRole("button", { name: "Обновить сейчас" }).click();
+      await page.waitForFunction(() => window.updates === 2);
+    } finally { await page.close(); }
+  });
 } finally {
   await browser.close();
-  server.close();
+  await new Promise(resolve => server.close(resolve));
 }

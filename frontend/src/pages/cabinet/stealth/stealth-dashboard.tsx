@@ -615,6 +615,7 @@ export function StealthDashboard() {
         <div
           ref={paySuccessRef}
           data-pay-success
+          data-pwa-block-update
           className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center pb-24 sm:pb-0 px-4"
         >
           <div

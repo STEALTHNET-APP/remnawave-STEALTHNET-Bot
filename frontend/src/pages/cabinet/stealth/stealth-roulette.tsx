@@ -397,7 +397,7 @@ export function StealthRoulette() {
 
       {/* ── Модалка результата ── */}
       {winSector && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
+        <div data-pwa-block-update className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
           <div className="w-full max-w-sm rounded-3xl bg-zinc-900/95 border border-white/10 p-6 text-center shadow-[0_24px_60px_-12px_rgba(0,0,0,0.8),0_0_40px_-10px_rgb(var(--stealth-accent)_/_0.3)] space-y-4">
             <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-zinc-800 to-black border border-saccent-500/40 flex items-center justify-center text-3xl shadow-[0_0_25px_rgb(var(--stealth-accent)_/_0.5)]">
               {winSector.type === "empty" ? "🥲" : "🎁"}

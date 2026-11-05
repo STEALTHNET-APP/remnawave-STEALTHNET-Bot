@@ -412,7 +412,7 @@ export function AuroraRoulette() {
 
       {/* ── Модалка победы ── */}
       {winSector && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div data-pwa-block-update className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-sm rounded-[28px] bg-[var(--au-surface)] border-2 border-white/80 dark:border-white/10 p-6 text-center shadow-2xl space-y-4">
             <div className="w-16 h-16 mx-auto rounded-full bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] flex items-center justify-center text-3xl shadow-lg shadow-[var(--au-from)]/30">
               {winSector.type === "empty" ? "🥲" : "🎁"}

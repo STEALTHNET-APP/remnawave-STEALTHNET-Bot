@@ -73,7 +73,7 @@ export default defineConfig({
                         handler: "CacheFirst",
                         options: {
                             cacheName: "google-fonts",
-                            expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+                            expiration: { maxEntries: 30, maxAgeSeconds: 7 * 24 * 60 * 60 },
                             cacheableResponse: { statuses: [0, 200] },
                         },
                     },
@@ -82,8 +82,8 @@ export default defineConfig({
                         urlPattern: /\.(?:png|jpg|jpeg|svg|webp|gif|ico)$/i,
                         handler: "StaleWhileRevalidate",
                         options: {
-                            cacheName: "images",
-                            expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 30 },
+                            cacheName: "images-v2",
+                            expiration: { maxEntries: 60, maxAgeSeconds: 7 * 24 * 60 * 60 },
                         },
                     },
                 ],
