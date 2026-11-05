@@ -118,7 +118,7 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose, onStatusChange 
     if (!state.token || !ticketId || !data || statusSending) return;
     const next = data.status === "closed" ? "open" : "closed";
     if (next === "closed") {
-      const ok = await askConfirm(t("aurora.ticket_resolve_confirm"));
+      const ok = await askConfirm(t("aurora.ticket_close_confirm"));
       if (!ok) return;
     }
     setStatusSending(true);
@@ -144,35 +144,7 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose, onStatusChange 
     <AuroraSheet
       open={open}
       onClose={onClose}
-      title={
-        <div className="flex items-center justify-between gap-2 w-full pr-8">
-          <span className="truncate">{data?.subject || "Обращение"}</span>
-          {ticketId && data && (
-            <button
-              type="button"
-              onClick={toggleStatus}
-              disabled={statusSending}
-              className={cn(
-                "flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium shadow-sm transition-all disabled:opacity-50",
-                isClosed
-                  ? "border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] text-[var(--au-ink)] hover:border-[var(--au-from)]/40 hover:text-[var(--au-from)]"
-                  : "border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] text-[var(--au-ink)] hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400",
-              )}
-              title={isClosed ? t("aurora.ticket_reopen") : t("aurora.ticket_resolved")}
-              aria-label={isClosed ? t("aurora.ticket_reopen") : t("aurora.ticket_resolved")}
-            >
-              {statusSending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : isClosed ? (
-                <RotateCcw className="h-3.5 w-3.5" />
-              ) : (
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-              )}
-              <span>{isClosed ? t("aurora.ticket_reopen") : t("aurora.ticket_resolved")}</span>
-            </button>
-          )}
-        </div>
-      }
+      title={data?.subject || "Обращение"}
       footer={
         isClosed ? (
           <div className="space-y-2 rounded-[16px] bg-[var(--au-surface)] px-4 py-3.5 text-center">
@@ -252,6 +224,38 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose, onStatusChange 
         )
       }
     >
+      {data && (
+        <div className="mb-3 flex items-center justify-between gap-2 border-b border-[color-mix(in_srgb,var(--au-muted)_14%,transparent)] pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-[var(--au-muted)]">Статус:</span>
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[11px] font-bold",
+                isClosed ? "bg-[var(--au-surface)] text-[var(--au-muted)]" : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+              )}
+            >
+              {isClosed ? t("aurora.ticket_closed") : t("aurora.ticket_open")}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={toggleStatus}
+            disabled={statusSending}
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-[14px] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] px-3 text-xs font-semibold text-[var(--au-ink)] transition-all hover:border-[color-mix(in_srgb,var(--au-muted)_45%,transparent)] hover:bg-[color-mix(in_srgb,var(--au-surface)_85%,var(--au-muted)_15%)] active:scale-[0.98] disabled:opacity-50"
+            title={isClosed ? t("aurora.ticket_reopen") : t("aurora.ticket_close")}
+          >
+            {statusSending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : isClosed ? (
+              <RotateCcw className="h-3.5 w-3.5" />
+            ) : (
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            )}
+            <span className="hidden min-[380px]:inline">{isClosed ? t("aurora.ticket_reopen") : t("aurora.ticket_close")}</span>
+            <span className="min-[380px]:hidden">{isClosed ? t("aurora.ticket_reopen_short") : t("aurora.ticket_close_short")}</span>
+          </button>
+        </div>
+      )}
       {loading && !data ? (
         <div className="space-y-2.5 py-2">
           {[0, 1, 2].map((i) => (

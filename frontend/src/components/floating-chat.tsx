@@ -277,7 +277,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
   const changeStatus = async (status: "open" | "closed") => {
     if (!token || !detailId || statusSending) return;
     if (status === "closed") {
-      const ok = await askConfirm("Отметить обращение как решённое? Диалог переместится во вкладку «История». При необходимости вы сможете возобновить его.");
+      const ok = await askConfirm("Закрыть это обращение? Диалог будет завершён и перемещён в историю. При необходимости вы сможете возобновить его.");
       if (!ok) return;
     }
     setStatusSending(true);
@@ -381,16 +381,11 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
                 size="sm"
                 onClick={() => changeStatus(detail.status === "open" ? "closed" : "open")}
                 disabled={statusSending}
-                className={cn(
-                  "h-8 shrink-0 rounded-lg px-2.5 text-[11px] font-semibold gap-1.5",
-                  detail.status === "open"
-                    ? "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-500 hover:border-emerald-500/40"
-                    : "border-border",
-                )}
-                title={detail.status === "open" ? "Вопрос решён" : "Возобновить диалог"}
+                className="h-8 shrink-0 rounded-lg border-border bg-background/50 hover:bg-muted px-2.5 text-[11px] font-semibold gap-1.5"
+                title={detail.status === "open" ? "Закрыть обращение" : "Возобновить обращение"}
               >
                 {statusSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : detail.status === "open" ? <CheckCircle2 className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                {detail.status === "open" ? "Вопрос решён" : "Возобновить"}
+                {detail.status === "open" ? "Закрыть обращение" : "Возобновить"}
               </Button>
             )}
           </div>
@@ -496,7 +491,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
               <p className="mb-1.5 text-[10px] text-destructive text-center font-semibold">{uploadError}</p>
             )}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
-              <p className="text-[11px] text-muted-foreground text-center">Обращение закрыто (вопрос решён). Чтобы продолжить диалог, возобновите его.</p>
+              <p className="text-[11px] text-muted-foreground text-center">Обращение закрыто. Чтобы продолжить переписку, возобновите его.</p>
               <Button
                 variant="outline"
                 size="sm"
@@ -505,7 +500,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
                 className="h-8 shrink-0 rounded-lg gap-1.5 text-[11px] font-semibold"
               >
                 {statusSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                Возобновить диалог
+                Возобновить обращение
               </Button>
             </div>
           </div>
