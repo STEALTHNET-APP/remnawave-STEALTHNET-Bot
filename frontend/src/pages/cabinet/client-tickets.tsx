@@ -2,7 +2,7 @@ import { SupportMessage } from "@/components/support-message";
 import "./cabinet-support.css";
 import { AuroraTickets } from "./aurora/aurora-tickets";
 import { useEffect, useRef, useState } from "react";
-import { MessageSquarePlus, Inbox, Loader2, Send, ArrowLeft, CircleDot, CircleCheck, Paperclip, X as XIcon, ImageIcon, CheckCircle, RotateCcw, History } from "lucide-react";
+import { MessageSquarePlus, Inbox, Loader2, Send, ArrowLeft, CircleDot, CircleCheck, Paperclip, X as XIcon, ImageIcon, CheckCircle2, RotateCcw, History } from "lucide-react";
 import { askConfirm } from "@/lib/confirm";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type TicketAttachmentDto, type TicketMessageDto } from "@/lib/api";
@@ -200,7 +200,7 @@ function ClassicTicketsPage() {
   const changeTicketStatus = async (status: "open" | "closed") => {
     if (!token || !detail || statusSending) return;
     if (status === "closed") {
-      const ok = await askConfirm("Вы уверены, что хотите закрыть это обращение?");
+      const ok = await askConfirm("Отметить обращение как решённое? Диалог переместится во вкладку «История». При необходимости вы сможете возобновить его.");
       if (!ok) return;
     }
     setStatusSending(true);
@@ -289,10 +289,11 @@ function ClassicTicketsPage() {
               size="sm"
               onClick={() => changeTicketStatus("closed")}
               disabled={statusSending}
-              className="shrink-0 rounded-xl gap-1.5 text-xs font-semibold"
+              className="shrink-0 rounded-xl gap-1.5 text-xs font-semibold border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-500 hover:border-emerald-500/40"
             >
-              {statusSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-              <span className="hidden sm:inline">Закрыть обращение</span>
+              {statusSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              <span className="hidden sm:inline">Вопрос решён</span>
+              <span className="sm:hidden">Решено</span>
             </Button>
           ) : (
             <Button
@@ -303,7 +304,8 @@ function ClassicTicketsPage() {
               className="shrink-0 rounded-xl gap-1.5 text-xs font-semibold"
             >
               {statusSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-              <span className="hidden sm:inline">Возобновить</span>
+              <span className="hidden sm:inline">Возобновить диалог</span>
+              <span className="sm:hidden">Возобновить</span>
             </Button>
           )}
         </div>
@@ -402,7 +404,7 @@ function ClassicTicketsPage() {
               <p className="mb-2 text-[11px] text-destructive font-semibold text-center">{uploadError}</p>
             )}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <p className="text-xs font-medium text-muted-foreground text-center">Обращение закрыто. Вы можете возобновить его при необходимости.</p>
+              <p className="text-xs font-medium text-muted-foreground text-center">Обращение закрыто (вопрос решён). Чтобы продолжить диалог, возобновите его.</p>
               <Button
                 variant="outline"
                 size="sm"
@@ -411,7 +413,7 @@ function ClassicTicketsPage() {
                 className="rounded-xl gap-1.5 text-xs font-semibold shrink-0"
               >
                 {statusSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-                Возобновить обращение
+                Возобновить диалог
               </Button>
             </div>
           </div>

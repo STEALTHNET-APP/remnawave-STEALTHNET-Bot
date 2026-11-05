@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X as XIcon, RefreshCw, CheckCircle, RotateCcw } from "lucide-react";
+import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X as XIcon, RefreshCw, CheckCircle2, RotateCcw } from "lucide-react";
 import { askConfirm } from "@/lib/confirm";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type TicketMessageDto } from "@/lib/api";
@@ -134,7 +134,7 @@ export function StealthTicketChatModal({ open, ticketId, onClose, onStatusChange
     if (!state.token || !ticketId || !data || statusSending) return;
     const next = data.status === "closed" ? "open" : "closed";
     if (next === "closed") {
-      const ok = await askConfirm("Вы уверены, что хотите закрыть это обращение?");
+      const ok = await askConfirm("Отметить обращение как решённое? Диалог переместится во вкладку «История». При необходимости вы сможете возобновить его.");
       if (!ok) return;
     }
     setStatusSending(true);
@@ -161,7 +161,7 @@ export function StealthTicketChatModal({ open, ticketId, onClose, onStatusChange
     <StealthModal open={open} onClose={onClose} title={subject} maxWidth="32rem">
       {/* Status pill & status action */}
       {data && (
-        <div className="-mt-2 mb-3 flex items-center justify-between">
+        <div className="-mt-2 mb-3 flex items-center gap-2">
           <span className={cn(
             "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
             isClosed ? "bg-zinc-800/60 text-zinc-400 border-white/10" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
@@ -172,17 +172,22 @@ export function StealthTicketChatModal({ open, ticketId, onClose, onStatusChange
             type="button"
             onClick={toggleStatus}
             disabled={statusSending}
-            className="text-xs text-zinc-300 hover:text-zinc-100 flex items-center gap-1.5 px-2 py-1 rounded-lg border border-white/10 bg-zinc-800/60 hover:bg-zinc-700/60 transition disabled:opacity-50"
-            title={isClosed ? "Возобновить" : "Закрыть"}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50",
+              isClosed
+                ? "border-white/10 bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700/60"
+                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20",
+            )}
+            title={isClosed ? "Возобновить диалог" : "Вопрос решён"}
           >
             {statusSending ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : isClosed ? (
               <RotateCcw className="h-3.5 w-3.5" />
             ) : (
-              <CheckCircle className="h-3.5 w-3.5" />
+              <CheckCircle2 className="h-3.5 w-3.5" />
             )}
-            {isClosed ? "Возобновить" : "Закрыть"}
+            {isClosed ? "Возобновить диалог" : "Вопрос решён"}
           </button>
         </div>
       )}
@@ -256,7 +261,7 @@ export function StealthTicketChatModal({ open, ticketId, onClose, onStatusChange
       {/* Reply form */}
       {isClosed ? (
         <div className="rounded-2xl border border-white/[0.06] bg-zinc-950/40 p-3 space-y-2.5 text-center">
-          <p className="text-xs text-zinc-400">Обращение закрыто. Вы можете возобновить его при необходимости.</p>
+          <p className="text-xs text-zinc-400">Обращение закрыто (вопрос решён). Чтобы продолжить диалог, возобновите его.</p>
           <button
             type="button"
             onClick={toggleStatus}
@@ -264,7 +269,7 @@ export function StealthTicketChatModal({ open, ticketId, onClose, onStatusChange
             className="mx-auto h-10 px-4 rounded-xl bg-zinc-800/60 border border-white/10 text-zinc-200 text-xs font-semibold hover:bg-zinc-800 transition disabled:opacity-50 inline-flex items-center gap-1.5"
           >
             {statusSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-            Возобновить обращение
+            Возобновить диалог
           </button>
         </div>
       ) : (

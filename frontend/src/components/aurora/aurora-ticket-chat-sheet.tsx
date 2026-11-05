@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X, Check, RotateCcw } from "lucide-react";
+import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X, CheckCircle2, RotateCcw } from "lucide-react";
 import { askConfirm } from "@/lib/confirm";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type TicketMessageDto } from "@/lib/api";
@@ -118,7 +118,7 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose, onStatusChange 
     if (!state.token || !ticketId || !data || statusSending) return;
     const next = data.status === "closed" ? "open" : "closed";
     if (next === "closed") {
-      const ok = await askConfirm(t("aurora.ticket_close_confirm"));
+      const ok = await askConfirm(t("aurora.ticket_resolve_confirm"));
       if (!ok) return;
     }
     setStatusSending(true);
@@ -152,17 +152,23 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose, onStatusChange 
               type="button"
               onClick={toggleStatus}
               disabled={statusSending}
-              className="flex h-8 w-8 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] text-[var(--au-ink)] transition-colors enabled:hover:border-[var(--au-from)] disabled:opacity-50 shrink-0"
-              title={isClosed ? t("aurora.ticket_reopen") : t("aurora.ticket_close")}
-              aria-label={isClosed ? t("aurora.ticket_reopen") : t("aurora.ticket_close")}
+              className={cn(
+                "flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium shadow-sm transition-all disabled:opacity-50",
+                isClosed
+                  ? "border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] text-[var(--au-ink)] hover:border-[var(--au-from)]/40 hover:text-[var(--au-from)]"
+                  : "border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] text-[var(--au-ink)] hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-400",
+              )}
+              title={isClosed ? t("aurora.ticket_reopen") : t("aurora.ticket_resolved")}
+              aria-label={isClosed ? t("aurora.ticket_reopen") : t("aurora.ticket_resolved")}
             >
               {statusSending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : isClosed ? (
-                <RotateCcw className="h-4 w-4" />
+                <RotateCcw className="h-3.5 w-3.5" />
               ) : (
-                <Check className="h-4 w-4" />
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
               )}
+              <span>{isClosed ? t("aurora.ticket_reopen") : t("aurora.ticket_resolved")}</span>
             </button>
           )}
         </div>
