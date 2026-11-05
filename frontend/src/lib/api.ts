@@ -2928,8 +2928,14 @@ export const api = {
   },
 
   /** Список тикетов клиента (доступно при включённой тикет-системе) */
-  async getTickets(token: string): Promise<{ items: { id: string; subject: string; status: string; createdAt: string; updatedAt: string }[] }> {
-    return request("/client/tickets", { token });
+  async getTickets(
+    token: string,
+    status: "open" | "closed" | "all" = "all"
+  ): Promise<{
+    items: { id: string; subject: string; status: string; createdAt: string; updatedAt: string; closedAt?: string | null }[];
+  }> {
+    const query = status === "all" ? "" : `?status=${status}`;
+    return request(`/client/tickets${query}`, { token });
   },
   /** Количество непрочитанных сообщений от поддержки */
   async getUnreadTicketsCount(token: string): Promise<{ count: number }> {
@@ -2942,6 +2948,7 @@ export const api = {
     status: string;
     createdAt: string;
     updatedAt: string;
+    closedAt?: string | null;
     messages: TicketMessageDto[];
   }> {
     return request(`/client/tickets/${id}`, { token });
@@ -2959,6 +2966,7 @@ export const api = {
     status: string;
     createdAt: string;
     updatedAt: string;
+    closedAt?: string | null;
     messages: TicketMessageDto[];
   }> {
     const files = data.files ?? [];
@@ -2994,9 +3002,17 @@ export const api = {
       token,
     });
   },
-  /** Клиент: удалить свой тикет */
-  async deleteTicket(token: string, id: string): Promise<{ success: boolean; id: string }> {
-    return request(`/client/tickets/${id}`, { method: "DELETE", token });
+  /** Клиент: закрыть или возобновить тикет */
+  async updateTicketStatus(
+    token: string,
+    id: string,
+    status: "open" | "closed"
+  ): Promise<{ id: string; subject: string; status: string; closedAt?: string | null; updatedAt: string }> {
+    return request(`/client/tickets/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+      token,
+    });
   },
 
   /** AI Чат (Groq) */

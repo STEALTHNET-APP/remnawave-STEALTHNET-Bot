@@ -65,6 +65,9 @@ export const uploadVideo = multer({
 // ——— Ticket attachments (PNG/JPG/WEBP/GIF, max 10MB, до 5 файлов за раз) ———
 // Используется как клиентской частью тикетов (POST /client/tickets, /client/tickets/:id/messages),
 // так и админской (POST /admin/tickets/:id/messages).
+const ALLOWED_IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
+const ALLOWED_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
 const ticketStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIRS.tickets),
   filename: (_req, file, cb) => cb(null, makeFilename(file.originalname)),
@@ -74,12 +77,11 @@ export const uploadTicketAttachment = multer({
   storage: ticketStorage,
   limits: { fileSize: 10 * 1024 * 1024, files: 5 },
   fileFilter: (_req, file, cb) => {
-    const allowed = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".heic", ".heif"];
     const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext) || file.mimetype.startsWith("image/")) {
+    if (ALLOWED_IMAGE_EXTS.has(ext) && ALLOWED_IMAGE_MIMES.has(file.mimetype.toLowerCase())) {
       cb(null, true);
     } else {
-      cb(new Error("Допустимые форматы: PNG, JPG, WEBP, GIF, HEIC"));
+      cb(new Error("Допустимые форматы изображений: PNG, JPG, JPEG, WEBP, GIF (до 10 МБ)"));
     }
   },
 });

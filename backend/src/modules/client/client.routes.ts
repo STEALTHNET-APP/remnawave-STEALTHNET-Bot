@@ -1,6 +1,5 @@
 import { cloudTrialUsed } from "../cloudpayments/cloudpayments-trial.js";
 import { prepareCloudCheckout, cloudClientRouter } from "../cloudpayments/cloudpayments.routes.js";
-import { deleteTickets } from "../ticket/ticket-delete.service.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { webClientRouter } from "../amnezia-web/client.routes.js";
 import { isWebPanel, WEB_PROTOCOLS } from "../amnezia-web/api.js";
@@ -35,6 +34,7 @@ import {
   notifyAdminsAboutClientTicketMessage,
   notifyAdminsAboutNewClient,
   notifyAdminsAboutNewTicket,
+  notifyAdminsAboutTicketStatusChange,
 } from "../notification/telegram-notify.service.js";
 import { requireClientAuth } from "./client.middleware.js";
 import { remnaCreateUser, remnaUpdateUser, isRemnaConfigured, remnaGetUser, remnaGetUserByUsername, remnaGetUserByEmail, remnaGetUserByTelegramId, remnaGetUserByShortUuid, extractRemnaUuid, remnaUsernameFromClient, remnaGetUserHwidDevices, remnaDeleteUserHwidDevice, encryptSubscriptionUrlInPlace, remnaRevokeUserSubscription, probeRemnaHealth } from "../remna/remna.client.js";
@@ -8271,9 +8271,10 @@ async function ensureTicketsEnabled(res: import("express").Response): Promise<bo
 // Создание тикета. Принимаем как JSON, так и multipart/form-data (когда прикрепляют фото).
 // Текст первого сообщения может быть пустым, если приложены картинки.
 const createTicketSchema = z.object({
-  subject: z.string().min(1).max(500),
-  message: z.string().max(10000).optional().default(""),
+  subject: z.string().trim().min(3, "Тема должна содержать минимум 3 символа").max(200, "Тема не должна превышать 200 символов"),
+  message: z.string().trim().max(5000, "Сообщение не должно превышать 5000 символов").optional().default(""),
 });
+const MAX_OPEN_TICKETS = 5;
 clientRouter.post("/tickets", uploadTicketAttachment.array("files", 5), async (req, res) => {
   if (!(await ensureTicketsEnabled(res))) return;
   const clientId = (req as unknown as { client: { id: string } }).client.id;
@@ -8282,6 +8283,14 @@ clientRouter.post("/tickets", uploadTicketAttachment.array("files", 5), async (r
   const body = createTicketSchema.safeParse({ subject, message });
   if (!body.success) {
     return res.status(400).json({ message: "Проверьте введённые данные", errors: body.error.flatten() });
+  }
+  const openTicketsCount = await prisma.ticket.count({
+    where: { clientId, status: "open" },
+  });
+  if (openTicketsCount >= MAX_OPEN_TICKETS) {
+    return res.status(400).json({
+      message: "У вас уже есть 5 активных обращений. Пожалуйста, дождитесь ответа или закройте неактуальные тикеты перед созданием нового",
+    });
   }
   const attachments = filesToAttachments(req.files as Express.Multer.File[] | undefined);
   const trimmedMessage = body.data.message.trim();
@@ -8316,6 +8325,7 @@ clientRouter.post("/tickets", uploadTicketAttachment.array("files", 5), async (r
     status: ticket.status,
     createdAt: ticket.createdAt.toISOString(),
     updatedAt: ticket.updatedAt.toISOString(),
+    closedAt: null,
     messages: ticket.messages.map((m) => ({
       id: m.id,
       authorType: m.authorType,
@@ -8342,13 +8352,22 @@ clientRouter.get("/tickets/unread-count", async (req, res) => {
 clientRouter.get("/tickets", async (req, res) => {
   if (!(await ensureTicketsEnabled(res))) return;
   const clientId = (req as unknown as { client: { id: string } }).client.id;
+  const statusParam = typeof req.query.status === "string" ? req.query.status : "all";
+  const where = { clientId, ...(statusParam === "open" || statusParam === "closed" ? { status: statusParam } : {}) };
   const list = await prisma.ticket.findMany({
-    where: { clientId },
+    where,
     orderBy: { updatedAt: "desc" },
-    select: { id: true, subject: true, status: true, createdAt: true, updatedAt: true },
+    select: { id: true, subject: true, status: true, createdAt: true, updatedAt: true, closedAt: true },
   });
   return res.json({
-    items: list.map((t) => ({ id: t.id, subject: t.subject, status: t.status, createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString() })),
+    items: list.map((t) => ({
+      id: t.id,
+      subject: t.subject,
+      status: t.status,
+      createdAt: t.createdAt.toISOString(),
+      updatedAt: t.updatedAt.toISOString(),
+      closedAt: t.closedAt ? t.closedAt.toISOString() : null,
+    })),
   });
 });
 
@@ -8373,6 +8392,7 @@ clientRouter.get("/tickets/:id", async (req, res) => {
     status: ticket.status,
     createdAt: ticket.createdAt.toISOString(),
     updatedAt: ticket.updatedAt.toISOString(),
+    closedAt: ticket.closedAt ? ticket.closedAt.toISOString() : null,
     messages: ticket.messages.map((m) => ({
       id: m.id,
       authorType: m.authorType,
@@ -8420,15 +8440,51 @@ clientRouter.post("/tickets/:id/messages", uploadTicketAttachment.array("files",
   });
 }));
 
-// Удаление тикета клиентом
-clientRouter.delete("/tickets/:id", async (req, res, next) => {
+// Смена статуса тикета клиентом: закрытие и возобновление.
+const updateClientTicketStatusSchema = z.object({ status: z.enum(["open", "closed"]) });
+clientRouter.patch("/tickets/:id/status", async (req, res, next) => {
   try {
-  if (!(await ensureTicketsEnabled(res))) return;
-  const clientId = (req as unknown as { client: { id: string } }).client.id;
-  const count = await deleteTickets({ id: req.params.id, clientId });
-  if (!count) return res.status(404).json({ message: "Тикет не найден" });
-  return res.json({ success: true, id: req.params.id });
+    if (!(await ensureTicketsEnabled(res))) return;
+    const clientId = (req as unknown as { client: { id: string } }).client.id;
+    const body = updateClientTicketStatusSchema.safeParse(req.body);
+    if (!body.success) {
+      return res.status(400).json({ message: "Некорректный статус обращения" });
+    }
+    const ticket = await prisma.ticket.findFirst({ where: { id: req.params.id, clientId } });
+    if (!ticket) return res.status(404).json({ message: "Тикет не найден" });
+
+    const isClosing = body.data.status === "closed";
+    const updated = await prisma.ticket.update({
+      where: { id: ticket.id, clientId },
+      data: {
+        status: body.data.status,
+        closedAt: isClosing ? new Date() : null,
+        updatedAt: new Date(),
+      },
+      select: { id: true, clientId: true, subject: true, status: true, closedAt: true, updatedAt: true },
+    });
+    notifyAdminsAboutTicketStatusChange({
+      ticketId: updated.id,
+      clientId: updated.clientId,
+      subject: updated.subject,
+      status: updated.status,
+    }).catch(() => {});
+
+    return res.json({
+      id: updated.id,
+      subject: updated.subject,
+      status: updated.status,
+      closedAt: updated.closedAt ? updated.closedAt.toISOString() : null,
+      updatedAt: updated.updatedAt.toISOString(),
+    });
   } catch (error) { next(error); }
+});
+
+// Удаление обращений клиенту недоступно: только закрытие и возобновление.
+clientRouter.delete("/tickets/:id", async (_req, res) => {
+  return res.status(403).json({
+    message: "Удаление обращений недоступно. Вы можете закрыть тикет, когда вопрос решён.",
+  });
 });
 
 // Публичный конфиг для бота, mini app, сайта (без паролей и секретов)

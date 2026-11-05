@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X, Check, RotateCcw } from "lucide-react";
 import { askConfirm } from "@/lib/confirm";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type TicketMessageDto } from "@/lib/api";
@@ -10,6 +11,7 @@ interface Props {
   open: boolean;
   ticketId: string | null;
   onClose: () => void;
+  onStatusChange?: () => void;
 }
 
 interface TicketDetail {
@@ -18,11 +20,13 @@ interface TicketDetail {
   status: string;
   createdAt: string;
   updatedAt: string;
+  closedAt?: string | null;
   messages: TicketMessageDto[];
 }
 
 const MAX_FILES = 5;
 const POLL_MS = 8000;
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 function fmtTime(iso: string): string {
   try {
@@ -37,7 +41,8 @@ function fmtTime(iso: string): string {
   }
 }
 
-export function AuroraTicketChatSheet({ open, ticketId, onClose }: Props) {
+export function AuroraTicketChatSheet({ open, ticketId, onClose, onStatusChange }: Props) {
+  const { t } = useTranslation();
   const { state } = useClientAuth();
   const [data, setData] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -45,6 +50,7 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose }: Props) {
   const [reply, setReply] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const [statusSending, setStatusSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -83,7 +89,7 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose }: Props) {
     if (!list) return;
     const arr = Array.from(list)
       .slice(0, MAX_FILES - files.length)
-      .filter((f) => f.type.startsWith("image/"));
+      .filter((f) => ALLOWED_IMAGE_TYPES.has(f.type));
     setFiles((prev) => [...prev, ...arr].slice(0, MAX_FILES));
   }
 
@@ -108,15 +114,27 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose }: Props) {
     }
   }
 
-  async function handleDelete() {
-    if (!state.token || !ticketId) return;
-    const ok = await askConfirm("Удалить это обращение навсегда? Все сообщения будут удалены.");
-    if (!ok) return;
+  async function toggleStatus() {
+    if (!state.token || !ticketId || !data || statusSending) return;
+    const next = data.status === "closed" ? "open" : "closed";
+    if (next === "closed") {
+      const ok = await askConfirm(t("aurora.ticket_close_confirm"));
+      if (!ok) return;
+    }
+    setStatusSending(true);
+    setErr(null);
     try {
-      await api.deleteTicket(state.token, ticketId);
-      onClose();
+      const updated = await api.updateTicketStatus(state.token, ticketId, next);
+      setData((prev) =>
+        prev
+          ? { ...prev, status: updated.status, closedAt: updated.closedAt ?? null, updatedAt: updated.updatedAt }
+          : prev,
+      );
+      onStatusChange?.();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Не удалось удалить обращение");
+      setErr(e instanceof Error ? e.message : t("aurora.ticket_status_error"));
+    } finally {
+      setStatusSending(false);
     }
   }
 
@@ -129,23 +147,40 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose }: Props) {
       title={
         <div className="flex items-center justify-between gap-2 w-full pr-8">
           <span className="truncate">{data?.subject || "Обращение"}</span>
-          {ticketId && (
+          {ticketId && data && (
             <button
               type="button"
-              onClick={handleDelete}
-              className="text-red-500 hover:text-red-600 p-1.5 rounded-full hover:bg-red-500/10 transition-colors shrink-0"
-              title="Удалить обращение"
+              onClick={toggleStatus}
+              disabled={statusSending}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] text-[var(--au-ink)] transition-colors enabled:hover:border-[var(--au-from)] disabled:opacity-50 shrink-0"
+              title={isClosed ? t("aurora.ticket_reopen") : t("aurora.ticket_close")}
+              aria-label={isClosed ? t("aurora.ticket_reopen") : t("aurora.ticket_close")}
             >
-              <Trash2 className="h-4 w-4" />
+              {statusSending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isClosed ? (
+                <RotateCcw className="h-4 w-4" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
             </button>
           )}
         </div>
       }
       footer={
         isClosed ? (
-          <p className="rounded-[16px] bg-[var(--au-surface)] px-4 py-3.5 text-center text-[13px] text-[var(--au-muted)]">
-            Обращение закрыто. Если вопрос остался — создайте новое.
-          </p>
+          <div className="space-y-2 rounded-[16px] bg-[var(--au-surface)] px-4 py-3.5 text-center">
+            <p className="text-[13px] text-[var(--au-muted)]">{t("aurora.ticket_closed_notice")}</p>
+            <button
+              type="button"
+              onClick={toggleStatus}
+              disabled={statusSending}
+              className="mx-auto flex min-h-10 items-center justify-center gap-2 rounded-[14px] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] px-4 text-[13.5px] font-semibold text-[var(--au-ink)] disabled:opacity-50"
+            >
+              {statusSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+              {t("aurora.ticket_reopen")}
+            </button>
+          </div>
         ) : (
           <div className="space-y-2">
             {files.length > 0 && (
@@ -182,7 +217,7 @@ export function AuroraTicketChatSheet({ open, ticketId, onClose }: Props) {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp,image/gif"
                 multiple
                 hidden
                 onChange={(e) => {

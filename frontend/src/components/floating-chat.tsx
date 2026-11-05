@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import gsap from "gsap";
 import { EASE_OUT, EASE_SPRING, reducedMotion } from "@/lib/gsap-utils";
-import { MessageCircle, X, Send, User, Sparkles, Headset, ArrowLeft, MessageSquarePlus, CircleDot, CircleCheck, Inbox, Loader2, Maximize2, Minimize2, Paperclip, X as XIcon, Trash2 } from "lucide-react";
+import { MessageCircle, X, Send, User, Sparkles, Headset, ArrowLeft, MessageSquarePlus, CircleDot, CircleCheck, Inbox, Loader2, Maximize2, Minimize2, Paperclip, X as XIcon, RotateCcw } from "lucide-react";
 import { askConfirm } from "@/lib/confirm";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ import { api, type TicketAttachmentDto } from "@/lib/api";
 const TICKET_MAX_FILES = 5;
 const TICKET_MAX_FILE_MB = 10;
 const TICKET_MAX_FILE_BYTES = TICKET_MAX_FILE_MB * 1024 * 1024;
+const TICKET_ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 function TicketAttachments({ items }: { items: TicketAttachmentDto[] }) {
   if (!items || items.length === 0) return null;
@@ -196,6 +197,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
   const [newFiles, setNewFiles] = useState<File[]>([]);
   const newInputRef = useRef<HTMLInputElement>(null);
   const [createSending, setCreateSending] = useState(false);
+  const [statusSending, setStatusSending] = useState(false);
 
   const addFiles = (
     setList: (files: File[]) => void,
@@ -210,8 +212,8 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
         setUploadError(`Не больше ${TICKET_MAX_FILES} файлов`);
         break;
       }
-      if (!f.type.startsWith("image/")) {
-        setUploadError("Можно прикладывать только изображения");
+      if (!TICKET_ALLOWED_IMAGE_TYPES.has(f.type)) {
+        setUploadError("Можно прикладывать только PNG, JPG, WEBP или GIF");
         continue;
       }
       if (f.size > TICKET_MAX_FILE_BYTES) {
@@ -272,21 +274,33 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
     }
   }, [detail?.messages?.length]);
 
-  const handleDeleteTicket = async (id: string, subject?: string) => {
-    if (!token) return;
-    const msg = subject ? `Удалить обращение «${subject}»? Все сообщения будут удалены.` : "Удалить обращение?";
-    const ok = await askConfirm(msg);
-    if (!ok) return;
+  const changeStatus = async (status: "open" | "closed") => {
+    if (!token || !detailId || statusSending) return;
+    if (status === "closed") {
+      const ok = await askConfirm("Вы уверены, что хотите закрыть это обращение?");
+      if (!ok) return;
+    }
+    setStatusSending(true);
+    setUploadError(null);
     try {
-      await api.deleteTicket(token, id);
-      setList((prev) => prev.filter((t) => t.id !== id));
-      if (detailId === id) {
-        setDetailId(null);
-        setDetail(null);
-      }
+      const updated = await api.updateTicketStatus(token, detailId, status);
+      setList((prev) =>
+        prev.map((t) =>
+          t.id === updated.id
+            ? { ...t, status: updated.status, closedAt: updated.closedAt ?? null, updatedAt: updated.updatedAt }
+            : t,
+        ),
+      );
+      setDetail((d: any) =>
+        d && d.id === updated.id
+          ? { ...d, status: updated.status, closedAt: updated.closedAt ?? null, updatedAt: updated.updatedAt }
+          : d,
+      );
       if (onRefreshUnread) onRefreshUnread();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Не удалось удалить обращение");
+      setUploadError(e instanceof Error ? e.message : "Не удалось изменить статус обращения");
+    } finally {
+      setStatusSending(false);
     }
   };
 
@@ -363,13 +377,15 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
             </div>
             {detail && (
               <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => handleDeleteTicket(detail.id, detail.subject)}
-                className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-                title="Удалить обращение"
+                variant="outline"
+                size="sm"
+                onClick={() => changeStatus(detail.status === "open" ? "closed" : "open")}
+                disabled={statusSending}
+                className="h-8 shrink-0 rounded-lg border-border px-2.5 text-[11px] font-semibold gap-1.5"
+                title={detail.status === "open" ? "Закрыть обращение" : "Возобновить обращение"}
               >
-                <Trash2 className="h-4 w-4" />
+                {statusSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : detail.status === "open" ? <CircleCheck className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                {detail.status === "open" ? "Закрыть" : "Возобновить"}
               </Button>
             )}
           </div>
@@ -425,7 +441,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
               <input
                 ref={replyInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp,image/gif"
                 multiple
                 className="hidden"
                 onChange={(e) => addFiles(setReplyFiles, replyFiles, e.target.files)}
@@ -464,6 +480,27 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
                 disabled={replySending || (!replyText.trim() && replyFiles.length === 0)}
               >
                 {replySending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 ml-0.5" />}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {detail?.status === "closed" && (
+          <div className="shrink-0 border-t border-black/5 dark:border-border bg-card px-4 py-3">
+            {uploadError && (
+              <p className="mb-1.5 text-[10px] text-destructive text-center font-semibold">{uploadError}</p>
+            )}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+              <p className="text-[11px] text-muted-foreground text-center">Обращение закрыто. Вы можете возобновить его при необходимости.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => changeStatus("open")}
+                disabled={statusSending}
+                className="h-8 shrink-0 rounded-lg gap-1.5 text-[11px] font-semibold"
+              >
+                {statusSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                Возобновить
               </Button>
             </div>
           </div>
@@ -508,7 +545,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
               <input
                 ref={newInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp,image/gif"
                 multiple
                 className="hidden"
                 onChange={(e) => addFiles(setNewFiles, newFiles, e.target.files)}
@@ -614,18 +651,6 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
                     {formatDate(t.updatedAt)}
                   </span>
                 </button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteTicket(t.id, t.subject);
-                  }}
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 opacity-80 group-hover:opacity-100"
-                  title="Удалить обращение"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
               </div>
             );
           })
