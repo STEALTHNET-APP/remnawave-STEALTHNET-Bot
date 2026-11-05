@@ -410,6 +410,7 @@ export function DashboardLayout() {
       {mobileSidebarVisible && (
         <>
           <div ref={sidebarOverlayRef} data-sidebar="overlay"
+            data-pwa-block-update
             className="fixed inset-0 z-[69] bg-card md:hidden" onClick={() => setMobileMenuOpen(false)} />
           <aside ref={sidebarRef} data-sidebar="panel"
             className="fixed left-0 top-0 bottom-0 z-[70] w-[290px] flex flex-col md:hidden bg-background border-r border-border overflow-hidden"

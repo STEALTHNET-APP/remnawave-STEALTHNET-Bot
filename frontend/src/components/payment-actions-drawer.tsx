@@ -148,7 +148,7 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
   // топбара/сайдбара, оказываясь визуально под ними.
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[80] bg-black/40" onClick={onClose} />
+      <div data-pwa-block-update className="fixed inset-0 z-[80] bg-black/40" onClick={onClose} />
       <aside
         className={cn(
           "fixed right-0 top-0 z-[81] h-screen w-full sm:w-[480px] max-w-full overflow-y-auto",

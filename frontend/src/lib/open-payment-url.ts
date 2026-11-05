@@ -18,13 +18,25 @@
  *     что ничего не произошло.
  */
 
+type TelegramInvoiceStatus = "paid" | "cancelled" | "failed" | "pending";
+
 type TelegramWebAppMinimal = {
   initData?: string;
   platform?: string;
-  openInvoice?: (url: string) => void;
+  openInvoice?: (url: string, callback?: (status: TelegramInvoiceStatus) => void) => void;
   openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
   openTelegramLink?: (url: string) => void;
 };
+
+const TELEGRAM_INVOICE_KEY = "stealthnet_telegram_invoice_open";
+
+function markTelegramInvoiceOpen(value: number | null): void {
+  try {
+    if (value === null) sessionStorage.removeItem(TELEGRAM_INVOICE_KEY);
+    else sessionStorage.setItem(TELEGRAM_INVOICE_KEY, String(value));
+  } catch {}
+  (window as { __stealthnet_telegram_invoice_opened_at?: number }).__stealthnet_telegram_invoice_opened_at = value ?? undefined;
+}
 
 /**
  * Возвращает `WebApp` ТОЛЬКО если пользователь действительно запущен из Telegram
@@ -77,7 +89,8 @@ export function preparePaymentRedirect(): PaymentRedirect {
       open: (url) => {
         try {
           if (/^https:\/\/t\.me\/\$[A-Za-z0-9_-]+$/.test(url) && typeof webApp.openInvoice === "function") {
-            webApp.openInvoice(url);
+            markTelegramInvoiceOpen(Date.now());
+            webApp.openInvoice(url, () => markTelegramInvoiceOpen(null));
           } else if (/^https:\/\/t\.me\//.test(url) && typeof webApp.openTelegramLink === "function") {
             webApp.openTelegramLink(url);
           } else {
