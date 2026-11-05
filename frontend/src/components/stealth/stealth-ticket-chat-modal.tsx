@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X as XIcon, RefreshCw, Trash2 } from "lucide-react";
+import { Send, Loader2, AlertCircle, Paperclip, ImageIcon, X as XIcon, RefreshCw, CheckCheck, RotateCcw } from "lucide-react";
 import { askConfirm } from "@/lib/confirm";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type TicketMessageDto } from "@/lib/api";
@@ -24,6 +24,7 @@ interface Props {
   open: boolean;
   ticketId: string | null;
   onClose: () => void;
+  onStatusChange?: () => void;
 }
 
 interface TicketDetail {
@@ -32,11 +33,13 @@ interface TicketDetail {
   status: string;
   createdAt: string;
   updatedAt: string;
+  closedAt?: string | null;
   messages: TicketMessageDto[];
 }
 
 const MAX_FILES = 5;
 const POLL_MS = 8000;
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 function fmtTime(iso: string): string {
   try {
@@ -45,7 +48,7 @@ function fmtTime(iso: string): string {
   } catch { return iso; }
 }
 
-export function StealthTicketChatModal({ open, ticketId, onClose }: Props) {
+export function StealthTicketChatModal({ open, ticketId, onClose, onStatusChange }: Props) {
   const { state } = useClientAuth();
   const [data, setData] = useState<TicketDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,6 +56,7 @@ export function StealthTicketChatModal({ open, ticketId, onClose }: Props) {
   const [reply, setReply] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const [statusSending, setStatusSending] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -100,7 +104,7 @@ export function StealthTicketChatModal({ open, ticketId, onClose }: Props) {
 
   function pickFiles(list: FileList | null) {
     if (!list) return;
-    const arr = Array.from(list).slice(0, MAX_FILES - files.length).filter((f) => f.type.startsWith("image/"));
+    const arr = Array.from(list).slice(0, MAX_FILES - files.length).filter((f) => ALLOWED_IMAGE_TYPES.has(f.type));
     setFiles((prev) => [...prev, ...arr].slice(0, MAX_FILES));
   }
 
@@ -126,15 +130,27 @@ export function StealthTicketChatModal({ open, ticketId, onClose }: Props) {
     }
   }
 
-  async function handleDelete() {
-    if (!state.token || !ticketId) return;
-    const ok = await askConfirm("Удалить это обращение навсегда? Все сообщения будут удалены.");
-    if (!ok) return;
+  async function toggleStatus() {
+    if (!state.token || !ticketId || !data || statusSending) return;
+    const next = data.status === "closed" ? "open" : "closed";
+    if (next === "closed") {
+      const ok = await askConfirm("Закрыть это обращение? Диалог будет завершён и перемещён в историю. При необходимости вы сможете возобновить его.");
+      if (!ok) return;
+    }
+    setStatusSending(true);
+    setErr(null);
     try {
-      await api.deleteTicket(state.token, ticketId);
-      onClose();
+      const updated = await api.updateTicketStatus(state.token, ticketId, next);
+      setData((prev) =>
+        prev
+          ? { ...prev, status: updated.status, closedAt: updated.closedAt ?? null, updatedAt: updated.updatedAt }
+          : prev,
+      );
+      onStatusChange?.();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Не удалось удалить обращение");
+      setErr(e instanceof Error ? e.message : "Не удалось изменить статус обращения");
+    } finally {
+      setStatusSending(false);
     }
   }
 
@@ -143,23 +159,26 @@ export function StealthTicketChatModal({ open, ticketId, onClose }: Props) {
 
   return (
     <StealthModal open={open} onClose={onClose} title={subject} maxWidth="32rem">
-      {/* Status pill & Delete button */}
+      {/* Status pill & status action */}
       {data && (
-        <div className="-mt-2 mb-3 flex items-center justify-between">
-          <span className={cn(
-            "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-            isClosed ? "bg-zinc-800/60 text-zinc-400 border-white/10" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
-          )}>
-            {isClosed ? "Закрыт" : "Открыт"}
-          </span>
+        <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/[0.06]">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-400">Статус:</span>
+            <span className={cn(
+              "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+              isClosed ? "bg-zinc-800/60 text-zinc-400 border-white/10" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
+            )}>
+              {isClosed ? "Закрыт" : "Открыт"}
+            </span>
+          </div>
           <button
             type="button"
-            onClick={handleDelete}
-            className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-500/10 transition"
-            title="Удалить обращение"
+            onClick={toggleStatus}
+            disabled={statusSending}
+            className="h-8 px-3 rounded-xl bg-zinc-800/80 hover:bg-zinc-700/80 border border-white/10 text-zinc-200 hover:text-white text-xs font-medium inline-flex items-center gap-1.5 transition active:scale-[0.98] disabled:opacity-50"
           >
-            <Trash2 className="h-3.5 w-3.5" />
-            Удалить
+            {statusSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : isClosed ? <RotateCcw className="h-3.5 w-3.5" /> : <CheckCheck className="h-3.5 w-3.5 text-zinc-400" />}
+            <span>{isClosed ? "Возобновить обращение" : "Закрыть обращение"}</span>
           </button>
         </div>
       )}
@@ -232,8 +251,17 @@ export function StealthTicketChatModal({ open, ticketId, onClose }: Props) {
 
       {/* Reply form */}
       {isClosed ? (
-        <div className="rounded-2xl border border-white/[0.06] bg-zinc-950/40 p-3 text-xs text-zinc-400 text-center">
-          Тикет закрыт. Напишите новое обращение если нужна дополнительная помощь.
+        <div className="rounded-2xl border border-white/[0.06] bg-zinc-950/40 p-3 space-y-2.5 text-center">
+          <p className="text-xs text-zinc-400">Обращение закрыто. Чтобы продолжить переписку, возобновите его.</p>
+          <button
+            type="button"
+            onClick={toggleStatus}
+            disabled={statusSending}
+            className="mx-auto h-10 px-4 rounded-xl bg-zinc-800/60 border border-white/10 text-zinc-200 text-xs font-semibold hover:bg-zinc-800 transition disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            {statusSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+            Возобновить обращение
+          </button>
         </div>
       ) : (
         <div className="space-y-2">
@@ -259,7 +287,7 @@ export function StealthTicketChatModal({ open, ticketId, onClose }: Props) {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/webp,image/gif"
               multiple
               className="hidden"
               onChange={(e) => pickFiles(e.target.files)}

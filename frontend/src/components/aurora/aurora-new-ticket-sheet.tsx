@@ -11,6 +11,7 @@ interface Props {
 }
 
 const MAX_FILES = 5;
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const MAX_BODY = 4000;
 const MAX_SUBJECT = 500;
 
@@ -37,7 +38,7 @@ export function AuroraNewTicketSheet({ open, onClose, onCreated }: Props) {
     if (!list) return;
     const arr = Array.from(list)
       .slice(0, MAX_FILES - files.length)
-      .filter((f) => f.type.startsWith("image/"));
+      .filter((f) => ALLOWED_IMAGE_TYPES.has(f.type));
     setFiles((prev) => [...prev, ...arr].slice(0, MAX_FILES));
   }
 
@@ -138,7 +139,7 @@ export function AuroraNewTicketSheet({ open, onClose, onCreated }: Props) {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp,image/gif"
           multiple
           hidden
           onChange={(e) => {
