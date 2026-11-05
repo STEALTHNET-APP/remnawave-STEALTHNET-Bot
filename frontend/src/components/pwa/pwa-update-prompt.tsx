@@ -1,22 +1,101 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { applyWorkerUpdate } from "./pwa-apply-update";
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, CheckCircle2, RefreshCw, Clock } from "lucide-react";
 
 const AUTO_RELOAD_KEY = "pwa_last_auto_reload";
 const SNOOZE_KEY = "pwa_snooze_until";
+const TELEGRAM_INVOICE_KEY = "stealthnet_telegram_invoice_open";
 
+const AUTO_RELOAD_COOLDOWN_MS = 5 * 60 * 1000;
+const SNOOZE_MS = 15 * 60 * 1000;
+const EDIT_GRACE_MS = 15 * 1000;
+const COLD_START_MS = 15 * 1000;
+const LONG_SESSION_MS = 2 * 60 * 1000;
+const TELEGRAM_INVOICE_MAX_AGE_MS = 15 * 60 * 1000;
 
-export function isUserActivelyEditing(): boolean {
-  const overlays = document.querySelectorAll('[role="dialog"], dialog[open], [aria-modal="true"], .au-sheet-overlay');
-  if (Array.from(overlays).some(element => element.getClientRects().length > 0)) return true;
-  const active = document.activeElement;
-  return active instanceof HTMLElement && (active.matches("input, textarea, select") || active.isContentEditable);
+const PAYMENT_PARAM_NAMES = [
+  "payment", "paymentid", "payment_id",
+  "invoice", "invoiceid", "invoice_id",
+  "order", "orderid", "order_id",
+  "yookassa", "heleket", "rollypay", "paritypay",
+  "lava", "lavatop", "overpay", "yoomoney_form",
+  "cryptopay", "stars", "redirect",
+];
+const PAYMENT_PATH_PREFIXES = [
+  "/cabinet/payment-wait",
+  "/cabinet/yoomoney-pay",
+  "/cabinet/payment",
+  "/cabinet/subscribe",
+];
+const BLOCKED_PATH_PREFIXES = [
+  "/cabinet/custom-build",
+  "/cabinet/onboarding",
+  "/admin/settings",
+  "/admin/backup",
+  "/admin/tickets",
+  "/admin/landing-editor",
+  "/admin/tour-constructor",
+];
+const OVERLAY_SELECTORS = [
+  '[role="dialog"]',
+  '[role="alertdialog"]',
+  "dialog[open]",
+  '[aria-modal="true"]',
+  ".au-sheet-overlay",
+  ".app-viewport-overlay",
+  ".admin-command",
+  ".cabinet-floating-chat",
+  ".cabinet-ticket-conversation",
+  '[data-tour="floating-chat"]',
+  "[data-pwa-block-update]",
+];
+const editableSelector = 'input:not([type=hidden]), textarea, select, [contenteditable="true"], [contenteditable=""]';
+
+export type SafeLocation = {
+  pathname: string;
+  search?: string;
+  hash?: string;
+};
+
+function readSessionTime(key: string): number {
+  try {
+    return Number(sessionStorage.getItem(key)) || 0;
+  } catch {
+    return 0;
+  }
 }
 
-const editableSelector = 'input:not([type=hidden]), textarea, select, [contenteditable="true"], [contenteditable=""]';
+function matchesPath(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
+export function hasPaymentSearchParams(search = ""): boolean {
+  if (!search) return false;
+  const params = new URLSearchParams(search.startsWith("?") ? search : `?${search}`);
+  return Array.from(params.entries()).some(([key, value]) => {
+    const normalizedKey = key.toLowerCase();
+    const normalizedValue = value.toLowerCase();
+    return PAYMENT_PARAM_NAMES.some(name => normalizedKey.includes(name) || normalizedValue.includes(name));
+  });
+}
+
+export function isSafeUrlForAutoUpdate(location: SafeLocation): boolean {
+  const pathname = location.pathname || "/";
+  if (PAYMENT_PATH_PREFIXES.some(prefix => matchesPath(pathname, prefix))) return false;
+  if (BLOCKED_PATH_PREFIXES.some(prefix => matchesPath(pathname, prefix))) return false;
+  return !hasPaymentSearchParams(location.search || "");
+}
+
+export function isTelegramInvoiceOpen(now = Date.now()): boolean {
+  if (typeof window === "undefined") return false;
+  const globalOpenedAt = (window as { __stealthnet_telegram_invoice_opened_at?: number }).__stealthnet_telegram_invoice_opened_at || 0;
+  const openedAt = Math.max(globalOpenedAt, readSessionTime(TELEGRAM_INVOICE_KEY));
+  return openedAt > 0 && now - openedAt < TELEGRAM_INVOICE_MAX_AGE_MS;
+}
 
 function editableValue(element: Element): string {
   if (element instanceof HTMLInputElement) {
@@ -64,89 +143,80 @@ function createEditTracker() {
   };
 }
 
+function isVisible(element: Element): boolean {
+  return element.getClientRects().length > 0;
+}
+
+export function hasOpenOverlay(): boolean {
+  if (typeof document === "undefined") return false;
+  return OVERLAY_SELECTORS.some(selector =>
+    Array.from(document.querySelectorAll(selector)).some(isVisible),
+  );
+}
+
+export function hasFileUploadInProgress(): boolean {
+  if (typeof document === "undefined") return false;
+  return Array.from(document.querySelectorAll<HTMLInputElement>('input[type="file"]')).some(input => (input.files?.length ?? 0) > 0);
+}
+
 export function hasUnsavedFormInput(): boolean {
+  if (typeof document === "undefined") return false;
   return Array.from(document.querySelectorAll(editableSelector)).some(element => {
     const initial = defaultEditableValue(element);
     return initial !== undefined && editableValue(element) !== initial;
   });
 }
 
-export type SafeLocation = {
-  pathname: string;
-  search?: string;
-  hash?: string;
+export function isUserActivelyEditing(now = Date.now(), lastEditTime = 0): boolean {
+  if (typeof document !== "undefined") {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && (active.matches("input, textarea, select") || active.isContentEditable)) return true;
+  }
+  return now - lastEditTime < EDIT_GRACE_MS;
+}
+
+export type UpdateSafetyOptions = {
+  location?: SafeLocation;
+  now?: number;
+  lastEditTime?: number;
+  hasTrackedChanges?: boolean;
 };
 
-export function isSafeUrlForAutoUpdate(location: SafeLocation): boolean {
-  const pathname = location.pathname || "/";
-  const search = location.search || "";
-
-  const paymentKeywords = [
-    "payment=", "invoice=", "order=", "yookassa=", "heleket=",
-    "rollypay=", "paritypay=", "lava=", "lavatop=", "overpay=",
-    "yoomoney_form=", "cryptopay=",
-  ];
-  if (search && paymentKeywords.some((key) => search.includes(key))) {
-    return false;
-  }
-  const unsafePaths = [
-    "/cabinet/payment-wait",
-    "/cabinet/yoomoney-pay",
-    "/cabinet/custom-build",
-    "/cabinet/onboarding",
-    "/admin/settings",
-    "/admin/backup",
-    "/admin/tickets",
-    "/admin/landing-editor",
-    "/admin/tour-constructor",
-  ];
-  if (unsafePaths.some((p) => pathname.startsWith(p))) {
-    return false;
-  }
-
-  const safeClientPaths = [
-    "/",
-    "/cabinet",
-    "/cabinet/dashboard",
-    "/cabinet/referral",
-    "/cabinet/documents/privacy",
-    "/cabinet/documents/offer",
-    "/cabinet/documents/refund",
-  ];
-  if (safeClientPaths.includes(pathname) || pathname.startsWith("/cabinet/menu/")) {
-    return true;
-  }
-
-  const safeAdminPaths = [
-    "/admin",
-    "/admin/analytics",
-    "/admin/sales-report",
-    "/admin/business-analytics",
-    "/admin/referral-network",
-    "/admin/diagnostics",
-  ];
-  if (safeAdminPaths.includes(pathname)) {
-    return true;
-  }
-
-  return false;
+export function canSafelyApplyUpdate(options: UpdateSafetyOptions = {}): boolean {
+  const now = options.now ?? Date.now();
+  const location = options.location ?? (typeof window !== "undefined" ? window.location : undefined);
+  if (!location) return false;
+  if (isTelegramInvoiceOpen(now)) return false;
+  if (isUserActivelyEditing(now, options.lastEditTime ?? 0)) return false;
+  if (options.hasTrackedChanges || hasUnsavedFormInput()) return false;
+  if (hasOpenOverlay()) return false;
+  if (hasFileUploadInProgress()) return false;
+  if (!isSafeUrlForAutoUpdate(location)) return false;
+  if (now < readSessionTime(SNOOZE_KEY)) return false;
+  if (now - readSessionTime(AUTO_RELOAD_KEY) < AUTO_RELOAD_COOLDOWN_MS) return false;
+  return true;
 }
 
 export function PwaUpdatePrompt() {
+  const location = useLocation();
   const [registration, setRegistration] = useState<ServiceWorkerRegistration>();
   const [autoUpdating, setAutoUpdating] = useState(false);
   const [updateError, setUpdateError] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSnoozed, setIsSnoozed] = useState(false);
+  const [waitingWorker, setWaitingWorker] = useState(false);
+  const [promptVisible, setPromptVisible] = useState(false);
+  const [snoozeUntil, setSnoozeUntil] = useState(() => readSessionTime(SNOOZE_KEY));
+  const [snoozed, setSnoozed] = useState(() => readSessionTime(SNOOZE_KEY) > Date.now());
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [offlineVisible, setOfflineVisible] = useState(false);
   const updateTriggeredRef = useRef(false);
+  const applyingRef = useRef(false);
   const lastEditTime = useRef(0);
   const editTracker = useRef(createEditTracker());
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const autoBlocked = useRef(false);
-  const lastActivity = useRef(Date.now());
-  const snoozeUntil = useRef(0);
-  const applyUpdateRef = useRef<() => void>(() => {});
+  const coldStart = useRef(true);
+  const availableAt = useRef(0);
+  const routeChangedAt = useRef(Date.now());
+  const routeKey = useRef(location.key);
 
   const {
     offlineReady: [offlineReady, setOfflineReady],
@@ -157,60 +227,17 @@ export function PwaUpdatePrompt() {
     onRegisterError(err) { console.warn("[PWA] SW registration failed:", err); },
   });
 
-  useEffect(() => {
-    try { snoozeUntil.current = Number(sessionStorage.getItem(SNOOZE_KEY)) || 0; } catch {}
-    const activity = () => { lastActivity.current = Date.now(); };
-    const edit = (event: Event) => {
-      editTracker.current.edit(event);
-      lastEditTime.current = Date.now();
-      activity();
-    };
-    const focus = (event: Event) => editTracker.current.focus(event);
-    document.addEventListener("focusin", focus, true);
-    for (const event of ["pointerdown", "touchstart", "keydown", "scroll"]) window.addEventListener(event, activity, true);
-    for (const event of ["input", "change"]) document.addEventListener(event, edit, true);
-    return () => {
-      document.removeEventListener("focusin", focus, true);
-      for (const event of ["pointerdown", "touchstart", "keydown", "scroll"]) window.removeEventListener(event, activity, true);
-      for (const event of ["input", "change"]) document.removeEventListener(event, edit, true);
-    };
-  }, []);
+  const hasPendingUpdate = needRefresh || waitingWorker || Boolean(registration?.waiting);
 
-  useEffect(() => {
-    if (!registration && typeof navigator !== "undefined" && "serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistration().then((reg) => {
-        if (reg) setRegistration(reg);
-      }).catch(() => {});
-    }
-  }, [registration]);
+  const canAutoApply = useCallback((target?: SafeLocation) => canSafelyApplyUpdate({
+    location: target,
+    lastEditTime: lastEditTime.current,
+    hasTrackedChanges: editTracker.current.hasChanges(),
+  }), []);
 
-  useEffect(() => {
-    if (!registration) return;
-    const check = () => {
-      if (!registration.installing && navigator.onLine && document.visibilityState === "visible") {
-        registration.update().catch(() => {});
-      }
-    };
-    const interval = setInterval(check, 5 * 60 * 1000);
-    document.addEventListener("visibilitychange", check);
-    window.addEventListener("focus", check);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", check);
-      window.removeEventListener("focus", check);
-    };
-  }, [registration]);
-
-  const [offlineVisible, setOfflineVisible] = useState(false);
-  useEffect(() => {
-    if (!offlineReady) return;
-    setOfflineVisible(true);
-    const timer = setTimeout(() => { setOfflineVisible(false); setOfflineReady(false); }, 4500);
-    return () => clearTimeout(timer);
-  }, [offlineReady, setOfflineReady]);
-
-  const doApplyUpdate = async () => {
-    if (updateTriggeredRef.current) return;
+  const doApplyUpdate = useCallback(async () => {
+    if (updateTriggeredRef.current || applyingRef.current) return;
+    applyingRef.current = true;
     autoBlocked.current = false;
     updateTriggeredRef.current = true;
     setAutoUpdating(true);
@@ -229,63 +256,166 @@ export function PwaUpdatePrompt() {
       autoBlocked.current = true;
       setAutoUpdating(false);
       setUpdateError(true);
+      setPromptVisible(true);
+    } finally {
+      applyingRef.current = false;
     }
-  };
-
-  const applyUpdate = async (manual = false) => {
-    if (manual) {
-      const isEditingNow = isUserActivelyEditing() || editTracker.current.hasChanges() || hasUnsavedFormInput() || Date.now() - lastEditTime.current < 15000;
-      if (isEditingNow) setConfirmOpen(true);
-      else void doApplyUpdate();
-      return;
-    }
-    await doApplyUpdate();
-  };
-
-  applyUpdateRef.current = () => { void applyUpdate(); };
-
-  const snooze = () => {
-    snoozeUntil.current = Date.now() + 10 * 60 * 1000;
-    try { sessionStorage.setItem(SNOOZE_KEY, String(snoozeUntil.current)); } catch {}
-    setIsSnoozed(true);
-    setCountdown(null);
-  };
+  }, [registration, updateServiceWorker]);
 
   useEffect(() => {
-    if (!needRefresh) return;
-    let seconds: number | null = null;
-    const tick = () => {
-      const now = Date.now();
-      const snoozed = now < snoozeUntil.current;
-      setIsSnoozed(snoozed);
-      const editing = isUserActivelyEditing() || editTracker.current.hasChanges() || hasUnsavedFormInput() || now - lastEditTime.current < 15000;
-      setIsEditing(editing);
-      const safePage = typeof window !== "undefined" && isSafeUrlForAutoUpdate(window.location);
-      let previousReload = now;
-      try { previousReload = Number(sessionStorage.getItem(AUTO_RELOAD_KEY)) || 0; } catch {}
-      if (
-        autoBlocked.current ||
-        snoozed ||
-        editing ||
-        !safePage ||
-        document.visibilityState !== "visible" ||
-        !navigator.onLine ||
-        now - lastActivity.current < 7000 ||
-        now - previousReload < 180000
-      ) {
-        seconds = null;
-        setCountdown(null);
+    const stopColdStart = () => { coldStart.current = false; };
+    const timer = window.setTimeout(stopColdStart, COLD_START_MS);
+    for (const event of ["pointerdown", "touchstart", "keydown"]) window.addEventListener(event, stopColdStart, true);
+    return () => {
+      window.clearTimeout(timer);
+      for (const event of ["pointerdown", "touchstart", "keydown"]) window.removeEventListener(event, stopColdStart, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    const edit = (event: Event) => {
+      editTracker.current.edit(event);
+      lastEditTime.current = Date.now();
+    };
+    const focus = (event: Event) => editTracker.current.focus(event);
+    document.addEventListener("focusin", focus, true);
+    for (const event of ["input", "change"]) document.addEventListener(event, edit, true);
+    return () => {
+      document.removeEventListener("focusin", focus, true);
+      for (const event of ["input", "change"]) document.removeEventListener(event, edit, true);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!registration && typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        if (reg) setRegistration(reg);
+      }).catch(() => {});
+    }
+  }, [registration]);
+
+  useEffect(() => {
+    if (!registration) return;
+    const refreshWaiting = () => setWaitingWorker(Boolean(registration.waiting));
+    const onUpdateFound = () => {
+      const worker = registration.installing;
+      if (!worker) return;
+      worker.addEventListener("statechange", refreshWaiting);
+    };
+    refreshWaiting();
+    registration.addEventListener("updatefound", onUpdateFound);
+    const waitingPoll = window.setInterval(refreshWaiting, 30 * 1000);
+    const check = () => {
+      if (!registration.installing && navigator.onLine && document.visibilityState === "visible") {
+        registration.update().catch(() => {});
+      }
+    };
+    const interval = window.setInterval(check, 5 * 60 * 1000);
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    return () => {
+      registration.removeEventListener("updatefound", onUpdateFound);
+      window.clearInterval(waitingPoll);
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("focus", check);
+    };
+  }, [registration]);
+
+  useEffect(() => {
+    if (!offlineReady) return;
+    setOfflineVisible(true);
+    const timer = window.setTimeout(() => { setOfflineVisible(false); setOfflineReady(false); }, 4500);
+    return () => window.clearTimeout(timer);
+  }, [offlineReady, setOfflineReady]);
+
+  useEffect(() => {
+    if (!snoozed) return;
+    const remaining = snoozeUntil - Date.now();
+    if (remaining <= 0) {
+      setSnoozed(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setSnoozed(false), remaining);
+    return () => window.clearTimeout(timer);
+  }, [snoozed, snoozeUntil]);
+
+  useEffect(() => {
+    if (!hasPendingUpdate) {
+      availableAt.current = 0;
+      updateTriggeredRef.current = false;
+      autoBlocked.current = false;
+      setPromptVisible(false);
+      setUpdateError(false);
+      setAutoUpdating(false);
+      return;
+    }
+    if (!availableAt.current) availableAt.current = Date.now();
+    if (snoozed || !isSafeUrlForAutoUpdate(location)) {
+      setPromptVisible(false);
+      return;
+    }
+    const startedAt = Math.max(availableAt.current, routeChangedAt.current);
+    const remaining = Math.max(0, LONG_SESSION_MS - (Date.now() - startedAt));
+    if (remaining === 0) {
+      setPromptVisible(true);
+      return;
+    }
+    setPromptVisible(false);
+    const timer = window.setTimeout(() => setPromptVisible(true), remaining);
+    return () => window.clearTimeout(timer);
+  }, [hasPendingUpdate, snoozed, location]);
+
+  useEffect(() => {
+    if (!hasPendingUpdate) return;
+    if (!coldStart.current || autoBlocked.current) return;
+    if (!canAutoApply(location)) return;
+    void doApplyUpdate();
+  }, [hasPendingUpdate, location, canAutoApply, doApplyUpdate]);
+
+  useEffect(() => {
+    const previousKey = routeKey.current;
+    if (previousKey === location.key) return;
+    routeKey.current = location.key;
+    routeChangedAt.current = Date.now();
+    if (!hasPendingUpdate || autoBlocked.current) return;
+    if (!canAutoApply(location)) return;
+    void doApplyUpdate();
+  }, [location, hasPendingUpdate, canAutoApply, doApplyUpdate]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "hidden") return;
+      if (!hasPendingUpdate || autoBlocked.current || !navigator.onLine) return;
+      if (!canAutoApply()) return;
+      void doApplyUpdate();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [hasPendingUpdate, canAutoApply, doApplyUpdate]);
+
+  const applyUpdate = (manual = false) => {
+    if (manual) {
+      const editing = isUserActivelyEditing(Date.now(), lastEditTime.current)
+        || editTracker.current.hasChanges()
+        || hasUnsavedFormInput();
+      if (editing) {
+        setConfirmOpen(true);
         return;
       }
-      if (updateTriggeredRef.current) return;
-      seconds = seconds === null ? 5 : seconds - 1;
-      setCountdown(seconds);
-      if (seconds <= 0) applyUpdateRef.current();
-    };
-    tick();
-    const interval = setInterval(tick, 1000);
-    return () => clearInterval(interval);
-  }, [needRefresh]);
+    }
+    void doApplyUpdate();
+  };
+
+  const snooze = () => {
+    const until = Date.now() + SNOOZE_MS;
+    try {
+      sessionStorage.setItem(SNOOZE_KEY, String(until));
+    } catch {}
+    setSnoozeUntil(until);
+    setSnoozed(true);
+    setPromptVisible(false);
+  };
 
   return (
     <>
@@ -302,7 +432,7 @@ export function PwaUpdatePrompt() {
       </DialogContent>
     </Dialog>
     <AnimatePresence>
-      {needRefresh && !isSnoozed && (
+      {hasPendingUpdate && !snoozed && promptVisible && (
         <motion.div
           key="update"
           initial={{ opacity: 0, y: 24, scale: 0.95 }}
@@ -313,40 +443,34 @@ export function PwaUpdatePrompt() {
         >
           <div className="rounded-xl border border-border bg-card p-4 flex items-start gap-3 shadow-lg shadow-black/20">
             <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
-              <RefreshCw className="h-4 w-4 animate-spin" />
+              <RefreshCw className={`h-4 w-4 ${autoUpdating ? "animate-spin" : ""}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Доступно обновление</p>
+              <p className="text-sm font-semibold">Доступна новая версия</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {autoUpdating
                   ? "Применяем обновление…"
                   : updateError
                     ? "Не удалось обновить. Попробуйте ещё раз."
-                    : isEditing
-                      ? "Завершите работу и сохраните изменения перед обновлением."
-                      : countdown !== null && countdown > 0
-                        ? `Применяем обновление (${countdown}с)…`
-                        : "Появилась новая версия. Можно обновить страницу, когда вам удобно."}
+                    : "Обновите приложение, когда вам удобно."}
               </p>
               <div className="flex flex-wrap gap-2 mt-3">
                 <button
-                  onClick={() => void applyUpdate(true)}
+                  onClick={() => applyUpdate(true)}
                   disabled={autoUpdating}
                   className="h-8 px-3 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity flex items-center gap-1.5"
                 >
                   <RefreshCw className="h-3 w-3" />
                   Обновить сейчас
                 </button>
-                {(
-                  <button
-                    onClick={snooze}
-                    disabled={autoUpdating}
-                    className="h-8 px-2.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors flex items-center gap-1"
-                  >
-                    <Clock className="h-3 w-3" />
-                    Отложить
-                  </button>
-                )}
+                <button
+                  onClick={snooze}
+                  disabled={autoUpdating}
+                  className="h-8 px-2.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/5 transition-colors flex items-center gap-1"
+                >
+                  <Clock className="h-3 w-3" />
+                  Позже
+                </button>
               </div>
             </div>
             <button

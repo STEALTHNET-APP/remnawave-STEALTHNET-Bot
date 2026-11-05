@@ -140,6 +140,7 @@ export function TourTooltip({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              data-pwa-block-update
               className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 p-4"
               onClick={() => setIsVideoOpen(false)}
             >
