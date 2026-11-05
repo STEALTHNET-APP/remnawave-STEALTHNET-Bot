@@ -2,7 +2,7 @@ import { SupportMessage } from "@/components/support-message";
 import "./cabinet-support.css";
 import { AuroraTickets } from "./aurora/aurora-tickets";
 import { useEffect, useRef, useState } from "react";
-import { MessageSquarePlus, Inbox, Loader2, Send, ArrowLeft, CircleDot, CircleCheck, Paperclip, X as XIcon, ImageIcon, Trash2 } from "lucide-react";
+import { MessageSquarePlus, Inbox, Loader2, Send, ArrowLeft, CircleDot, CircleCheck, Paperclip, X as XIcon, ImageIcon, CheckCircle, RotateCcw, History } from "lucide-react";
 import { askConfirm } from "@/lib/confirm";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type TicketAttachmentDto, type TicketMessageDto } from "@/lib/api";
@@ -15,13 +15,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-type TicketItem = { id: string; subject: string; status: string; createdAt: string; updatedAt: string };
+type TicketItem = { id: string; subject: string; status: string; createdAt: string; updatedAt: string; closedAt?: string | null };
 type TicketMessage = TicketMessageDto;
 
 // Лимиты должны совпадать с backend (uploadTicketAttachment).
 const MAX_FILES = 5;
 const MAX_FILE_MB = 10;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 /** Мелкий компонент-галерея: превью вложений внутри bubble сообщения. */
 function AttachmentsGallery({ items, align }: { items: TicketAttachmentDto[]; align: "left" | "right" }) {
@@ -68,8 +69,11 @@ function ClassicTicketsPage() {
     messages: TicketMessage[];
     createdAt: string;
     updatedAt: string;
+    closedAt?: string | null;
   } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [tab, setTab] = useState<"active" | "history">("active");
+  const [statusSending, setStatusSending] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [replySending, setReplySending] = useState(false);
   const [replyFiles, setReplyFiles] = useState<File[]>([]);
@@ -96,8 +100,8 @@ function ClassicTicketsPage() {
         setUploadError(`Не больше ${MAX_FILES} файлов`);
         break;
       }
-      if (!f.type.startsWith("image/")) {
-        setUploadError("Можно прикладывать только изображения");
+      if (!ALLOWED_IMAGE_TYPES.has(f.type)) {
+        setUploadError("Можно прикладывать только PNG, JPG, WEBP или GIF");
         continue;
       }
       if (f.size > MAX_FILE_BYTES) {
@@ -180,9 +184,9 @@ function ClassicTicketsPage() {
     api
       .createTicket(token, { subject: newSubject.trim(), message: newMessage.trim(), files: newFiles })
       .then((t) => {
-        setList((prev) => [{ id: t.id, subject: t.subject, status: t.status, createdAt: t.createdAt, updatedAt: t.updatedAt }, ...prev]);
+        setList((prev) => [{ id: t.id, subject: t.subject, status: t.status, createdAt: t.createdAt, updatedAt: t.updatedAt, closedAt: t.closedAt ?? null }, ...prev]);
         setDetailId(t.id);
-        setDetail({ id: t.id, subject: t.subject, status: t.status, messages: t.messages, createdAt: t.createdAt, updatedAt: t.updatedAt });
+        setDetail({ id: t.id, subject: t.subject, status: t.status, messages: t.messages, createdAt: t.createdAt, updatedAt: t.updatedAt, closedAt: t.closedAt ?? null });
         setShowNewForm(false);
         setNewSubject("");
         setNewMessage("");
@@ -193,20 +197,32 @@ function ClassicTicketsPage() {
       .finally(() => setCreateSending(false));
   };
 
-  const deleteCurrentTicket = async (id?: string) => {
-    const targetId = id || detailId;
-    if (!token || !targetId) return;
-    const ok = await askConfirm("Удалить это обращение навсегда? Все сообщения будут удалены.");
-    if (!ok) return;
+  const changeTicketStatus = async (status: "open" | "closed") => {
+    if (!token || !detail || statusSending) return;
+    if (status === "closed") {
+      const ok = await askConfirm("Вы уверены, что хотите закрыть это обращение?");
+      if (!ok) return;
+    }
+    setStatusSending(true);
+    setUploadError(null);
     try {
-      await api.deleteTicket(token, targetId);
-      setList((prev) => prev.filter((t) => t.id !== targetId));
-      if (detailId === targetId) {
-        setDetailId(null);
-        setDetail(null);
-      }
+      const updated = await api.updateTicketStatus(token, detail.id, status);
+      setList((prev) =>
+        prev.map((t) =>
+          t.id === updated.id
+            ? { ...t, status: updated.status, closedAt: updated.closedAt ?? null, updatedAt: updated.updatedAt }
+            : t,
+        ),
+      );
+      setDetail((d) =>
+        d && d.id === updated.id
+          ? { ...d, status: updated.status, closedAt: updated.closedAt ?? null, updatedAt: updated.updatedAt }
+          : d,
+      );
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Не удалось удалить обращение");
+      setUploadError(e instanceof Error ? e.message : "Не удалось изменить статус обращения");
+    } finally {
+      setStatusSending(false);
     }
   };
 
@@ -222,6 +238,10 @@ function ClassicTicketsPage() {
       return s;
     }
   };
+
+  const openTickets = list.filter((t) => t.status === "open");
+  const closedTickets = list.filter((t) => t.status !== "open");
+  const visibleTickets = tab === "active" ? openTickets : closedTickets;
 
   if (loading && list.length === 0) {
     return (
@@ -263,16 +283,29 @@ function ClassicTicketsPage() {
               </div>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => deleteCurrentTicket(detail.id)}
-            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
-            aria-label="Удалить обращение"
-            title="Удалить обращение"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {detail.status === "open" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => changeTicketStatus("closed")}
+              disabled={statusSending}
+              className="shrink-0 rounded-xl gap-1.5 text-xs font-semibold"
+            >
+              {statusSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+              <span className="hidden sm:inline">Закрыть обращение</span>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => changeTicketStatus("open")}
+              disabled={statusSending}
+              className="shrink-0 rounded-xl gap-1.5 text-xs font-semibold"
+            >
+              {statusSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+              <span className="hidden sm:inline">Возобновить</span>
+            </Button>
+          )}
         </div>
 
         <div className="support-message-list flex-1 overflow-y-auto">
@@ -318,7 +351,7 @@ function ClassicTicketsPage() {
               <input
                 ref={replyInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp,image/gif"
                 multiple
                 className="hidden"
                 onChange={(e) => addFiles(setReplyFiles, replyFiles, e.target.files)}
@@ -360,6 +393,27 @@ function ClassicTicketsPage() {
               </Button>
             </div>
             <p className="hidden sm:block text-center text-[10px] text-muted-foreground mt-2 font-medium">Enter — отправить · Shift+Enter — перенос · 📎 — до {MAX_FILES} фото</p>
+          </div>
+        )}
+
+        {detail.status === "closed" && (
+          <div className="shrink-0 border-t border-border/50 bg-background/30 backdrop-blur-md px-4 sm:px-6 py-4">
+            {uploadError && (
+              <p className="mb-2 text-[11px] text-destructive font-semibold text-center">{uploadError}</p>
+            )}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <p className="text-xs font-medium text-muted-foreground text-center">Обращение закрыто. Вы можете возобновить его при необходимости.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => changeTicketStatus("open")}
+                disabled={statusSending}
+                className="rounded-xl gap-1.5 text-xs font-semibold shrink-0"
+              >
+                {statusSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                Возобновить обращение
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -409,7 +463,7 @@ function ClassicTicketsPage() {
                   placeholder="О чем пойдет речь?"
                   value={newSubject}
                   onChange={(e) => setNewSubject(e.target.value)}
-                  maxLength={500}
+                  maxLength={200}
                   className="rounded-2xl h-12 bg-background/50 border-white/10 dark:border-white/5 shadow-inner font-medium text-sm px-4"
                 />
               </div>
@@ -421,6 +475,7 @@ function ClassicTicketsPage() {
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   rows={5}
+                  maxLength={5000}
                   className="resize-none rounded-2xl bg-background/50 border-white/10 dark:border-white/5 shadow-inner p-4 font-medium text-sm"
                 />
               </div>
@@ -430,7 +485,7 @@ function ClassicTicketsPage() {
                   <input
                     ref={newInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
                     multiple
                     className="hidden"
                     onChange={(e) => addFiles(setNewFiles, newFiles, e.target.files)}
@@ -495,25 +550,76 @@ function ClassicTicketsPage() {
         </div>
       )}
 
-      {!showNewForm && list.length === 0 ? (
+      {!showNewForm && (
+        <div className="inline-flex items-center gap-1 rounded-2xl border border-white/10 dark:border-white/5 bg-background/40 p-1 backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => setTab("active")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-colors",
+              tab === "active" ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <CircleDot className="h-3.5 w-3.5" />
+            Активные ({openTickets.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("history")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-colors",
+              tab === "history" ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <History className="h-3.5 w-3.5" />
+            История ({closedTickets.length})
+          </button>
+        </div>
+      )}
+
+      {!showNewForm && visibleTickets.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 px-4 rounded-[2.5rem] border border-dashed border-border/60 bg-card/20 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-primary/10 text-primary mb-4 border border-primary/20">
             <Inbox className="h-8 w-8 opacity-80" />
           </div>
-          <h3 className="text-lg font-bold text-foreground">У вас нет обращений</h3>
-          <p className="text-sm text-muted-foreground mt-1 max-w-sm font-medium">Здесь будет отображаться история ваших тикетов в службу поддержки.</p>
+          <h3 className="text-lg font-bold text-foreground">
+            {tab === "active" ? "Нет активных обращений" : "История обращений пуста"}
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1 max-w-sm font-medium">
+            {tab === "active"
+              ? "Если что-то не работает или есть вопрос — напишите нам, поможем."
+              : "Здесь появятся закрытые обращения."}
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
+            {tab === "active" ? (
+              <Button onClick={() => setShowNewForm(true)} className="rounded-xl shadow-lg bg-primary hover:bg-primary/90 text-primary-foreground h-10 px-5">
+                <MessageSquarePlus className="h-4 w-4 mr-2" />
+                Новое обращение
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => setTab("active")} className="rounded-xl h-10 px-5">
+                <CircleDot className="h-4 w-4 mr-2" />
+                Активные обращения
+              </Button>
+            )}
+            {tab === "active" && closedTickets.length > 0 && (
+              <Button variant="ghost" onClick={() => setTab("history")} className="rounded-xl h-10 px-5 text-muted-foreground">
+                <History className="h-4 w-4 mr-2" />
+                История обращений ({closedTickets.length})
+              </Button>
+            )}
+          </div>
         </div>
       ) : !showNewForm ? (
         <div className="grid gap-3 sm:gap-4">
-          {list.map((t) => {
+          {visibleTickets.map((t) => {
             const isOpen = t.status === "open";
             return (
               <div key={t.id} className="cabinet-ticket-row">
                 <button className="cabinet-ticket-open" onClick={()=>setDetailId(t.id)}>
                   <strong>{t.subject}</strong>
-                  <span><span data-open={isOpen}>{isOpen ? "Открыт" : "Закрыт"}</span> · {formatDate(t.updatedAt)}</span>
+                  <span><span data-open={isOpen}>{isOpen ? "Открыт" : "Закрыт"}</span> · {formatDate(isOpen ? t.updatedAt : (t.closedAt ?? t.updatedAt))}</span>
                 </button>
-                <Button variant="ghost" size="icon" aria-label={`Удалить обращение: ${t.subject}`} onClick={()=>deleteCurrentTicket(t.id)}><Trash2 size={16}/></Button>
               </div>
             );
           })}
