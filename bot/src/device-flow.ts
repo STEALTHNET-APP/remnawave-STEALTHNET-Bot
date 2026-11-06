@@ -110,7 +110,7 @@ export class DeviceFlow {
     if (state.page + 1 < pages) row.push({ text: "Далее ›", callback_data: this.callback(state, `page:${state.page + 1}`) });
     if (row.length) rows.push(row);
   }
-  private async devices(key: string, selected: DeviceSubscription, source: DeviceSource, page = 0, note = ""): Promise<DeviceScreen> {
+  private async devices(key: string, selected: DeviceSubscription, source: DeviceSource, page = 0, note = "", allSubscriptions: DeviceSubscription[] = []): Promise<DeviceScreen> {
     const rows: Button[][] = [];
     const lines = [TITLE, "", label(selected), status(selected), ""];
     if (note) lines.push(note, "");
@@ -119,7 +119,7 @@ export class DeviceFlow {
       const devices = [...new Map(result.devices.map(d => [d.hwid, d])).values()];
       const pages = Math.max(1, Math.ceil(devices.length / PAGE_SIZE));
       page = Math.max(0, Math.min(page, pages - 1));
-      const state = this.save(key, { subscriptions: [], selected, devices, page });
+      const state = this.save(key, { subscriptions: allSubscriptions, selected, devices, page });
       lines.push(formatDeviceCount(devices.length, subscriptionDeviceLimit(selected.subscription)), "");
       if (!devices.length) lines.push("Здесь пока нет подключённых устройств.", "Добавьте ссылку этой подписки в приложение на нужном устройстве.");
       else {
@@ -138,7 +138,7 @@ export class DeviceFlow {
       lines.push("Устройства не удалось загрузить. Попробуйте обновить список.");
       rows.push([{ text: "↻ Повторить", callback_data: `dev:open:${selected.id}` }]);
     }
-    rows.push([{ text: "К подписке", callback_data: `sub:detail:${selected.type}:${selected.id}`, appearance: "subscription" }], back);
+    rows.push([{ text: "К подписке", callback_data: `sub:detail:${selected.type}:${selected.id}`, appearance: "subscription" }], allSubscriptions.length > 1 ? back : menu);
     return screen(lines.join("\n"), rows);
   }
   async handle(key: string, data: string, source: DeviceSource): Promise<DeviceScreen> {
@@ -146,9 +146,16 @@ export class DeviceFlow {
       this.states.delete(key);
       try {
         const subscriptions = (await source.subscriptions()).sort((a, b) => (a.subscriptionIndex ?? 0) - (b.subscriptionIndex ?? 0));
-        if (data === "menu:devices") return this.subscriptions(key, subscriptions);
+        if (data === "menu:devices") {
+          if (subscriptions.length === 0) return this.subscriptions(key, subscriptions);
+          if (subscriptions.length === 1) {
+            const only = subscriptions[0];
+            if (only) return this.devices(key, only, source, 0, "", subscriptions);
+          }
+          return this.subscriptions(key, subscriptions);
+        }
         const selected = subscriptions.find(s => s.id === data.slice("dev:open:".length));
-        return selected ? this.devices(key, selected, source) : this.expired();
+        return selected ? this.devices(key, selected, source, 0, "", subscriptions) : this.expired();
       } catch {
         return screen(`${TITLE}\n\nНе удалось загрузить подписки. Попробуйте ещё раз.`, [back, menu]);
       }
@@ -162,13 +169,13 @@ export class DeviceFlow {
     const index = match[3] === undefined ? NaN : Number(match[3]);
     if (action === "sub" && !state.selected) {
       const selected = state.subscriptions[index];
-      return selected ? this.devices(key, selected, source) : this.expired();
+      return selected ? this.devices(key, selected, source, 0, "", state.subscriptions) : this.expired();
     }
     if (action === "page" && Number.isSafeInteger(index)) {
-      return state.selected ? this.devices(key, state.selected, source, index) : this.subscriptions(key, state.subscriptions, index);
+      return state.selected ? this.devices(key, state.selected, source, index, "", state.subscriptions) : this.subscriptions(key, state.subscriptions, index);
     }
     if (!state.selected) return this.expired();
-    if (action === "refresh" || action === "cancel") return this.devices(key, state.selected, source, state.page);
+    if (action === "refresh" || action === "cancel") return this.devices(key, state.selected, source, state.page, "", state.subscriptions);
     if (action === "device") {
       const device = state.devices[index];
       if (!device) return this.expired();
@@ -186,8 +193,8 @@ export class DeviceFlow {
     }
     if (action === "yes" && state.confirmation) {
       try { await source.remove(state.selected, state.confirmation.hwid); }
-      catch { return this.devices(key, state.selected, source, state.page, "Не удалось удалить устройство. Обновите список и попробуйте ещё раз."); }
-      return this.devices(key, state.selected, source, state.page, "✓ Устройство удалено из этой подписки.");
+      catch { return this.devices(key, state.selected, source, state.page, "Не удалось удалить устройство. Обновите список и попробуйте ещё раз.", state.subscriptions); }
+      return this.devices(key, state.selected, source, state.page, "✓ Устройство удалено из этой подписки.", state.subscriptions);
     }
     return this.expired();
   }

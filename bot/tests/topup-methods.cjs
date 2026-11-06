@@ -14,7 +14,7 @@ const mixed=kb('250.5',[{id:2,label:'Card'}],null,undefined,undefined,{rollypayE
 assert.deepEqual(Array.from(mixed.inline_keyboard.flat().map(x=>x.callback_data)),['topup_lava:250.5','topup_rollypay:250.5','topup:250.5:2','menu:topup']);
 assert.equal(kb('500',[],null,undefined,undefined,{lavatopEnabled:true}).inline_keyboard.length,1);
 // Check real call sites: all amount entry paths must supply named RollyPay config.
-const index=fs.readFileSync('src/index.ts','utf8'),ast=ts.createSourceFile('index.ts',index,ts.ScriptTarget.Latest,true);
+const index=fs.readFileSync('src/handlers/payments.ts','utf8'),ast=ts.createSourceFile('payments.ts',index,ts.ScriptTarget.Latest,true);
 assert.equal(ast.parseDiagnostics.length,0);let count=0;
 function visit(node){if(ts.isCallExpression(node)&&node.expression.getText(ast)==='topupPaymentMethodButtons'){
  count++;assert.equal(node.arguments.length,6);

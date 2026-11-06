@@ -29,6 +29,37 @@ test("menu asks for a subscription and does not merge their devices", async () =
   const list = await flow.handle("u1", button(menu, "#0"), source);
   assert.deepEqual(reads, ["sub-active"]);
   assert.match(list.text, /9 из 8/);
+  assert.ok(list.markup.inline_keyboard.flat().some(b => b.text.includes("Выбрать подписку") && b.callback_data === "menu:devices"));
+});
+
+test("menu opens devices directly for a single subscription and keeps main-menu navigation", async () => {
+  const reads: string[] = [];
+  const source: DeviceSource = {
+    subscriptions: async () => [sub],
+    devices: async (id) => { reads.push(id); return { total: 1, devices: [{ hwid: "hwid-single", deviceModel: "iPhone" }] }; },
+    remove: async () => {},
+  };
+  const flow = new DeviceFlow();
+  const screen = await flow.handle("single", "menu:devices", source);
+  assert.deepEqual(reads, ["sub-active"]);
+  assert.doesNotMatch(screen.text, /Выберите подписку/);
+  const labels = screen.markup.inline_keyboard.flat();
+  assert.ok(labels.some(b => b.text.includes("Главное меню") && b.callback_data === "menu:main"));
+  assert.ok(!labels.some(b => b.text.includes("Выбрать подписку")));
+  const refreshed = await flow.handle("single", button(screen, "Обновить"), source);
+  assert.deepEqual(reads, ["sub-active", "sub-active"]);
+  assert.ok(refreshed.markup.inline_keyboard.flat().some(b => b.text.includes("Главное меню") && b.callback_data === "menu:main"));
+});
+
+test("menu reports no subscriptions when the client has none", async () => {
+  const source: DeviceSource = {
+    subscriptions: async () => [],
+    devices: async () => { throw new Error("unexpected devices lookup"); },
+    remove: async () => {},
+  };
+  const screen = await new DeviceFlow().handle("empty", "menu:devices", source);
+  assert.match(screen.text, /У вас пока нет подписок/);
+  assert.ok(screen.markup.inline_keyboard.flat().some(b => b.text.includes("Главное меню") && b.callback_data === "menu:main"));
 });
 
 test("device selection confirms; cancel keeps it; yes deletes exactly the chosen subscription and HWID", async () => {
