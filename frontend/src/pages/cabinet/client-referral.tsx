@@ -34,16 +34,28 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedRef, setCopiedRef] = useState<"site" | "bot" | null>(null);
-  // Заявка на вывод реф.средств (бэк: POST /client/withdrawals, мин 3000₽, TRC20)
+  // Заявка на вывод реф.средств (бэк: POST /client/withdrawals, мин 3000₽).
   const [wOpen, setWOpen] = useState(false);
-  const [wWallet, setWWallet] = useState("");
+  const [wMethod, setWMethod] = useState<"sbp" | "card" | "usdt">("usdt");
+  const [wDetails, setWDetails] = useState("");
   const [wAmount, setWAmount] = useState("");
   const [wSubmitting, setWSubmitting] = useState(false);
   const [wMsg, setWMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const clientBalance = typeof client?.balance === "number" ? client.balance : null;
-  // настройки заявок на вывод из админки (вкл/выкл + мин. сумма).
+  // настройки заявок на вывод из админки (вкл/выкл + мин. сумма + способы).
   const withdrawalsEnabled = config?.withdrawalsEnabled !== false;
   const withdrawMin = config?.withdrawalMinAmount ?? 3000;
+  const withdrawalMethods = config?.withdrawalMethods ?? ["sbp", "card", "usdt"];
+  const activeMethod = withdrawalMethods.includes(wMethod) ? wMethod : (withdrawalMethods[0] ?? "usdt");
+  const methodLabel = activeMethod === "sbp" ? "СБП" : activeMethod === "card" ? "Карта" : "USDT TRC20";
+  const detailsLabel = activeMethod === "sbp" ? "Телефон и банк получателя" : activeMethod === "card" ? "Номер банковской карты" : "TRC20-кошелёк (USDT)";
+  const detailsPlaceholder = activeMethod === "sbp" ? "+79991234567, Сбербанк" : activeMethod === "card" ? "0000 0000 0000 0000" : "T...";
+
+  useEffect(() => {
+    if (withdrawalMethods.length > 0 && !withdrawalMethods.includes(wMethod)) {
+      setWMethod(withdrawalMethods[0] ?? "usdt");
+    }
+  }, [withdrawalMethods, wMethod]);
 
   const siteOrigin = config?.publicAppUrl?.replace(/\/$/, "") || (typeof window !== "undefined" ? window.location.origin : "");
   const referralLinkSite =
@@ -88,19 +100,27 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
       setWMsg({ type: "err", text: `Минимальная сумма вывода — ${withdrawMin} ₽` });
       return;
     }
-    const w = wWallet.trim();
-    if (!/^T[A-Za-z0-9]{33}$/.test(w)) {
+    const details = wDetails.trim();
+    if (activeMethod === "usdt" && !/^T[A-Za-z0-9]{33}$/.test(details)) {
       setWMsg({ type: "err", text: "Некорректный TRC20-адрес (начинается с T, 34 символа)" });
+      return;
+    }
+    if (activeMethod === "card" && !/^\d{16,19}$/.test(details.replace(/[\s-]/g, ""))) {
+      setWMsg({ type: "err", text: "Некорректный номер карты (16–19 цифр)" });
+      return;
+    }
+    if (activeMethod === "sbp" && (!details.includes(",") || details.split(",").slice(1).join(",").trim().length < 2)) {
+      setWMsg({ type: "err", text: "Укажите номер телефона и банк через запятую" });
       return;
     }
     setWSubmitting(true);
     setWMsg(null);
     try {
-      const r = await api.createWithdrawal(token, { amount: amt, walletTrc20: w });
+      const r = await api.createWithdrawal(token, { amount: amt, method: activeMethod, details });
       toast.success("Заявка отправлена", r.message || "Ожидайте подтверждения администратора.");
       setWOpen(false);
       refreshProfile().catch(() => {});
-      setWWallet("");
+      setWDetails("");
       setWAmount("");
     } catch (e) {
       setWMsg({ type: "err", text: e instanceof Error ? e.message : "Ошибка отправки заявки" });
@@ -151,7 +171,7 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
       </>}
       {/* Маленькая неприметная кнопка вывода реф.средств — в самом низу.
           скрывается тогглом «Заявки на вывод» из админки. */}
-      {withdrawalsEnabled && (
+      {withdrawalsEnabled && withdrawalMethods.length > 0 && (
       <div className="flex justify-center pt-2">
         <Dialog open={wOpen} onOpenChange={(o) => { setWOpen(o); if (!o) setWMsg(null); }}>
           <DialogTrigger asChild>
@@ -171,9 +191,44 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
                   <span className="font-bold text-foreground">{formatMoney(clientBalance, currency)}</span>
                 </div>
               )}
+              {withdrawalMethods.length > 1 && (
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium">Способ вывода</p>
+                  <div className="flex flex-wrap gap-1.5 rounded-xl bg-muted/40 border border-border/50 p-1.5">
+                    {withdrawalMethods.map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => { setWMethod(method); setWDetails(""); setWMsg(null); }}
+                        disabled={wSubmitting}
+                        className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${activeMethod === method ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"}`}
+                      >
+                        {method === "sbp" ? "СБП" : method === "card" ? "Карта" : "USDT"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {withdrawalMethods.length === 1 && (
+                <p className="text-sm text-muted-foreground">Способ вывода: <span className="font-semibold text-foreground">{methodLabel}</span></p>
+              )}
               <div className="space-y-1.5">
-                <label htmlFor="withdraw-wallet" className="text-sm font-medium">TRC20-кошелёк (USDT)</label>
-                <Input id="withdraw-wallet" autoComplete="off" value={wWallet} onChange={(e) => { setWWallet(e.target.value); setWMsg(null); }} placeholder="T..." className="font-mono" disabled={wSubmitting} />
+                <label htmlFor="withdraw-details" className="text-sm font-medium">{detailsLabel}</label>
+                <Input
+                  id="withdraw-details"
+                  autoComplete="off"
+                  value={wDetails}
+                  onChange={(e) => {
+                    const value = activeMethod === "card"
+                      ? e.target.value.replace(/\D/g, "").slice(0, 19).replace(/(\d{4})(?=\d)/g, "$1 ")
+                      : e.target.value;
+                    setWDetails(value);
+                    setWMsg(null);
+                  }}
+                  placeholder={detailsPlaceholder}
+                  className={activeMethod === "usdt" ? "font-mono" : undefined}
+                  disabled={wSubmitting}
+                />
               </div>
               <div className="space-y-1.5">
                 <label htmlFor="withdraw-amount" className="text-sm font-medium">Сумма, ₽ (минимум {withdrawMin})</label>
@@ -182,7 +237,7 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
               {wMsg && (
                 <p className={`text-sm font-medium ${wMsg.type === "ok" ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>{wMsg.text}</p>
               )}
-              <Button className="w-full gap-2 h-11 rounded-xl" onClick={submitWithdraw} disabled={wSubmitting || !wWallet.trim() || !wAmount.trim()}>
+              <Button className="w-full gap-2 h-11 rounded-xl" onClick={submitWithdraw} disabled={wSubmitting || !wDetails.trim() || !wAmount.trim()}>
                 {wSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Отправить заявку
               </Button>

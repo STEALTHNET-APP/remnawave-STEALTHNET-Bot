@@ -15,7 +15,7 @@ import type { WithdrawalRequestRecord } from "@/lib/api";
 import { qk } from "@/lib/query-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Check, X, RefreshCw, Copy, Clock3 } from "lucide-react";
+import { Loader2, Check, X, RefreshCw, Copy, Clock3, Smartphone, CreditCard, Coins } from "lucide-react";
 import { fmtMsk } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
@@ -47,6 +47,18 @@ const FILTERS: { key: StatusFilter; label: string }[] = [
   { key: "ALL", label: "Все" },
 ];
 
+const METHOD_META = {
+  sbp: { label: "СБП", detailsLabel: "Реквизиты СБП", Icon: Smartphone, chip: "bg-sky-500/15 text-sky-500 dark:text-sky-400 border-sky-500/30" },
+  card: { label: "Карта", detailsLabel: "Номер карты", Icon: CreditCard, chip: "bg-violet-500/15 text-violet-500 dark:text-violet-400 border-violet-500/30" },
+  usdt: { label: "USDT TRC20", detailsLabel: "Кошелёк TRC20", Icon: Coins, chip: "bg-emerald-500/15 text-emerald-500 dark:text-emerald-400 border-emerald-500/30" },
+} as const;
+
+type WithdrawalMethod = keyof typeof METHOD_META;
+
+function methodMeta(method: string) {
+  return METHOD_META[method as WithdrawalMethod] ?? METHOD_META.usdt;
+}
+
 export function WithdrawalsPage() {
   const { state } = useAuth();
   const token = state.accessToken ?? null;
@@ -70,12 +82,14 @@ export function WithdrawalsPage() {
   const load = () => { void listQuery.refetch(); };
 
 
-  const handleApprove = async (id: string) => {
+  const handleApprove = async (item: WithdrawalRequestRecord) => {
     if (!token) return;
-    if (!(await adminConfirm("Одобрить заявку? Клиенту придёт уведомление в Telegram.\n\nДеньги переводи на USDT TRC20 кошелёк вручную после нажатия."))) return;
-    setProcessing(id);
+    const meta = methodMeta(item.method);
+    const details = item.details?.trim() || item.walletTrc20 || "—";
+    if (!(await adminConfirm(`Одобрить заявку? Клиенту придёт уведомление в Telegram.\n\nПереведите ${item.amount.toFixed(2)} ₽ на реквизиты (${meta.label}: ${details}) вручную перед подтверждением.`))) return;
+    setProcessing(item.id);
     try {
-      await api.approveWithdrawal(token, id);
+      await api.approveWithdrawal(token, item.id);
       void queryClient.invalidateQueries({ queryKey: ["admin", "withdrawals"], exact: false });
     } catch (e) {
       (await adminAlert(e instanceof Error ? e.message : "Ошибка одобрения"));
@@ -126,7 +140,7 @@ export function WithdrawalsPage() {
         <div className="flex items-start gap-3">
           <div>
             <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Заявки на вывод</h1>
-            <p className="text-[12.5px] text-muted-foreground mt-[3px]">USDT TRC20 · Минимальная сумма заявки 3000₽ · reject возвращает баланс автоматически.</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">СБП · банковская карта · USDT TRC20 · reject возвращает баланс автоматически.</p>
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1.5 rounded-xl">
@@ -172,7 +186,10 @@ export function WithdrawalsPage() {
         </Card>
       ) : (
         <div className="grid gap-4">
-          {items.map((item, idx) => (
+          {items.map((item, idx) => {
+            const meta = methodMeta(item.method);
+            const details = item.details?.trim() || item.walletTrc20 || "—";
+            return (
             <motion.div key={item.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(idx * 0.03, 0.3) }} whileHover={{ y: -2 }}>
               <Card className="bg-card border-border rounded-2xl p-5 space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -181,6 +198,10 @@ export function WithdrawalsPage() {
                       <span className={cn("inline-flex items-center gap-1.5 border rounded-full px-2.5 py-0.5 text-xs font-semibold", STATUS_CHIP[item.status])}>
                         <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[item.status])} />
                         {STATUS_LABEL[item.status]}
+                      </span>
+                      <span className={cn("inline-flex items-center gap-1.5 border rounded-full px-2.5 py-0.5 text-xs font-semibold", meta.chip)}>
+                        <meta.Icon className="h-3 w-3" />
+                        {meta.label}
                       </span>
                       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                         <Clock3 className="h-3 w-3" />
@@ -194,7 +215,7 @@ export function WithdrawalsPage() {
                       <Button
                         size="sm"
                         className="gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
-                        onClick={() => handleApprove(item.id)}
+                        onClick={() => handleApprove(item)}
                         disabled={processing === item.id}
                       >
                         {processing === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
@@ -223,15 +244,15 @@ export function WithdrawalsPage() {
                     )}
                   </div>
                   <div className="space-y-1">
-                    <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Кошелёк TRC20</p>
+                    <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{meta.detailsLabel}</p>
                     <div className="flex items-center gap-2">
-                      <code className="text-xs bg-foreground/5 border border-border px-2 py-1 rounded-lg break-all">{item.walletTrc20}</code>
+                      <code className="text-xs bg-foreground/5 border border-border px-2 py-1 rounded-lg break-all">{details}</code>
                       <Button
                         size="icon"
                         variant="ghost"
                         className="h-7 w-7 shrink-0 rounded-lg"
-                        onClick={() => copyText(item.walletTrc20)}
-                        title="Скопировать кошелёк"
+                        onClick={() => copyText(details)}
+                        title={`Скопировать ${meta.detailsLabel.toLowerCase()}`}
                       >
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
@@ -253,7 +274,8 @@ export function WithdrawalsPage() {
                 )}
               </Card>
             </motion.div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -3244,9 +3244,13 @@ const updateSettingsSchema = z.object({
   stealthAccent: z.string().max(20).nullable().optional(),
   stealthHeroImage: z.string().max(8_000_000).nullable().optional(),
   multiSubscriptionsEnabled: z.boolean().optional(),
-  // заявки на вывод реф. баланса: вкл/выкл + мин. сумма.
+  // заявки на вывод реф. баланса: вкл/выкл + мин. сумма + способы вывода.
   withdrawalsEnabled: z.boolean().optional(),
   withdrawalMinAmount: z.number().int().min(1).max(1e7).optional(),
+  withdrawalMethods: z.array(z.enum(["sbp", "card", "usdt"])).optional(),
+  withdrawalMethodsSbp: z.boolean().optional(),
+  withdrawalMethodsCard: z.boolean().optional(),
+  withdrawalMethodsUsdt: z.boolean().optional(),
   signupProtectionEnabled: z.boolean().optional(),
   emailDomainBlocklist: z.string().max(10000).optional(),
   emailPatternBlocklist: z.string().max(10000).optional(),
@@ -4265,6 +4269,31 @@ adminRouter.patch("/settings", async (req, res) => {
     await prisma.systemSetting.upsert({
       where: { key: "withdrawal_min_amount" },
       create: { key: "withdrawal_min_amount", value: val },
+      update: { value: val },
+    });
+  }
+  if (updates.withdrawalMethods !== undefined) {
+    const enabled = new Set(updates.withdrawalMethods);
+    for (const method of ["sbp", "card", "usdt"] as const) {
+      const key = `withdrawal_methods_${method}`;
+      const val = enabled.has(method) ? "true" : "false";
+      await prisma.systemSetting.upsert({
+        where: { key },
+        create: { key, value: val },
+        update: { value: val },
+      });
+    }
+  }
+  for (const [key, value] of [
+    ["withdrawal_methods_sbp", updates.withdrawalMethodsSbp],
+    ["withdrawal_methods_card", updates.withdrawalMethodsCard],
+    ["withdrawal_methods_usdt", updates.withdrawalMethodsUsdt],
+  ] as const) {
+    if (value === undefined) continue;
+    const val = value ? "true" : "false";
+    await prisma.systemSetting.upsert({
+      where: { key },
+      create: { key, value: val },
       update: { value: val },
     });
   }

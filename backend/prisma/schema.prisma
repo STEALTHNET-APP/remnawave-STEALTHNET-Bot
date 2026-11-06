@@ -303,15 +303,15 @@ model Payment {
 }
 
 // Начисление реферального бонуса (для отчёта «заработок с рефералов»)
-// T6 (11.05.2026, WolfVPN): заявка на вывод реферального баланса (USDT TRC20).
-// Минимум 3000₽ за раз. Юзер вводит сумму + кошелёк TRC20 → создаёт заявку (баланс
-// замораживается) → админ approve/reject. При approve — клиенту уведомление,
-// средства уходят (вне бота, ручной перевод USDT админом). При reject — баланс возвращается.
+// Заявка на вывод реферального баланса: СБП, банковская карта или USDT TRC20.
+// Баланс замораживается при создании; reject возвращает средства, approve уведомляет клиента.
 model WithdrawalRequest {
   id           String    @id @default(cuid())
   clientId     String    @map("client_id")
   amount       Float
-  walletTrc20  String    @map("wallet_trc20")
+  method       String    @default("usdt")
+  details      String    @default("")
+  walletTrc20  String?   @map("wallet_trc20")
   status       String    @default("PENDING") // PENDING | APPROVED | REJECTED
   adminComment String?   @map("admin_comment")
   processedAt  DateTime? @map("processed_at")

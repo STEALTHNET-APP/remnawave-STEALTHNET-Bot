@@ -606,6 +606,9 @@ export function SettingsPage() {
       referralPercentLevel3: (data as AdminSettings).referralPercentLevel3 ?? 10,
       withdrawalsEnabled: (data as AdminSettings).withdrawalsEnabled ?? true,
       withdrawalMinAmount: (data as AdminSettings).withdrawalMinAmount ?? 3000,
+      withdrawalMethodsSbp: (data as AdminSettings).withdrawalMethodsSbp ?? true,
+      withdrawalMethodsCard: (data as AdminSettings).withdrawalMethodsCard ?? true,
+      withdrawalMethodsUsdt: (data as AdminSettings).withdrawalMethodsUsdt ?? true,
       plategaMethods: (data as AdminSettings).plategaMethods ?? DEFAULT_PLATEGA_METHODS,
       botButtons: (() => {
         const raw = (data as AdminSettings).botButtons;
@@ -957,6 +960,9 @@ export function SettingsPage() {
         referralPercentLevel3: settings.referralPercentLevel3 ?? 10,
         withdrawalsEnabled: settings.withdrawalsEnabled ?? true,
         withdrawalMinAmount: settings.withdrawalMinAmount ?? 3000,
+        withdrawalMethodsSbp: settings.withdrawalMethodsSbp ?? true,
+        withdrawalMethodsCard: settings.withdrawalMethodsCard ?? true,
+        withdrawalMethodsUsdt: settings.withdrawalMethodsUsdt ?? true,
         trialDays: settings.trialDays,
         trialSquadUuid: settings.trialSquadUuid ?? null,
         trialDeviceLimit: settings.trialDeviceLimit ?? null,
@@ -3045,7 +3051,7 @@ export function SettingsPage() {
                     <div className="space-y-1">
                       <Label className="text-base font-semibold"> Заявки на вывод</Label>
                       <p className="text-sm text-muted-foreground">
-                        Вывод реферального баланса (USDT TRC20). Выключено — кнопка в боте и блок
+                        Вывод реферального баланса (СБП, банковская карта или USDT TRC20). Выключено — кнопка в боте и блок
                         в кабинете/на сайте скрываются, API отклоняет новые заявки.
                       </p>
                     </div>
@@ -3055,16 +3061,37 @@ export function SettingsPage() {
                     />
                   </div>
                   {(settings.withdrawalsEnabled ?? true) && (
-                    <div className="grid gap-1.5 max-w-xs">
-                      <Label className="text-xs text-muted-foreground">Минимальная сумма заявки (₽)</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        className="h-9 rounded-xl tabular-nums"
-                        value={settings.withdrawalMinAmount ?? 3000}
-                        onChange={(e) => setSettings((s) => (s ? { ...s, withdrawalMinAmount: Math.max(1, Number(e.target.value) || 1) } : s))}
-                      />
-                    </div>
+                    <>
+                      <div className="grid gap-1.5 max-w-xs">
+                        <Label className="text-xs text-muted-foreground">Минимальная сумма заявки (₽)</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          className="h-9 rounded-xl tabular-nums"
+                          value={settings.withdrawalMinAmount ?? 3000}
+                          onChange={(e) => setSettings((s) => (s ? { ...s, withdrawalMinAmount: Math.max(1, Number(e.target.value) || 1) } : s))}
+                        />
+                      </div>
+                      <div className="space-y-3 border-t border-border pt-4">
+                        <Label className="text-xs text-muted-foreground">Доступные способы вывода</Label>
+                        {([
+                          ["withdrawalMethodsSbp", "СБП (по номеру телефона)"],
+                          ["withdrawalMethodsCard", "Банковская карта"],
+                          ["withdrawalMethodsUsdt", "USDT TRC20"],
+                        ] as const).map(([key, label]) => (
+                          <div key={key} className="flex items-center justify-between gap-4">
+                            <span className="text-sm">{label}</span>
+                            <Switch
+                              checked={settings[key] ?? true}
+                              onCheckedChange={(v) => setSettings((s) => (s ? { ...s, [key]: v } : s))}
+                            />
+                          </div>
+                        ))}
+                        {!(settings.withdrawalMethodsSbp ?? true) && !(settings.withdrawalMethodsCard ?? true) && !(settings.withdrawalMethodsUsdt ?? true) && (
+                          <p className="text-xs text-amber-500">Все способы выключены — заявки на вывод будут недоступны.</p>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
 
