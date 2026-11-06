@@ -150,8 +150,11 @@ export const giftOptionsCache = userMap<{ tariffId: string; options: StatePriceO
 export const awaitingPromoCode = userSet();
 export const activeDiscountCode = userCache<DiscountInfo>();
 export const awaitingGiftCode = userSet();
+export type WithdrawMethod = "sbp" | "card" | "usdt";
+export type WithdrawDraft = { amount: number; method?: WithdrawMethod; details?: string };
+export const pendingWithdrawals = userMap<WithdrawDraft>();
 export const awaitingWithdrawAmount = userSet();
-export const awaitingWithdrawWallet = userMap<number>();
+export const awaitingWithdrawDetails = userSet();
 export const awaitingCustomTopup = userSet();
 
 export const awaitingAdminSearch = userSet();

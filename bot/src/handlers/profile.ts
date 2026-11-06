@@ -1,9 +1,73 @@
 import { Composer } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
-import { activeDiscountCode, awaitingPromoCode, awaitingWithdrawAmount, awaitingWithdrawWallet, clearUserState } from "../state-store.js";
+import { activeDiscountCode, awaitingPromoCode, awaitingWithdrawAmount, awaitingWithdrawDetails, clearUserState, pendingWithdrawals, type WithdrawMethod } from "../state-store.js";
 import { _t, applyMarkdownAndEmoji, backButton, backToMenu, blockUnsubscribedCallback, callbackUi, currencyButtons, editMessageContent, enforceSubscription, formatMoney, getOrRestoreToken, getUserLang, groupedProfileMenu, langButtons, profileButtons, referralRewardLines, setTranslations, setUserLang, t, tariffErrMarkup, textInputUserId, titleWithEmoji } from "./shared.js";
 import { resolveCallbackDomain } from "./routing.js";
+
+const WITHDRAW_METHODS: WithdrawMethod[] = ["sbp", "card", "usdt"];
+
+function availableWithdrawMethods(config: { withdrawalMethods?: string[] } | null): WithdrawMethod[] {
+  if (!Array.isArray(config?.withdrawalMethods)) return WITHDRAW_METHODS;
+  return WITHDRAW_METHODS.filter((method) => config?.withdrawalMethods?.includes(method));
+}
+
+function withdrawMethodLabel(method: WithdrawMethod): string {
+  if (method === "sbp") return "СБП (Система быстрых платежей)";
+  if (method === "card") return "Банковская карта";
+  return "USDT TRC20";
+}
+
+function withdrawDetailsPrompt(method: WithdrawMethod): string {
+  if (method === "sbp") return "🏦 Введите номер телефона и банк получателя.\nПример: +79991234567, Сбербанк";
+  if (method === "card") return "💳 Введите номер банковской карты (16-19 цифр):";
+  return "🌐 Введите адрес кошелька USDT TRC20 (начинается с T):";
+}
+
+function withdrawDetailsError(method: WithdrawMethod): string {
+  if (method === "sbp") return "❌ Укажите номер телефона и банк через запятую.\nПример: +79991234567, Сбербанк\nПопробуйте снова:";
+  if (method === "card") return "❌ Некорректный номер карты.\nНомер должен содержать 16-19 цифр.\nПопробуйте снова:";
+  return "❌ Некорректный кошелёк TRC20.\n\nАдрес должен начинаться с буквы T и содержать 34 символа.\nПопробуйте снова:";
+}
+
+function normalizeWithdrawDetails(method: WithdrawMethod, raw: string): string | null {
+  const value = raw.trim();
+  if (method === "usdt") {
+    return /^T[A-Za-z0-9]{33}$/.test(value) ? value : null;
+  }
+  if (method === "card") {
+    const digits = value.replace(/[\s-]/g, "");
+    if (!/^\d{16,19}$/.test(digits)) return null;
+    let sum = 0;
+    let double = false;
+    for (let i = digits.length - 1; i >= 0; i -= 1) {
+      let digit = Number(digits[i]);
+      if (double) {
+        digit *= 2;
+        if (digit > 9) digit -= 9;
+      }
+      sum += digit;
+      double = !double;
+    }
+    if (sum % 10 !== 0) return null;
+    return digits.replace(/(\d{4})(?=\d)/g, "$1 ");
+  }
+  const parts = value.split(/[,;]/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  const bank = parts.slice(1).join(", ");
+  if (bank.length < 2) return null;
+  const phoneDigits = parts[0]?.replace(/\D/g, "") ?? "";
+  if (phoneDigits.length < 10 || phoneDigits.length > 15) return null;
+  let phone: string;
+  if (phoneDigits.length === 11 && (phoneDigits.startsWith("7") || phoneDigits.startsWith("8"))) {
+    phone = `+7${phoneDigits.slice(1)}`;
+  } else if (phoneDigits.length === 10) {
+    phone = `+7${phoneDigits}`;
+  } else {
+    phone = parts[0]?.trim().startsWith("+") ? `+${phoneDigits}` : phoneDigits;
+  }
+  return `${phone}, ${bank}`.slice(0, 255);
+}
 
 export function createProfileHandlers(): Composer<Context> {
   const composer = new Composer<Context>();
@@ -301,9 +365,15 @@ composer.command("referral", async (ctx) => {
 
     if (data === "withdraw:start") {
       try {
-        // мин. сумма из настройки + общий выключатель фичи.
         if (config?.withdrawalsEnabled === false) {
           await editMessageContent(ctx, "💰 Заявки на вывод временно отключены.", {
+            inline_keyboard: [[{ text: "👥 К рефералке", callback_data: "menu:referral" }]],
+          });
+          return;
+        }
+        const methods = availableWithdrawMethods(config);
+        if (methods.length === 0) {
+          await editMessageContent(ctx, "💰 Заявки на вывод временно недоступны.", {
             inline_keyboard: [[{ text: "👥 К рефералке", callback_data: "menu:referral" }]],
           });
           return;
@@ -314,7 +384,7 @@ composer.command("referral", async (ctx) => {
         if (balance < withdrawMin) {
           await editMessageContent(
             ctx,
-            `💰 Заявка на вывод (USDT TRC20)\n\n⚠️ Минимальная сумма вывода — ${withdrawMin}₽\n\nВаш текущий баланс: ${balance.toFixed(2)}₽\n\nПродолжайте приглашать друзей по реферальной ссылке — и накопите нужную сумму!`,
+            `💰 Заявка на вывод\n\n⚠️ Минимальная сумма вывода — ${withdrawMin}₽\n\nВаш текущий баланс: ${balance.toFixed(2)}₽\n\nПродолжайте приглашать друзей по реферальной ссылке — и накопите нужную сумму!`,
             {
               inline_keyboard: [
                 [{ text: "👥 К рефералке", callback_data: "menu:referral" }],
@@ -325,10 +395,11 @@ composer.command("referral", async (ctx) => {
           return;
         }
         awaitingWithdrawAmount.add(userId);
-        awaitingWithdrawWallet.delete(userId);
+        awaitingWithdrawDetails.delete(userId);
+        pendingWithdrawals.delete(userId);
         await editMessageContent(
           ctx,
-          `💰 Заявка на вывод (USDT TRC20)\n\nВведите сумму для вывода (минимум ${withdrawMin}₽).\nДоступно: ${balance.toFixed(2)}₽`,
+          `💰 Заявка на вывод\n\nВведите сумму для вывода (минимум ${withdrawMin}₽).\nДоступно: ${balance.toFixed(2)}₽`,
           {
             inline_keyboard: [
               [{ text: "❌ Отмена", callback_data: "menu:referral" }],
@@ -342,25 +413,94 @@ composer.command("referral", async (ctx) => {
       return;
     }
 
-    if (data.startsWith("withdraw:confirm:")) {
-      // Формат: withdraw:confirm:<amount>:<wallet>
-      const parts = data.slice("withdraw:confirm:".length).split(":");
-      const amount = parseFloat(parts[0] ?? "0");
-      const wallet = parts.slice(1).join(":");
+    if (data.startsWith("withdraw:method:")) {
+      const method = data.slice("withdraw:method:".length) as WithdrawMethod;
+      const draft = pendingWithdrawals.get(userId);
+      const methods = availableWithdrawMethods(config);
+      if (!draft || !WITHDRAW_METHODS.includes(method) || !methods.includes(method)) {
+        awaitingWithdrawAmount.delete(userId);
+        awaitingWithdrawDetails.delete(userId);
+        pendingWithdrawals.delete(userId);
+        await editMessageContent(ctx, "❌ Заявка устарела или способ вывода недоступен. Начните заново.", {
+          inline_keyboard: [
+            [{ text: "💰 Новая заявка", callback_data: "withdraw:start" }],
+            [{ text: "👥 К рефералке", callback_data: "menu:referral" }],
+          ],
+        });
+        return;
+      }
+      pendingWithdrawals.set(userId, { amount: draft.amount, method });
+      awaitingWithdrawDetails.add(userId);
+      await editMessageContent(
+        ctx,
+        `💸 Сумма: ${draft.amount.toFixed(2)}₽\nСпособ: ${withdrawMethodLabel(method)}\n\n${withdrawDetailsPrompt(method)}`,
+        {
+          inline_keyboard: [
+            [{ text: "❌ Отмена", callback_data: "menu:referral" }],
+          ],
+        },
+      );
+      return;
+    }
+
+    if (data === "withdraw:confirm") {
+      const draft = pendingWithdrawals.get(userId);
       const withdrawConfirmMin = config?.withdrawalMinAmount ?? 3000;
-      if (!Number.isFinite(amount) || amount < withdrawConfirmMin || !wallet) {
-        await editMessageContent(ctx, "❌ Некорректные данные заявки. Попробуйте снова.", {
-          inline_keyboard: [[{ text: "💰 К рефералке", callback_data: "menu:referral" }]],
+      if (!draft?.method || !draft.details || !Number.isFinite(draft.amount) || draft.amount < withdrawConfirmMin) {
+        awaitingWithdrawAmount.delete(userId);
+        awaitingWithdrawDetails.delete(userId);
+        pendingWithdrawals.delete(userId);
+        await editMessageContent(ctx, "❌ Данные заявки устарели. Начните заново.", {
+          inline_keyboard: [
+            [{ text: "💰 Новая заявка", callback_data: "withdraw:start" }],
+            [{ text: "👥 К рефералке", callback_data: "menu:referral" }],
+          ],
         });
         return;
       }
       try {
-        const result = await api.createWithdrawal(token, { amount, walletTrc20: wallet });
+        const result = await api.createWithdrawal(token, { amount: draft.amount, method: draft.method, details: draft.details });
+        pendingWithdrawals.delete(userId);
         awaitingWithdrawAmount.delete(userId);
-        awaitingWithdrawWallet.delete(userId);
+        awaitingWithdrawDetails.delete(userId);
         await editMessageContent(
           ctx,
-          `✅ ${result.message}\n\n💸 Сумма: ${amount.toFixed(2)}₽\n🏦 Кошелёк: ${wallet}\n\nКак только администратор обработает заявку — мы пришлём уведомление в этот чат.`,
+          `✅ ${result.message}\n\n💸 Сумма: ${draft.amount.toFixed(2)}₽\nСпособ: ${withdrawMethodLabel(draft.method)}\nРеквизиты: ${draft.details}\n\nКак только администратор обработает заявку — мы пришлём уведомление в этот чат.`,
+          {
+            inline_keyboard: [
+              [{ text: "👥 К рефералке", callback_data: "menu:referral" }],
+              [{ text: "🏠 Главное меню", callback_data: "menu:main" }],
+            ],
+          },
+        );
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка";
+        await editMessageContent(ctx, `❌ ${msg}`, {
+          inline_keyboard: [[{ text: "👥 К рефералке", callback_data: "menu:referral" }]],
+        });
+      }
+      return;
+    }
+
+    if (data.startsWith("withdraw:confirm:")) {
+      const parts = data.slice("withdraw:confirm:".length).split(":");
+      const amount = parseFloat(parts[0] ?? "0");
+      const wallet = parts.slice(1).join(":");
+      const withdrawConfirmMin = config?.withdrawalMinAmount ?? 3000;
+      if (!Number.isFinite(amount) || amount < withdrawConfirmMin || !/^T[A-Za-z0-9]{33}$/.test(wallet)) {
+        await editMessageContent(ctx, "❌ Некорректные данные заявки. Попробуйте снова.", {
+          inline_keyboard: [[{ text: "👥 К рефералке", callback_data: "menu:referral" }]],
+        });
+        return;
+      }
+      try {
+        const result = await api.createWithdrawal(token, { amount, method: "usdt", details: wallet });
+        awaitingWithdrawAmount.delete(userId);
+        awaitingWithdrawDetails.delete(userId);
+        pendingWithdrawals.delete(userId);
+        await editMessageContent(
+          ctx,
+          `✅ ${result.message}\n\n💸 Сумма: ${amount.toFixed(2)}₽\nСпособ: ${withdrawMethodLabel("usdt")}\nРеквизиты: ${wallet}\n\nКак только администратор обработает заявку — мы пришлём уведомление в этот чат.`,
           {
             inline_keyboard: [
               [{ text: "👥 К рефералке", callback_data: "menu:referral" }],
@@ -399,7 +539,7 @@ composer.command("referral", async (ctx) => {
   composer.on("message:text", async (ctx, next) => {
     const userId = textInputUserId(ctx);
     if (!userId) return next();
-    if (!awaitingWithdrawAmount.has(userId) && !awaitingWithdrawWallet.has(userId) && !awaitingPromoCode.has(userId)) return next();
+    if (!awaitingWithdrawAmount.has(userId) && !awaitingWithdrawDetails.has(userId) && !awaitingPromoCode.has(userId)) return next();
 
     const token = await getOrRestoreToken(userId, ctx.from?.username);
     if (!token) return;
@@ -409,11 +549,14 @@ composer.command("referral", async (ctx) => {
   if (awaitingWithdrawAmount.has(userId)) {
     const raw = ctx.message.text.trim().replace(/[,\s]/g, ".").replace(/[^\d.]/g, "");
     const amount = parseFloat(raw);
-    // «👥 К рефералке» → «↩️ Отмена» во время ввода данных заявки.
     const backRef = { reply_markup: { inline_keyboard: [[{ text: "↩️ Отмена", callback_data: "menu:referral" }]] } };
-    // мин. сумма из настройки (была захардкожена 3000₽).
     const wdCfg = await api.getPublicConfig().catch(() => null);
     const withdrawMin = wdCfg?.withdrawalMinAmount ?? 3000;
+    if (availableWithdrawMethods(wdCfg).length === 0) {
+      awaitingWithdrawAmount.delete(userId);
+      await ctx.reply("💰 Заявки на вывод временно недоступны.", backRef);
+      return;
+    }
     if (!Number.isFinite(amount) || amount < withdrawMin) {
       await ctx.reply(`❌ Минимальная сумма вывода — ${withdrawMin}₽. Введите корректную сумму или нажмите «Отмена».`, backRef);
       return;
@@ -428,34 +571,60 @@ composer.command("referral", async (ctx) => {
     } catch {
       // ignore — backend всё равно проверит при создании
     }
+    const methods = availableWithdrawMethods(wdCfg);
     awaitingWithdrawAmount.delete(userId);
-    awaitingWithdrawWallet.set(userId, amount);
+    awaitingWithdrawDetails.delete(userId);
+    pendingWithdrawals.set(userId, { amount });
+    if (methods.length === 1) {
+      const method = methods[0] ?? "usdt";
+      pendingWithdrawals.set(userId, { amount, method });
+      awaitingWithdrawDetails.add(userId);
+      await ctx.reply(
+        `✅ Сумма: ${amount.toFixed(2)}₽\nСпособ: ${withdrawMethodLabel(method)}\n\n${withdrawDetailsPrompt(method)}`,
+        backRef,
+      );
+      return;
+    }
+    const methodButtons = methods.map((method) => ({
+      text: method === "sbp" ? "🏦 СБП (по номеру телефона)" : method === "card" ? "💳 Банковская карта (РФ)" : "🌐 USDT TRC-20",
+      callback_data: `withdraw:method:${method}`,
+    }));
     await ctx.reply(
-      `✅ Сумма: ${amount.toFixed(2)}₽\n\n🏦 Теперь введите ваш кошелёк USDT TRC20 (адрес начинается с T):`,
-      backRef,
+      `✅ Сумма: ${amount.toFixed(2)}₽\n\nВыберите способ вывода:`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            ...methodButtons.map((button) => [button]),
+            [{ text: "↩️ Отмена", callback_data: "menu:referral" }],
+          ],
+        },
+      },
     );
     return;
   }
 
-  // Шаг 2 — пользователь вводит кошелёк (если есть в awaitingWithdrawWallet).
-  if (awaitingWithdrawWallet.has(userId)) {
-    const wallet = ctx.message.text.trim();
-    const amount = awaitingWithdrawWallet.get(userId)!;
-    // «👥 К рефералке» → «↩️ Отмена» во время ввода кошелька.
+  if (awaitingWithdrawDetails.has(userId)) {
+    const draft = pendingWithdrawals.get(userId);
     const backRef = { reply_markup: { inline_keyboard: [[{ text: "↩️ Отмена", callback_data: "menu:referral" }]] } };
-    // Базовая валидация TRC20-адреса (длина 34, начинается с T, base58 алфавит).
-    if (!/^T[A-Za-z0-9]{33}$/.test(wallet)) {
-      await ctx.reply("❌ Некорректный кошелёк TRC20.\n\nАдрес должен начинаться с буквы T и содержать 34 символа.\nПопробуйте снова:", backRef);
+    if (!draft?.method) {
+      awaitingWithdrawDetails.delete(userId);
+      pendingWithdrawals.delete(userId);
+      await ctx.reply("❌ Заявка устарела. Начните заново.", backRef);
       return;
     }
-    awaitingWithdrawWallet.delete(userId);
-    const callbackData = `withdraw:confirm:${amount}:${wallet}`.slice(0, 64);
+    const details = normalizeWithdrawDetails(draft.method, ctx.message.text);
+    if (!details) {
+      await ctx.reply(withdrawDetailsError(draft.method), backRef);
+      return;
+    }
+    awaitingWithdrawDetails.delete(userId);
+    pendingWithdrawals.set(userId, { ...draft, details });
     await ctx.reply(
-      `📋 Проверьте заявку на вывод:\n\n💸 Сумма: ${amount.toFixed(2)}₽\n🏦 Кошелёк TRC20: ${wallet}\n\nПодтвердите создание заявки:`,
+      `📋 Проверьте данные заявки на вывод:\n\n💸 Сумма: ${draft.amount.toFixed(2)} ₽\nСпособ: ${withdrawMethodLabel(draft.method)}\nРеквизиты: ${details}\n\nСоздать заявку?`,
       {
         reply_markup: {
           inline_keyboard: [
-            [{ text: "✅ Подтвердить", callback_data: callbackData }],
+            [{ text: "✅ Подтвердить", callback_data: "withdraw:confirm" }],
             [{ text: "❌ Отмена", callback_data: "menu:referral" }],
           ],
         },

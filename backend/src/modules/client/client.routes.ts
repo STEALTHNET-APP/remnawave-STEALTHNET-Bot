@@ -2225,14 +2225,57 @@ clientRouter.get("/referral-stats", async (req, res) => {
   });
 });
 
-// создание заявки на вывод реф. баланса (USDT TRC20).
-// настройки в админке: withdrawals_enabled (вкл/выкл фичи целиком)
-// и withdrawal_min_amount (мин. сумма; раньше было захардкожено 3000₽).
+// создание заявки на вывод реф. баланса (СБП, банковская карта или USDT TRC20).
+// настройки в админке: withdrawals_enabled (вкл/выкл фичи целиком),
+// withdrawal_min_amount (мин. сумма) и withdrawal_methods_* (доступные способы).
 // При создании баланс замораживается (decrement) — при reject админом средства
 // возвращаются. При approve — клиенту приходит уведомление.
+type WithdrawalMethod = "sbp" | "card" | "usdt";
+
+function luhnValid(cardNumber: string): boolean {
+  let sum = 0;
+  let double = false;
+  for (let i = cardNumber.length - 1; i >= 0; i -= 1) {
+    let digit = Number(cardNumber[i]);
+    if (double) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+    double = !double;
+  }
+  return sum % 10 === 0;
+}
+
+function normalizeCardDetails(input: string): string | null {
+  const digits = input.replace(/[\s-]/g, "");
+  if (!/^\d{16,19}$/.test(digits) || !luhnValid(digits)) return null;
+  return digits.replace(/(\d{4})(?=\d)/g, "$1 ");
+}
+
+function normalizeSbpDetails(input: string): string | null {
+  const parts = input.split(/[,;]/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  const bank = parts.slice(1).join(", ");
+  if (bank.length < 2) return null;
+  const phoneDigits = parts[0]?.replace(/\D/g, "") ?? "";
+  if (phoneDigits.length < 10 || phoneDigits.length > 15) return null;
+  let phone: string;
+  if (phoneDigits.length === 11 && (phoneDigits.startsWith("7") || phoneDigits.startsWith("8"))) {
+    phone = `+7${phoneDigits.slice(1)}`;
+  } else if (phoneDigits.length === 10) {
+    phone = `+7${phoneDigits}`;
+  } else {
+    phone = parts[0]?.trim().startsWith("+") ? `+${phoneDigits}` : phoneDigits;
+  }
+  return `${phone}, ${bank}`.slice(0, 255);
+}
+
 const withdrawCreateSchema = z.object({
   amount: z.number().positive().max(1e7),
-  walletTrc20: z.string().min(20).max(64).regex(/^T[A-Za-z0-9]{33}$/, "Некорректный TRC20-адрес (должен начинаться с T)"),
+  method: z.enum(["sbp", "card", "usdt"]).default("usdt"),
+  details: z.string().min(3).max(255).optional(),
+  walletTrc20: z.string().optional(),
 });
 clientRouter.post("/withdrawals", async (req, res) => {
   const clientId = (req as unknown as { clientId: string }).clientId;
@@ -2244,10 +2287,34 @@ clientRouter.post("/withdrawals", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Некорректные данные", errors: parsed.error.flatten() });
   }
-  const { amount, walletTrc20 } = parsed.data;
+  const { amount, method } = parsed.data;
   const minAmount = wdCfg.withdrawalMinAmount ?? 3000;
   if (amount < minAmount) {
     return res.status(400).json({ message: `Минимальная сумма вывода — ${minAmount}₽` });
+  }
+  if (!wdCfg.withdrawalMethods.includes(method)) {
+    return res.status(400).json({ message: "Выбранный способ вывода недоступен" });
+  }
+  const rawDetails = (parsed.data.details ?? parsed.data.walletTrc20 ?? "").trim();
+  if (!rawDetails) {
+    return res.status(400).json({ message: "Укажите реквизиты для вывода" });
+  }
+  let formattedDetails: string | null;
+  if (method === "usdt") {
+    formattedDetails = /^T[A-Za-z0-9]{33}$/.test(rawDetails) ? rawDetails : null;
+    if (!formattedDetails) {
+      return res.status(400).json({ message: "Некорректный TRC20-адрес (должен начинаться с T, 34 символа)" });
+    }
+  } else if (method === "card") {
+    formattedDetails = normalizeCardDetails(rawDetails);
+    if (!formattedDetails) {
+      return res.status(400).json({ message: "Некорректный номер карты" });
+    }
+  } else {
+    formattedDetails = normalizeSbpDetails(rawDetails);
+    if (!formattedDetails) {
+      return res.status(400).json({ message: "Укажите номер телефона и банк получателя через запятую" });
+    }
   }
 
   let wr: { id: string; status: string };
@@ -2261,7 +2328,14 @@ clientRouter.post("/withdrawals", async (req, res) => {
         throw Object.assign(new Error("INSUFFICIENT_FUNDS"), { code: "INSUFFICIENT_FUNDS" });
       }
       return tx.withdrawalRequest.create({
-        data: { clientId, amount, walletTrc20, status: "PENDING" },
+        data: {
+          clientId,
+          amount,
+          method,
+          details: formattedDetails,
+          walletTrc20: method === "usdt" ? formattedDetails : null,
+          status: "PENDING",
+        },
       });
     });
   } catch (e) {
@@ -2285,7 +2359,9 @@ clientRouter.post("/withdrawals", async (req, res) => {
     message: "Заявка отправлена. Ожидайте подтверждения администратора.",
     id: wr.id,
     amount,
-    walletTrc20,
+    method,
+    details: formattedDetails,
+    walletTrc20: method === "usdt" ? formattedDetails : null,
     status: wr.status,
   });
 });

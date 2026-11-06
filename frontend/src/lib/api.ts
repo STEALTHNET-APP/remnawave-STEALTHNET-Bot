@@ -2147,7 +2147,7 @@ export const api = {
   },
 
   // T-withdrawal (портировано из WolfVPN): заявка клиента на вывод реферального баланса.
-  async createWithdrawal(token: string, data: { amount: number; walletTrc20: string }): Promise<{ message: string; id: string; amount: number; walletTrc20: string; status: string }> {
+  async createWithdrawal(token: string, data: { amount: number; method?: "sbp" | "card" | "usdt"; details?: string; walletTrc20?: string }): Promise<{ message: string; id: string; amount: number; method: string; details: string; walletTrc20: string | null; status: string }> {
     return request("/client/withdrawals", { method: "POST", body: JSON.stringify(data), token });
   },
   async approveWithdrawal(token: string, id: string, comment?: string): Promise<{ message: string }> {
@@ -2315,7 +2315,9 @@ export const api = {
     items: Array<{
       id: string;
       amount: number;
-      walletTrc20: string;
+      method: string;
+      details: string;
+      walletTrc20: string | null;
       status: string;
       adminComment: string | null;
       processedAt: string | null;
@@ -3613,6 +3615,9 @@ export type UpdateSettingsPayload = {
   /** заявки на вывод: вкл/выкл + мин. сумма. */
   withdrawalsEnabled?: boolean;
   withdrawalMinAmount?: number;
+  withdrawalMethodsSbp?: boolean;
+  withdrawalMethodsCard?: boolean;
+  withdrawalMethodsUsdt?: boolean;
   trialDays?: number;
   trialSquadUuid?: string | null;
   trialDeviceLimit?: number | null;
@@ -4358,6 +4363,10 @@ export interface AdminSettings {
   withdrawalsEnabled?: boolean;
   /** мин. сумма заявки на вывод (₽). */
   withdrawalMinAmount?: number;
+  /** доступные способы вывода. */
+  withdrawalMethodsSbp?: boolean;
+  withdrawalMethodsCard?: boolean;
+  withdrawalMethodsUsdt?: boolean;
   /** Master switch для антибот-защиты регистраций */
   signupProtectionEnabled?: boolean;
   /** Доп. список заблокированных email-доменов (через запятую) */
@@ -5342,7 +5351,9 @@ export interface WithdrawalRequestRecord {
   id: string;
   clientId: string;
   amount: number;
-  walletTrc20: string;
+  method: "sbp" | "card" | "usdt";
+  details: string;
+  walletTrc20: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED";
   adminComment: string | null;
   processedAt: string | null;
@@ -5794,6 +5805,8 @@ export interface PublicConfig {
   /** заявки на вывод реф. баланса: вкл/выкл + мин. сумма. */
   withdrawalsEnabled?: boolean;
   withdrawalMinAmount?: number;
+  /** Активные способы вывода: sbp, card, usdt. */
+  withdrawalMethods?: Array<"sbp" | "card" | "usdt">;
   /** T-pwd-reset: вкл/выкл восстановление пароля клиента (по умолчанию выкл). */
   passwordResetEnabled?: boolean;
   /** true = SMTP настроен и можно слать письма верификации. */

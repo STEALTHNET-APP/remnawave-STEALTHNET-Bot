@@ -67,7 +67,7 @@ import {
   RECEIPT_OK_LINE,
   isValidEmail,
 } from "../yk-receipt.js";
-import { isSubscriptionCached, cacheSubscription, userLangCache, tokenStore, activeDiscountCode, selectedTariffOption, trialReplaceChoice, awaitingPromoCode, awaitingGiftCode, awaitingWithdrawAmount, awaitingWithdrawWallet, awaitingCustomTopup, awaitingAdminSearch, lastAdminSearch, awaitingAdminBalance, awaitingBroadcastMessage, lastBroadcastMessage, lastSquadsForAdd, lastSquadsForRemove, tariffOptionsCache, selectedGiftOption, giftOptionsCache, addsubPending, extendingSecondaryPending, pendingDropExtras, extraOptionTargetSub, extraOptionPending, trialConvertPickCache, convDropExtras, type DiscountInfo, type BroadcastPayload } from "../state-store.js";
+import { isSubscriptionCached, cacheSubscription, userLangCache, tokenStore, activeDiscountCode, selectedTariffOption, trialReplaceChoice, awaitingPromoCode, awaitingGiftCode, awaitingWithdrawAmount, awaitingWithdrawDetails, awaitingCustomTopup, awaitingAdminSearch, lastAdminSearch, awaitingAdminBalance, awaitingBroadcastMessage, lastBroadcastMessage, lastSquadsForAdd, lastSquadsForRemove, tariffOptionsCache, selectedGiftOption, giftOptionsCache, addsubPending, extendingSecondaryPending, pendingDropExtras, extraOptionTargetSub, extraOptionPending, trialConvertPickCache, convDropExtras, type DiscountInfo, type BroadcastPayload } from "../state-store.js";
 export * from "../keyboard.js";
 export { t as _t, formatDays as _formatDays, setTranslations } from "../i18n.js";
 export { DeviceFlow, formatDeviceCount, subscriptionDeviceLimit } from "../device-flow.js";

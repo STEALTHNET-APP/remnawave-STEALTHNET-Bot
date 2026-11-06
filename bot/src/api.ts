@@ -226,6 +226,7 @@ export async function getPublicConfig(force = false): Promise<{
   botShowTariffCategories?: boolean;
   withdrawalsEnabled?: boolean;
   withdrawalMinAmount?: number;
+  withdrawalMethods?: Array<"sbp" | "card" | "usdt">;
   videoInstructionsEnabled?: boolean;
   videoInstructions?: { id: string; title: string; telegramFileId: string; sortOrder: number }[];
   ticketsEnabled?: boolean;
@@ -357,11 +358,11 @@ export async function toggleSubAutoRenew(
   });
 }
 
-/** создание заявки на вывод реф. баланса (USDT TRC20). */
+/** создание заявки на вывод реф. баланса (СБП, карта или USDT TRC20). */
 export async function createWithdrawal(
   token: string,
-  body: { amount: number; walletTrc20: string },
-): Promise<{ message: string; id: string; amount: number; walletTrc20: string; status: string }> {
+  body: { amount: number; method?: "sbp" | "card" | "usdt"; details?: string; walletTrc20?: string },
+): Promise<{ message: string; id: string; amount: number; method: string; details: string; walletTrc20: string | null; status: string }> {
   return fetchJson("/api/client/withdrawals", { method: "POST", body, token });
 }
 
