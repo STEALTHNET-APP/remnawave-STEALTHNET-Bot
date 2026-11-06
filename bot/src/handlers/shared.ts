@@ -1684,7 +1684,13 @@ export function buildHelpScreen(opts: {
 export function formatMoney(amount: number, currency: string): string {
   const c = currency.toUpperCase();
   const sym = c === "RUB" ? "₽" : c === "USD" ? "$" : "₴";
-  return `${amount} ${sym}`;
+  if (typeof amount !== "number" || !Number.isFinite(amount)) return `0 ${sym}`;
+  const rounded = Math.round(amount * 100) / 100;
+  const formatted = new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: Number.isInteger(rounded) ? 0 : 2,
+  }).format(rounded);
+  return `${formatted} ${sym}`;
 }
 
 /** Рассчитать цену со скидкой */

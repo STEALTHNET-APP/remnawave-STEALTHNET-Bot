@@ -3,7 +3,7 @@ import type { Context } from "grammy";
 import * as api from "../api.js";
 import { escapeHtml } from "../html.js";
 import { BroadcastPayload, awaitingAdminBalance, awaitingAdminSearch, awaitingBroadcastMessage, clearUserState, lastAdminSearch, lastBroadcastMessage, lastSquadsForAdd, lastSquadsForRemove } from "../state-store.js";
-import { editMessageContent, textInputUserId } from "./shared.js";
+import { editMessageContent, formatMoney, textInputUserId } from "./shared.js";
 import type { InlineMarkup } from "./shared.js";
 import { resolveCallbackDomain } from "./routing.js";
 
@@ -182,7 +182,7 @@ export function createAdminHandlers(): Composer<Context> {
       const client = await api.getBotAdminClient(userId, clientId);
       const created = client.createdAt ? new Date(client.createdAt).toLocaleString("ru-RU") : "—";
       let text = `👤 ${client.email || client.telegramUsername || client.telegramId || client.id}\n\n`;
-      text += `ID: ${client.id}\nБаланс: ${client.balance}\nРефералов: ${client._count?.referrals ?? 0}\nСоздан: ${created}\n`;
+      text += `ID: ${client.id}\nБаланс: ${formatMoney(client.balance ?? 0, client.preferredCurrency ?? "RUB")}\nРефералов: ${client._count?.referrals ?? 0}\nСоздан: ${created}\n`;
       if (client.isBlocked) text += `\n🚫 Заблокирован${client.blockReason ? `: ${client.blockReason}` : ""}`;
       const kb: InlineMarkup["inline_keyboard"] = [];
       if (client.isBlocked) {
@@ -472,7 +472,7 @@ export function createAdminHandlers(): Composer<Context> {
       await api.patchBotAdminClientBlock(userId, clientId, true);
       const client = await api.getBotAdminClient(userId, clientId);
       const created = client.createdAt ? new Date(client.createdAt).toLocaleString("ru-RU") : "—";
-      let text = `👤 ${client.email || client.telegramUsername || client.telegramId || client.id}\n\nID: ${client.id}\nБаланс: ${client.balance}\nРефералов: ${client._count?.referrals ?? 0}\nСоздан: ${created}\n\n🚫 Заблокирован`;
+      let text = `👤 ${client.email || client.telegramUsername || client.telegramId || client.id}\n\nID: ${client.id}\nБаланс: ${formatMoney(client.balance ?? 0, client.preferredCurrency ?? "RUB")}\nРефералов: ${client._count?.referrals ?? 0}\nСоздан: ${created}\n\n🚫 Заблокирован`;
       const kb: InlineMarkup["inline_keyboard"] = [
         [{ text: "✅ Разблокировать", callback_data: `admin:unblock:${client.id}` }],
         [{ text: "◀️ К списку", callback_data: "admin:clients:1" }],
@@ -486,7 +486,7 @@ export function createAdminHandlers(): Composer<Context> {
       await api.patchBotAdminClientBlock(userId, clientId, false);
       const client = await api.getBotAdminClient(userId, clientId);
       const created = client.createdAt ? new Date(client.createdAt).toLocaleString("ru-RU") : "—";
-      let text = `👤 ${client.email || client.telegramUsername || client.telegramId || client.id}\n\nID: ${client.id}\nБаланс: ${client.balance}\nРефералов: ${client._count?.referrals ?? 0}\nСоздан: ${created}`;
+      let text = `👤 ${client.email || client.telegramUsername || client.telegramId || client.id}\n\nID: ${client.id}\nБаланс: ${formatMoney(client.balance ?? 0, client.preferredCurrency ?? "RUB")}\nРефералов: ${client._count?.referrals ?? 0}\nСоздан: ${created}`;
       const kb: InlineMarkup["inline_keyboard"] = [
         [{ text: "🚫 Заблокировать", callback_data: `admin:block:${client.id}` }],
         [{ text: "◀️ К списку", callback_data: "admin:clients:1" }],
@@ -607,7 +607,7 @@ export function createAdminHandlers(): Composer<Context> {
     }
     try {
       const result = await api.patchBotAdminClientBalance(userId, clientId, num);
-      await ctx.reply(`✅ Баланс пополнен. Новый баланс: ${result.newBalance}`);
+      await ctx.reply(`✅ Баланс пополнен. Новый баланс: ${formatMoney(result.newBalance, "RUB")}`);
     } catch (e: unknown) {
       await ctx.reply(`❌ ${e instanceof Error ? e.message : "Ошибка"}`);
     }
