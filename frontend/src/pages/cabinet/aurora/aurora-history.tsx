@@ -61,6 +61,12 @@ export function AuroraHistory() {
     return { label: t("aurora.withdraw_pending"), tone: "accent" };
   }
 
+  function withdrawalMethodLabel(method: string): string {
+    if (method === "sbp") return t("aurora.withdraw_method_sbp");
+    if (method === "card") return t("aurora.withdraw_method_card");
+    return t("aurora.withdraw_method_usdt");
+  }
+
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: "payments", label: t("aurora.payments") },
     { id: "withdrawals", label: t("aurora.withdrawals") },
@@ -135,7 +141,7 @@ export function AuroraHistory() {
                     </div>
                     <AuBadge tone={status.tone}>{status.label}</AuBadge>
                   </div>
-                  <div className="mt-1 break-all font-mono text-[11.5px] text-[var(--au-muted)]">{item.walletTrc20}</div>
+                  <div className="mt-1 break-all text-[11.5px] text-[var(--au-muted)]">{withdrawalMethodLabel(item.method)} · {item.details?.trim() || item.walletTrc20}</div>
                   <div className="mt-1 text-[11.5px] text-[var(--au-muted)]">
                     {new Date(item.createdAt).toLocaleString(locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                   </div>

@@ -182,8 +182,9 @@ export const SYSTEM_CONFIG_KEYS = [
   "bot_tariffs_show_balance_button",
   // меню выбора категорий перед списком тарифов в боте (default true)
   "bot_show_tariff_categories",
-  // заявки на вывод реф. баланса: вкл/выкл + мин. сумма (была захардкожена 3000₽)
+  // заявки на вывод реф. баланса: вкл/выкл + мин. сумма + доступные способы вывода
   "withdrawals_enabled", "withdrawal_min_amount",
+  "withdrawal_methods_sbp", "withdrawal_methods_card", "withdrawal_methods_usdt",
   // Приветственное сообщение бота (показывается при /start, до главного меню)
   "bot_welcome_enabled", "bot_welcome_text", "bot_welcome_image", "bot_welcome_show_once",
   // Применять выбранный дизайн (Stealth) и в обычном браузере, не только в Telegram Mini App
@@ -915,6 +916,13 @@ async function loadSystemConfigFromDb() {
       const n = Number(map.withdrawal_min_amount);
       return Number.isFinite(n) && n > 0 ? n : 3000;
     })(),
+    withdrawalMethodsSbp: map.withdrawal_methods_sbp !== "false" && map.withdrawal_methods_sbp !== "0",
+    withdrawalMethodsCard: map.withdrawal_methods_card !== "false" && map.withdrawal_methods_card !== "0",
+    withdrawalMethodsUsdt: map.withdrawal_methods_usdt !== "false" && map.withdrawal_methods_usdt !== "0",
+    withdrawalMethods: (["sbp", "card", "usdt"] as const).filter((method) => {
+      const key = `withdrawal_methods_${method}`;
+      return map[key] !== "false" && map[key] !== "0";
+    }),
     videoInstructionsEnabled: map.video_instructions_enabled === "true" || map.video_instructions_enabled === "1",
     videoInstructions: (() => {
       try { return JSON.parse(map.video_instructions || "[]") as { id: string; title: string; telegramFileId: string; sortOrder: number }[]; } catch { return []; }
@@ -1498,6 +1506,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     botShowTariffCategories: (full as { botShowTariffCategories?: boolean }).botShowTariffCategories ?? true,
     withdrawalsEnabled: (full as { withdrawalsEnabled?: boolean }).withdrawalsEnabled ?? true,
     withdrawalMinAmount: (full as { withdrawalMinAmount?: number }).withdrawalMinAmount ?? 3000,
+    withdrawalMethods: (full as { withdrawalMethods?: string[] }).withdrawalMethods ?? ["sbp", "card", "usdt"],
     videoInstructionsEnabled: full.videoInstructionsEnabled ?? false,
     videoInstructions: full.videoInstructionsEnabled ? (full.videoInstructions ?? []) : [],
     ticketsEnabled: (full as { ticketsEnabled?: boolean }).ticketsEnabled ?? false,

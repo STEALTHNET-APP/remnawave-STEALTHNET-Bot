@@ -667,14 +667,27 @@ export async function notifyAdminsAboutWithdrawal(withdrawalId: string): Promise
   const config = await getSystemConfig();
   const baseUrl = (config.publicAppUrl || "").replace(/\/+$/, "");
   const clientLabel = formatClientLabel(wr.client);
+  const details = wr.details?.trim() || wr.walletTrc20 || "";
+  let title: string;
+  let detailsLine: string;
+  if (wr.method === "sbp") {
+    title = "СБП";
+    detailsLine = `🏦 Реквизиты СБП: <code>${escapeHtml(details)}</code>`;
+  } else if (wr.method === "card") {
+    title = "Банковская карта";
+    detailsLine = `💳 Номер карты: <code>${escapeHtml(details)}</code>`;
+  } else {
+    title = "USDT TRC20";
+    detailsLine = `🌐 Кошелёк TRC20: <code>${escapeHtml(details)}</code>`;
+  }
   const lines = [
-    `💰 <b>Заявка на вывод (USDT TRC20)</b>`,
+    `💰 <b>Новая заявка на вывод (${title})</b>`,
     ``,
     `👤 Клиент: ${escapeHtml(clientLabel)}`,
   ];
   if (wr.client.telegramId) lines.push(`🆔 TG ID: <code>${escapeHtml(wr.client.telegramId)}</code>`);
-  lines.push(`💸 Сумма: <b>${wr.amount.toFixed(2)} ₽</b>`);
-  lines.push(`🏦 Кошелёк TRC20: <code>${escapeHtml(wr.walletTrc20)}</code>`);
+  lines.push(`💸 Сумма: <b>${wr.amount.toFixed(2)} ₽</b>${wr.method === "usdt" ? " (выплата в USDT по курсу)" : ""}`);
+  lines.push(detailsLine);
   lines.push(`🕐 ${formatDate(wr.createdAt)}`);
   if (baseUrl) lines.push(`\n🔗 <a href="${escapeHtml(`${baseUrl}/admin/withdrawals`)}">Открыть в админке</a>`);
   await sendTelegramToAdminsForEvent("withdrawal_request", lines.join("\n"));
@@ -807,10 +820,12 @@ export async function notifyClientAboutWithdrawalApproved(withdrawalId: string):
     include: { client: { select: { id: true, telegramId: true } } },
   });
   if (!wr || !wr.client.telegramId) return;
+  const methodLabel = wr.method === "sbp" ? "СБП" : wr.method === "card" ? "Банковская карта" : "USDT TRC20";
+  const details = wr.details?.trim() || wr.walletTrc20 || "";
   const text = [
     `✅ Заявка на вывод средств успешно исполнена.`,
     ``,
-    `В течение 48 часов средства поступят на указанный Вами кошелёк.`,
+    `Средства успешно отправлены по указанным реквизитам (${methodLabel}: ${details}).`,
     ``,
     `Благодарим за сотрудничество 🤝`,
   ].join("\n");

@@ -16,26 +16,85 @@ let tariffsCacheTime = 0;
 
 const CACHE_TTL = 60 * 1000; // Кэш на 60 секунд
 
-function getHeaders(token?: string): HeadersInit {
-  const h: Record<string, string> = { "Content-Type": "application/json" };
+const REQUEST_TIMEOUT_MS = 15_000;
+const RETRY_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 300;
+const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+const RETRYABLE_CODES = new Set([
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "ECONNREFUSED",
+  "EAI_AGAIN",
+  "ENETUNREACH",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_SOCKET",
+]);
+
+type RequestOptions = RequestInit & { timeoutMs?: number; retries?: number };
+
+function getHeaders(token?: string, extra?: HeadersInit): HeadersInit {
+  const h: Record<string, string> = { "Content-Type": "application/json", ...(extra as Record<string, string> | undefined) };
   if (token) h["Authorization"] = `Bearer ${token}`;
   const botToken = process.env.BOT_TOKEN || "";
   if (botToken) h["X-Telegram-Bot-Token"] = botToken;
   return h;
 }
 
-async function fetchJson<T>(path: string, opts?: { method?: string; body?: unknown; token?: string }): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+function retryableNetworkError(error: unknown): boolean {
+  const candidate = error as { code?: unknown; cause?: { code?: unknown }; name?: unknown } | null;
+  const code = typeof candidate?.code === "string" ? candidate.code : typeof candidate?.cause?.code === "string" ? candidate.cause.code : "";
+  if (RETRYABLE_CODES.has(code)) return true;
+  return candidate?.name === "TimeoutError" || candidate?.name === "AbortError";
+}
+
+function retryDelay(attempt: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, RETRY_BASE_DELAY_MS * 2 ** attempt));
+}
+
+export async function requestWithRetry(url: string, init: RequestOptions = {}): Promise<Response> {
+  const attempts = Math.max(1, init.retries ?? RETRY_ATTEMPTS);
+  const timeoutMs = init.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const response = await fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(timeoutMs) });
+      if (RETRYABLE_STATUSES.has(response.status) && attempt < attempts - 1) {
+        await response.body?.cancel().catch(() => {});
+        await retryDelay(attempt);
+        continue;
+      }
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1 && retryableNetworkError(error)) {
+        await retryDelay(attempt);
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError ?? new Error("Request failed");
+}
+
+async function fetchJson<T>(
+  path: string,
+  opts?: { method?: string; body?: unknown; token?: string; headers?: HeadersInit; timeoutMs?: number; retries?: number },
+): Promise<T> {
+  const res = await requestWithRetry(`${API_URL}${path}`, {
     method: opts?.method ?? "GET",
-    headers: getHeaders(opts?.token),
+    headers: getHeaders(opts?.token, opts?.headers),
     ...(opts?.body !== undefined && { body: JSON.stringify(opts.body) }),
+    ...(opts?.timeoutMs !== undefined && { timeoutMs: opts.timeoutMs }),
+    ...(opts?.retries !== undefined && { retries: opts.retries }),
   });
   const data = (await res.json().catch(() => ({}))) as T | { message?: string; code?: string };
   if (!res.ok) {
     const msg = typeof (data as { message?: string }).message === "string" ? (data as { message: string }).message : `HTTP ${res.status}`;
-    const err = new Error(msg) as Error & { code?: string };
+    const err = new Error(msg) as Error & { code?: string; status?: number };
     const code = (data as { code?: string }).code;
     if (typeof code === "string") err.code = code;
+    err.status = res.status;
     throw err;
   }
   return data as T;
@@ -43,40 +102,18 @@ async function fetchJson<T>(path: string, opts?: { method?: string; body?: unkno
 
 /** Привязка Telegram к аккаунту по коду (вызывается ботом при /link КОД) */
 export async function linkTelegramFromBot(code: string, telegramId: number, telegramUsername?: string): Promise<{ message: string }> {
-  const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}/api/public/link-telegram-from-bot`, {
+  return fetchJson("/api/public/link-telegram-from-bot", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Telegram-Bot-Token": botToken,
-    },
-    body: JSON.stringify({ code: code.trim(), telegramId, telegramUsername: telegramUsername ?? "" }),
+    body: { code: code.trim(), telegramId, telegramUsername: telegramUsername ?? "" },
   });
-  const data = (await res.json().catch(() => ({}))) as { message?: string };
-  if (!res.ok) {
-    const msg = typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-  return data as { message: string };
 }
 
 /** Подтверждение deep-link авторизации (бот -> API) */
 export async function confirmTelegramAuth(token: string, telegramId: number, telegramUsername?: string): Promise<{ ok: boolean }> {
-  const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}/api/client/auth/telegram-login-confirm`, {
+  return fetchJson("/api/client/auth/telegram-login-confirm", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Telegram-Bot-Token": botToken,
-    },
-    body: JSON.stringify({ token: token.trim(), telegramId, telegramUsername: telegramUsername ?? "" }),
+    body: { token: token.trim(), telegramId, telegramUsername: telegramUsername ?? "" },
   });
-  const data = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string };
-  if (!res.ok) {
-    const msg = typeof data.message === "string" ? data.message : `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-  return data as { ok: boolean };
 }
 
 /** Активный конкурс (для меню и ежедневной рассылки) */
@@ -189,6 +226,7 @@ export async function getPublicConfig(force = false): Promise<{
   botShowTariffCategories?: boolean;
   withdrawalsEnabled?: boolean;
   withdrawalMinAmount?: number;
+  withdrawalMethods?: Array<"sbp" | "card" | "usdt">;
   videoInstructionsEnabled?: boolean;
   videoInstructions?: { id: string; title: string; telegramFileId: string; sortOrder: number }[];
   ticketsEnabled?: boolean;
@@ -320,11 +358,11 @@ export async function toggleSubAutoRenew(
   });
 }
 
-/** создание заявки на вывод реф. баланса (USDT TRC20). */
+/** создание заявки на вывод реф. баланса (СБП, карта или USDT TRC20). */
 export async function createWithdrawal(
   token: string,
-  body: { amount: number; walletTrc20: string },
-): Promise<{ message: string; id: string; amount: number; walletTrc20: string; status: string }> {
+  body: { amount: number; method?: "sbp" | "card" | "usdt"; details?: string; walletTrc20?: string },
+): Promise<{ message: string; id: string; amount: number; method: string; details: string; walletTrc20: string | null; status: string }> {
   return fetchJson("/api/client/withdrawals", { method: "POST", body, token });
 }
 
@@ -715,7 +753,7 @@ export type BotAdminNotificationSettings = {
 
 export async function getBotAdminStats(telegramId: number): Promise<BotAdminStats> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/stats?telegramId=${telegramId}`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/stats?telegramId=${telegramId}`, {
     headers: { "X-Telegram-Bot-Token": botToken },
   });
   const data = (await res.json().catch(() => ({}))) as BotAdminStats | { message?: string };
@@ -728,7 +766,7 @@ export async function getBotAdminStats(telegramId: number): Promise<BotAdminStat
 
 export async function getBotAdminNotificationSettings(telegramId: number): Promise<BotAdminNotificationSettings> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/notification-settings?telegramId=${telegramId}`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/notification-settings?telegramId=${telegramId}`, {
     headers: { "X-Telegram-Bot-Token": botToken },
   });
   const data = (await res.json().catch(() => ({}))) as BotAdminNotificationSettings | { message?: string };
@@ -744,7 +782,7 @@ export async function patchBotAdminNotificationSettings(
   settings: Partial<BotAdminNotificationSettings>
 ): Promise<BotAdminNotificationSettings> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/notification-settings`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/notification-settings`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", "X-Telegram-Bot-Token": botToken },
     body: JSON.stringify({ telegramId, ...settings }),
@@ -775,7 +813,7 @@ export async function getBotAdminClients(
   const params = new URLSearchParams({ telegramId: String(telegramId), page: String(page), limit: "8" });
   if (search?.trim()) params.set("search", search.trim());
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/clients?${params}`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/clients?${params}`, {
     headers: { "X-Telegram-Bot-Token": botToken },
   });
   const data = (await res.json().catch(() => ({}))) as { items: BotAdminClientItem[]; total: number; page: number; limit: number } | { message?: string };
@@ -798,7 +836,7 @@ export type BotAdminClient = BotAdminClientItem & {
 
 export async function getBotAdminClient(telegramId: number, clientId: string): Promise<BotAdminClient> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}?telegramId=${telegramId}`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}?telegramId=${telegramId}`, {
     headers: { "X-Telegram-Bot-Token": botToken },
   });
   const data = (await res.json().catch(() => ({}))) as BotAdminClient | { message?: string };
@@ -816,7 +854,7 @@ export async function patchBotAdminClientBlock(
   blockReason?: string
 ): Promise<{ ok: boolean; isBlocked: boolean }> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/block`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/block`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", "X-Telegram-Bot-Token": botToken },
     body: JSON.stringify({ telegramId, isBlocked, blockReason }),
@@ -849,7 +887,7 @@ export async function getBotAdminPayments(
   page: number
 ): Promise<{ items: BotAdminPaymentItem[]; total: number; page: number; limit: number }> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(
+  const res = await requestWithRetry(
     `${API_URL}${BOT_ADMIN_BASE}/payments?telegramId=${telegramId}&status=${status}&page=${page}&limit=8`,
     { headers: { "X-Telegram-Bot-Token": botToken } }
   );
@@ -868,7 +906,7 @@ export async function getBotAdminPayments(
 
 export async function patchBotAdminPaymentMarkPaid(telegramId: number, paymentId: string): Promise<unknown> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/payments/${encodeURIComponent(paymentId)}/mark-paid`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/payments/${encodeURIComponent(paymentId)}/mark-paid`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", "X-Telegram-Bot-Token": botToken },
     body: JSON.stringify({ telegramId }),
@@ -883,7 +921,7 @@ export async function patchBotAdminPaymentMarkPaid(telegramId: number, paymentId
 
 export async function getBotAdminBroadcastCount(telegramId: number): Promise<{ withTelegram: number; withEmail: number }> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/broadcast/count?telegramId=${telegramId}`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/broadcast/count?telegramId=${telegramId}`, {
     headers: { "X-Telegram-Bot-Token": botToken },
   });
   const data = (await res.json().catch(() => ({}))) as { withTelegram: number; withEmail: number } | { message?: string };
@@ -903,7 +941,7 @@ export async function postBotAdminBroadcast(
   buttonUrl?: string
 ): Promise<{ ok: boolean; sentTelegram: number; sentEmail: number; failedTelegram: number; failedEmail: number; errors: string[] }> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/broadcast`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/broadcast`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Telegram-Bot-Token": botToken },
     body: JSON.stringify({ telegramId, message, channel, photoFileId: photoFileId ?? undefined, buttonText: buttonText ?? undefined, buttonUrl: buttonUrl ?? undefined }),
@@ -925,7 +963,7 @@ export async function postBotAdminBroadcast(
 
 export async function patchBotAdminClientBalance(telegramId: number, clientId: string, amount: number): Promise<{ ok: boolean; newBalance: number }> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/balance`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/balance`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", "X-Telegram-Bot-Token": botToken },
     body: JSON.stringify({ telegramId, amount }),
@@ -940,7 +978,7 @@ export async function patchBotAdminClientBalance(telegramId: number, clientId: s
 
 export async function postBotAdminClientRemnaRevoke(telegramId: number, clientId: string): Promise<unknown> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna/revoke-subscription`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna/revoke-subscription`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Telegram-Bot-Token": botToken },
     body: JSON.stringify({ telegramId }),
@@ -952,7 +990,7 @@ export async function postBotAdminClientRemnaRevoke(telegramId: number, clientId
 
 export async function postBotAdminClientRemnaDisable(telegramId: number, clientId: string): Promise<unknown> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna/disable`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna/disable`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Telegram-Bot-Token": botToken },
     body: JSON.stringify({ telegramId }),
@@ -964,7 +1002,7 @@ export async function postBotAdminClientRemnaDisable(telegramId: number, clientI
 
 export async function postBotAdminClientRemnaEnable(telegramId: number, clientId: string): Promise<unknown> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna/enable`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna/enable`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Telegram-Bot-Token": botToken },
     body: JSON.stringify({ telegramId }),
@@ -976,7 +1014,7 @@ export async function postBotAdminClientRemnaEnable(telegramId: number, clientId
 
 export async function postBotAdminClientRemnaResetTraffic(telegramId: number, clientId: string): Promise<unknown> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna/reset-traffic`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna/reset-traffic`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Telegram-Bot-Token": botToken },
     body: JSON.stringify({ telegramId }),
@@ -990,7 +1028,7 @@ export type BotAdminSquadItem = { uuid: string; name: string };
 
 export async function getBotAdminRemnaSquadsInternal(telegramId: number): Promise<{ items: BotAdminSquadItem[] }> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/remna/squads/internal?telegramId=${telegramId}`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/remna/squads/internal?telegramId=${telegramId}`, {
     headers: { "X-Telegram-Bot-Token": botToken },
   });
   const data = (await res.json().catch(() => ({}))) as { items: BotAdminSquadItem[] } | { message?: string };
@@ -1003,7 +1041,7 @@ export async function getBotAdminRemnaSquadsInternal(telegramId: number): Promis
 
 export async function getBotAdminClientRemna(telegramId: number, clientId: string): Promise<{ remnaUuid: string; activeInternalSquads: string[] }> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(
+  const res = await requestWithRetry(
     `${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna?telegramId=${telegramId}`,
     { headers: { "X-Telegram-Bot-Token": botToken } }
   );
@@ -1017,7 +1055,7 @@ export async function getBotAdminClientRemna(telegramId: number, clientId: strin
 
 export async function postBotAdminClientRemnaSquadAdd(telegramId: number, clientId: string, squadUuid: string): Promise<{ ok: boolean; activeInternalSquads: string[] }> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna/squads/add`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna/squads/add`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Telegram-Bot-Token": botToken },
     body: JSON.stringify({ telegramId, squadUuid }),
@@ -1032,7 +1070,7 @@ export async function postBotAdminClientRemnaSquadAdd(telegramId: number, client
 
 export async function postBotAdminClientRemnaSquadRemove(telegramId: number, clientId: string, squadUuid: string): Promise<{ ok: boolean; activeInternalSquads: string[] }> {
   const botToken = process.env.BOT_TOKEN || "";
-  const res = await fetch(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna/squads/remove`, {
+  const res = await requestWithRetry(`${API_URL}${BOT_ADMIN_BASE}/clients/${encodeURIComponent(clientId)}/remna/squads/remove`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Telegram-Bot-Token": botToken },
     body: JSON.stringify({ telegramId, squadUuid }),
@@ -1217,7 +1255,7 @@ export function getBotTerms(telegramId: number, pendingStart?: string): Promise<
 }
 
 export async function acceptBotTerms(telegramId: number, version: string): Promise<BotTermsStatus> {
-  const response = await fetch(`${API_URL}/api/bot/terms/accept`, {
+  const response = await requestWithRetry(`${API_URL}/api/bot/terms/accept`, {
     method: "POST", headers: getHeaders(), body: JSON.stringify({ telegramId: String(telegramId), version }),
   });
   if (response.status === 409) return getBotTerms(telegramId);
@@ -1230,7 +1268,7 @@ export function createStarsPayment(token: string, body: Parameters<typeof create
 }
 export type StarsReceipt = { paymentId: string; telegramId: string; currency: string; totalAmount: number; chargeId?: string; checkoutId?: string };
 export async function starsCheckout(body: StarsReceipt): Promise<{ ok: boolean }> {
-  const response = await fetch(`${API_URL}/api/bot/stars/checkout`, { method: "POST", headers: getHeaders(), body: JSON.stringify(body), signal: AbortSignal.timeout(6500) });
+  const response = await requestWithRetry(`${API_URL}/api/bot/stars/checkout`, { method: "POST", headers: getHeaders(), body: JSON.stringify(body) });
   if (!response.ok) throw new Error("Платёж не подтверждён");
   return response.json();
 }
@@ -1243,9 +1281,8 @@ export function starsRefunded(body: StarsReceipt): Promise<{ ok: boolean }> {
 }
 
 export async function getBotRuntimeConfig(): Promise<RuntimeConfig> {
-  const response = await fetch(`${API_URL}/api/bot/runtime`, {
+  const response = await requestWithRetry(`${API_URL}/api/bot/runtime`, {
     headers: { "X-Bot-Internal-Auth": internalBotCredential((process.env.BOT_TOKEN || "").trim()) },
-    signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error("Bot runtime configuration unavailable");
   return response.json() as Promise<RuntimeConfig>;
