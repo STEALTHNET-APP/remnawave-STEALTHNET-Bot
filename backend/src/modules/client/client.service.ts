@@ -1109,25 +1109,29 @@ const DEFAULT_PLATEGA_METHODS: PlategaMethodConfig[] = [
 
 export type PaymentProviderConfig = { id: string; label: string; sortOrder: number };
 const DEFAULT_PAYMENT_PROVIDERS: PaymentProviderConfig[] = [
-  { id: "telegram_stars", label: "Telegram Stars", sortOrder: 0 },
-  { id: "cryptopay", label: "Crypto Bot", sortOrder: 0 },
-  { id: "heleket", label: "Heleket", sortOrder: 1 },
-  { id: "cloudpayments", label: "Карта (CloudPayments)", sortOrder: 11 },
-  { id: "paritypay", label: "ParityPay", sortOrder: 10 },
+  { id: "platega_2", label: "Platega (СБП)", sortOrder: 0 },
   { id: "rollypay", label: "RollyPay", sortOrder: 1 },
   { id: "yookassa", label: "ЮKassa (СБП / Карты)", sortOrder: 2 },
   { id: "yoomoney", label: "ЮMoney (Карты)", sortOrder: 3 },
-  { id: "lava", label: "LAVA (СБП / Карты / СберPay)", sortOrder: 4 },
-  { id: "lavatop", label: "Lava.top (СБП / Карты)", sortOrder: 5 },
-  { id: "overpay", label: "Overpay (Карты / СБП)", sortOrder: 6 },
+  { id: "platega_11", label: "Platega (Карты)", sortOrder: 4 },
+  { id: "platega_12", label: "Platega (Международный)", sortOrder: 5 },
+  { id: "platega_13", label: "Platega (Криптовалюта)", sortOrder: 6 },
+  { id: "lava", label: "LAVA (СБП / Карты / СберPay)", sortOrder: 7 },
+  { id: "lavatop", label: "Lava.top (СБП / Карты)", sortOrder: 8 },
+  { id: "overpay", label: "Overpay (Карты / СБП)", sortOrder: 9 },
+  { id: "paritypay", label: "ParityPay", sortOrder: 10 },
+  { id: "cloudpayments", label: "Карта (CloudPayments)", sortOrder: 11 },
+  { id: "cryptopay", label: "Crypto Bot", sortOrder: 12 },
+  { id: "heleket", label: "Heleket", sortOrder: 13 },
+  { id: "telegram_stars", label: "Telegram Stars", sortOrder: 14 },
 ];
 
-function parsePaymentProviders(raw: string | undefined): PaymentProviderConfig[] {
+export function parsePaymentProviders(raw: string | undefined): PaymentProviderConfig[] {
   if (!raw || !raw.trim()) return DEFAULT_PAYMENT_PROVIDERS;
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return DEFAULT_PAYMENT_PROVIDERS;
-    const result = parsed.map((m: unknown, i: number) => {
+    const parsedItems = parsed.map((m: unknown, i: number) => {
       const x = m as Record<string, unknown>;
       return {
         id: typeof x.id === "string" ? x.id : `unknown_${i}`,
@@ -1135,6 +1139,10 @@ function parsePaymentProviders(raw: string | undefined): PaymentProviderConfig[]
         sortOrder: typeof x.sortOrder === "number" ? x.sortOrder : i,
       };
     });
+    const hasPlatega2 = parsedItems.some((r) => r.id === "platega_2");
+    const result = parsedItems
+      .filter((r) => !(r.id === "platega" && hasPlatega2))
+      .map((r) => r.id === "platega" ? { ...r, id: "platega_2", label: r.label || "Platega (СБП)" } : r);
     const knownIds = new Set(result.map((r) => r.id));
     for (const def of DEFAULT_PAYMENT_PROVIDERS) {
       if (!knownIds.has(def.id)) result.push({ ...def, sortOrder: result.length });
@@ -1401,7 +1409,9 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     botWebhookEnabled: Boolean((full as { botWebhookEnabled?: boolean }).botWebhookEnabled),
     botWebhookUrl: ((full as { botWebhookUrl?: string | null }).botWebhookUrl ?? null),
     botAdminTelegramIds: full.botAdminTelegramIds ?? [],
-    plategaMethods: full.plategaMethods.filter((m) => m.enabled).map((m) => ({ id: m.id, label: m.label })),
+    plategaMethods: Boolean(full.plategaMerchantId?.trim() && full.plategaSecret?.trim())
+      ? full.plategaMethods.filter((m) => m.enabled).map((m) => ({ id: m.id, label: m.label }))
+      : [],
     yoomoneyEnabled: Boolean(full.yoomoneyReceiverWallet?.trim()),
     yookassaEnabled: Boolean(full.yookassaShopId?.trim() && full.yookassaSecretKey?.trim()),
     yookassaRecurringEnabled: full.yookassaRecurringEnabled ?? false,

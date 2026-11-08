@@ -177,8 +177,8 @@ export function ExtendSubscriptionDialog({
       let url: string | null = null;
       let paymentId: string | undefined;
       let providerLabel = providerId;
-      if (providerId.startsWith("platega:")) {
-        const methodId = Number(providerId.slice("platega:".length));
+      if (providerId.startsWith("platega_")) {
+        const methodId = Number(providerId.slice("platega_".length));
         const r = await api.clientCreatePlategaPayment(token, { ...payBase, paymentMethod: methodId });
         url = r.paymentUrl; paymentId = r.paymentId; providerLabel = "Platega";
       } else if (providerId === "yookassa") {
@@ -227,10 +227,9 @@ export function ExtendSubscriptionDialog({
   const providers = useMemo(() => {
     if (!config) return [] as { id: string; label: string }[];
     const isRub = currency.toUpperCase() === "RUB";
-    const list: { id: string; label: string }[] = [];
-    (config.plategaMethods ?? []).forEach((m) => list.push({ id: `platega:${m.id}`, label: m.label }));
     const label = (id: string, fb: string) => config.paymentProviders?.find((p) => p.id === id)?.label || fb;
     const flags: { id: string; enabled: boolean; fb: string }[] = [
+      ...(config.plategaMethods ?? []).map((m) => ({ id: `platega_${m.id}`, enabled: true, fb: m.label })),
       { id: "telegram_stars", enabled: Boolean(config.telegramStarsEnabled) && isRub, fb: "⭐ Telegram Stars" },
       { id: "cryptopay", enabled: Boolean(config.cryptopayEnabled), fb: "Crypto Bot" },
       { id: "heleket", enabled: Boolean(config.heleketEnabled), fb: "Heleket" },
@@ -250,7 +249,7 @@ export function ExtendSubscriptionDialog({
       const ia = order.indexOf(a.id); const ib = order.indexOf(b.id);
       return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
     });
-    return [...list, ...enabled];
+    return enabled;
   }, [config, currency]);
 
   return (

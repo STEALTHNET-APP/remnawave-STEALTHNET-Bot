@@ -62,7 +62,7 @@ export function AuroraTopUpSheet({ open, onClose }: Props) {
     if (!config) return [];
     const list: PaymentMethodItem[] = [];
 
-    const paymentProviders = (config.paymentProviders as { id: string; label: string }[]) ?? [];
+    const paymentProviders = (config.paymentProviders as { id: string; label: string; sortOrder?: number }[]) ?? [];
     const providerLabel = (id: string, fallback: string) =>
       paymentProviders.find((p) => p.id === id)?.label || fallback;
 
@@ -180,14 +180,15 @@ if (Boolean(config.paritypayEnabled) && isRub) {
       list.push({
         id: `platega_${m.id}`,
         kind: "platega",
-        label: m.label,
+        label: providerLabel(`platega_${m.id}`, m.label),
         plategaId: m.id,
         icon: CreditCard,
       });
     }
 
-    const order = new Map(paymentProviders.map((provider, index) => [provider.id, index]));
-    return list.sort((a, b) => (order.get(a.kind) ?? 999) - (order.get(b.kind) ?? 999));
+    const order = new Map(paymentProviders.map((provider, index) => [provider.id, provider.sortOrder ?? index]));
+    const fallback = new Map(list.map((method, index) => [method.id, 100 + index]));
+    return list.sort((a, b) => (order.get(a.id) ?? order.get(a.kind) ?? fallback.get(a.id) ?? 999) - (order.get(b.id) ?? order.get(b.kind) ?? fallback.get(b.id) ?? 999));
   }, [config, isRub]);
 
   // Выбираем первый метод по умолчанию

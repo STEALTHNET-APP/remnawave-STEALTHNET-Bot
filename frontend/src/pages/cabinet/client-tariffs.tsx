@@ -1244,10 +1244,17 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
                 { id: "lava", enabled: lavaEnabled && isRub, onClick: () => startLavaPayment(tariff), label: providerLabel("lava", "LAVA"), icon: "card" },
                 { id: "lavatop", enabled: lavatopEnabled, onClick: () => startLavatopPayment(tariff), label: providerLabel("lavatop", "Lava.top"), icon: "card" },
                 { id: "overpay", enabled: overpayEnabled, onClick: () => startOverpayPayment(tariff), label: providerLabel("overpay", "Overpay"), icon: "card" },
-              ];
+                              ...(plategaMethods.map((m) => ({
+                  id: `platega_${m.id}`,
+                  enabled: true,
+                  onClick: () => startPayment(tariff, m.id),
+                  label: providerLabel(`platega_${m.id}`, m.label),
+                  icon: "card" as const,
+                }))),
+];
 
               const sortedProviders = paymentProviders.length > 0
-                ? paymentProviders.map((pp) => providers.find((p) => p.id === pp.id)).filter((p): p is ProviderEntry => !!p)
+                ? [...paymentProviders.map((pp) => providers.find((p) => p.id === pp.id)).filter((p): p is ProviderEntry => !!p), ...providers.filter((p) => !paymentProviders.some((pp) => pp.id === p.id))]
                 : providers;
 
               return (
@@ -1274,25 +1281,6 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
                     </Button>
                     );
                   })}
-                  {plategaMethods.map((m) => (
-                    <Button key={m.id} size="lg" variant="outline" onClick={() => startPayment(tariff, m.id)} disabled={payLoading} className={btnCls}>
-                      {isMobileOrMiniapp ? (
-                        <>
-                          <div className="p-2 rounded-xl bg-green-500/10">
-                            {payLoading ? <Loader2 className="h-6 w-6 animate-spin text-green-500" /> : <CreditCard className="h-6 w-6 text-green-500" />}
-                          </div>
-                          <span className="text-base font-bold">{m.label}</span>
-                        </>
-                      ) : (
-                        <>
-                          <div className="shrink-0 p-1.5 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
-                            {payLoading ? <Loader2 className="h-5 w-5 animate-spin text-green-500" /> : <CreditCard className="h-5 w-5 text-green-500" />}
-                          </div>
-                          <span className="text-sm font-medium">{m.label}</span>
-                        </>
-                      )}
-                    </Button>
-                  ))}
                 </>
               );
             })()}

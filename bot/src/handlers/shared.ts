@@ -1992,6 +1992,7 @@ export async function showGiftPaymentConfirm(ctx: any, userId: number, tariff: T
     tariff.currency,
     !!config?.paritypayEnabled,
     !!config?.cloudpaymentsEnabled,
+    config?.plategaMethods ?? [],
   ));
 }
 

@@ -19,6 +19,7 @@ export type CheckoutMethodKind =
   | "paritypay"
   | "cloudpayments"
   | "lava"
+  | "lavatop"
   | "overpay";
 
 export interface CheckoutMethod {
@@ -40,6 +41,7 @@ const DEFAULT_ORDER: CheckoutMethodKind[] = [
   "paritypay",
   "cloudpayments",
   "lava",
+  "lavatop",
   "overpay",
 ];
 
@@ -71,7 +73,8 @@ export function checkoutMethods(
   const label = (id: string, fallback: string) => labels.get(id)?.trim() || fallback;
 
   for (const m of config.plategaMethods ?? []) {
-    list.push({ id: `platega_${m.id}`, kind: "platega", label: m.label, plategaId: m.id });
+    const provId = `platega_${m.id}`;
+    list.push({ id: provId, kind: "platega", label: label(provId, m.label), plategaId: m.id });
   }
   if (config.yookassaEnabled && rub) {
     list.push({ id: "yookassa", kind: "yookassa", label: label("yookassa", "Карта / СБП"), subLabel: "ЮKassa" });
@@ -100,6 +103,9 @@ export function checkoutMethods(
   if (config.lavaEnabled && rub) {
     list.push({ id: "lava", kind: "lava", label: label("lava", "LAVA"), subLabel: "Карты и кошельки" });
   }
+  if (config.lavatopEnabled) {
+    list.push({ id: "lavatop", kind: "lavatop", label: label("lavatop", "Lava.top"), subLabel: "Карты и кошельки" });
+  }
   if (config.overpayEnabled) {
     list.push({ id: "overpay", kind: "overpay", label: label("overpay", "Overpay"), subLabel: "Карты и платёжные системы" });
   }
@@ -109,7 +115,7 @@ export function checkoutMethods(
   return list.sort((a, b) => {
     if (a.kind === "balance") return -1;
     if (b.kind === "balance") return 1;
-    const rank = (m: CheckoutMethod) => order.get(m.kind) ?? fallback.get(m.kind) ?? 999;
+    const rank = (m: CheckoutMethod) => order.get(m.id) ?? order.get(m.kind) ?? fallback.get(m.kind) ?? 999;
     return rank(a) - rank(b);
   });
 }

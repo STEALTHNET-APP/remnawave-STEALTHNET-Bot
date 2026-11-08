@@ -521,6 +521,7 @@ async function payByCloudpayments() {
                 };
 
                 type ProviderEntry = { id: string; enabled: boolean; onClick: () => void; label: string; icon: "crypto" | "card" };
+                const plategaMethods = config?.plategaMethods ?? [];
                 const providers: ProviderEntry[] = [
                   { id: "telegram_stars", enabled: Boolean(config?.telegramStarsEnabled) && cb.currency.toUpperCase() === "RUB", onClick: () => payByCryptopay(true), label: "⭐ Telegram Stars", icon: "crypto" },
                   { id: "cryptopay", enabled: !!config?.cryptopayEnabled, onClick: () => payByCryptopay(), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
@@ -532,13 +533,18 @@ async function payByCloudpayments() {
                   { id: "yoomoney", enabled: !!config?.yoomoneyEnabled && cb.currency.toUpperCase() === "RUB", onClick: () => payByYoomoney(), label: providerLabel("yoomoney", "ЮMoney / Карты"), icon: "card" },
                   { id: "lava", enabled: !!config?.lavaEnabled && cb.currency.toUpperCase() === "RUB", onClick: () => payByLava(), label: providerLabel("lava", "LAVA"), icon: "card" },
                   { id: "overpay", enabled: !!config?.overpayEnabled, onClick: () => payByOverpay(), label: providerLabel("overpay", "Overpay"), icon: "card" },
-                ];
+                                  ...(plategaMethods.map((m) => ({
+                    id: `platega_${m.id}`,
+                    enabled: true,
+                    onClick: () => payByPlatega(m.id),
+                    label: providerLabel(`platega_${m.id}`, m.label),
+                    icon: "card" as const,
+                  }))),
+];
 
                 const sortedProviders = paymentProviders.length > 0
-                  ? paymentProviders.map((pp) => providers.find((p) => p.id === pp.id)).filter((p): p is ProviderEntry => !!p)
-                  : providers;
-
-                const plategaMethods = config?.plategaMethods ?? [];
+                ? [...paymentProviders.map((pp) => providers.find((p) => p.id === pp.id)).filter((p): p is ProviderEntry => !!p), ...providers.filter((p) => !paymentProviders.some((pp) => pp.id === p.id))]
+                : providers;
 
                 return (
                   <>
@@ -564,25 +570,6 @@ async function payByCloudpayments() {
                       </Button>
                       );
                     })}
-                    {plategaMethods.map((m) => (
-                      <Button key={m.id} size="lg" variant="outline" onClick={() => payByPlatega(m.id)} disabled={payLoading} className={btnCls}>
-                        {isMobileOrMiniapp ? (
-                          <>
-                            <div className="p-2 rounded-xl bg-green-500/10">
-                              {payLoading ? <Loader2 className="h-6 w-6 animate-spin text-green-500" /> : <CreditCard className="h-6 w-6 text-green-500" />}
-                            </div>
-                            <span className="text-base font-bold">{m.label}</span>
-                          </>
-                        ) : (
-                          <>
-                            <div className="absolute left-6 p-1.5 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
-                              {payLoading ? <Loader2 className="h-5 w-5 animate-spin text-green-500" /> : <CreditCard className="h-5 w-5 text-green-500" />}
-                            </div>
-                            <span className="text-base font-medium">{m.label}</span>
-                          </>
-                        )}
-                      </Button>
-                    ))}
                   </>
                 );
               })()}

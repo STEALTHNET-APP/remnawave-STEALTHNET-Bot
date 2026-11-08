@@ -261,8 +261,9 @@ export async function getPublicConfig(force = false): Promise<{
   } | null>("/api/public/config");
 
   try {
-    const { setProviderLabels, setStarsPaymentsEnabled } = await import("./keyboard.js");
+    const { setProviderLabels, setPaymentProviders, setStarsPaymentsEnabled } = await import("./keyboard.js");
     setProviderLabels(cfg?.paymentProviders ?? null);
+    setPaymentProviders(cfg?.paymentProviders ?? null);
     setStarsPaymentsEnabled(cfg?.telegramStarsEnabled === true);
   } catch {}
 
@@ -563,6 +564,7 @@ export async function createPlategaPayment(
     promoCode?: string;
     extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string; targetSubscriptionId?: string };
     asAdditional?: boolean;
+    asGift?: boolean;
     extendsSecondarySubId?: string;
     removeExtrasOnActivate?: boolean;
     replaceTrialSubId?: string;

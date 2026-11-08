@@ -391,6 +391,12 @@ function LavatopOffersBrowser() {
 
 function isPaymentProviderActive(id: string, s: AdminSettings | null): boolean {
   if (!s) return false;
+  if (id.startsWith("platega_")) {
+    const methodId = Number(id.replace("platega_", ""));
+    const hasCreds = Boolean(s.plategaMerchantId?.trim() && s.plategaSecret?.trim());
+    const method = (s.plategaMethods ?? DEFAULT_PLATEGA_METHODS).find((m) => m.id === methodId);
+    return Boolean(hasCreds && method?.enabled);
+  }
   switch (id) {
     case "telegram_stars":
       return Boolean(s.telegramStarsEnabled && (s.telegramStarsRubPerStar ?? 0) > 0);

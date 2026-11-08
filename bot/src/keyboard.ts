@@ -84,6 +84,27 @@ function providerLabel(id: string, fallback: string): string {
   return CURRENT_PROVIDER_LABELS[id] ?? fallback;
 }
 
+let CURRENT_PAYMENT_PROVIDERS: Array<{ id: string; label: string; sortOrder: number }> = [];
+export function setPaymentProviders(list: Array<{ id: string; label: string; sortOrder?: number }> | null | undefined): void {
+  if (!Array.isArray(list)) {
+    CURRENT_PAYMENT_PROVIDERS = [];
+    return;
+  }
+  CURRENT_PAYMENT_PROVIDERS = list.map((p, i) => ({
+    id: p.id,
+    label: p.label,
+    sortOrder: typeof p.sortOrder === "number" ? p.sortOrder : i,
+  })).sort((a, b) => a.sortOrder - b.sortOrder);
+}
+function orderedProviderIds(fallback: string[]): string[] {
+  if (CURRENT_PAYMENT_PROVIDERS.length === 0) return fallback;
+  const ids = CURRENT_PAYMENT_PROVIDERS.map((p) => p.id);
+  for (const id of fallback) {
+    if (!ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
 // Стрип ведущего unicode-эмодзи (с опциональным VS16, ZWJ-секвенциями и пробелом).
 // Когда у кнопки задан `icon_custom_emoji_id`, Telegram рендерит премиум-иконку слева
 // от текста, а unicode-эмодзи в лейбле даёт второй значок — двойная иконка. Чтобы избежать
@@ -752,45 +773,43 @@ export function tariffPaymentMethodButtons(
   const backSty = undefined;
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
-  if (starsPaymentsEnabled && tariffCurrency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_tariff_stars:${tariffId}`)]);
-  // Кнопка оплаты балансом (первая)
   if (balanceLabel) {
     rows.push([btn(balanceLabel, `pay_tariff_balance:${tariffId}`, undefined, cardId)]);
   }
-  // ЮMoney — только для рублёвых тарифов
-  if (yoomoneyEnabled && (!tariffCurrency || tariffCurrency.toUpperCase() === "RUB")) {
-    rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — оплата картой"), `pay_tariff_yoomoney:${tariffId}`, undefined, cardId)]);
-  }
-  // ЮKassa — только RUB
-  if (yookassaEnabled && (!tariffCurrency || tariffCurrency.toUpperCase() === "RUB")) {
-    rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `pay_tariff_yookassa:${tariffId}`, undefined, cardId)]);
-  }
-  // LAVA Business — только RUB (СБП / Карты / СберPay)
-  if (lavaEnabled && (!tariffCurrency || tariffCurrency.toUpperCase() === "RUB")) {
-    rows.push([btn(providerLabel("lava", "💳 Lava — СБП / Карты"), `pay_tariff_lava:${tariffId}`, undefined, cardId)]);
-  }
-  // Lava.top — RUB / USD / EUR через product/offer модель
-  if (lavatopEnabled) {
-    rows.push([btn(providerLabel("lavatop", "💳 Lava.top — СБП / Карты"), `pay_tariff_lavatop:${tariffId}`, undefined, cardId)]);
-  }
-  if (cryptopayEnabled) {
-    rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `pay_tariff_cryptopay:${tariffId}`, undefined, cardId)]);
-  }
-  if (heleketEnabled) {
-    rows.push([btn(providerLabel("heleket", "💳 Heleket — криптовалюта"), `pay_tariff_heleket:${tariffId}`, undefined, cardId)]);
-  }
-  if (rollypayEnabled) {
-    rows.push([btn(providerLabel("rollypay", "💳 RollyPay — СБП, карта, крипта"), `pay_tariff_rollypay:${tariffId}`, undefined, cardId)]);
-  }
-  if (paritypayEnabled && (!tariffCurrency || tariffCurrency.toUpperCase() === "RUB")) {
-    rows.push([btn(providerLabel("paritypay", "💳 ParityPay — СБП, карта"), `pay_tariff_paritypay:${tariffId}`, undefined, cardId)]);
-  }
-  if (cloudpaymentsEnabled && (!tariffCurrency || tariffCurrency.toUpperCase() === "RUB")) {
-    rows.push([btn(providerLabel("cloudpayments", "💳 Карта (CloudPayments)"), `pay_tariff_cloudpayments:${tariffId}`, undefined, cardId)]);
-  }
-  for (const m of methods) {
-    rows.push([btn(m.label, `pay_tariff:${tariffId}:${m.id}`, undefined, cardId)]);
-  }
+  const plategaById = new Map(methods.map((m) => [m.id, m]));
+  const seen = new Set<string>();
+  const isRub = !tariffCurrency || tariffCurrency.toUpperCase() === "RUB";
+  const addProvider = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    if (id === "telegram_stars") {
+      if (starsPaymentsEnabled && tariffCurrency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_tariff_stars:${tariffId}`)]);
+    } else if (id.startsWith("platega_")) {
+      const methodId = Number(id.replace("platega_", ""));
+      const m = plategaById.get(methodId);
+      if (m) rows.push([btn(providerLabel(id, m.label), `pay_tariff:${tariffId}:${m.id}`, undefined, cardId)]);
+    } else if (id === "yoomoney") {
+      if (yoomoneyEnabled && isRub) rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — оплата картой"), `pay_tariff_yoomoney:${tariffId}`, undefined, cardId)]);
+    } else if (id === "yookassa") {
+      if (yookassaEnabled && isRub) rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `pay_tariff_yookassa:${tariffId}`, undefined, cardId)]);
+    } else if (id === "lava") {
+      if (lavaEnabled && isRub) rows.push([btn(providerLabel("lava", "💳 Lava — СБП / Карты"), `pay_tariff_lava:${tariffId}`, undefined, cardId)]);
+    } else if (id === "lavatop") {
+      if (lavatopEnabled) rows.push([btn(providerLabel("lavatop", "💳 Lava.top — СБП / Карты"), `pay_tariff_lavatop:${tariffId}`, undefined, cardId)]);
+    } else if (id === "cryptopay") {
+      if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `pay_tariff_cryptopay:${tariffId}`, undefined, cardId)]);
+    } else if (id === "heleket") {
+      if (heleketEnabled) rows.push([btn(providerLabel("heleket", "💳 Heleket — криптовалюта"), `pay_tariff_heleket:${tariffId}`, undefined, cardId)]);
+    } else if (id === "rollypay") {
+      if (rollypayEnabled) rows.push([btn(providerLabel("rollypay", "💳 RollyPay — СБП, карта, крипта"), `pay_tariff_rollypay:${tariffId}`, undefined, cardId)]);
+    } else if (id === "paritypay") {
+      if (paritypayEnabled && isRub) rows.push([btn(providerLabel("paritypay", "💳 ParityPay — СБП, карта"), `pay_tariff_paritypay:${tariffId}`, undefined, cardId)]);
+    } else if (id === "cloudpayments") {
+      if (cloudpaymentsEnabled && isRub) rows.push([btn(providerLabel("cloudpayments", "💳 Карта (CloudPayments)"), `pay_tariff_cloudpayments:${tariffId}`, undefined, cardId)]);
+    }
+  };
+  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "lava", "lavatop", "cryptopay", "heleket", "rollypay", "paritypay", "cloudpayments"])) addProvider(id);
+  for (const m of methods) addProvider(`platega_${m.id}`);
   // «🏠 Главное меню» → «← Назад» (callback menu:tariffs).
   // Юзер хочет возвращаться к списку тарифов, а не уходить в главное меню.
   const bk = backButton(botEmojis);
@@ -908,18 +927,29 @@ export function proxyPaymentMethodButtons(
   const backSty = undefined;
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
-  if (starsPaymentsEnabled && currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_proxy_stars:${proxyTariffId}`)]);
   if (balanceLabel) rows.push([btn(balanceLabel, `pay_proxy_balance:${proxyTariffId}`, undefined, cardId)]);
-  if (yoomoneyEnabled && (!currency || currency.toUpperCase() === "RUB")) {
-    rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_proxy_yoomoney:${proxyTariffId}`, undefined, cardId)]);
-  }
-  if (yookassaEnabled && (!currency || currency.toUpperCase() === "RUB")) {
-    rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `pay_proxy_yookassa:${proxyTariffId}`, undefined, cardId)]);
-  }
-  if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `pay_proxy_cryptopay:${proxyTariffId}`, undefined, cardId)]);
-  for (const m of methods) {
-    rows.push([btn(m.label, `pay_proxy:${proxyTariffId}:${m.id}`, undefined, cardId)]);
-  }
+  const plategaById = new Map(methods.map((m) => [m.id, m]));
+  const seen = new Set<string>();
+  const isRub = !currency || currency.toUpperCase() === "RUB";
+  const addProvider = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    if (id === "telegram_stars") {
+      if (starsPaymentsEnabled && currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_proxy_stars:${proxyTariffId}`)]);
+    } else if (id.startsWith("platega_")) {
+      const methodId = Number(id.replace("platega_", ""));
+      const m = plategaById.get(methodId);
+      if (m) rows.push([btn(providerLabel(id, m.label), `pay_proxy:${proxyTariffId}:${m.id}`, undefined, cardId)]);
+    } else if (id === "yoomoney") {
+      if (yoomoneyEnabled && isRub) rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_proxy_yoomoney:${proxyTariffId}`, undefined, cardId)]);
+    } else if (id === "yookassa") {
+      if (yookassaEnabled && isRub) rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `pay_proxy_yookassa:${proxyTariffId}`, undefined, cardId)]);
+    } else if (id === "cryptopay") {
+      if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `pay_proxy_cryptopay:${proxyTariffId}`, undefined, cardId)]);
+    }
+  };
+  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "cryptopay"])) addProvider(id);
+  for (const m of methods) addProvider(`platega_${m.id}`);
   rows.push([btn(back, "menu:proxy", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }
@@ -996,18 +1026,29 @@ export function singboxPaymentMethodButtons(
   const backSty = undefined;
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
-  if (starsPaymentsEnabled && currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_singbox_stars:${singboxTariffId}`)]);
   if (balanceLabel) rows.push([btn(balanceLabel, `pay_singbox_balance:${singboxTariffId}`, undefined, cardId)]);
-  if (yoomoneyEnabled && (!currency || currency.toUpperCase() === "RUB")) {
-    rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_singbox_yoomoney:${singboxTariffId}`, undefined, cardId)]);
-  }
-  if (yookassaEnabled && (!currency || currency.toUpperCase() === "RUB")) {
-    rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `pay_singbox_yookassa:${singboxTariffId}`, undefined, cardId)]);
-  }
-  if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `pay_singbox_cryptopay:${singboxTariffId}`, undefined, cardId)]);
-  for (const m of methods) {
-    rows.push([btn(m.label, `pay_singbox:${singboxTariffId}:${m.id}`, undefined, cardId)]);
-  }
+  const plategaById = new Map(methods.map((m) => [m.id, m]));
+  const seen = new Set<string>();
+  const isRub = !currency || currency.toUpperCase() === "RUB";
+  const addProvider = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    if (id === "telegram_stars") {
+      if (starsPaymentsEnabled && currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_singbox_stars:${singboxTariffId}`)]);
+    } else if (id.startsWith("platega_")) {
+      const methodId = Number(id.replace("platega_", ""));
+      const m = plategaById.get(methodId);
+      if (m) rows.push([btn(providerLabel(id, m.label), `pay_singbox:${singboxTariffId}:${m.id}`, undefined, cardId)]);
+    } else if (id === "yoomoney") {
+      if (yoomoneyEnabled && isRub) rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_singbox_yoomoney:${singboxTariffId}`, undefined, cardId)]);
+    } else if (id === "yookassa") {
+      if (yookassaEnabled && isRub) rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `pay_singbox_yookassa:${singboxTariffId}`, undefined, cardId)]);
+    } else if (id === "cryptopay") {
+      if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `pay_singbox_cryptopay:${singboxTariffId}`, undefined, cardId)]);
+    }
+  };
+  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "cryptopay"])) addProvider(id);
+  for (const m of methods) addProvider(`platega_${m.id}`);
   rows.push([btn(back, "menu:singbox", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }
@@ -1036,35 +1077,37 @@ export function topupPaymentMethodButtons(
   const backSty = resolveStyle(toStyle(backStyle), "danger");
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
-  if (starsPaymentsEnabled && providers.currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `topup_stars:${amount}`)]);
-  if (yoomoneyEnabled) {
-    rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — оплата картой"), `topup_yoomoney:${amount}`, "primary", cardId)]);
-  }
-  if (yookassaEnabled) {
-    rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `topup_yookassa:${amount}`, "primary", cardId)]);
-  }
-  if (lavaEnabled) {
-    rows.push([btn(providerLabel("lava", "💳 Lava — СБП / Карты"), `topup_lava:${amount}`, "primary", cardId)]);
-  }
-  // Lava.top — только для тарифов (subscription mode), не для топ-апа баланса.
-  if (cryptopayEnabled) {
-    rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `topup_cryptopay:${amount}`, "primary", cardId)]);
-  }
-  if (heleketEnabled) {
-    rows.push([btn(providerLabel("heleket", "💳 Heleket — криптовалюта"), `topup_heleket:${amount}`, "primary", cardId)]);
-  }
-  if (rollypayEnabled) {
-    rows.push([btn(providerLabel("rollypay", "💳 RollyPay — СБП, карта, крипта"), `topup_rollypay:${amount}`, "primary", cardId)]);
-  }
-  if (paritypayEnabled) {
-    rows.push([btn(providerLabel("paritypay", "💳 ParityPay — СБП, карта"), `topup_paritypay:${amount}`, "primary", cardId)]);
-  }
-  if (cloudpaymentsEnabled) {
-    rows.push([btn(providerLabel("cloudpayments", "💳 Карта (CloudPayments)"), `topup_cloudpayments:${amount}`, "primary", cardId)]);
-  }
-  for (const m of methods) {
-    rows.push([btn(m.label, `topup:${amount}:${m.id}`, "primary", cardId)]);
-  }
+  const plategaById = new Map(methods.map((m) => [m.id, m]));
+  const seen = new Set<string>();
+  const addProvider = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    if (id === "telegram_stars") {
+      if (starsPaymentsEnabled && providers.currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `topup_stars:${amount}`)]);
+    } else if (id.startsWith("platega_")) {
+      const methodId = Number(id.replace("platega_", ""));
+      const m = plategaById.get(methodId);
+      if (m) rows.push([btn(providerLabel(id, m.label), `topup:${amount}:${m.id}`, "primary", cardId)]);
+    } else if (id === "yoomoney") {
+      if (yoomoneyEnabled) rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — оплата картой"), `topup_yoomoney:${amount}`, "primary", cardId)]);
+    } else if (id === "yookassa") {
+      if (yookassaEnabled) rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `topup_yookassa:${amount}`, "primary", cardId)]);
+    } else if (id === "lava") {
+      if (lavaEnabled) rows.push([btn(providerLabel("lava", "💳 Lava — СБП / Карты"), `topup_lava:${amount}`, "primary", cardId)]);
+    } else if (id === "cryptopay") {
+      if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `topup_cryptopay:${amount}`, "primary", cardId)]);
+    } else if (id === "heleket") {
+      if (heleketEnabled) rows.push([btn(providerLabel("heleket", "💳 Heleket — криптовалюта"), `topup_heleket:${amount}`, "primary", cardId)]);
+    } else if (id === "rollypay") {
+      if (rollypayEnabled) rows.push([btn(providerLabel("rollypay", "💳 RollyPay — СБП, карта, крипта"), `topup_rollypay:${amount}`, "primary", cardId)]);
+    } else if (id === "paritypay") {
+      if (paritypayEnabled) rows.push([btn(providerLabel("paritypay", "💳 ParityPay — СБП, карта"), `topup_paritypay:${amount}`, "primary", cardId)]);
+    } else if (id === "cloudpayments") {
+      if (cloudpaymentsEnabled) rows.push([btn(providerLabel("cloudpayments", "💳 Карта (CloudPayments)"), `topup_cloudpayments:${amount}`, "primary", cardId)]);
+    }
+  };
+  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "lava", "cryptopay", "heleket", "rollypay", "paritypay", "cloudpayments"])) addProvider(id);
+  for (const m of methods) addProvider(`platega_${m.id}`);
   rows.push([btn(back, "menu:topup", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }
@@ -1120,22 +1163,30 @@ export function optionPaymentMethodButtons(
   const backSty = undefined;
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
-  if (starsPaymentsEnabled && option.currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_option_stars:${option.kind}:${option.id}`)]);
   if (balance >= option.price) {
     rows.push([btn(`💰 Оплатить балансом (${option.price} ₽)`, `pay_option_balance:${option.kind}:${option.id}`, undefined, cardId)]);
   }
-  if (yoomoneyEnabled) {
-    rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_option_yoomoney:${option.kind}:${option.id}`, undefined, cardId)]);
-  }
-  if (yookassaEnabled !== false) {
-    rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `pay_option_yookassa:${option.kind}:${option.id}`, undefined, cardId)]);
-  }
-  if (cryptopayEnabled) {
-    rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `pay_option_cryptopay:${option.kind}:${option.id}`, undefined, cardId)]);
-  }
-  for (const m of plategaMethods) {
-    rows.push([btn(m.label, `pay_option_platega:${option.kind}:${option.id}:${m.id}`, undefined, cardId)]);
-  }
+  const plategaById = new Map(plategaMethods.map((m) => [m.id, m]));
+  const seen = new Set<string>();
+  const addProvider = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    if (id === "telegram_stars") {
+      if (starsPaymentsEnabled && option.currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_option_stars:${option.kind}:${option.id}`)]);
+    } else if (id.startsWith("platega_")) {
+      const methodId = Number(id.replace("platega_", ""));
+      const m = plategaById.get(methodId);
+      if (m) rows.push([btn(providerLabel(id, m.label), `pay_option_platega:${option.kind}:${option.id}:${m.id}`, undefined, cardId)]);
+    } else if (id === "yoomoney") {
+      if (yoomoneyEnabled) rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_option_yoomoney:${option.kind}:${option.id}`, undefined, cardId)]);
+    } else if (id === "yookassa") {
+      if (yookassaEnabled !== false) rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `pay_option_yookassa:${option.kind}:${option.id}`, undefined, cardId)]);
+    } else if (id === "cryptopay") {
+      if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `pay_option_cryptopay:${option.kind}:${option.id}`, undefined, cardId)]);
+    }
+  };
+  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "cryptopay"])) addProvider(id);
+  for (const m of plategaMethods) addProvider(`platega_${m.id}`);
   if (rows.length === 0) {
     rows.push([btn(providerLabel("yookassa", "💳 Оплата (ЮKassa)"), `pay_option_yookassa:${option.kind}:${option.id}`, undefined, cardId)]);
   }
@@ -1503,37 +1554,45 @@ export function giftPaymentButtons(
   tariffCurrency?: string,
   paritypayEnabled?: boolean,
   cloudpaymentsEnabled?: boolean,
+  plategaMethods: { id: number; label: string }[] = [],
 ): InlineMarkup {
   const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
   const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
   const cardId = emojiIds?.card;
   const isRub = !tariffCurrency || tariffCurrency.toUpperCase() === "RUB";
   const rows: InlineButton[][] = [];
-  if (starsPaymentsEnabled && tariffCurrency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `gift_pay_stars:${tariffId}`)]);
   if (balanceLabel) {
     rows.push([btn(balanceLabel, `gift_pay_balance:${tariffId}`, undefined, cardId)]);
   }
-  if (yoomoneyEnabled && isRub) {
-    rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — оплата картой"), `gift_pay_yoomoney:${tariffId}`, undefined, cardId)]);
-  }
-  if (yookassaEnabled && isRub) {
-    rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `gift_pay_yookassa:${tariffId}`, undefined, cardId)]);
-  }
-  if (lavaEnabled && isRub) {
-    rows.push([btn(providerLabel("lava", "💳 Lava — СБП / Карты"), `gift_pay_lava:${tariffId}`, undefined, cardId)]);
-  }
-  if (paritypayEnabled && isRub) {
-    rows.push([btn(providerLabel("paritypay", "💳 ParityPay — СБП / Карты"), `gift_pay_paritypay:${tariffId}`, undefined, cardId)]);
-  }
-  if (cloudpaymentsEnabled && isRub) {
-    rows.push([btn(providerLabel("cloudpayments", "💳 Карта (CloudPayments)"), `gift_pay_cloudpayments:${tariffId}`, undefined, cardId)]);
-  }
-  if (cryptopayEnabled) {
-    rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `gift_pay_cryptopay:${tariffId}`, undefined, cardId)]);
-  }
-  if (heleketEnabled) {
-    rows.push([btn(providerLabel("heleket", "💳 Heleket — криптовалюта"), `gift_pay_heleket:${tariffId}`, undefined, cardId)]);
-  }
+  const plategaById = new Map(plategaMethods.map((m) => [m.id, m]));
+  const seen = new Set<string>();
+  const addProvider = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    if (id === "telegram_stars") {
+      if (starsPaymentsEnabled && tariffCurrency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `gift_pay_stars:${tariffId}`)]);
+    } else if (id.startsWith("platega_")) {
+      const methodId = Number(id.replace("platega_", ""));
+      const m = plategaById.get(methodId);
+      if (m) rows.push([btn(providerLabel(id, m.label), `gift_pay_platega:${tariffId}:${m.id}`, undefined, cardId)]);
+    } else if (id === "yoomoney") {
+      if (yoomoneyEnabled && isRub) rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — оплата картой"), `gift_pay_yoomoney:${tariffId}`, undefined, cardId)]);
+    } else if (id === "yookassa") {
+      if (yookassaEnabled && isRub) rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `gift_pay_yookassa:${tariffId}`, undefined, cardId)]);
+    } else if (id === "lava") {
+      if (lavaEnabled && isRub) rows.push([btn(providerLabel("lava", "💳 Lava — СБП / Карты"), `gift_pay_lava:${tariffId}`, undefined, cardId)]);
+    } else if (id === "paritypay") {
+      if (paritypayEnabled && isRub) rows.push([btn(providerLabel("paritypay", "💳 ParityPay — СБП / Карты"), `gift_pay_paritypay:${tariffId}`, undefined, cardId)]);
+    } else if (id === "cloudpayments") {
+      if (cloudpaymentsEnabled && isRub) rows.push([btn(providerLabel("cloudpayments", "💳 Карта (CloudPayments)"), `gift_pay_cloudpayments:${tariffId}`, undefined, cardId)]);
+    } else if (id === "cryptopay") {
+      if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `gift_pay_cryptopay:${tariffId}`, undefined, cardId)]);
+    } else if (id === "heleket") {
+      if (heleketEnabled) rows.push([btn(providerLabel("heleket", "💳 Heleket — криптовалюта"), `gift_pay_heleket:${tariffId}`, undefined, cardId)]);
+    }
+  };
+  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "lava", "paritypay", "cloudpayments", "cryptopay", "heleket"])) addProvider(id);
+  for (const m of plategaMethods) addProvider(`platega_${m.id}`);
   rows.push([btn(back, "gift:buy", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }

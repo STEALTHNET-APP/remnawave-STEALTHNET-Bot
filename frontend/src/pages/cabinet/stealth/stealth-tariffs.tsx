@@ -253,19 +253,25 @@ export function StealthTariffs() {
   const availableMethods: PayMethod[] = useMemo(() => {
     if (!config) return [];
     const list: PayMethod[] = [];
+    const labels = new Map((config.paymentProviders ?? []).map((p) => [p.id, p.label]));
+    const labelFor = (id: string, fallbackLabel: string) => labels.get(id)?.trim() || fallbackLabel;
     (config.plategaMethods ?? []).forEach((m) => {
-      list.push({ kind: "platega", id: m.id, label: m.label, icon: Wallet });
+      const id = `platega_${m.id}`;
+      list.push({ kind: "platega", id: m.id, label: labelFor(id, m.label), icon: Wallet });
     });
-    if (config.yookassaEnabled) list.push({ kind: "yookassa", label: "YooKassa", icon: Wallet });
-    if (config.yoomoneyEnabled) list.push({ kind: "yoomoney", label: "YooMoney", icon: Wallet });
-    if (config.telegramStarsEnabled && currency.toUpperCase() === "RUB") list.push({ kind: "telegram_stars", label: "⭐ Telegram Stars", icon: Wallet });
-    if (config.cryptopayEnabled) list.push({ kind: "cryptopay", label: "Crypto Pay", icon: Bitcoin });
-    if (config.heleketEnabled) list.push({ kind: "heleket", label: "Heleket", icon: Bitcoin });
-    if ((config as { rollypayEnabled?: boolean }).rollypayEnabled) list.push({ kind: "rollypay", label: "RollyPay", icon: Wallet });
-    if ((config as { cloudpaymentsEnabled?: boolean }).cloudpaymentsEnabled) list.push({ kind: "cloudpayments", label: "CloudPayments", icon: Wallet });
-if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kind: "paritypay", label: "ParityPay", icon: Wallet });
-    if (config.lavaEnabled) list.push({ kind: "lava", label: "Lava", icon: Wallet });
-    return list;
+    if (config.yookassaEnabled) list.push({ kind: "yookassa", label: labelFor("yookassa", "YooKassa"), icon: Wallet });
+    if (config.yoomoneyEnabled) list.push({ kind: "yoomoney", label: labelFor("yoomoney", "YooMoney"), icon: Wallet });
+    if (config.telegramStarsEnabled && currency.toUpperCase() === "RUB") list.push({ kind: "telegram_stars", label: labelFor("telegram_stars", "⭐ Telegram Stars"), icon: Wallet });
+    if (config.cryptopayEnabled) list.push({ kind: "cryptopay", label: labelFor("cryptopay", "Crypto Pay"), icon: Bitcoin });
+    if (config.heleketEnabled) list.push({ kind: "heleket", label: labelFor("heleket", "Heleket"), icon: Bitcoin });
+    if ((config as { rollypayEnabled?: boolean }).rollypayEnabled) list.push({ kind: "rollypay", label: labelFor("rollypay", "RollyPay"), icon: Wallet });
+    if ((config as { cloudpaymentsEnabled?: boolean }).cloudpaymentsEnabled) list.push({ kind: "cloudpayments", label: labelFor("cloudpayments", "CloudPayments"), icon: Wallet });
+    if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kind: "paritypay", label: labelFor("paritypay", "ParityPay"), icon: Wallet });
+    if (config.lavaEnabled) list.push({ kind: "lava", label: labelFor("lava", "Lava"), icon: Wallet });
+    const methodId = (m: PayMethod) => m.kind === "platega" ? `platega_${m.id}` : m.kind;
+    const order = new Map((config.paymentProviders ?? []).map((p, i) => [p.id, p.sortOrder ?? i]));
+    const fallback = new Map(list.map((m, i) => [methodId(m), 100 + i]));
+    return list.sort((a, b) => (order.get(methodId(a)) ?? fallback.get(methodId(a)) ?? 999) - (order.get(methodId(b)) ?? fallback.get(methodId(b)) ?? 999));
   }, [config, currency]);
 
   // Auto-select first method when methods load

@@ -163,15 +163,19 @@ export function createGiftHandlers(): Composer<Context> {
       return;
     }
 
-    if (data.startsWith("gift_pay_stars:") || data.startsWith("gift_pay_yookassa:") || data.startsWith("gift_pay_yoomoney:") || data.startsWith("gift_pay_cryptopay:") || data.startsWith("gift_pay_heleket:") || data.startsWith("gift_pay_lava:") || data.startsWith("gift_pay_paritypay:") || data.startsWith("gift_pay_cloudpayments:")) {
+    if (data.startsWith("gift_pay_stars:") || data.startsWith("gift_pay_yookassa:") || data.startsWith("gift_pay_yoomoney:") || data.startsWith("gift_pay_cryptopay:") || data.startsWith("gift_pay_heleket:") || data.startsWith("gift_pay_lava:") || data.startsWith("gift_pay_paritypay:") || data.startsWith("gift_pay_cloudpayments:") || data.startsWith("gift_pay_platega:")) {
+      const isPlategaGift = data.startsWith("gift_pay_platega:");
+      const giftParts = isPlategaGift ? data.split(":") : [];
+      const plategaMethodId = isPlategaGift ? Number(giftParts[2]) : null;
       const provider = data.startsWith("gift_pay_stars:") ? "telegram_stars" : data.startsWith("gift_pay_yookassa:") ? "yookassa"
         : data.startsWith("gift_pay_yoomoney:") ? "yoomoney"
         : data.startsWith("gift_pay_cryptopay:") ? "cryptopay"
         : data.startsWith("gift_pay_heleket:") ? "heleket"
         : data.startsWith("gift_pay_cloudpayments:") ? "cloudpayments"
         : data.startsWith("gift_pay_paritypay:") ? "paritypay"
+        : isPlategaGift ? "platega"
         : "lava";
-      const tariffId = data.slice(data.indexOf(":") + 1);
+      const tariffId = isPlategaGift ? (giftParts[1] ?? "") : data.slice(data.indexOf(":") + 1);
       try {
         const { items } = await api.getPublicTariffs();
         const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
@@ -243,6 +247,9 @@ export function createGiftHandlers(): Composer<Context> {
         } else if (provider === "paritypay") {
           const p = await api.createParitypayPayment(token, { amount: effectivePrice, currency: "RUB", tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
           payUrl = p.payUrl;
+        } else if (provider === "platega" && plategaMethodId != null) {
+          const p = await api.createPlategaPayment(token, { amount: effectivePrice, currency: "RUB", paymentMethod: plategaMethodId, tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
+          payUrl = p.paymentUrl;
         } else {
           const p = await api.createLavaPayment(token, { amount: effectivePrice, currency: "RUB", tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
           payUrl = p.payUrl;
