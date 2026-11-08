@@ -419,6 +419,52 @@ export async function notifyTariffActivationFailed(clientId: string, paymentId: 
   await sendTelegramToAdminsForEvent("tariff_payment", lines.join("\n"));
 }
 
+export async function notifyAdminsAboutActivationFailed(params: {
+  clientId: string;
+  paymentId: string;
+  amount: number;
+  currency: string;
+  provider: string;
+  error: string;
+  tariffName?: string | null;
+}): Promise<void> {
+  const { clientId, paymentId, amount, currency, provider, error, tariffName } = params;
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { telegramId: true, email: true, telegramUsername: true, id: true },
+  });
+  const lines = [
+    `🚨 <b>Сбой активации оплаченного платежа!</b>`,
+    ``,
+    `💳 Платёж: <code>${escapeHtml(paymentId)}</code>`,
+    `💰 Сумма: <b>${formatMoney(amount, currency)}</b> (${escapeHtml(provider)})`,
+    `👤 Клиент: ${escapeHtml(client ? formatClientLabel(client) : clientId)}`,
+  ];
+  if (client?.telegramId) lines.push(`🆔 TG ID: <code>${escapeHtml(client.telegramId)}</code>`);
+  if (tariffName) lines.push(`📋 Тариф: <b>${escapeHtml(tariffName)}</b>`);
+  lines.push(`❌ Причина: <code>${escapeHtml(error.slice(0, 300))}</code>`);
+  lines.push(`🕐 ${formatDate(new Date())}`);
+  lines.push(``);
+  lines.push(`⚠️ <i>Деньги получены, но подписка НЕ выдана. Откройте платёж в админке для повторной активации или возврата на баланс.</i>`);
+  await sendTelegramToAdminsForEvent("tariff_payment", lines.join("\n"));
+}
+
+export async function notifyClientAboutActivationDelayed(clientId: string, _errorMessage?: string): Promise<void> {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { telegramId: true, id: true },
+  });
+  if (!client?.telegramId) return;
+  const config = await getSystemConfig();
+  const text = `⚠️ <b>Оплата получена, но возникла задержка при активации</b>
+
+Ваш платёж успешно поступил, однако при автоматическом подключении тарифа произошла задержка.
+Администраторы уже получили уведомление и подключат вашу подписку или зачислят средства на баланс в ближайшее время.`;
+  await sendTelegramToUser(client.telegramId, text, null, backToMenuMarkup(config.botBackLabel), {
+    clientIdForBotToken: client.id,
+  });
+}
+
 /**
  * уведомление клиенту об успешной активации
  * extra-option (доп. устройства / трафик / серверы), после оплаты картой / криптой / etc.

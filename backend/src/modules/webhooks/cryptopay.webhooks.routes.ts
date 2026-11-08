@@ -13,8 +13,9 @@ import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.ser
 import { createSingboxSlotsByPaymentId } from "../singbox/singbox-slots-activation.service.js";
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
 import { distributeReferralRewards } from "../referral/referral.service.js";
-import { notifyBalanceToppedUp, notifyTariffActivated, notifyProxySlotsCreated, notifySingboxSlotsCreated } from "../notification/telegram-notify.service.js";
+import { notifyBalanceToppedUp, notifyProxySlotsCreated, notifySingboxSlotsCreated } from "../notification/telegram-notify.service.js";
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
+import { handlePaymentActivationResult } from "../payment/payment-fulfillment.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
 
 function parseMetadata(metadata: string | null): Record<string, unknown> {
@@ -131,7 +132,14 @@ cryptopayWebhooksRouter.post("/", async (req: Request, res: Response) => {
     }
   } else {
     const activation = await activateTariffByPaymentId(payment.id);
-    if (activation.ok) await notifyTariffActivated(payment.clientId, payment.id).catch(() => {});
+    await handlePaymentActivationResult({
+      paymentId: payment.id,
+      clientId: payment.clientId,
+      amount: payment.amount,
+      currency: payment.currency || "RUB",
+      provider: "cryptopay",
+      activation,
+    });
   }
 
   // сжигаем одноразовую персональную скидку после продуктовой покупки.

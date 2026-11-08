@@ -6227,23 +6227,32 @@ adminRouter.get("/sales-report", async (req, res) => {
   }
 
   return res.json({
-    items: payments.map((p) => ({
-      id: p.id,
-      orderId: p.orderId,
-      amount: p.amount,
-      currency: p.currency,
-      provider: p.provider ?? "unknown",
-      status: p.status,
-      tariffName: p.tariff?.name ?? null,
-      tariffId: p.tariff?.id ?? null,
-      clientId: p.client?.id ?? null,
-      clientEmail: p.client?.email ?? null,
-      clientTelegramId: p.client?.telegramId ?? null,
-      clientTelegramUsername: p.client?.telegramUsername ?? null,
-      paidAt: p.paidAt?.toISOString() ?? null,
-      createdAt: p.createdAt.toISOString(),
-      metadata: p.metadata,
-    })),
+    items: payments.map((p) => {
+      let activationError: string | null = null;
+      try {
+        const meta = p.metadata ? (JSON.parse(p.metadata) as Record<string, unknown>) : null;
+        if (typeof meta?.activationError === "string") activationError = meta.activationError;
+      } catch { /* ignore malformed metadata */ }
+      return {
+        id: p.id,
+        orderId: p.orderId,
+        amount: p.amount,
+        currency: p.currency,
+        provider: p.provider ?? "unknown",
+        status: p.status,
+        tariffName: p.tariff?.name ?? null,
+        tariffId: p.tariff?.id ?? null,
+        clientId: p.client?.id ?? null,
+        clientEmail: p.client?.email ?? null,
+        clientTelegramId: p.client?.telegramId ?? null,
+        clientTelegramUsername: p.client?.telegramUsername ?? null,
+        paidAt: p.paidAt?.toISOString() ?? null,
+        createdAt: p.createdAt.toISOString(),
+        metadata: p.metadata,
+        hasActivationError: p.status === "PAID" && !p.subscriptionId && Boolean(activationError),
+        activationError,
+      };
+    }),
     total,
     page,
     limit,

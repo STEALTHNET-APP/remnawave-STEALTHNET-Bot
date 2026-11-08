@@ -37,8 +37,9 @@ import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.ser
 import { createSingboxSlotsByPaymentId } from "../singbox/singbox-slots-activation.service.js";
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
 import { distributeReferralRewards } from "../referral/referral.service.js";
-import { notifyBalanceToppedUp, notifyTariffActivated, notifyTariffActivationFailed, notifyProxySlotsCreated, notifySingboxSlotsCreated } from "../notification/telegram-notify.service.js";
+import { notifyBalanceToppedUp, notifyTariffActivated, notifyProxySlotsCreated, notifySingboxSlotsCreated } from "../notification/telegram-notify.service.js";
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
+import { handlePaymentActivationResult } from "../payment/payment-fulfillment.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
 import { decidePlategaConfirmed, withPlategaCancelMarker, type PlategaApiCheck, type PlategaConfirmedDecision } from "./platega-transition.js";
 
@@ -536,11 +537,17 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
       // нельзя — деньги могли списаться без выдачи. Не молчим: warning, outcome=error, алерт админам.
       const reason = claim.decision.reason;
       console.warn("[Platega Webhook] CONFIRMED could not be applied", { paymentId: payment.id, transactionId, reason, apiCheck });
-      await notifyTariffActivationFailed(
-        payment.clientId,
-        payment.id,
-        `Platega прислал ${status}, но платёж не зачислен (${reason}). Проверьте транзакцию ${transactionId ?? payment.externalId ?? "?"} вручную.`,
-      ).catch(() => {});
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "platega",
+        activation: {
+          ok: false,
+          error: `Platega прислал ${status}, но платёж не зачислен (${reason}). Проверьте транзакцию ${transactionId ?? payment.externalId ?? "?"} вручную.`,
+        },
+      });
       ack(200, "error", `CONFIRMED not applied: ${reason}`, payment.id);
       return res.status(200).json({ received: true });
     }
@@ -580,7 +587,14 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
       if (activationOutcome.applied && activationOutcome.ok) {
         await notifyTariffActivated(payment.clientId, payment.id).catch(() => {});
       } else if (!activationOutcome.ok) {
-        await notifyTariffActivationFailed(payment.clientId, payment.id, activationOutcome.error).catch(() => {});
+        await handlePaymentActivationResult({
+          paymentId: payment.id,
+          clientId: payment.clientId,
+          amount: payment.amount,
+          currency: payment.currency || "RUB",
+          provider: "platega",
+          activation: { ok: false, error: activationOutcome.error },
+        });
       }
       // applied=false (already_applied / in_progress) — уведомление уже уходило при
       // первичной активации; повторный webhook больше не дублирует его.

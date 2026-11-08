@@ -3,7 +3,7 @@ import { InputFile } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
 import { addsubPending, convDropExtras, extendingSecondaryPending, extraOptionPending, extraOptionTargetSub, pendingDropExtras, selectedTariffOption, tariffOptionsCache, trialConvertPickCache, trialReplaceChoice } from "../state-store.js";
-import { DEFAULT_EMOJI_UNICODE, DEFAULT_TARIFFS_TEXT, DEFAULT_TARIFF_LINE_FIELDS, _t, applyExtraDevicesPriceBot, backToMenu, bestPricePerDayOptionId, blockUnsubscribedCallback, callbackUi, currencySymbol, editMessageContent, extraOptionsButtons, formatRuDays, formatTariffLine, getMenuEmojiKey, getOrRestoreToken, getUserLang, hasExtraDevices, markHasOptions, proxyTariffPayButtons, proxyTariffsOfCategoryButtons, renderTariffsText, setTranslations, showPaymentMethodsForTariff, singboxTariffPayButtons, singboxTariffsOfCategoryButtons, sortedPriceOptions, t, tariffCategoryButtons, tariffDevicePickerButtons, tariffErrMarkup, tariffOptionPickerButtons, tariffPayButtons, tariffsOfCategoryButtons, titleWithEmoji, titleWithOptionalEmoji } from "./shared.js";
+import { DEFAULT_EMOJI_UNICODE, DEFAULT_TARIFFS_TEXT, DEFAULT_TARIFF_LINE_FIELDS, _t, applyExtraDevicesPriceBot, backToMenu, bestPricePerDayOptionId, blockUnsubscribedCallback, callbackUi, checkoutExtraDeviceCap, currencySymbol, editMessageContent, extraOptionsButtons, formatRuDays, formatTariffLine, getMenuEmojiKey, getOrRestoreToken, getUserLang, hasExtraDevices, markHasOptions, proxyTariffPayButtons, proxyTariffsOfCategoryButtons, renderTariffsText, setTranslations, showPaymentMethodsForTariff, singboxTariffPayButtons, singboxTariffsOfCategoryButtons, sortedPriceOptions, t, tariffCategoryButtons, tariffDevicePickerButtons, tariffErrMarkup, tariffOptionPickerButtons, tariffPayButtons, tariffsOfCategoryButtons, titleWithEmoji, titleWithOptionalEmoji } from "./shared.js";
 import type { TariffCategory, TariffItem } from "./shared.js";
 import { resolveCallbackDomain } from "./routing.js";
 
@@ -518,7 +518,12 @@ export function createTariffHandlers(): Composer<Context> {
       if (hasExtraDevices(tariff)) {
         const tiers = tariff.deviceDiscountTiers;
         const pricePerExtra = tariff.pricePerExtraDevice ?? 0;
-        const maxExtras = tariff.maxExtraDevices ?? 0;
+        const targetSubId = extPair && extPair.tariffId === tariff.id ? extPair.secondaryId : null;
+        const maxExtras = await checkoutExtraDeviceCap(token, tariff, targetSubId, addsubPending.get(userId) === tariff.id);
+        if (maxExtras <= 0) {
+          await showPaymentMethodsForTariff(ctx, userId, tariff, option, 0, config, innerStyles, innerEmojiIds, token);
+          return;
+        }
         const includedDevices = tariff.includedDevices ?? 1;
         // Плитка «+0» = базовая цена тарифа, дальше +1, +2, ... до maxExtras.
         const tiles = Array.from({ length: maxExtras + 1 }, (_, i) => {
@@ -605,7 +610,10 @@ export function createTariffHandlers(): Composer<Context> {
         await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
-      const cappedExtras = Math.min(Math.max(0, extraDevices), tariff.maxExtraDevices ?? 0);
+      const extPair = extendingSecondaryPending.get(userId);
+      const targetSubId = extPair && extPair.tariffId === tariff.id ? extPair.secondaryId : null;
+      const cap = await checkoutExtraDeviceCap(token, tariff, targetSubId, addsubPending.get(userId) === tariff.id);
+      const cappedExtras = Math.min(Math.max(0, extraDevices), cap);
       selectedTariffOption.set(userId, { ...sel, extraDevices: cappedExtras });
       await showPaymentMethodsForTariff(ctx, userId, tariff, sel.option, cappedExtras, config, innerStyles, innerEmojiIds, token);
       return;

@@ -302,6 +302,30 @@ export function hasExtraDevices(t: TariffItem): boolean {
   return (t.pricePerExtraDevice ?? 0) > 0 && (t.maxExtraDevices ?? 0) > 0;
 }
 
+export async function checkoutExtraDeviceCap(
+  token: string,
+  tariff: TariffItem,
+  targetSubscriptionId?: string | null,
+  asAdditional = false,
+): Promise<number> {
+  const maximum = Math.max(0, tariff.maxExtraDevices ?? 0);
+  if (maximum <= 0) return 0;
+  if (asAdditional) return maximum;
+  try {
+    const { items } = await api.getAllSubscriptions(token);
+    const subs = items ?? [];
+    let targetId = targetSubscriptionId ?? null;
+    if (!targetId) {
+      const matching = renewableSubscriptions(subs, tariff.id);
+      targetId = (matching.find((it) => it.subscriptionIndex === 0) ?? matching[0])?.id ?? null;
+    }
+    const target = targetId ? subs.find((it) => it.id === targetId) : null;
+    return Math.max(0, maximum - (target?.extraDevices ?? 0));
+  } catch {
+    return maximum;
+  }
+}
+
 /**
  * Помечает каждый тариф флагом `hasOptions` для отображения «от» в кнопках.
  * "от" показывается если: несколько priceOptions ИЛИ включены доп. устройства.

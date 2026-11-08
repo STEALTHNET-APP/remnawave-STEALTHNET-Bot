@@ -219,6 +219,7 @@ export interface PaymentDetailPayment {
   tariffId: string | null;
   proxyTariffId: string | null;
   singboxTariffId: string | null;
+  subscriptionId: string | null;
   createdAt: string;
   paidAt: string | null;
   metadata: string | null;
@@ -234,6 +235,9 @@ export interface PaymentDetailPayment {
 
 export interface PaymentDetailResponse {
   payment: PaymentDetailPayment;
+  activationError?: string | null;
+  activationFailedAt?: string | null;
+  hasActivationError?: boolean;
   referralCredits: Array<{
     id: string;
     amount: number;

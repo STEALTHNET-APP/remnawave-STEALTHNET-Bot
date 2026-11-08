@@ -48,6 +48,8 @@ interface SaleItem {
   paidAt: string | null;
   createdAt: string;
   metadata: string | null;
+  hasActivationError: boolean;
+  activationError: string | null;
 }
 
 interface SalesData {
@@ -386,6 +388,11 @@ export function SalesReportPage() {
                       <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border", providerColor(r.provider))}>
                         {providerLabel(r.provider)}
                       </span>
+                      {r.hasActivationError && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/30 px-2 py-0.5 text-[10px] font-medium" title={r.activationError ?? undefined}>
+                          Сбой активации
+                        </span>
+                      )}
                       {r.tariffName && (
                         <span className="inline-flex items-center gap-1 rounded-md bg-foreground/[0.05] dark:bg-white/[0.05] border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
                           <Package className="h-3 w-3" /> {r.tariffName}

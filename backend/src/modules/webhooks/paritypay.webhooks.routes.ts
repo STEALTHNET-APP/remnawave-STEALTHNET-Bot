@@ -7,8 +7,9 @@ import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.ser
 import { createSingboxSlotsByPaymentId } from "../singbox/singbox-slots-activation.service.js";
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
 import { distributeReferralRewards } from "../referral/referral.service.js";
-import { notifyBalanceToppedUp, notifyTariffActivated, notifyExtraOptionApplied, notifyProxySlotsCreated, notifySingboxSlotsCreated } from "../notification/telegram-notify.service.js";
+import { notifyBalanceToppedUp, notifyExtraOptionApplied, notifyProxySlotsCreated, notifySingboxSlotsCreated } from "../notification/telegram-notify.service.js";
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
+import { handlePaymentActivationResult } from "../payment/payment-fulfillment.util.js";
 import { extinguishOneTimeDiscount } from "../client/personal-discount.js";
 
 export const paritypayWebhooksRouter = Router();
@@ -55,6 +56,16 @@ paritypayWebhooksRouter.post("/", async (req: Request, res: Response) => {
         const next = latest?.metadata ? JSON.parse(latest.metadata) as Record<string,unknown> : meta;
         if (!activation.ok) {
           await prisma.payment.update({ where: { id: payment.id }, data: { metadata: JSON.stringify({ ...next, paritypayActivationError: activation.error || "Activation failed" }) } });
+          if (payment.tariffId || meta.customBuild) {
+            await handlePaymentActivationResult({
+              paymentId: payment.id,
+              clientId: payment.clientId,
+              amount: payment.amount,
+              currency: payment.currency || "RUB",
+              provider: "paritypay",
+              activation: { ok: false, error: activation.error || "Activation failed" },
+            });
+          }
           return res.status(503).send("Activation failed");
         }
         delete next.paritypayProcessingAt;
@@ -68,7 +79,16 @@ paritypayWebhooksRouter.post("/", async (req: Request, res: Response) => {
           const tariff = await prisma.singboxTariff.findUnique({ where: { id: payment.singboxTariffId }, select: { name: true } });
           await notifySingboxSlotsCreated(payment.clientId, activation.slotIds.filter((id): id is string => typeof id === "string"), tariff?.name).catch(()=>{});
         }
-        if (payment.tariffId || meta.customBuild) await notifyTariffActivated(payment.clientId, payment.id).catch(()=>{});
+        if (payment.tariffId || meta.customBuild) {
+          await handlePaymentActivationResult({
+            paymentId: payment.id,
+            clientId: payment.clientId,
+            amount: payment.amount,
+            currency: payment.currency || "RUB",
+            provider: "paritypay",
+            activation,
+          });
+        }
         await extinguishOneTimeDiscount(payment.clientId);
       }
     }

@@ -211,6 +211,19 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
                 </div>
               </Card>
 
+              {data?.activationError && (
+                <Card className="p-4 bg-rose-500/10 border-rose-500/30 rounded-xl space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />
+                    <span className="text-[10px] uppercase tracking-widest font-semibold text-rose-500">Сбой активации</span>
+                  </div>
+                  <p className="text-xs text-rose-600 dark:text-rose-400 break-words">{data.activationError}</p>
+                  {data.activationFailedAt && (
+                    <p className="text-[10px] text-muted-foreground">{fmtMsk(data.activationFailedAt)}</p>
+                  )}
+                </Card>
+              )}
+
               {/* Client card */}
               <Card className="p-4 bg-card border-border rounded-xl">
                 <div className="flex items-center gap-2 mb-2">

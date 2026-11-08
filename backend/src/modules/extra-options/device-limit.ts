@@ -50,6 +50,9 @@ export async function validateTariffDevices(db: Pick<Prisma.TransactionClient, "
   if (typeof meta.extendsSecondarySubId === "string" && meta.removeExtrasOnActivate !== true) {
     const sub = await db.subscription.findFirst({ where: { id: meta.extendsSecondarySubId, OR: [{ ownerId: clientId }, { giftedToClientId: clientId }] }, select: { extraDevices: true } });
     existing = sub?.extraDevices ?? 0;
+  } else if (!meta.extendsSecondarySubId && meta.isAdditionalSubscription !== true && meta.purchasedAsGift !== true) {
+    const sub = await db.subscription.findFirst({ where: { ownerId: clientId, subscriptionIndex: 0, tariffId }, select: { extraDevices: true } });
+    existing = sub?.extraDevices ?? 0;
   }
   const available = Math.max(0, (tariff?.maxExtraDevices ?? 0) - existing);
   if (count > available) throw deviceLimitError(`По тарифу можно докупить ещё ${available} устройств.`);

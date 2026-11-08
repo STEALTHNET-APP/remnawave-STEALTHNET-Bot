@@ -23,6 +23,7 @@ import {
   notifySingboxSlotsCreated,
 } from "../notification/telegram-notify.service.js";
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
+import { handlePaymentActivationResult } from "../payment/payment-fulfillment.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
 
 function hasExtraOptionInMetadata(metadata: string | null): boolean {
@@ -60,7 +61,7 @@ function parseMeta(raw: string | null): Meta {
   }
 }
 
-async function ensureTariffActivation(paymentId: string): Promise<void> {
+async function ensureTariffActivation(paymentId: string): Promise<{ applied: boolean; ok: boolean; error?: string }> {
   const claim = await prisma.$transaction(async (tx) => {
     const row = await tx.payment.findUnique({
       where: { id: paymentId },
@@ -96,7 +97,7 @@ async function ensureTariffActivation(paymentId: string): Promise<void> {
     return { claimed: true as const, reason: "claimed" };
   });
 
-  if (!claim.claimed) return;
+  if (!claim.claimed) return { applied: false, ok: true };
 
   const row = await prisma.payment.findUnique({
     where: { id: paymentId },
@@ -151,6 +152,7 @@ async function ensureTariffActivation(paymentId: string): Promise<void> {
   } else {
     console.error("[Overpay Webhook] Tariff activation failed", { paymentId, error: activation.error });
   }
+  return { applied: true, ok: activation.ok, error: activation.ok ? undefined : (activation.error || "Unknown error") };
 }
 
 export const overpayWebhooksRouter = Router();
@@ -310,9 +312,20 @@ async function handle(req: Request, res: Response) {
     }
 
     await recordPromoCodeUsageFromPayment(payment.id);
-    await ensureTariffActivation(payment.id);
+    const activationOutcome = await ensureTariffActivation(payment.id);
     if (payment.tariffId) {
-      await notifyTariffActivated(payment.clientId, payment.id).catch(() => {});
+      if (activationOutcome.ok && activationOutcome.applied) {
+        await notifyTariffActivated(payment.clientId, payment.id).catch(() => {});
+      } else if (!activationOutcome.ok) {
+        await handlePaymentActivationResult({
+          paymentId: payment.id,
+          clientId: payment.clientId,
+          amount: payment.amount,
+          currency: payment.currency || "RUB",
+          provider: "overpay",
+          activation: { ok: false, error: activationOutcome.error || "Unknown error" },
+        });
+      }
     }
 
     // сжигаем одноразовую персональную скидку после продуктовой покупки.

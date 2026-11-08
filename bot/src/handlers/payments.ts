@@ -2,7 +2,7 @@ import { Composer } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
 import { activeDiscountCode, addsubPending, awaitingCustomTopup, clearUserState, convDropExtras, extendingSecondaryPending, extraOptionPending, extraOptionTargetSub, pendingDropExtras, selectedTariffOption, tariffOptionsCache, tokenStore, trialReplaceChoice } from "../state-store.js";
-import { EMAIL_PROMPT_TEXT, RECEIPT_OK_LINE, _t, applyExtraDevicesPriceBot, backButton, backToMenu, bestPricePerDayOptionId, blockUnsubscribedCallback, buildPaymentMessage, buildTariffDiscountArg, callbackUi, editMessageContent, enforceSubscription, formatMoney, formatRuDays, getDiscountedPrice, getOrRestoreToken, getUserLang, hasExtraDevices, hasPendingEmailInput, instructionFallbackText, isValidEmail, optionPaymentMethodButtons, payUrlMarkup, peekPendingReceipt, proxyPaymentMethodButtons, receiptPromptKeyboard, receiptPromptText, renewableSubscriptions, setPendingEmailInput, setTranslations, setUserLang, shouldShowPurchaseChoice, showCloudCheckout, showPaymentMethodsForTariff, singboxPaymentMethodButtons, sortedPriceOptions, storePendingReceipt, t, takePendingEmailInput, takePendingReceipt, tariffActionChoiceButtons, tariffDevicePickerButtons, tariffErrMarkup, tariffOptionPickerButtons, textInputUserId, titleWithEmoji, topUpPresets, topupPaymentMethodButtons, tryAutoDeleteUnknown } from "./shared.js";
+import { EMAIL_PROMPT_TEXT, RECEIPT_OK_LINE, _t, applyExtraDevicesPriceBot, backButton, backToMenu, bestPricePerDayOptionId, blockUnsubscribedCallback, buildPaymentMessage, buildTariffDiscountArg, callbackUi, checkoutExtraDeviceCap, editMessageContent, enforceSubscription, formatMoney, formatRuDays, getDiscountedPrice, getOrRestoreToken, getUserLang, hasExtraDevices, hasPendingEmailInput, instructionFallbackText, isValidEmail, optionPaymentMethodButtons, payUrlMarkup, peekPendingReceipt, proxyPaymentMethodButtons, receiptPromptKeyboard, receiptPromptText, renewableSubscriptions, setPendingEmailInput, setTranslations, setUserLang, shouldShowPurchaseChoice, showCloudCheckout, showPaymentMethodsForTariff, singboxPaymentMethodButtons, sortedPriceOptions, storePendingReceipt, t, takePendingEmailInput, takePendingReceipt, tariffActionChoiceButtons, tariffDevicePickerButtons, tariffErrMarkup, tariffOptionPickerButtons, textInputUserId, titleWithEmoji, topUpPresets, topupPaymentMethodButtons, tryAutoDeleteUnknown } from "./shared.js";
 import type { InnerEmojiIds, TariffCategory, TariffItem } from "./shared.js";
 import { resolveCallbackDomain } from "./routing.js";
 import { showRenewalChoice } from "./subscriptions.js";
@@ -1787,7 +1787,13 @@ if (data.startsWith("pay_tariff_rollypay:")) {
           if (hasExtraDevices(tariff)) {
             const tiers = tariff.deviceDiscountTiers;
             const pricePerExtra = tariff.pricePerExtraDevice ?? 0;
-            const maxExtras = tariff.maxExtraDevices ?? 0;
+            const extPairOnly = extendingSecondaryPending.get(userId);
+            const targetSubId = extPairOnly && extPairOnly.tariffId === tariff.id ? extPairOnly.secondaryId : null;
+            const maxExtras = await checkoutExtraDeviceCap(token, tariff, targetSubId, addsubPending.get(userId) === tariff.id);
+            if (maxExtras <= 0) {
+              await showPaymentMethodsForTariff(ctx, userId, tariff, onlyOpt, 0, config, innerStyles, innerEmojiIds, token);
+              return;
+            }
             const includedDevices = tariff.includedDevices ?? 1;
             const tiles = Array.from({ length: maxExtras + 1 }, (_, i) => {
               const extras = i;

@@ -8,6 +8,7 @@ import { createSingboxSlotsByPaymentId } from "../singbox/singbox-slots-activati
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
 import { distributeReferralRewards } from "../referral/referral.service.js";
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
+import { handlePaymentActivationResult } from "../payment/payment-fulfillment.util.js";
 import { starsApi } from "./stars-api.js";
 
 type StarsMetadata = { total: number; telegramId: string; botId: string; expiresAt: number; checkoutId?: string; delivery?: string; balanceCredited?: boolean; error?: string };
@@ -101,8 +102,20 @@ async function deliverStarsPayment(id: string): Promise<string> {
     await tx.payment.update({ where: { id }, data: { metadata: JSON.stringify(meta) } });
   });
   const p = claimed.payment;
-  if (error) await notifyTariffActivationFailed(p.clientId, id, error).catch(() => {});
-  else {
+  if (error) {
+    if (p.tariffId) {
+      await handlePaymentActivationResult({
+        paymentId: id,
+        clientId: p.clientId,
+        amount: p.amount,
+        currency: p.currency || "RUB",
+        provider: "telegram_stars",
+        activation: { ok: false, error },
+      });
+    } else {
+      await notifyTariffActivationFailed(p.clientId, id, error).catch(() => {});
+    }
+  } else {
     await extinguishOneTimeDiscount(p.clientId).catch(() => {});
     if (claimed.meta.extraOption) await notifyExtraOptionApplied(p.clientId, id).catch(() => {});
     else if (p.proxyTariffId) await notifyProxySlotsCreated(p.clientId, slotIds).catch(() => {});

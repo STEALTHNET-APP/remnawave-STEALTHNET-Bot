@@ -6,6 +6,7 @@ import { activateTariffByPaymentId } from "../tariff/tariff-activation.service.j
 import { createProxySlotsByPaymentId } from "../proxy/proxy-slots-activation.service.js";
 import { createSingboxSlotsByPaymentId } from "../singbox/singbox-slots-activation.service.js";
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
+import { handlePaymentActivationResult } from "../payment/payment-fulfillment.util.js";
 import {
   pickFirst,
   verifyYooMoneyHmacSign,
@@ -24,7 +25,7 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
     }
   }
   import { distributeReferralRewards } from "../referral/referral.service.js";
-  import { notifyBalanceToppedUp, notifyTariffActivated, notifyProxySlotsCreated, notifySingboxSlotsCreated } from "../notification/telegram-notify.service.js";
+  import { notifyBalanceToppedUp, notifyProxySlotsCreated, notifySingboxSlotsCreated } from "../notification/telegram-notify.service.js";
   import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
   import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
 
@@ -144,6 +145,7 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
       id: string;
       clientId: string;
       amount: number;
+      currency: string;
       tariffId: string | null;
       proxyTariffId: string | null;
       singboxTariffId: string | null;
@@ -156,6 +158,7 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
       id: true,
       clientId: true,
       amount: true,
+      currency: true,
       tariffId: true,
       proxyTariffId: true,
       singboxTariffId: true,
@@ -261,10 +264,17 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
         const activation = await activateTariffByPaymentId(payment.id);
         if (activation.ok) {
           console.log("[YooMoney Webhook] Tariff activated", { paymentId: payment.id });
-          await notifyTariffActivated(payment.clientId, payment.id).catch(() => {});
         } else {
           console.error("[YooMoney Webhook] Tariff activation failed", { paymentId: payment.id, error: (activation as { error?: string }).error });
         }
+        await handlePaymentActivationResult({
+          paymentId: payment.id,
+          clientId: payment.clientId,
+          amount: payment.amount,
+          currency: payment.currency || "RUB",
+          provider: "yoomoney",
+          activation,
+        });
       }
     }
 

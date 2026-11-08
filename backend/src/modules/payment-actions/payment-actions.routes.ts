@@ -25,6 +25,26 @@ function asyncRoute(fn: (req: express.Request, res: express.Response) => Promise
   };
 }
 
+function parsePaymentMetadata(metadata: string | null): Record<string, unknown> {
+  if (!metadata?.trim()) return {};
+  try {
+    const parsed = JSON.parse(metadata) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function clearActivationFailure(paymentId: string): Promise<void> {
+  const row = await prisma.payment.findUnique({ where: { id: paymentId }, select: { metadata: true } });
+  if (!row?.metadata) return;
+  const meta = parsePaymentMetadata(row.metadata);
+  if (!("activationError" in meta) && !("activationFailedAt" in meta)) return;
+  delete meta.activationError;
+  delete meta.activationFailedAt;
+  await prisma.payment.update({ where: { id: paymentId }, data: { metadata: JSON.stringify(meta) } });
+}
+
 export const paymentActionsRouter = Router();
 paymentActionsRouter.use(requireAuth);
 paymentActionsRouter.use(requireAdminSection);
@@ -50,7 +70,12 @@ paymentActionsRouter.get(
       });
     } catch { /* referral_credits может не быть */ }
 
-    return res.json({ payment, referralCredits });
+    const meta = parsePaymentMetadata(payment.metadata);
+    const activationError = typeof meta.activationError === "string" ? meta.activationError : null;
+    const activationFailedAt = typeof meta.activationFailedAt === "string" ? meta.activationFailedAt : null;
+    const hasActivationError = payment.status === "PAID" && !payment.subscriptionId && Boolean(activationError);
+
+    return res.json({ payment, referralCredits, activationError, activationFailedAt, hasActivationError });
   }),
 );
 
@@ -258,6 +283,10 @@ paymentActionsRouter.post(
     });
 
     if (activationError) return res.status(502).json({ message: activationError, result: activationResult });
+    console.info(`[payment-actions] payment ${payment.id} activation recovered`);
+    await clearActivationFailure(payment.id).catch((e) => {
+      console.error("[payment-actions] failed to clear activation error:", e);
+    });
     return res.json({ ok: true, result: activationResult });
   }),
 );

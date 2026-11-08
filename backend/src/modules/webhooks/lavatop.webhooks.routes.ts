@@ -33,11 +33,11 @@ import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.serv
 import { distributeReferralRewards } from "../referral/referral.service.js";
 import {
   notifyBalanceToppedUp,
-  notifyTariffActivated,
   notifyProxySlotsCreated,
   notifySingboxSlotsCreated,
 } from "../notification/telegram-notify.service.js";
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
+import { handlePaymentActivationResult } from "../payment/payment-fulfillment.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
 
 function parseMetadata(metadata: string | null): Record<string, unknown> {
@@ -96,7 +96,14 @@ async function activatePayment(paymentId: string) {
     }
   } else {
     const activation = await activateTariffByPaymentId(payment.id);
-    if (activation.ok) await notifyTariffActivated(payment.clientId, payment.id).catch(() => {});
+    await handlePaymentActivationResult({
+      paymentId: payment.id,
+      clientId: payment.clientId,
+      amount: payment.amount,
+      currency: payment.currency || "RUB",
+      provider: "lavatop",
+      activation,
+    });
   }
 
   // сжигаем одноразовую персональную скидку после продуктовой покупки.
