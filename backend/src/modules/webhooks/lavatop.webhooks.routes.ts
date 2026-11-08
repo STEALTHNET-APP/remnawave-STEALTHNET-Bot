@@ -39,6 +39,7 @@ import {
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
 import { handlePaymentActivationResult } from "../payment/payment-fulfillment.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
+import { recordWebhook, markOutcome } from "../webhook-inbox/webhook-inbox.service.js";
 
 function parseMetadata(metadata: string | null): Record<string, unknown> {
   if (!metadata?.trim()) return {};
@@ -48,7 +49,7 @@ function parseMetadata(metadata: string | null): Record<string, unknown> {
 export const lavatopWebhooksRouter = Router();
 
 /** Активирует/продлевает тариф (или прокси/singbox/extras/topup) по существующему PAID payment. */
-async function activatePayment(paymentId: string) {
+async function activatePayment(paymentId: string): Promise<{ ok: boolean; error?: string }> {
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
     select: {
@@ -62,7 +63,8 @@ async function activatePayment(paymentId: string) {
       metadata: true,
     },
   });
-  if (!payment) return;
+  if (!payment) return { ok: false, error: "payment not found" };
+  let outcome: { ok: boolean; error?: string } = { ok: true };
 
   const meta = parseMetadata(payment.metadata);
   const isExtraOption = Boolean(meta.extraOption);
@@ -81,18 +83,48 @@ async function activatePayment(paymentId: string) {
     if (r.ok) {
       const { notifyExtraOptionApplied } = await import("../notification/telegram-notify.service.js");
       await notifyExtraOptionApplied(payment.clientId, payment.id).catch(() => {});
+    } else {
+      outcome = { ok: false, error: (r as { error?: string }).error || "extra option activation failed" };
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "lavatop",
+        activation: { ok: false, error: outcome.error },
+      });
     }
   } else if (payment.proxyTariffId) {
     const proxyResult = await createProxySlotsByPaymentId(payment.id);
     if (proxyResult.ok) {
       const tariff = await prisma.proxyTariff.findUnique({ where: { id: payment.proxyTariffId }, select: { name: true } });
       await notifyProxySlotsCreated(payment.clientId, proxyResult.slotIds, tariff?.name ?? undefined).catch(() => {});
+    } else {
+      outcome = { ok: false, error: proxyResult.error || "proxy slots activation failed" };
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "lavatop",
+        activation: { ok: false, error: outcome.error },
+      });
     }
   } else if (payment.singboxTariffId) {
     const singboxResult = await createSingboxSlotsByPaymentId(payment.id);
     if (singboxResult.ok) {
       const tariff = await prisma.singboxTariff.findUnique({ where: { id: payment.singboxTariffId }, select: { name: true } });
       await notifySingboxSlotsCreated(payment.clientId, singboxResult.slotIds, tariff?.name ?? undefined).catch(() => {});
+    } else {
+      outcome = { ok: false, error: singboxResult.error || "singbox slots activation failed" };
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "lavatop",
+        activation: { ok: false, error: outcome.error },
+      });
     }
   } else {
     const activation = await activateTariffByPaymentId(payment.id);
@@ -104,6 +136,7 @@ async function activatePayment(paymentId: string) {
       provider: "lavatop",
       activation,
     });
+    if (!activation.ok) outcome = { ok: false, error: activation.error || "activation_failed" };
   }
 
   // сжигаем одноразовую персональную скидку после продуктовой покупки.
@@ -113,17 +146,18 @@ async function activatePayment(paymentId: string) {
   }
 
   await distributeReferralRewards(payment.id).catch(() => {});
+  return outcome;
 }
 
 class RecurringIdentityError extends Error {}
 
 /** Recurring renewal: клонирует исходный payment, создаёт новый PAID и активирует. */
-async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<void> {
+async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<{ ok: boolean; error?: string; alreadyPaid?: boolean }> {
   const parentOrderId = event.parentContractId?.trim();
   const rawChildOrderId = event.contractId?.trim();
   if (!parentOrderId || !rawChildOrderId) {
     console.warn("[Lava.top Webhook] recurring без parentContractId/contractId", event);
-    return;
+    return { ok: false, error: "missing recurring identifiers" };
   }
 
   const raw = event.raw as Record<string, unknown>;
@@ -149,9 +183,9 @@ async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<void>
         where: { id: alreadyProcessed.id, status: { not: "PAID" } },
         data: { status: "PAID", paidAt: new Date() },
       });
-      if (flipped.count > 0) await activatePayment(alreadyProcessed.id);
+      if (flipped.count > 0) return activatePayment(alreadyProcessed.id);
     }
-    return;
+    return { ok: true, alreadyPaid: true };
   }
 
   // Находим исходный (parent) платёж — берём из него clientId, tariffId
@@ -171,7 +205,7 @@ async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<void>
   });
   if (!parent) {
     console.warn("[Lava.top Webhook] recurring: parent payment не найден", { parentOrderId });
-    return;
+    return { ok: false, error: "parent payment not found" };
   }
 
   // Сумма берётся из webhook'а (Lava сообщает фактически списанную сумму)
@@ -221,22 +255,29 @@ async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<void>
       }
     });
   } catch (e) {
-    if ((e as { code?: string })?.code === "P2002") return;
+    if ((e as { code?: string })?.code === "P2002") return { ok: true, alreadyPaid: true };
     throw e;
   }
 
   console.log("[Lava.top Webhook] recurring renewal — создан payment", { id: newPaymentId, amount, currency });
 
   // Активация (продление) тарифа / прокси / singbox / etc
-  await activatePayment(newPaymentId);
+  return activatePayment(newPaymentId);
 }
 
 /** POST /api/webhooks/lavatop */
 lavatopWebhooksRouter.post("/", async (req: Request, res: Response) => {
+  const rawPayload = JSON.stringify(req.body ?? {});
+  const captured = await recordWebhook("lavatop", req, rawPayload);
+  const ack = (status: number, outcome: Parameters<typeof markOutcome>[2], errorMessage?: string, paymentId?: string | null) => {
+    void markOutcome(captured, status, outcome, { errorMessage, paymentId });
+  };
+  try {
   const config = await getSystemConfig();
   const apiKey = (config as { lavatopApiKey?: string | null }).lavatopApiKey?.trim();
   if (!apiKey) {
     console.warn("[Lava.top Webhook] не настроено (нет lavatop_api_key)");
+    ack(200, "error", "Lava.top not configured");
     return res.status(200).send("OK");
   }
 
@@ -244,12 +285,14 @@ lavatopWebhooksRouter.post("/", async (req: Request, res: Response) => {
   const auth = req.header("authorization") || undefined;
   if (!verifyLavatopWebhookAuth(apiKey, { xApiKey, authorization: auth })) {
     console.warn("[Lava.top Webhook] неверный X-Api-Key");
+    ack(401, "rejected_signature", "Invalid API key");
     return res.status(401).send("Unauthorized");
   }
 
   const body = req.body;
   if (!body || typeof body !== "object") {
     console.warn("[Lava.top Webhook] пустое body");
+    ack(200, "rejected_payload", "Empty body");
     return res.status(200).send("OK");
   }
 
@@ -269,42 +312,39 @@ lavatopWebhooksRouter.post("/", async (req: Request, res: Response) => {
     // Просто фиксируем в логе. Не отменяем уже выданный тариф —
     // он истечёт по своему сроку. Дальше клиент платит новой подпиской если хочет.
     console.log("[Lava.top Webhook] подписка отменена", { contractId: event.contractId });
+    ack(200, "ignored_event", "subscription cancelled", event.contractId);
     return res.status(200).send("OK");
   }
 
   // Обрабатываем только успешные платежи — failed логируем и игнорим.
   if (event.status !== "success") {
+    const failed = event.status === "failed";
+    ack(200, failed ? "payment_failed" : "ignored_event", `event=${event.eventType}`);
     return res.status(200).send("OK");
   }
 
   // ─── Recurring renewal: subscription.recurring.payment.success ──
   if (/subscription\.recurring\.payment\.success/i.test(event.eventType)) {
     try {
-      await handleRecurringRenewal(event);
+      const outcome = await handleRecurringRenewal(event);
+      ack(200, outcome.alreadyPaid ? "payment_already_paid" : outcome.ok ? "accepted" : "error", outcome.error, event.contractId);
+      return res.status(200).send("OK");
     } catch (e) {
       if (e instanceof RecurringIdentityError) {
-        try {
-          await prisma.webhookEvent.create({
-            data: {
-              provider: "lavatop", rawBody: JSON.stringify(body), headers: {},
-              responseStatus: 200, outcome: "rejected_payload", errorMessage: e.message,
-            },
-          });
-          return res.status(200).send("OK");
-        } catch {
-          return res.status(503).send("Unable to retain webhook for review");
-        }
+        ack(200, "rejected_payload", e.message);
+        return res.status(200).send("OK");
       }
       console.error("[Lava.top Webhook] ошибка recurring renewal:", e);
+      ack(503, "error", String(e), event.contractId);
       return res.status(503).send("Recurring payment processing failed");
     }
-    return res.status(200).send("OK");
   }
 
   // ─── Первый платёж (payment.success / SUBSCRIPTION_FIRST_INVOICE) ──
   const orderId = event.contractId?.trim();
   if (!orderId) {
     console.warn("[Lava.top Webhook] нет contractId");
+    ack(200, "rejected_payload", "Missing contractId");
     return res.status(200).send("OK");
   }
 
@@ -315,6 +355,7 @@ lavatopWebhooksRouter.post("/", async (req: Request, res: Response) => {
 
   if (!payment) {
     console.warn("[Lava.top Webhook] payment не найден", { orderId });
+    ack(200, "payment_not_found", `orderId=${orderId}`, orderId);
     return res.status(200).send("OK");
   }
 
@@ -339,10 +380,19 @@ lavatopWebhooksRouter.post("/", async (req: Request, res: Response) => {
       })
     : (await prisma.payment.updateMany({ where, data: paidData })).count > 0;
 
-  if (!claimed) return res.status(200).send("OK");
+  if (!claimed) {
+    ack(200, "payment_already_paid", undefined, payment.id);
+    return res.status(200).send("OK");
+  }
 
   await recordPromoCodeUsageFromPayment(payment.id);
-  await activatePayment(payment.id);
+  const outcome = await activatePayment(payment.id);
+  ack(200, outcome.ok ? "accepted" : "error", outcome.error, payment.id);
 
   return res.status(200).send("OK");
+  } catch (e) {
+    console.error("[Lava.top Webhook] Processing failed", e);
+    ack(503, "error", String(e));
+    return res.status(503).send("Processing failed");
+  }
 });

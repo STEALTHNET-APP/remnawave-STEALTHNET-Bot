@@ -28,6 +28,7 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
   import { notifyBalanceToppedUp, notifyProxySlotsCreated, notifySingboxSlotsCreated } from "../notification/telegram-notify.service.js";
   import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
   import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
+  import { recordWebhook, markOutcome } from "../webhook-inbox/webhook-inbox.service.js";
 
   export const yoomoneyWebhooksRouter = Router();
 
@@ -37,10 +38,23 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
   });
 
   yoomoneyWebhooksRouter.post("/yoomoney", async (req, res) => {
+    const isForm = Boolean(req.headers?.["content-type"]?.includes("application/x-www-form-urlencoded"));
+    const rawPayload = typeof req.body === "string"
+      ? req.body
+      : Buffer.isBuffer(req.body)
+        ? req.body
+        : isForm && req.body && typeof req.body === "object"
+          ? new URLSearchParams(req.body as Record<string, string>).toString()
+          : JSON.stringify(req.body ?? {});
+    const captured = await recordWebhook("yoomoney", req, rawPayload);
+    const ack = (status: number, outcome: Parameters<typeof markOutcome>[2], errorMessage?: string, paymentId?: string | null) => {
+      void markOutcome(captured, status, outcome, { errorMessage, paymentId });
+    };
     try {
     const body = (req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
     if (Array.isArray(body) || Object.keys(body).length === 0 || Object.values(body).some((value) => typeof value !== "string")) {
       console.warn("[YooMoney Webhook] Invalid form payload");
+      ack(400, "rejected_payload", "Invalid form payload");
       return res.status(400).send("Bad request");
     }
 
@@ -73,15 +87,18 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
 
     if (!notificationType || !operationId || !amount || (!receivedSign && !sha1Hash)) {
       console.warn("[YooMoney Webhook] Missing required fields", { keys: Object.keys(body) });
+      ack(400, "rejected_payload", "Missing required fields");
       return res.status(400).send("Bad request");
     }
 
     if (codeproStr === "true") {
       console.log("[YooMoney Webhook] Ignored: codepro=true (protected transfer)");
+      ack(200, "ignored_event", "codepro=true");
       return res.status(200).send("OK");
     }
     if (unaccepted && unaccepted !== "false") {
       console.log("[YooMoney Webhook] Ignored: unaccepted=", unaccepted);
+      ack(200, "ignored_event", "unaccepted payment");
       return res.status(200).send("OK");
     }
 
@@ -89,6 +106,7 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
     const secret = config.yoomoneyNotificationSecret?.trim();
     if (!secret) {
       console.warn("[YooMoney Webhook] yoomoney_notification_secret not configured");
+      ack(500, "error", "notification secret not configured");
       return res.status(500).send("Server configuration error");
     }
 
@@ -125,6 +143,7 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
         hasSign: Boolean(receivedSign),
         hasSha1: Boolean(sha1Hash),
       });
+      ack(403, "rejected_signature", "Invalid signature");
       return res.status(403).send("Invalid signature");
     }
 
@@ -135,6 +154,7 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
 
     if (!label.trim()) {
       console.warn("[YooMoney Webhook] Empty label, cannot match payment");
+      ack(200, "rejected_payload", "Empty label");
       return res.status(200).send("OK");
     }
 
@@ -189,6 +209,7 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
 
     if (!payment) {
       console.warn("[YooMoney Webhook] Payment not found", { label: labelNorm, operationId });
+      ack(200, "payment_not_found", `label=${labelNorm}`, labelNorm);
       return res.status(200).send("OK");
     }
 
@@ -196,11 +217,13 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
 
     if (payment.status === "PAID") {
       console.log("[YooMoney Webhook] Payment already processed", { paymentId: payment.id });
+      ack(200, "payment_already_paid", undefined, payment.id);
       return res.status(200).send("OK");
     }
 
     const amountNum = parseFloat(amount);
     if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      ack(200, "rejected_payload", "Invalid amount", payment.id);
       return res.status(200).send("OK");
     }
 
@@ -218,8 +241,12 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
           return updated.count > 0;
         })
       : (await prisma.payment.updateMany({ where, data })).count > 0;
-    if (!claimed) return res.status(200).send("OK");
+    if (!claimed) {
+      ack(200, "payment_already_paid", undefined, payment.id);
+      return res.status(200).send("OK");
+    }
 
+    let fulfillmentError: string | undefined;
     if (isTopUp) {
       console.log("[YooMoney Webhook] Payment PAID, balance credited (top-up)", {
         paymentId: payment.id,
@@ -240,7 +267,16 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
           const { notifyExtraOptionApplied } = await import("../notification/telegram-notify.service.js");
           await notifyExtraOptionApplied(payment.clientId, payment.id).catch(() => {});
         } else {
-          console.error("[YooMoney Webhook] Extra option apply failed", { paymentId: payment.id, error: (result as { error?: string }).error });
+          fulfillmentError = (result as { error?: string }).error || "extra option activation failed";
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "yoomoney",
+        activation: { ok: false, error: fulfillmentError },
+      });
+          console.error("[YooMoney Webhook] Extra option apply failed", { paymentId: payment.id, error: fulfillmentError });
         }
       } else if (payment.proxyTariffId) {
         const proxyResult = await createProxySlotsByPaymentId(payment.id);
@@ -249,7 +285,16 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
           const tariff = await prisma.proxyTariff.findUnique({ where: { id: payment.proxyTariffId }, select: { name: true } });
           await notifyProxySlotsCreated(payment.clientId, proxyResult.slotIds, tariff?.name ?? undefined).catch(() => {});
         } else {
-          console.error("[YooMoney Webhook] Proxy slots creation failed", { paymentId: payment.id, error: proxyResult.error });
+          fulfillmentError = proxyResult.error || "proxy slots activation failed";
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "yoomoney",
+        activation: { ok: false, error: fulfillmentError },
+      });
+          console.error("[YooMoney Webhook] Proxy slots creation failed", { paymentId: payment.id, error: fulfillmentError });
         }
       } else if (payment.singboxTariffId) {
         const singboxResult = await createSingboxSlotsByPaymentId(payment.id);
@@ -258,7 +303,16 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
           const tariff = await prisma.singboxTariff.findUnique({ where: { id: payment.singboxTariffId }, select: { name: true } });
           await notifySingboxSlotsCreated(payment.clientId, singboxResult.slotIds, tariff?.name ?? undefined).catch(() => {});
         } else {
-          console.error("[YooMoney Webhook] Singbox slots creation failed", { paymentId: payment.id, error: singboxResult.error });
+          fulfillmentError = singboxResult.error || "singbox slots activation failed";
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "yoomoney",
+        activation: { ok: false, error: fulfillmentError },
+      });
+          console.error("[YooMoney Webhook] Singbox slots creation failed", { paymentId: payment.id, error: fulfillmentError });
         }
       } else {
         const activation = await activateTariffByPaymentId(payment.id);
@@ -275,6 +329,7 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
           provider: "yoomoney",
           activation,
         });
+        if (!activation.ok) fulfillmentError = activation.error || "activation_failed";
       }
     }
 
@@ -288,9 +343,11 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
       console.error("[YooMoney Webhook] Referral distribution error", { paymentId: payment.id, error: e });
     });
 
+    ack(200, fulfillmentError ? "error" : "accepted", fulfillmentError, payment.id);
     return res.status(200).send("OK");
   } catch (error) {
     console.error("[YooMoney Webhook] Processing failed", error);
+    ack(503, "error", String(error));
     return res.status(503).send("Processing failed");
   }
 });

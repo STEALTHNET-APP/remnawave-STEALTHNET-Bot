@@ -25,6 +25,7 @@ import {
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
 import { handlePaymentActivationResult } from "../payment/payment-fulfillment.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
+import { recordWebhook, markOutcome } from "../webhook-inbox/webhook-inbox.service.js";
 
 function hasExtraOptionInMetadata(metadata: string | null): boolean {
   if (!metadata?.trim()) return false;
@@ -158,12 +159,18 @@ async function ensureTariffActivation(paymentId: string): Promise<{ applied: boo
 export const overpayWebhooksRouter = Router();
 
 async function handle(req: Request, res: Response) {
+  const src = (req.body && typeof req.body === "object") ? (req.body as Record<string, unknown>) : {};
+  const q = (req.query ?? {}) as Record<string, unknown>;
+  const captured = await recordWebhook("overpay", req, JSON.stringify({ ...q, ...src }));
+  const ack = (status: number, outcome: Parameters<typeof markOutcome>[2], errorMessage?: string, paymentId?: string | null) => {
+    void markOutcome(captured, status, outcome, { errorMessage, paymentId });
+  };
+  let ackPaymentId: string | null = null;
   try {
-    const src = (req.body && typeof req.body === "object") ? (req.body as Record<string, unknown>) : {};
-    const q = (req.query ?? {}) as Record<string, unknown>;
     const data: Record<string, unknown> = { ...q, ...src };
     if (!data || Object.keys(data).length === 0) {
       console.warn("[Overpay Webhook] Empty body");
+      ack(200, "rejected_payload", "Empty body");
       return res.status(200).json({ received: true });
     }
 
@@ -191,6 +198,7 @@ async function handle(req: Request, res: Response) {
 
     if (!orderId && !overpayId) {
       console.warn("[Overpay Webhook] No identifiers", { keys: Object.keys(data) });
+      ack(200, "rejected_payload", "No identifiers");
       return res.status(200).json({ received: true });
     }
 
@@ -245,8 +253,10 @@ async function handle(req: Request, res: Response) {
 
     if (!payment) {
       console.warn("[Overpay Webhook] Payment not found", { orderId, overpayId, status });
+      ack(200, "payment_not_found", orderId ?? overpayId ?? undefined);
       return res.status(200).json({ received: true });
     }
+    ackPaymentId = payment.id;
 
     await auditPaymentClientBotAlignment(payment);
 
@@ -263,16 +273,20 @@ async function handle(req: Request, res: Response) {
           orderId: payment.orderId,
         });
       }
+      ack(200, "payment_failed", `status=${status}`, payment.id);
       return res.status(200).json({ received: true });
     }
 
     if (!OVERPAY_SUCCESS_STATUSES.has(status)) {
       console.log("[Overpay Webhook] Ignored status", { status, paymentId: payment.id });
+      ack(200, "ignored_event", `status=${status}`, payment.id);
       return res.status(200).json({ received: true });
     }
 
     const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
     const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption;
+    let outcome: Parameters<typeof markOutcome>[2] = "accepted";
+    let outcomeError: string | undefined;
     if (isTopUp) {
       const changed = await prisma.$transaction(async (tx) => {
         const upd = await tx.payment.updateMany({
@@ -296,6 +310,8 @@ async function handle(req: Request, res: Response) {
           orderId: payment.orderId,
         });
         await notifyBalanceToppedUp(payment.clientId, payment.amount, payment.currency || "RUB", "Overpay").catch(() => {});
+      } else {
+        outcome = "payment_already_paid";
       }
     } else {
       const upd = await prisma.payment.updateMany({
@@ -308,24 +324,28 @@ async function handle(req: Request, res: Response) {
           overpayId,
           orderId: payment.orderId,
         });
+      } else {
+        outcome = "payment_already_paid";
       }
     }
 
     await recordPromoCodeUsageFromPayment(payment.id);
     const activationOutcome = await ensureTariffActivation(payment.id);
-    if (payment.tariffId) {
-      if (activationOutcome.ok && activationOutcome.applied) {
-        await notifyTariffActivated(payment.clientId, payment.id).catch(() => {});
-      } else if (!activationOutcome.ok) {
-        await handlePaymentActivationResult({
-          paymentId: payment.id,
-          clientId: payment.clientId,
-          amount: payment.amount,
-          currency: payment.currency || "RUB",
-          provider: "overpay",
-          activation: { ok: false, error: activationOutcome.error || "Unknown error" },
-        });
-      }
+    if (activationOutcome.ok && activationOutcome.applied) {
+      if (payment.tariffId) await notifyTariffActivated(payment.clientId, payment.id).catch(() => {});
+    } else if (!activationOutcome.ok) {
+      outcome = "error";
+      outcomeError = activationOutcome.error || "Unknown error";
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "overpay",
+        activation: { ok: false, error: outcomeError },
+      });
+    } else if (!activationOutcome.applied && payment.tariffId) {
+      outcome = "payment_already_paid";
     }
 
     // сжигаем одноразовую персональную скидку после продуктовой покупки.
@@ -338,9 +358,11 @@ async function handle(req: Request, res: Response) {
       console.error("[Overpay Webhook] Referral distribution error", { paymentId: payment.id, error: e });
     });
 
+    ack(200, outcome, outcomeError, payment.id);
     return res.status(200).json({ received: true });
   } catch (e) {
     console.error("[Overpay Webhook] Error:", e);
+    ack(200, "error", String(e), ackPaymentId);
     return res.status(200).json({ received: true });
   }
 }

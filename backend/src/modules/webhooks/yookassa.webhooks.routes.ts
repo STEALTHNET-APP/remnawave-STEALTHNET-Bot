@@ -19,6 +19,7 @@ import { createNalogReceipt } from "../nalog/nalog.service.js";
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
 import { handlePaymentActivationResult } from "../payment/payment-fulfillment.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
+import { recordWebhook, markOutcome } from "../webhook-inbox/webhook-inbox.service.js";
 
 function parseMetadata(metadata: string | null): Record<string, unknown> {
   if (!metadata?.trim()) return {};
@@ -88,10 +89,18 @@ async function verifyYookassaWebhookAuth(req: { headers: Record<string, unknown>
 }
 
 yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
+  const rawPayload = JSON.stringify(req.body ?? {});
+  const captured = await recordWebhook("yookassa", req, rawPayload);
+  const ack = (status: number, outcome: Parameters<typeof markOutcome>[2], errorMessage?: string, paymentId?: string | null) => {
+    void markOutcome(captured, status, outcome, { errorMessage, paymentId });
+  };
+  let ackPaymentId: string | null = null;
+  try {
   const auth = await verifyYookassaWebhookAuth(req);
   const needsApiConfirmation = !auth.ok && auth.reason === "no_credentials_configured";
   if (!auth.ok && !needsApiConfirmation) {
     console.warn(`[YooKassa Webhook] Auth failed: ${auth.reason}`);
+    ack(401, "rejected_signature", auth.reason);
     res.set("WWW-Authenticate", 'Basic realm="yookassa-webhook"');
     return res.status(401).json({ message: "Unauthorized" });
   }
@@ -105,17 +114,21 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
       hasBody: !!req.body,
       event: body.event,
     });
+    ack(200, "rejected_payload", "Missing payment_id");
     return res.status(200).send("OK");
   }
 
   const event = body.event ?? "";
   const paymentId = body.object?.metadata?.payment_id?.trim();
   if (!paymentId) {
+    ack(200, "rejected_payload", "Empty payment_id");
     return res.status(200).send("OK");
   }
+  ackPaymentId = paymentId;
 
   if (event !== "payment.succeeded") {
     console.log("[YooKassa Webhook] Ignored event", { event, paymentId });
+    ack(200, "ignored_event", `event=${event}`, paymentId);
     return res.status(200).send("OK");
   }
 
@@ -140,6 +153,7 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
         paymentId,
         externalId,
       });
+      ack(200, "rejected_signature", "Not confirmed by YooKassa API", paymentId);
       return res.status(200).send("OK");
     }
     console.log("[YooKassa Webhook] Платёж успешно верифицирован", { paymentId });
@@ -162,6 +176,7 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
 
   if (!payment) {
     console.warn("[YooKassa Webhook] Payment not found in database", { paymentId });
+    ack(200, "payment_not_found", `paymentId=${paymentId}`, paymentId);
     return res.status(200).send("OK");
   }
 
@@ -189,6 +204,7 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
 
   if (!claimed) {
     console.log("[YooKassa Webhook] Already processed", { paymentId });
+    ack(200, "payment_already_paid", undefined, payment.id);
     return res.status(200).send("OK");
   }
   await recordPromoCodeUsageFromPayment(payment.id);
@@ -211,6 +227,7 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
     });
   }
 
+  let fulfillmentError: string | undefined;
   if (isTopUp) {
     console.log("[YooKassa Webhook] Payment PAID, balance credited (top-up)", {
       paymentId: payment.id,
@@ -225,9 +242,18 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
       const { notifyExtraOptionApplied } = await import("../notification/telegram-notify.service.js");
       await notifyExtraOptionApplied(payment.clientId, payment.id).catch(() => {});
     } else {
+      fulfillmentError = (result as { error?: string }).error || "extra option activation failed";
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "yookassa",
+        activation: { ok: false, error: fulfillmentError },
+      });
       console.error("[YooKassa Webhook] Extra option apply failed", {
         paymentId: payment.id,
-        error: (result as { error?: string }).error,
+        error: fulfillmentError,
       });
     }
   } else if (payment.proxyTariffId) {
@@ -237,9 +263,18 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
       const tariff = await prisma.proxyTariff.findUnique({ where: { id: payment.proxyTariffId }, select: { name: true } });
       await notifyProxySlotsCreated(payment.clientId, proxyResult.slotIds, tariff?.name ?? undefined).catch(() => {});
     } else {
+      fulfillmentError = proxyResult.error || "proxy slots activation failed";
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "yookassa",
+        activation: { ok: false, error: fulfillmentError },
+      });
       console.error("[YooKassa Webhook] Proxy slots creation failed", {
         paymentId: payment.id,
-        error: proxyResult.error,
+        error: fulfillmentError,
       });
     }
   } else if (payment.singboxTariffId) {
@@ -249,9 +284,18 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
       const tariff = await prisma.singboxTariff.findUnique({ where: { id: payment.singboxTariffId }, select: { name: true } });
       await notifySingboxSlotsCreated(payment.clientId, singboxResult.slotIds, tariff?.name ?? undefined).catch(() => {});
     } else {
+      fulfillmentError = singboxResult.error || "singbox slots activation failed";
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "yookassa",
+        activation: { ok: false, error: fulfillmentError },
+      });
       console.error("[YooKassa Webhook] Singbox slots creation failed", {
         paymentId: payment.id,
-        error: singboxResult.error,
+        error: fulfillmentError,
       });
     }
   } else {
@@ -272,6 +316,7 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
       provider: "yookassa",
       activation,
     });
+    if (!activation.ok) fulfillmentError = activation.error || "activation_failed";
   }
 
   if (!isTopUp) {
@@ -297,5 +342,11 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
     console.warn("[YooKassa Webhook] Nalog receipt error (non-critical):", e);
   });
 
+  ack(200, fulfillmentError ? "error" : "accepted", fulfillmentError, payment.id);
   return res.status(200).send("OK");
+  } catch (e) {
+    console.error("[YooKassa Webhook] Processing failed", e);
+    ack(200, "error", String(e), ackPaymentId);
+    return res.status(200).send("OK");
+  }
 });

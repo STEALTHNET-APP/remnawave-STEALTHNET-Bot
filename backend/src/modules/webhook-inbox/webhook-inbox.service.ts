@@ -28,7 +28,7 @@ export interface CapturedWebhook {
 function pickHeaders(req: express.Request): Record<string, string> {
   const out: Record<string, string> = {};
   // Только relevant заголовки чтобы не хранить cookies/auth-tokens пользователей.
-  const allowed = ["x-signature", "signature", "authorization", "content-type", "user-agent", "x-forwarded-for", "x-real-ip"];
+  const allowed = ["x-signature", "signature", "authorization", "content-type", "user-agent", "x-forwarded-for", "x-real-ip", "crypto-pay-api-signature", "x-api-key", "x-timestamp"];
   for (const k of allowed) {
     const v = req.headers[k];
     if (typeof v === "string" && v.length > 0) out[k] = v.length > 1024 ? v.slice(0, 1024) : v;

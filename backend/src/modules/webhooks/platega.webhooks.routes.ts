@@ -583,21 +583,17 @@ plategaWebhooksRouter.post("/platega", async (req, res) => {
     // получали «успех», а реальная ошибка тихо лежала в metadata. Теперь уведомляем
     // только когда активация реально применена, а при фейле шлём админам алерт.
     const activationOutcome = await ensureTariffActivation(payment.id);
-    if (payment.tariffId) {
-      if (activationOutcome.applied && activationOutcome.ok) {
-        await notifyTariffActivated(payment.clientId, payment.id).catch(() => {});
-      } else if (!activationOutcome.ok) {
-        await handlePaymentActivationResult({
-          paymentId: payment.id,
-          clientId: payment.clientId,
-          amount: payment.amount,
-          currency: payment.currency || "RUB",
-          provider: "platega",
-          activation: { ok: false, error: activationOutcome.error },
-        });
-      }
-      // applied=false (already_applied / in_progress) — уведомление уже уходило при
-      // первичной активации; повторный webhook больше не дублирует его.
+    if (activationOutcome.ok && activationOutcome.applied) {
+      if (payment.tariffId) await notifyTariffActivated(payment.clientId, payment.id).catch(() => {});
+    } else if (!activationOutcome.ok) {
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "platega",
+        activation: { ok: false, error: activationOutcome.error },
+      });
     }
     // proxyTariffId: notifyProxySlotsCreated вызывается из ensureTariffActivation
 

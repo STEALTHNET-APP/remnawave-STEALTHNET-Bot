@@ -30,6 +30,7 @@ import { yookassaWebhooksRouter } from "./modules/webhooks/yookassa.webhooks.rou
 import { cryptopayWebhooksRouter } from "./modules/webhooks/cryptopay.webhooks.routes.js";
 import { heleketWebhooksRouter } from "./modules/webhooks/heleket.webhooks.routes.js";
 import { rollypayWebhooksRouter } from "./modules/webhooks/rollypay.webhooks.routes.js";
+import { overpayWebhooksRouter } from "./modules/webhooks/overpay.webhooks.routes.js";
 import { lavaWebhooksRouter } from "./modules/webhooks/lava.webhooks.routes.js";
 import { lavatopWebhooksRouter } from "./modules/webhooks/lavatop.webhooks.routes.js";
 import { botAdminRouter } from "./modules/bot-admin/bot-admin.routes.js";
@@ -437,6 +438,7 @@ app.use("/api/webhooks", remnaWebhooksRouter);
 app.use("/api/webhooks", plategaWebhooksRouter); // raw body для /platega уже применён выше
 app.use("/api/webhooks", yoomoneyWebhooksRouter);
 app.use("/api/webhooks", yookassaWebhooksRouter);
+app.use("/api/webhooks", overpayWebhooksRouter);
 // cryptopay уже смонтирован выше с raw body
 // Lava.top использует X-Api-Key вместо HMAC, поэтому raw body не нужен — обычный JSON
 app.use("/api/webhooks/lavatop", lavatopWebhooksRouter);

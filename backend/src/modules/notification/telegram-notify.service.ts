@@ -470,17 +470,18 @@ export async function notifyClientAboutActivationDelayed(clientId: string, _erro
  * extra-option (доп. устройства / трафик / серверы), после оплаты картой / криптой / etc.
  */
 export async function notifyExtraOptionApplied(clientId: string, paymentId: string): Promise<void> {
-  const client = await prisma.client.findUnique({
-    where: { id: clientId },
-    select: { telegramId: true },
-  });
-  if (!client?.telegramId) return;
-  const payment = await prisma.payment.findUnique({
-    where: { id: paymentId },
-    select: { amount: true, currency: true, metadata: true, provider: true },
-  });
+  const [client, payment] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id: clientId },
+      select: { telegramId: true, email: true, telegramUsername: true, id: true },
+    }),
+    prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: { amount: true, currency: true, metadata: true, provider: true },
+    }),
+  ]);
   if (!payment) return;
-  // Парсим extraOption.kind из metadata.
+
   let kind: "traffic" | "devices" | "servers" | null = null;
   try {
     const meta = payment.metadata ? JSON.parse(payment.metadata) as { extraOption?: { kind?: string } } : null;
@@ -488,7 +489,6 @@ export async function notifyExtraOptionApplied(clientId: string, paymentId: stri
     if (k === "traffic" || k === "devices" || k === "servers") kind = k;
   } catch { /* ignore */ }
 
-  // Текст по типу опции. verb согласован с родом title-а.
   let title: string;
   let verb: string;
   if (kind === "traffic") { title = "Дополнительный трафик"; verb = "добавлен"; }
@@ -513,24 +513,38 @@ export async function notifyExtraOptionApplied(clientId: string, paymentId: stri
 
   const cfg = await getSystemConfig();
   const botToken = cfg.telegramBotToken?.trim();
-  if (!botToken) return;
-  const replyMarkup = {
-    inline_keyboard: [
-      [{ text: "📋 Мои подписки", callback_data: "menu:my_subs" }],
-      [{ text: "🏠 Главное меню", callback_data: "menu:main" }],
-    ],
-  };
-  await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: client.telegramId,
-      text: lines.join("\n"),
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-      reply_markup: replyMarkup,
-    }),
-  }).catch((e) => console.error("[notifyExtraOptionApplied] send failed:", e));
+  if (client?.telegramId && botToken) {
+    const replyMarkup = {
+      inline_keyboard: [
+        [{ text: "📋 Мои подписки", callback_data: "menu:my_subs" }],
+        [{ text: "🏠 Главное меню", callback_data: "menu:main" }],
+      ],
+    };
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: client.telegramId,
+        text: lines.join("\n"),
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+        reply_markup: replyMarkup,
+      }),
+    }).catch((e) => console.error("[notifyExtraOptionApplied] send failed:", e));
+  }
+
+  const clientLabel = formatClientLabel(client ?? { id: clientId });
+  const adminLines = [
+    `⚡ <b>Оплата дополнительной опции</b>`,
+    ``,
+    `👤 Клиент: ${escapeHtml(clientLabel)}`,
+  ];
+  if (client?.telegramId) adminLines.push(`🆔 TG ID: <code>${escapeHtml(client.telegramId)}</code>`);
+  adminLines.push(`📦 Опция: <b>${escapeHtml(title)}</b>`);
+  if (amount > 0) adminLines.push(`💵 Сумма: <b>${formatMoney(amount, currency)}</b>`);
+  if (payment.provider) adminLines.push(`🏦 Провайдер: ${escapeHtml(payment.provider)}`);
+  adminLines.push(`🕐 ${formatDate(new Date())}`);
+  await sendTelegramToAdminsForEvent("tariff_payment", adminLines.join("\n")).catch(() => {});
 }
 
 /** Человекочитаемый маркер «к сообщению приложены фото». */
@@ -928,8 +942,18 @@ function formatDate(d: Date): string {
  * Отправить уведомление о создании прокси-слотов (после оплаты).
  */
 export async function notifyProxySlotsCreated(clientId: string, slotIds: string[], tariffName?: string): Promise<void> {
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { telegramId: true, id: true } });
-  if (!client?.telegramId || slotIds.length === 0) return;
+  if (slotIds.length === 0) return;
+  const [client, payment] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id: clientId },
+      select: { telegramId: true, email: true, telegramUsername: true, id: true },
+    }),
+    prisma.payment.findFirst({
+      where: { clientId, status: "PAID", proxyTariffId: { not: null } },
+      orderBy: { paidAt: "desc" },
+      select: { amount: true, currency: true, provider: true },
+    }),
+  ]);
 
   const slots = await prisma.proxySlot.findMany({
     where: { id: { in: slotIds } },
@@ -947,15 +971,41 @@ export async function notifyProxySlotsCreated(clientId: string, slotIds: string[
   text += "Скопируйте строку в настройки прокси вашего приложения.";
 
   const cfg = await getSystemConfig();
-  await sendTelegramToUser(client.telegramId, text, null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
+  if (client?.telegramId) {
+    await sendTelegramToUser(client.telegramId, text, null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
+  }
+
+  const clientLabel = formatClientLabel(client ?? { id: clientId });
+  const adminLines = [
+    `🛰 <b>Оплата прокси</b>`,
+    ``,
+    `👤 Клиент: ${escapeHtml(clientLabel)}`,
+  ];
+  if (client?.telegramId) adminLines.push(`🆔 TG ID: <code>${escapeHtml(client.telegramId)}</code>`);
+  adminLines.push(`📦 Тариф: <b>${escapeHtml(name)}</b>`);
+  adminLines.push(`🔑 Слотов: ${slotIds.length}`);
+  if (payment?.amount != null) adminLines.push(`💵 Сумма: <b>${formatMoney(payment.amount, payment.currency ?? "RUB")}</b>`);
+  if (payment?.provider) adminLines.push(`🏦 Провайдер: ${escapeHtml(payment.provider)}`);
+  adminLines.push(`🕐 ${formatDate(new Date())}`);
+  await sendTelegramToAdminsForEvent("tariff_payment", adminLines.join("\n")).catch(() => {});
 }
 
 /**
  * Отправить уведомление о создании Sing-box слотов (после оплаты).
  */
 export async function notifySingboxSlotsCreated(clientId: string, slotIds: string[], tariffName?: string): Promise<void> {
-  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { telegramId: true, id: true } });
-  if (!client?.telegramId || slotIds.length === 0) return;
+  if (slotIds.length === 0) return;
+  const [client, payment] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id: clientId },
+      select: { telegramId: true, email: true, telegramUsername: true, id: true },
+    }),
+    prisma.payment.findFirst({
+      where: { clientId, status: "PAID", singboxTariffId: { not: null } },
+      orderBy: { paidAt: "desc" },
+      select: { amount: true, currency: true, provider: true },
+    }),
+  ]);
 
   const slots = await prisma.singboxSlot.findMany({
     where: { id: { in: slotIds } },
@@ -967,13 +1017,30 @@ export async function notifySingboxSlotsCreated(clientId: string, slotIds: strin
     orderBy: { createdAt: "asc" },
   });
 
+  const name = tariffName?.trim() || "Sing-box";
+  const cfg = await getSystemConfig();
+  const clientLabel = formatClientLabel(client ?? { id: clientId });
+  const adminLines = [
+    `📦 <b>Оплата Sing-box</b>`,
+    ``,
+    `👤 Клиент: ${escapeHtml(clientLabel)}`,
+  ];
+  if (client?.telegramId) adminLines.push(`🆔 TG ID: <code>${escapeHtml(client.telegramId)}</code>`);
+  adminLines.push(`📦 Тариф: <b>${escapeHtml(name)}</b>`);
+  adminLines.push(`🔑 Слотов: ${slotIds.length}`);
+  if (payment?.amount != null) adminLines.push(`💵 Сумма: <b>${formatMoney(payment.amount, payment.currency ?? "RUB")}</b>`);
+  if (payment?.provider) adminLines.push(`🏦 Провайдер: ${escapeHtml(payment.provider)}`);
+  adminLines.push(`🕐 ${formatDate(new Date())}`);
+  const notifyAdmins = () => sendTelegramToAdminsForEvent("tariff_payment", adminLines.join("\n")).catch(() => {});
   const { buildSingboxSlotSubscriptionLink } = await import("../singbox/singbox-link.js");
+
   if (slots.some(s => ["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(s.node.protocol))) {
-    const cfg = await getSystemConfig();
-    await sendTelegramToUser(client.telegramId, "✅ Доступ AmneziaWG оплачен. Скачайте .conf в личном кабинете → Sing-box / AmneziaWG → Мои доступы и импортируйте в приложение AmneziaVPN.", null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
+    if (client?.telegramId) {
+      await sendTelegramToUser(client.telegramId, "✅ Доступ AmneziaWG оплачен. Скачайте .conf в личном кабинете → Sing-box / AmneziaWG → Мои доступы и импортируйте в приложение AmneziaVPN.", null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
+    }
+    await notifyAdmins();
     return;
   }
-  const name = tariffName?.trim() || "Sing-box";
   let text = `✅ <b>Доступы «${escapeHtml(name)}»</b> оплачены.\n\n`;
   for (let i = 0; i < slots.length; i++) {
     const s = slots[i]!;
@@ -986,8 +1053,10 @@ export async function notifySingboxSlotsCreated(clientId: string, slotIds: strin
   }
   text += "Скопируйте ссылку в приложение (v2rayN, Nekoray, Shadowrocket и др.).";
 
-  const cfg = await getSystemConfig();
-  await sendTelegramToUser(client.telegramId, text, null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
+  if (client?.telegramId) {
+    await sendTelegramToUser(client.telegramId, text, null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
+  }
+  await notifyAdmins();
 }
 
 /** Админ продлил подписку (только дата, без смены тарифа) — короткое уведомление клиенту. */

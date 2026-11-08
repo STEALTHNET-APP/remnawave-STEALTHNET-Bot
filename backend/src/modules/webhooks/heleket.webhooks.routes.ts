@@ -17,6 +17,7 @@ import { notifyBalanceToppedUp, notifyProxySlotsCreated, notifySingboxSlotsCreat
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
 import { handlePaymentActivationResult } from "../payment/payment-fulfillment.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
+import { recordWebhook, markOutcome } from "../webhook-inbox/webhook-inbox.service.js";
 
 function hasExtraOptionInMetadata(metadata: string | null): boolean {
   if (!metadata?.trim()) return false;
@@ -40,11 +41,17 @@ type HeleketWebhookPayload = {
 
 /** POST /api/webhooks/heleket — вызывается с express.raw(), req.body = Buffer */
 heleketWebhooksRouter.post("/", async (req: Request, res: Response) => {
-  try {
   const rawBody = req.body;
   const rawString = typeof rawBody === "string" ? rawBody : Buffer.isBuffer(rawBody) ? rawBody.toString("utf8") : "";
+  const captured = await recordWebhook("heleket", req, rawString);
+  const ack = (status: number, outcome: Parameters<typeof markOutcome>[2], errorMessage?: string, paymentId?: string | null) => {
+    void markOutcome(captured, status, outcome, { errorMessage, paymentId });
+  };
+  let ackPaymentId: string | null = null;
+  try {
   if (!rawString) {
     console.warn("[Heleket Webhook] Empty body");
+    ack(400, "rejected_payload", "Empty body");
     return res.status(400).send("Empty body");
   }
 
@@ -52,6 +59,7 @@ heleketWebhooksRouter.post("/", async (req: Request, res: Response) => {
   const apiKey = (config as { heleketApiKey?: string | null }).heleketApiKey?.trim();
   if (!apiKey) {
     console.warn("[Heleket Webhook] Heleket not configured");
+    ack(200, "error", "Heleket not configured");
     return res.status(200).send("OK");
   }
 
@@ -60,32 +68,39 @@ heleketWebhooksRouter.post("/", async (req: Request, res: Response) => {
     body = JSON.parse(rawString) as HeleketWebhookPayload;
   } catch {
     console.warn("[Heleket Webhook] Invalid JSON");
+    ack(400, "rejected_payload", "Invalid JSON");
     return res.status(400).send("Invalid JSON");
   }
 
   if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.sign !== "string") {
+    ack(400, "rejected_payload", "Invalid payload");
     return res.status(400).send("Invalid payload");
   }
 
   const signFromBody = body.sign;
   if (!verifyHeleketWebhookSignature(apiKey, rawString, signFromBody)) {
     console.warn("[Heleket Webhook] Invalid signature");
+    ack(401, "rejected_signature", "Invalid signature");
     return res.status(401).send("Invalid signature");
   }
 
   if (typeof body.status !== "string" || typeof body.order_id !== "string" || typeof body.uuid !== "string") {
+    ack(400, "rejected_payload", "Invalid payload");
     return res.status(400).send("Invalid payload");
   }
   const status = body.status.toLowerCase();
   if (status !== "paid" && status !== "paid_over") {
+    ack(200, "ignored_event", `status=${body.status}`, body.order_id);
     return res.status(200).send("OK");
   }
 
   const orderId = body.order_id?.trim();
   if (!orderId) {
     console.warn("[Heleket Webhook] No order_id");
+    ack(200, "rejected_payload", "No order_id");
     return res.status(200).send("OK");
   }
+  ackPaymentId = orderId;
 
   const payment = await prisma.payment.findFirst({
     where: { orderId, provider: "heleket" },
@@ -104,17 +119,22 @@ heleketWebhooksRouter.post("/", async (req: Request, res: Response) => {
 
   if (!payment) {
     console.warn("[Heleket Webhook] Payment not found", { orderId });
+    ack(200, "payment_not_found", `order_id=${orderId}`, orderId);
     return res.status(200).send("OK");
   }
 
   await auditPaymentClientBotAlignment(payment);
 
   if (payment.status === "PAID") {
+    ack(200, "payment_already_paid", undefined, payment.id);
     return res.status(200).send("OK");
   }
 
   const uuid = body.uuid.trim();
-  if (!uuid) return res.status(400).send("Missing invoice uuid");
+  if (!uuid) {
+    ack(400, "rejected_payload", "Missing invoice uuid", payment.id);
+    return res.status(400).send("Missing invoice uuid");
+  }
   const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
   const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption;
   const paidData = { status: "PAID", paidAt: new Date(), externalId: uuid };
@@ -128,9 +148,13 @@ heleketWebhooksRouter.post("/", async (req: Request, res: Response) => {
         return updated.count > 0;
       })
     : (await prisma.payment.updateMany({ where, data: paidData })).count > 0;
-  if (!claimed) return res.status(200).send("OK");
+  if (!claimed) {
+    ack(200, "payment_already_paid", undefined, payment.id);
+    return res.status(200).send("OK");
+  }
   await recordPromoCodeUsageFromPayment(payment.id);
 
+  let fulfillmentError: string | undefined;
   if (isTopUp) {
     await notifyBalanceToppedUp(payment.clientId, payment.amount, payment.currency || "USD", "Heleket").catch(() => {});
   } else if (isExtraOption) {
@@ -138,18 +162,48 @@ heleketWebhooksRouter.post("/", async (req: Request, res: Response) => {
     if (r.ok) {
       const { notifyExtraOptionApplied } = await import("../notification/telegram-notify.service.js");
       await notifyExtraOptionApplied(payment.clientId, payment.id).catch(() => {});
+    } else {
+      fulfillmentError = (r as { error?: string }).error || "extra option activation failed";
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "heleket",
+        activation: { ok: false, error: fulfillmentError },
+      });
     }
   } else if (payment.proxyTariffId) {
     const proxyResult = await createProxySlotsByPaymentId(payment.id);
     if (proxyResult.ok) {
       const tariff = await prisma.proxyTariff.findUnique({ where: { id: payment.proxyTariffId }, select: { name: true } });
       await notifyProxySlotsCreated(payment.clientId, proxyResult.slotIds, tariff?.name ?? undefined).catch(() => {});
+    } else {
+      fulfillmentError = proxyResult.error || "proxy slots activation failed";
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "heleket",
+        activation: { ok: false, error: fulfillmentError },
+      });
     }
   } else if (payment.singboxTariffId) {
     const singboxResult = await createSingboxSlotsByPaymentId(payment.id);
     if (singboxResult.ok) {
       const tariff = await prisma.singboxTariff.findUnique({ where: { id: payment.singboxTariffId }, select: { name: true } });
       await notifySingboxSlotsCreated(payment.clientId, singboxResult.slotIds, tariff?.name ?? undefined).catch(() => {});
+    } else {
+      fulfillmentError = singboxResult.error || "singbox slots activation failed";
+      await handlePaymentActivationResult({
+        paymentId: payment.id,
+        clientId: payment.clientId,
+        amount: payment.amount,
+        currency: payment.currency || "RUB",
+        provider: "heleket",
+        activation: { ok: false, error: fulfillmentError },
+      });
     }
   } else {
     const activation = await activateTariffByPaymentId(payment.id);
@@ -161,6 +215,7 @@ heleketWebhooksRouter.post("/", async (req: Request, res: Response) => {
       provider: "heleket",
       activation,
     });
+    if (!activation.ok) fulfillmentError = activation.error || "activation_failed";
   }
 
   // сжигаем одноразовую персональную скидку после продуктовой покупки.
@@ -171,9 +226,11 @@ heleketWebhooksRouter.post("/", async (req: Request, res: Response) => {
 
   await distributeReferralRewards(payment.id).catch(() => {});
 
+  ack(200, fulfillmentError ? "error" : "accepted", fulfillmentError, payment.id);
   return res.status(200).send("OK");
   } catch (error) {
     console.error("[Heleket Webhook] Processing failed", error);
+    ack(503, "error", String(error), ackPaymentId);
     return res.status(503).send("Processing failed");
   }
 });

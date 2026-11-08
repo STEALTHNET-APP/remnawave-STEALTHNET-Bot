@@ -30,7 +30,7 @@ const OUTCOME_META: Record<string, { label: string; cls: string; icon: typeof Ch
   error: { label: "Ошибка обработки", cls: "text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/30", icon: XCircle },
 };
 
-const PROVIDERS = ["platega", "yookassa", "yoomoney", "cryptopay", "heleket", "lava", "overpay"];
+const PROVIDERS = ["platega", "yookassa", "yoomoney", "cryptopay", "heleket", "lava", "lavatop", "overpay", "paritypay", "rollypay"];
 
 export function AdminWebhookInboxPage() {
   const { state } = useAuth();
@@ -152,7 +152,7 @@ export function AdminWebhookInboxPage() {
         <CardContent className="p-0">
           {items.length === 0 && !loading ? (
             <div className="p-8 text-center text-sm text-muted-foreground">
-              Нет webhook'ов. Capture включён только для Platega — для остальных провайдеров inbox пополнится после следующей итерации.
+              Нет webhook'ов. Входящие вебхуки от платёжных провайдеров появятся здесь.
             </div>
           ) : (
             <div className="divide-y">
