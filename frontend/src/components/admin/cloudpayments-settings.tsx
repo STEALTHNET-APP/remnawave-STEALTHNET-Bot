@@ -1,7 +1,9 @@
 import { adminConfirm } from "@/lib/admin-dialogs";
 import { useEffect, useState } from "react";
 import { api, type AdminSettings } from "@/lib/api";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown, CreditCard } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -15,7 +17,29 @@ export function CloudPaymentsSettings({ settings, onChange, token, saving }: { s
   const updateReceipt = (patch: Partial<typeof receipt>) => onChange({ cloudpaymentsReceipt: { ...receipt, ...patch } });
   const [error, setError] = useState("");
   useEffect(() => { api.getTariffs(token).then(r => setTariffs(r.items.filter(t => t.currency.toUpperCase() === "RUB"))).catch(() => setError("Не удалось загрузить тарифы")); }, [token]);
-  return <Card><CardHeader><CardTitle>CloudPayments</CardTitle><p className="text-sm text-muted-foreground">Оплата картой, платный пробный период и регулярные списания.</p></CardHeader><CardContent className="space-y-5">
+  return <Collapsible defaultOpen={false} className="group mt-4">
+    <CollapsibleTrigger asChild>
+      <button
+        type="button"
+        className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      >
+        <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
+          <div className="flex items-center justify-between pr-2">
+            <div className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-primary" />
+              <CardTitle>CloudPayments</CardTitle>
+              <span className="text-xs font-normal text-muted-foreground">— оплата картой, пробный период и регулярные списания</span>
+            </div>
+            <ChevronDown className="chevron h-5 w-5 shrink-0 text-muted-foreground" />
+          </div>
+          <p className="text-[12.5px] text-muted-foreground mt-[3px]">
+            Рекуррентные платежи, тестовый режим и фискализация CloudKassir
+          </p>
+        </CardHeader>
+      </button>
+    </CollapsibleTrigger>
+    <CollapsibleContent>
+      <CardContent className="space-y-5 border-t pt-4">
     <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="cp-public">Public ID</Label><Input id="cp-public" value={settings.cloudpaymentsPublicId || ""} onChange={e => onChange({ cloudpaymentsPublicId: e.target.value })}/></div><div className="space-y-2"><Label htmlFor="cp-secret">API Secret</Label><Input id="cp-secret" type="password" autoComplete="new-password" value={settings.cloudpaymentsApiSecret || ""} onChange={e => onChange({ cloudpaymentsApiSecret: e.target.value })}/></div></div>
     <label className="flex items-center gap-3"><input type="checkbox" checked={!!settings.cloudpaymentsEnabled} onChange={e => onChange({ cloudpaymentsEnabled: e.target.checked })}/>Принимать платежи через CloudPayments</label>
     <label className="flex items-center gap-3"><input type="checkbox" checked={settings.cloudpaymentsTestMode !== false} onChange={e => onChange({ cloudpaymentsTestMode: e.target.checked })}/>Тестовый терминал</label>
@@ -47,5 +71,5 @@ export function CloudPaymentsSettings({ settings, onChange, token, saving }: { s
     </div>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     <Button type="submit" disabled={saving}>{saving ? "Сохранение…" : "Сохранить"}</Button>
-  </CardContent></Card>;
+  </CardContent></CollapsibleContent></Collapsible>;
 }

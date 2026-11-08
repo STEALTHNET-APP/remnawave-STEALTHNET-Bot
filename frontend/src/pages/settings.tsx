@@ -3111,7 +3111,6 @@ export function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="payments" className="space-y-4">
-            <CloudPaymentsSettings settings={settings} token={token!} saving={saving} onChange={patch => setSettings(s => s ? { ...s, ...patch } : s)}/>
             <Card><CardContent className="space-y-2 pt-6">
               <Label htmlFor="payment-description">Описание платежа</Label>
               <Input id="payment-description" maxLength={128} value={settings.paymentDescription ?? ""} onChange={e => setSettings(s => s ? { ...s, paymentDescription: e.target.value } : s)} placeholder="По умолчанию — название тарифа или пополнение баланса" />
@@ -3675,23 +3674,46 @@ export function SettingsPage() {
                 </CollapsibleContent>
               </Collapsible>
 
-              <Card>
-                <CardHeader><CardTitle>Telegram Stars</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <input id="telegramStarsEnabled" type="checkbox" checked={settings.telegramStarsEnabled ?? false} onChange={(e) => setSettings(s => s ? { ...s, telegramStarsEnabled: e.target.checked } : s)} />
-                    <Label htmlFor="telegramStarsEnabled">Принимать оплату звёздами</Label>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="telegramStarsRubPerStar">Стоимость одной звезды в рублях</Label>
-                    <Input id="telegramStarsRubPerStar" type="number" min="0" step="0.01" value={settings.telegramStarsRubPerStar ?? 0} onChange={(e) => setSettings(s => s ? { ...s, telegramStarsRubPerStar: Number(e.target.value) } : s)} />
-                    <p className="text-sm text-muted-foreground">Вы задаёте стоимость звезды для своего сервиса. Цена тарифа в рублях делится на это значение и округляется вверх до целого количества Stars. При нуле оплата недоступна.</p>
-                    {(settings.telegramStarsRubPerStar ?? 0) > 0 && <p className="text-sm">Например, 300 ₽ = {Math.ceil(300 / settings.telegramStarsRubPerStar!)} ⭐</p>}
-                    <p className="text-sm text-muted-foreground">Используется основной Telegram-бот. Оплата доступна для цен в рублях и аккаунтов с привязанным Telegram.</p>
-                  </div>
-                  <Button type="submit" disabled={saving}>{saving ? t("admin.settings.saving") : t("admin.settings.save")}</Button>
-                </CardContent>
-              </Card>
+              <CloudPaymentsSettings settings={settings} token={token!} saving={saving} onChange={patch => setSettings(s => s ? { ...s, ...patch } : s)}/>
+
+              <Collapsible defaultOpen={false} className="group mt-4">
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
+                      <div className="flex items-center justify-between pr-2">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-5 w-5 text-amber-500" />
+                          <CardTitle>Telegram Stars</CardTitle>
+                          <span className="text-xs font-normal text-muted-foreground">— приём оплаты звёздами в Telegram</span>
+                        </div>
+                        <ChevronDown className="chevron h-5 w-5 shrink-0 text-muted-foreground" />
+                      </div>
+                      <p className="text-[12.5px] text-muted-foreground mt-[3px]">
+                        Оплата цифровыми звёздами через бота для пользователей с привязанным Telegram
+                      </p>
+                    </CardHeader>
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-4 border-t pt-4">
+                    <div className="flex items-center gap-2">
+                      <input id="telegramStarsEnabled" type="checkbox" checked={settings.telegramStarsEnabled ?? false} onChange={(e) => setSettings(s => s ? { ...s, telegramStarsEnabled: e.target.checked } : s)} />
+                      <Label htmlFor="telegramStarsEnabled">Принимать оплату звёздами</Label>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="telegramStarsRubPerStar">Стоимость одной звезды в рублях</Label>
+                      <Input id="telegramStarsRubPerStar" type="number" min="0" step="0.01" value={settings.telegramStarsRubPerStar ?? 0} onChange={(e) => setSettings(s => s ? { ...s, telegramStarsRubPerStar: Number(e.target.value) } : s)} />
+                      <p className="text-sm text-muted-foreground">Вы задаёте стоимость звезды для своего сервиса. Цена тарифа в рублях делится на это значение и округляется вверх до целого количества Stars. При нуле оплата недоступна.</p>
+                      {(settings.telegramStarsRubPerStar ?? 0) > 0 && <p className="text-sm">Например, 300 ₽ = {Math.ceil(300 / settings.telegramStarsRubPerStar!)} ⭐</p>}
+                      <p className="text-sm text-muted-foreground">Используется основной Telegram-бот. Оплата доступна для цен в рублях и аккаунтов с привязанным Telegram.</p>
+                    </div>
+                    <Button type="submit" disabled={saving}>{saving ? t("admin.settings.saving") : t("admin.settings.save")}</Button>
+                  </CardContent>
+                </CollapsibleContent>
+              </Collapsible>
               <Collapsible defaultOpen={false} className="group mt-4">
                 <CollapsibleTrigger asChild>
                   <button
