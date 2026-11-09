@@ -32,13 +32,34 @@ function clean(value: string, max = 55): string {
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
+function numeric(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return null;
+}
 export function subscriptionDeviceLimit(sub: unknown): unknown {
   const outer = record(sub);
   const inner = record(outer.response ?? outer.data ?? outer);
-  for (const key of ["hwidDeviceLimit", "deviceLimit", "device_limit"]) {
-    if (inner[key] !== undefined) return inner[key];
-  }
-  return undefined;
+  if (inner.hwidDeviceLimit != null) return inner.hwidDeviceLimit;
+  const sources = [inner, outer, record(inner.tariff), record(outer.tariff)];
+  const pick = (keys: string[]): unknown => {
+    for (const source of sources) {
+      for (const key of keys) {
+        if (source[key] != null) return source[key];
+      }
+    }
+    return undefined;
+  };
+  const fallback = Math.max(
+    numeric(pick(["includedDevices", "included_devices"])) ?? 0,
+    numeric(pick(["deviceLimit", "device_limit"])) ?? 0,
+  );
+  if (fallback > 0) return fallback;
+  const explicitZero = sources.some((source) =>
+    ["hwidDeviceLimit", "includedDevices", "included_devices", "deviceLimit", "device_limit"].some((key) => source[key] === 0),
+  );
+  if (explicitZero) return 0;
+  return inner.hwidDeviceLimit !== undefined ? inner.hwidDeviceLimit : undefined;
 }
 export function formatDeviceCount(count: number | null, limit: unknown): string {
   if (count === null) return "📱 Устройства: не удалось загрузить количество";

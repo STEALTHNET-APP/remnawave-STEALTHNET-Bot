@@ -107,12 +107,17 @@ function parseSubscription(sub: unknown): {
   const subUrl = typeof o.subscriptionUrl === "string" ? o.subscriptionUrl : undefined;
   const productName = typeof o.productName === "string" ? o.productName.trim() : undefined;
   const subscriptionProductName = typeof (o as Record<string, unknown>).subscriptionProductName === "string" ? (o as Record<string, unknown>).subscriptionProductName as string : undefined;
+  const toNumber = (value: unknown): number | undefined => typeof value === "number"
+    ? value
+    : value != null && Number.isFinite(Number(value)) ? Number(value) : undefined;
+  const directDeviceLimit = toNumber(o.hwidDeviceLimit);
+  const fallbackDeviceLimit = Math.max(toNumber(o.deviceLimit) ?? 0, toNumber(o.includedDevices) ?? 0) || undefined;
   return {
     status: typeof o.status === "string" ? o.status : undefined,
     expireAt: typeof o.expireAt === "string" ? o.expireAt : undefined,
     trafficUsed: usedBytes,
     trafficLimitBytes: typeof o.trafficLimitBytes === "number" ? o.trafficLimitBytes : undefined,
-    hwidDeviceLimit: typeof o.hwidDeviceLimit === "number" ? o.hwidDeviceLimit : (o.hwidDeviceLimit != null ? Number(o.hwidDeviceLimit) : undefined),
+    hwidDeviceLimit: directDeviceLimit ?? fallbackDeviceLimit,
     subscriptionUrl: subUrl?.trim() || undefined,
     productName: productName || subscriptionProductName || undefined,
   };

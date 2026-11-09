@@ -51,6 +51,7 @@ interface TariffLite {
   priceOptions?: PriceOption[];
   durationDays?: number;
   trafficLimitBytes?: string | null;
+  deviceLimit?: number | null;
   includedDevices?: number;
 }
 
@@ -218,6 +219,7 @@ export function StealthTariffs() {
 
   const currentCat = displayCategories.find((c) => c.id === selectedCatId);
   const currentTariff = currentCat?.tariffs.find((t) => t.id === selectedTariffId) as TariffLite | undefined;
+  const currentTariffDeviceLimit = Math.max(currentTariff?.includedDevices ?? 0, currentTariff?.deviceLimit ?? 0) || null;
   const priceOptions: PriceOption[] = currentTariff?.priceOptions ?? [];
   const currentOption = priceOptions.find((o) => o.id === selectedPriceOptionId);
   const basePrice = currentOption?.price ?? currentTariff?.price ?? 0;
@@ -940,7 +942,7 @@ export function StealthTariffs() {
         <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">Преимущества</p>
         <ul className="space-y-1.5">
           {[
-            currentTariff?.includedDevices ? `До ${currentTariff.includedDevices} устройств` : "Поддержка нескольких устройств",
+            currentTariffDeviceLimit ? `До ${currentTariffDeviceLimit} устройств` : "Поддержка нескольких устройств",
             currentTariff?.trafficLimitBytes && currentTariff.trafficLimitBytes !== "0" ? "Ограниченный трафик" : "Безлимитный трафик",
             "Минимальные задержки",
           ].map((b, i) => (

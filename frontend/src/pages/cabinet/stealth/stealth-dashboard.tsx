@@ -214,8 +214,9 @@ export function StealthDashboard() {
         const daysLeft = isActive
           ? Math.max(0, Math.ceil((validDate!.getTime() - Date.now()) / 86_400_000))
           : null;
-        const limit = typeof s?.hwidDeviceLimit === "number" ? s.hwidDeviceLimit
-          : s?.hwidDeviceLimit != null ? Number(s.hwidDeviceLimit) : 0;
+        const directLimit = typeof s?.hwidDeviceLimit === "number" ? s.hwidDeviceLimit
+          : s?.hwidDeviceLimit != null ? Number(s.hwidDeviceLimit) : null;
+        const limit = directLimit ?? Math.max(Number(s?.deviceLimit ?? 0) || 0, Number(s?.includedDevices ?? 0) || 0);
         if (Number.isFinite(limit) && limit > 0) devicesTotal += limit;
         const idx = it.subscriptionIndex ?? 0;
         return {

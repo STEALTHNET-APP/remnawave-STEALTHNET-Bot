@@ -3,7 +3,8 @@ import { InputFile } from "grammy";
 import type { Context } from "grammy";
 import type { Api } from "grammy";
 import * as api from "../api.js";
-import { DeviceFlow } from "../device-flow.js";
+import { DeviceFlow, subscriptionDeviceLimit } from "../device-flow.js";
+import { formatTariffDeviceLine } from "../tariff-device-limit.js";
 import { titleEmojiPrefix } from "../title-emoji.js";
 import { renewableSubscriptions, connectableSubscriptions, directConnectionTarget } from "../subscription-actions.js";
 import {
@@ -586,8 +587,7 @@ export function formatTariffLine(tariff: TariffItem, fields: Required<BotTariffL
     if (label) parts.push(label);
   }
   if (fields.deviceLimit) {
-    const limit = tariff.deviceLimit;
-    parts.push(limit == null ? "устройства без лимита" : `устройства ${limit}`);
+    parts.push(formatTariffDeviceLine(tariff));
   }
   if (!parts.length) return `• ${tariff.name}`;
   return `• ${parts.join(" — ")}`;
@@ -1101,7 +1101,10 @@ export function buildMainMenuText(opts: {
     if (daysLeft != null) {
       pushLine("daysLeftPrefix", t(menuTexts, "daysLeftPrefix") + `${daysLeft} ${daysLeft === 1 ? "день" : daysLeft < 5 ? "дня" : "дней"}`);
     }
-    const deviceLimit = user?.hwidDeviceLimit ?? user?.deviceLimit ?? user?.device_limit;
+    const rawDeviceLimit = subscriptionDeviceLimit(subscription);
+    const deviceLimit = typeof rawDeviceLimit === "number" && Number.isFinite(rawDeviceLimit)
+      ? rawDeviceLimit
+      : rawDeviceLimit != null && Number.isFinite(Number(rawDeviceLimit)) ? Number(rawDeviceLimit) : null;
     const devicesUsed = user?.devicesUsed ?? user?.devices_used;
     if (deviceLimit != null && typeof deviceLimit === "number") {
       const available = devicesUsed != null ? Math.max(0, deviceLimit - Number(devicesUsed)) : deviceLimit;
@@ -1300,8 +1303,10 @@ export function richSubStats(subscription: unknown): {
       : null;
 
   // устройства
-  const dlRaw = u.hwidDeviceLimit ?? u.deviceLimit ?? u.device_limit;
-  const deviceLimit = typeof dlRaw === "number" ? dlRaw : dlRaw != null && Number.isFinite(Number(dlRaw)) ? Number(dlRaw) : null;
+  const dlRaw = subscriptionDeviceLimit(subscription);
+  const deviceLimit = typeof dlRaw === "number" && Number.isFinite(dlRaw)
+    ? dlRaw
+    : dlRaw != null && Number.isFinite(Number(dlRaw)) ? Number(dlRaw) : null;
   const duRaw = u.devicesUsed ?? u.devices_used;
   const devicesUsed = duRaw != null && Number.isFinite(Number(duRaw)) ? Number(duRaw) : null;
 

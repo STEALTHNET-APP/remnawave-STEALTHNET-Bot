@@ -8,9 +8,13 @@ import { useScrollReveal } from "../scroll-reveal";
 import { Check, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { api, type PublicTariffCategory } from "@/lib/api";
+import { api, type PublicTariff, type PublicTariffCategory } from "@/lib/api";
 import { useUtmCaptureAndBuildLink, txt, SECTION_SCROLL_OFFSET, useLandingTheme } from "../utils";
 import type { LandingApiBlock } from "../types";
+
+function tariffDeviceLimit(tariff: PublicTariff): number {
+  return Math.max(tariff.includedDevices ?? 0, tariff.deviceLimit ?? 0);
+}
 
 interface TariffsLiveProps {
   block: LandingApiBlock;
@@ -80,10 +84,10 @@ export function TariffsLive({ block }: TariffsLiveProps) {
                               {t.durationDays} дней доступа
                             </li>
                           ) : null}
-                          {t.deviceLimit ? (
+                          {tariffDeviceLimit(t) ? (
                             <li className="flex items-center gap-2">
                               <Check className="h-4 w-4" style={{ color: accentTheme.primary }} />
-                              До {t.deviceLimit} устройств
+                              До {tariffDeviceLimit(t)} устройств
                             </li>
                           ) : null}
                           {t.trafficLimitBytes ? (

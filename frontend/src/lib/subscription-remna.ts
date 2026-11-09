@@ -34,6 +34,15 @@ function num(value: unknown): number | null {
   return null;
 }
 
+function maxNum(...values: unknown[]): number | null {
+  let result: number | null = null;
+  for (const value of values) {
+    const current = num(value);
+    if (current != null && (result == null || current > result)) result = current;
+  }
+  return result;
+}
+
 function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -55,12 +64,15 @@ export function remnaInfo(sub: unknown): RemnaSubscriptionInfo {
   const traffic = payload.userTraffic && typeof payload.userTraffic === "object"
     ? (payload.userTraffic as Record<string, unknown>)
     : null;
+  const tariff = payload.tariff && typeof payload.tariff === "object"
+    ? (payload.tariff as Record<string, unknown>)
+    : null;
   return {
     status: str(payload.status),
     expireAt: str(payload.expireAt),
     trafficUsed: num(traffic?.usedTrafficBytes) ?? num(payload.trafficUsed),
     trafficLimitBytes: num(payload.trafficLimitBytes),
-    deviceLimit: num(payload.hwidDeviceLimit),
+    deviceLimit: num(payload.hwidDeviceLimit) ?? maxNum(payload.deviceLimit, payload.device_limit, payload.includedDevices, tariff?.includedDevices, tariff?.deviceLimit),
     subscriptionUrl: str(payload.subscriptionUrl),
     productName: str(payload.productName) ?? str(payload.subscriptionProductName),
     username: str(payload.username),

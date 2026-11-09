@@ -123,6 +123,9 @@ test("counts show available slots, unlimited limits and unavailable counts hones
   assert.match(formatDeviceCount(5, 0), /без лимита/);
   assert.equal(subscriptionDeviceLimit({ response: { hwidDeviceLimit: null } }), null);
   assert.match(formatDeviceCount(5, subscriptionDeviceLimit({ hwidDeviceLimit: null })), /без лимита/);
+  assert.equal(subscriptionDeviceLimit({ response: { hwidDeviceLimit: null, includedDevices: 8 } }), 8);
+  assert.equal(subscriptionDeviceLimit({ response: { hwidDeviceLimit: null, tariff: { includedDevices: 6 } } }), 6);
+  assert.equal(subscriptionDeviceLimit({ response: { hwidDeviceLimit: null, deviceLimit: 4 } }), 4);
   assert.match(formatDeviceCount(null, 8), /не удалось загрузить/);
 });
 

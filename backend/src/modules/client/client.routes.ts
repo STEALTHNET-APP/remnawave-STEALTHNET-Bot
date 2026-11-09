@@ -3238,7 +3238,7 @@ async function doFetchClientSubscriptionsAll(clientId: string): Promise<{ items:
       remnaStatus: true,
       trafficUsedBytes: true,
       trafficLimitBytes: true,
-      tariff: { select: { id: true, name: true, menuEmoji: true, trafficLimitBytes: true } },
+      tariff: { select: { id: true, name: true, menuEmoji: true, trafficLimitBytes: true, includedDevices: true, deviceLimit: true } },
       trial: { select: { name: true, convertEnabled: true, convertAllTariffs: true, convertTariffIds: true } },
     },
     orderBy: { subscriptionIndex: "asc" },
@@ -3286,7 +3286,7 @@ async function doFetchClientSubscriptionsAll(clientId: string): Promise<{ items:
           remnaStatus: true,
           trafficUsedBytes: true,
           trafficLimitBytes: true,
-          tariff: { select: { id: true, name: true, menuEmoji: true, trafficLimitBytes: true } },
+          tariff: { select: { id: true, name: true, menuEmoji: true, trafficLimitBytes: true, includedDevices: true, deviceLimit: true } },
           trial: { select: { name: true, convertEnabled: true, convertAllTariffs: true, convertTariffIds: true } },
         },
       });

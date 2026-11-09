@@ -510,6 +510,11 @@ export async function getPublicTariffs(): Promise<{
       trafficLimitBytes?: number | null;
       trafficResetMode?: string;
       deviceLimit?: number | null;
+      includedDevices?: number;
+      maxExtraDevices?: number;
+      pricePerExtraDevice?: number;
+      deviceDiscountTiers?: { minExtraDevices: number; discountPercent: number }[];
+      locations?: string | null;
       price: number;
       currency: string;
       priceOptions: { id: string; durationDays: number; price: number; sortOrder: number }[];
@@ -536,6 +541,11 @@ export async function getPublicTariffs(): Promise<{
         trafficLimitBytes?: number | null;
         trafficResetMode?: string;
         deviceLimit?: number | null;
+        includedDevices?: number;
+        maxExtraDevices?: number;
+        pricePerExtraDevice?: number;
+        deviceDiscountTiers?: { minExtraDevices: number; discountPercent: number }[];
+        locations?: string | null;
         price: number;
         currency: string;
         priceOptions: { id: string; durationDays: number; price: number; sortOrder: number }[];
