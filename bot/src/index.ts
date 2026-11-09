@@ -162,7 +162,7 @@ const modeController = createModeController({
   deleteWebhook: () => b.api.deleteWebhook({ drop_pending_updates: false }),
   startPolling: () => {
     const runner = run(b, {
-      runner: { fetch: { allowed_updates: ["message", "callback_query", "pre_checkout_query", "my_chat_member", "widget_query"] as any } },
+      runner: { fetch: { timeout: 10, allowed_updates: ["message", "callback_query", "pre_checkout_query", "my_chat_member", "widget_query"] as any } },
       sink: { concurrency: 50 },
     });
     runner.task()?.catch(() => console.error("[Bot] Polling stopped; retrying on next reconciliation"));
