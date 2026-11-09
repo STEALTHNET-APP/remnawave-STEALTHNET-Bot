@@ -32,10 +32,11 @@ const db = {
 
 (async () => {
   await assert.rejects(
-    () => cap.validateTariffDevices(db, 'client', 'tariff-5', 2),
+    () => cap.validateTariffDevices(db, 'client', 'tariff-5', 2, { autoRenew: true }),
     (error) => error.code === 'EXTRA_DEVICE_LIMIT' && /1/.test(error.message),
   );
-  await cap.validateTariffDevices(db, 'client', 'tariff-5', 1);
+  await cap.validateTariffDevices(db, 'client', 'tariff-5', 1, { autoRenew: true });
+  await cap.validateTariffDevices(db, 'client', 'tariff-5', 5);
 
   await assert.rejects(
     () => cap.validateTariffDevices(db, 'client', 'tariff-5', 2, { extendsSecondarySubId: 'primary' }),

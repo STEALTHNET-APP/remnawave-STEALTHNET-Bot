@@ -259,6 +259,7 @@ model PendingEmailRegistration {
 }
 
 model Payment {
+  delivery PaymentDelivery?
   cloudJob CloudPaymentJob?
   id                    String    @id @default(cuid())
   clientId              String    @map("client_id")
@@ -1747,4 +1748,17 @@ model CloudPaymentJob {
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   @@index([state])
   @@map("cloudpayment_jobs")
+}
+
+model PaymentDelivery {
+  paymentId String @id @map("payment_id")
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  state String @default("PENDING")
+  error String? @db.Text
+  startedAt DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([state, createdAt])
+  @@map("payment_deliveries")
 }

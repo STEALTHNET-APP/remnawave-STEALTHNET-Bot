@@ -180,7 +180,7 @@ async function handleRecurringRenewal(event: LavatopWebhookEvent): Promise<{ ok:
   if (alreadyProcessed) {
     if (alreadyProcessed.status !== "PAID") {
       const flipped = await prisma.payment.updateMany({
-        where: { id: alreadyProcessed.id, status: { not: "PAID" } },
+        where: { id: alreadyProcessed.id, status: { in: ["PENDING", "FAILED"] } },
         data: { status: "PAID", paidAt: new Date() },
       });
       if (flipped.count > 0) return activatePayment(alreadyProcessed.id);
@@ -331,8 +331,11 @@ lavatopWebhooksRouter.post("/", async (req: Request, res: Response) => {
       return res.status(200).send("OK");
     } catch (e) {
       if (e instanceof RecurringIdentityError) {
-        ack(200, "rejected_payload", e.message);
-        return res.status(200).send("OK");
+        try {
+          await prisma.webhookEvent.create({ data: { provider: "lavatop", rawBody: rawPayload, headers: {}, responseStatus: 200, outcome: "rejected_payload", errorMessage: e.message } });
+          ack(200, "rejected_payload", e.message);
+          return res.status(200).send("OK");
+        } catch { return res.status(503).send("Unable to retain webhook for review"); }
       }
       console.error("[Lava.top Webhook] ошибка recurring renewal:", e);
       ack(503, "error", String(e), event.contractId);
@@ -366,7 +369,7 @@ lavatopWebhooksRouter.post("/", async (req: Request, res: Response) => {
   const isCustomBuild = Boolean(meta.customBuild);
   const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption && !isCustomBuild;
   const paidData = { status: "PAID", paidAt: new Date(), externalId: event.productId || null };
-  const where = { id: payment.id, status: { not: "PAID" } };
+  const where = { id: payment.id, status: { in: ["PENDING", "FAILED"] } };
   const claimed = isTopUp
     ? await prisma.$transaction(async (tx) => {
         const updated = await tx.payment.updateMany({ where, data: paidData });

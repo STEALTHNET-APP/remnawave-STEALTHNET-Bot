@@ -230,7 +230,7 @@ function hasExtraOptionInMetadata(metadata: string | null): boolean {
     const isExtraOption = hasExtraOptionInMetadata(payment.metadata);
     const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption;
 
-    const where = { id: payment.id, status: { not: "PAID" } };
+    const where = { id: payment.id, status: { in: ["PENDING", "FAILED"] } };
     const data = { status: "PAID", paidAt: new Date(), externalId: operationId };
     const claimed = isTopUp
       ? await prisma.$transaction(async (tx) => {

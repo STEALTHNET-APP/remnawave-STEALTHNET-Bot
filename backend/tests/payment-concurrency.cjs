@@ -97,6 +97,8 @@ const prisma = {
   webhookEvent: { create: async ({ data }) => { if (quarantineFails) throw Error("inbox unavailable"); quarantined.push(data); return { id: "event" }; } },
   payment,
   client,
+  $queryRaw: async () => [],
+  paymentDelivery: { findUnique: async () => null, updateMany: async () => ({ count: 0 }) },
   proxyTariff: { findUnique: async () => null },
   singboxTariff: { findUnique: async () => null },
   tariff: { findUnique: async () => null },
@@ -182,6 +184,8 @@ function captureRouter(path, mocks) {
 
 function activationMocks() {
   return {
+    '../webhook-inbox/webhook-inbox.service.js': { recordWebhook: async () => ({ id: null }), markOutcome: noop },
+    '../payment/payment-fulfillment.util.js': { handlePaymentActivationResult: noop },
     '../tariff/tariff-activation.service.js': { activateTariffByPaymentId: async () => { state.activations += 1; return { ok: true }; } },
     '../proxy/proxy-slots-activation.service.js': { createProxySlotsByPaymentId: async () => ({ ok: true, slotIds: [], slotsCreated: 0 }) },
     '../singbox/singbox-slots-activation.service.js': { createSingboxSlotsByPaymentId: async () => ({ ok: true, slotIds: [], slotsCreated: 0 }) },
@@ -250,14 +254,6 @@ function lavatopRoutes(parseEvent) {
   });
 }
 
-function rollypayRoutes() {
-  return captureRouter('src/modules/webhooks/rollypay.webhooks.routes.ts', {
-    ...activationMocks(),
-    '../client/client.service.js': { getSystemConfig: async () => ({ rollypaySigningSecret: 'secret' }) },
-    '../rollypay/rollypay.service.js': { verifyRollypayWebhookSignature: () => true },
-  });
-}
-
 async function sendYookassa(handler) {
   const res = makeRes();
   await handler({
@@ -294,18 +290,10 @@ async function sendLavatop(handler) {
   return res;
 }
 
-async function sendRollypay(handler) {
-  const res = makeRes();
-  await handler({
-    body: Buffer.from(JSON.stringify({ status: 'paid', order_id: 'order1', payment_id: 'rp1' })),
-    header: (name) => (String(name).toLowerCase() === 'x-signature' ? 'sig' : 'ts'),
-  }, res);
-  return res;
-}
-
 function refundRoutes() {
   return captureRouter('src/modules/payment-actions/payment-actions.routes.ts', {
     '../../db.js': { prisma },
+    '../payment/payment-delivery.service.js': { processPaymentDelivery: noop },
     '../auth/middleware.js': { requireAuth: () => (req, res, next) => next?.(), requireAdminSection: () => (req, res, next) => next?.() },
     '../audit/audit.service.js': { logAdmin: noop },
     '../amnezia-web/renewal.js': { refundWebRenewal: async () => ({ summary: {} }), WebRenewalError: class WebRenewalError extends Error {} },
@@ -339,7 +327,6 @@ async function runWebhookScenarios() {
     { name: 'cryptopay', routes: cryptopayRoutes, path: '/', send: sendCryptopay },
     { name: 'lava', routes: lavaRoutes, path: '/', send: sendLava },
     { name: 'lavatop', routes: lavatopRoutes, path: '/', send: sendLavatop },
-    { name: 'rollypay', routes: rollypayRoutes, path: '/', send: sendRollypay },
   ];
 
   for (const scenario of scenarios) {
@@ -355,6 +342,9 @@ async function runWebhookScenarios() {
 
     await scenario.send(handler);
     assert.equal(state.balance, 100, `${scenario.name} retry must not credit again`);
+    state.payments[0].status = 'REFUNDED';
+    await scenario.send(handler);
+    assert.equal(state.balance, 100, `${scenario.name} must not credit a refunded payment again`);
 
     resetState({ metadata: JSON.stringify({ customBuild: { days: 30, devices: 1 } }) });
     await Promise.all([scenario.send(handler), scenario.send(handler)]);

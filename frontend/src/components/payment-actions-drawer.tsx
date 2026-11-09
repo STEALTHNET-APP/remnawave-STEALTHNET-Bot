@@ -1,3 +1,4 @@
+import { adminConfirm } from "@/lib/admin-dialogs";
 /**
  * Drawer для админских действий над платежом.
  *
@@ -123,10 +124,11 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
 
   async function doRetry() {
     if (!paymentId || !state.accessToken) return;
+    if (!(await adminConfirm("Проверьте срок подписки, устройства и журнал VPN-сервера. Повтор при уже выполненной операции выдаст покупку дважды. Вы подтвердили, что эта покупка ещё не выдана?"))) return;
     setPendingAction("retry");
     setActionError(null);
     try {
-      const r = await paymentActionsApi.retryActivation(state.accessToken, paymentId);
+      const r = await paymentActionsApi.retryActivation(state.accessToken, paymentId, true);
       setActionResult(`Активация повторена. Результат: ${JSON.stringify(r.result).slice(0, 200)}`);
       await reload();
       onRefreshList?.();

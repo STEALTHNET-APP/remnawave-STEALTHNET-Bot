@@ -1,3 +1,4 @@
+import { processPaymentDelivery } from "../payment/payment-delivery.service.js";
 import { refundWebRenewal, WebRenewalError } from "../amnezia-web/renewal.js";
 import { reconcileWebPanels } from "../amnezia-web/service.js";
 import { refundStarsPayment } from "../telegram-stars/stars.service.js";
@@ -35,16 +36,6 @@ function parsePaymentMetadata(metadata: string | null): Record<string, unknown> 
   }
 }
 
-async function clearActivationFailure(paymentId: string): Promise<void> {
-  const row = await prisma.payment.findUnique({ where: { id: paymentId }, select: { metadata: true } });
-  if (!row?.metadata) return;
-  const meta = parsePaymentMetadata(row.metadata);
-  if (!("activationError" in meta) && !("activationFailedAt" in meta)) return;
-  delete meta.activationError;
-  delete meta.activationFailedAt;
-  await prisma.payment.update({ where: { id: paymentId }, data: { metadata: JSON.stringify(meta) } });
-}
-
 export const paymentActionsRouter = Router();
 paymentActionsRouter.use(requireAuth);
 paymentActionsRouter.use(requireAdminSection);
@@ -73,9 +64,10 @@ paymentActionsRouter.get(
     const meta = parsePaymentMetadata(payment.metadata);
     const activationError = typeof meta.activationError === "string" ? meta.activationError : null;
     const activationFailedAt = typeof meta.activationFailedAt === "string" ? meta.activationFailedAt : null;
-    const hasActivationError = payment.status === "PAID" && !payment.subscriptionId && Boolean(activationError);
+    const delivery = await prisma.paymentDelivery.findUnique({ where: { paymentId: id } });
+    const hasActivationError = payment.status === "PAID" && (Boolean(activationError) || (delivery != null && delivery.state !== "DONE"));
 
-    return res.json({ payment, referralCredits, activationError, activationFailedAt, hasActivationError });
+    return res.json({ payment, referralCredits, activationError: delivery?.error || activationError, activationFailedAt, hasActivationError, delivery });
   }),
 );
 
@@ -89,13 +81,15 @@ paymentActionsRouter.post(
     if (!payment) return res.status(404).json({ message: "Платёж не найден" });
     if (payment.provider === "cloudpayments" && payment.externalId) return res.status(409).json({ message: "Статус CloudPayments меняется только по подтверждению банка. Используйте возврат после сверки транзакции." });
     if (payment.provider === "telegram_stars" && payment.externalId) return res.status(400).json({ message: "Подтверждённую оплату Stars можно только вернуть через Telegram" });
+    if (payment.status === "PAID") return res.status(409).json({ message: "Оплаченный платёж нельзя отклонить. Используйте возврат после сверки." });
     if (payment.status === "FAILED") return res.status(400).json({ message: "Платёж уже в FAILED" });
     if (payment.status === "REFUNDED") return res.status(400).json({ message: "Платёж уже возвращён" });
 
-    const updated = await prisma.payment.update({
-      where: { id },
+    const updated = await prisma.payment.updateMany({
+      where: { id, status: "PENDING" },
       data: { status: "FAILED" },
     });
+    if (!updated.count) return res.status(409).json({ message: "Статус платежа изменился. Обновите карточку." });
 
     await logAdmin(req, "payment.mark_failed", { type: "payment", id }, {
       previousStatus: payment.status,
@@ -154,11 +148,15 @@ paymentActionsRouter.post(
     }
 
     const refundResult = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM payments WHERE id = ${id} FOR UPDATE`;
+      const delivery = await tx.paymentDelivery.findUnique({ where: { paymentId: id } });
+      if (delivery?.state === "PROCESSING") return null;
       const claim = await tx.payment.updateMany({
-        where: { id, status: { notIn: ["REFUNDED", "FAILED"] } },
+        where: { id, status: "PAID" },
         data: { status: "REFUNDED" },
       });
       if (claim.count === 0) return null;
+      await tx.paymentDelivery.updateMany({ where: { paymentId: id, state: { in: ["PENDING", "REVIEW"] } }, data: { state: "CANCELED", error: "Платёж возвращён администратором" } });
 
       let creditedToBalance = 0;
       if (refundToBalance && payment.amount > 0) {
@@ -191,7 +189,7 @@ paymentActionsRouter.post(
     });
 
     if (!refundResult) {
-      return res.status(400).json({ message: "Платёж уже возвращён или отклонён" });
+      return res.status(400).json({ message: "Возврат недоступен: платёж не оплачен, уже возвращён или покупка выдаётся. Обновите карточку." });
     }
 
     const { updated, creditedToBalance, reversedReferralAmount, reversedReferralCount } = refundResult;
@@ -235,58 +233,25 @@ paymentActionsRouter.post(
     }
     if (payment.provider === "telegram_stars") return res.status(409).json({ message: "Проверьте результат выдачи Stars перед повторной активацией. Если покупка не выдана, верните звёзды и создайте новый счёт." });
 
-    let activationResult: unknown = null;
-    let activationError: string | null = null;
-
-    // Импорт по типу tariff/proxy/singbox/extra-option.
-    if (payment.tariffId) {
-      const { activateTariffByPaymentId } = await import("../tariff/tariff-activation.service.js");
-      const result = await activateTariffByPaymentId(payment.id);
-      activationResult = result;
-      if (!result.ok) activationError = ((result as { error?: string }).error) ?? "tariff activation failed";
-    } else if (payment.proxyTariffId) {
-      const { createProxySlotsByPaymentId } = await import("../proxy/proxy-slots-activation.service.js");
-      const result = await createProxySlotsByPaymentId(payment.id);
-      activationResult = result;
-      if (!result.ok) activationError = result.error ?? "proxy slots activation failed";
-    } else if (payment.singboxTariffId) {
-      const { createSingboxSlotsByPaymentId } = await import("../singbox/singbox-slots-activation.service.js");
-      const result = await createSingboxSlotsByPaymentId(payment.id);
-      activationResult = result;
-      if (!result.ok) activationError = result.error ?? "singbox slots activation failed";
-    } else {
-      // Возможно extra-option.
-      try {
-        const { applyExtraOptionByPaymentId } = await import("../extra-options/extra-options.service.js");
-        const result = await applyExtraOptionByPaymentId(payment.id);
-        activationResult = result;
-        if (!(result as { ok?: boolean }).ok) {
-          activationError = ((result as { error?: string }).error) ?? "extra option activation failed";
-        } else if (payment.clientId) {
-          const { notifyExtraOptionApplied } = await import("../notification/telegram-notify.service.js");
-          await notifyExtraOptionApplied(payment.clientId, payment.id).catch(() => {});
-        }
-      } catch (e) {
-        activationError = `Не определён тип платежа для retry: ${String(e)}`;
-      }
-    }
-
-    // сжигаем одноразовую персональную скидку после успешной активации.
-    if (!activationError && payment.clientId) {
-      const { extinguishOneTimeDiscount } = await import("../client/personal-discount.js");
-      await extinguishOneTimeDiscount(payment.clientId).catch(() => {});
-    }
-
-    await logAdmin(req, "payment.retry_activation", { type: "payment", id }, {
-      ok: !activationError,
-      error: activationError,
-    });
-
-    if (activationError) return res.status(502).json({ message: activationError, result: activationResult });
-    console.info(`[payment-actions] payment ${payment.id} activation recovered`);
-    await clearActivationFailure(payment.id).catch((e) => {
-      console.error("[payment-actions] failed to clear activation error:", e);
-    });
-    return res.json({ ok: true, result: activationResult });
+    const job = await prisma.paymentDelivery.findUnique({ where: { paymentId: id } });
+    if (job?.state === "DONE" || (!job && payment.subscriptionId)) return res.json({ ok: true, result: { state: "DONE", message: "Покупка уже связана с подпиской. Повторная выдача не выполнялась." } });
+    if (job?.state === "PROCESSING" || job?.state === "PENDING") return res.status(409).json({ message: "Выдача уже выполняется или стоит в очереди." });
+    const meta = parsePaymentMetadata(payment.metadata);
+    if (!payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !meta.extraOption && !meta.customBuild) return res.status(400).json({ message: "Пополнение баланса нельзя повторно активировать." });
+    if (req.body?.confirmNotDelivered !== true) return res.status(409).json({ message: "Сначала проверьте результат операции на VPN-сервере и подтвердите, что покупка не была выдана." });
+    const claimed = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM payments WHERE id = ${id} FOR UPDATE`;
+      const current = await tx.payment.findUniqueOrThrow({ where: { id } });
+      if (current.status !== "PAID") return false;
+      if (job) return (await tx.paymentDelivery.updateMany({ where: { paymentId: id, state: "REVIEW", updatedAt: job.updatedAt }, data: { state: "PENDING", error: null, startedAt: null } })).count > 0;
+      await tx.paymentDelivery.create({ data: { paymentId: id } });
+      return true;
+    }).catch(() => false);
+    if (!claimed) return res.status(409).json({ message: "Состояние платежа изменилось. Обновите карточку." });
+    await logAdmin(req, "payment.retry_activation", { type: "payment", id }, { confirmedNotDelivered: true });
+    await processPaymentDelivery(id);
+    const result = await prisma.paymentDelivery.findUnique({ where: { paymentId: id } });
+    if (result?.state !== "DONE") return res.status(502).json({ message: result?.error || "Выдача не завершена; проверьте состояние операции", result });
+    return res.json({ ok: true, result });
   }),
 );

@@ -107,7 +107,7 @@ cryptopayWebhooksRouter.post("/", async (req: Request, res: Response) => {
   const isCustomBuild = Boolean(meta.customBuild);
   const isTopUp = !payment.tariffId && !payment.proxyTariffId && !payment.singboxTariffId && !isExtraOption && !isCustomBuild;
   const paidData = { status: "PAID", paidAt: new Date(), externalId: invoiceId != null ? String(invoiceId) : null };
-  const where = { id: payment.id, status: { not: "PAID" } };
+  const where = { id: payment.id, status: { in: ["PENDING", "FAILED"] } };
   const claimed = isTopUp
     ? await prisma.$transaction(async (tx) => {
         const updated = await tx.payment.updateMany({ where, data: paidData });

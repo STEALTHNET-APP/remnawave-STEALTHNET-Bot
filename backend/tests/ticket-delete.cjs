@@ -10,10 +10,8 @@ async function test(){
   });
   let status=200;const res={status(n){status=n;return this;},json(x){return x;}};
   await handler({params:{id:'ticket'},client:{id:'client'}},res,e=>{error=e;});
-  if(!owner){assert.equal(status,404);assert.equal(deleted,0);assert.equal(files,0);}
-  else if(fails){assert(error);assert.equal(files,0);}
-  else{assert.equal(deleted,1);assert.equal(files,1);}
+  assert.equal(status,403);assert.equal(deleted,0);assert.equal(files,0);assert.equal(error,undefined);
  }
- console.log('PASS: ticket ownership checked; attachments removed only after successful DB deletion; errors forwarded');
+ console.log('PASS: clients cannot delete ticket history or attachments');
 }
 test().catch(e=>{console.error(e);process.exitCode=1;});

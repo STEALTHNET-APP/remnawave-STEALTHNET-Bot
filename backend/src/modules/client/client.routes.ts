@@ -6677,7 +6677,7 @@ clientRouter.post("/rollypay/create-payment", requireRemnaPaymentOnline, asyncHa
         singboxTariffId: singboxTariffIdToStore,
         // see yookassa endpoint for explanation.
         metadata: (() => {
-          const meta = { ...metadataObj };
+          const meta: Record<string, unknown> = { ...metadataObj, rollypayTestMode: rollypayConfig.testMode === true };
           if (asAdditional && tariffIdToStore) {
             meta.isAdditionalSubscription = true;
           }
@@ -8360,20 +8360,15 @@ clientRouter.post("/tickets", uploadTicketAttachment.array("files", 5), async (r
   if (!body.success) {
     return res.status(400).json({ message: "Проверьте введённые данные", errors: body.error.flatten() });
   }
-  const openTicketsCount = await prisma.ticket.count({
-    where: { clientId, status: "open" },
-  });
-  if (openTicketsCount >= MAX_OPEN_TICKETS) {
-    return res.status(400).json({
-      message: "У вас уже есть 5 активных обращений. Пожалуйста, дождитесь ответа или закройте неактуальные тикеты перед созданием нового",
-    });
-  }
   const attachments = filesToAttachments(req.files as Express.Multer.File[] | undefined);
   const trimmedMessage = body.data.message.trim();
   if (!trimmedMessage && attachments.length === 0) {
     return res.status(400).json({ message: "Пустое сообщение" });
   }
-  const ticket = await prisma.ticket.create({
+  const ticket = await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${clientId}, 57))`;
+    if (await tx.ticket.count({ where: { clientId, status: "open" } }) >= MAX_OPEN_TICKETS) return null;
+    return tx.ticket.create({
     data: {
       clientId,
       subject: body.data.subject.trim(),
@@ -8388,6 +8383,8 @@ clientRouter.post("/tickets", uploadTicketAttachment.array("files", 5), async (r
     },
     include: { messages: true },
   });
+  });
+  if (!ticket) return res.status(400).json({ message: "У вас уже есть 5 активных обращений. Закройте неактуальное обращение перед созданием нового." });
   notifyAdminsAboutNewTicket({
     ticketId: ticket.id,
     clientId,
@@ -8498,9 +8495,13 @@ clientRouter.post("/tickets/:id/messages", uploadTicketAttachment.array("files",
     return res.status(400).json({ message: "Пустое сообщение" });
   }
   const msg = await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${clientId}, 57))`;
+    const current = await tx.ticket.findUniqueOrThrow({ where: { id: ticket.id } });
+    if (current.status !== "open" && await tx.ticket.count({ where: { clientId, status: "open" } }) >= MAX_OPEN_TICKETS) return null;
     await tx.ticket.update({ where: { id: ticket.id, clientId }, data: { updatedAt: new Date(), status: "open", closedAt: null } });
     return tx.ticketMessage.create({ data: { ticketId: ticket.id, authorType: "client", content: trimmed, attachments: serializeAttachments(attachments) } });
   });
+  if (!msg) return res.status(400).json({ message: "У вас уже есть 5 активных обращений. Закройте одно из них перед возобновлением." });
   notifyAdminsAboutClientTicketMessage({
     ticketId: ticket.id,
     clientId,
@@ -8530,7 +8531,11 @@ clientRouter.patch("/tickets/:id/status", async (req, res, next) => {
     if (!ticket) return res.status(404).json({ message: "Тикет не найден" });
 
     const isClosing = body.data.status === "closed";
-    const updated = await prisma.ticket.update({
+    const updated = await prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${clientId}, 57))`;
+      const current = await tx.ticket.findUniqueOrThrow({ where: { id: ticket.id } });
+      if (!isClosing && current.status !== "open" && await tx.ticket.count({ where: { clientId, status: "open" } }) >= MAX_OPEN_TICKETS) return null;
+      return tx.ticket.update({
       where: { id: ticket.id, clientId },
       data: {
         status: body.data.status,
@@ -8539,6 +8544,8 @@ clientRouter.patch("/tickets/:id/status", async (req, res, next) => {
       },
       select: { id: true, clientId: true, subject: true, status: true, closedAt: true, updatedAt: true },
     });
+    });
+    if (!updated) return res.status(400).json({ message: "У вас уже есть 5 активных обращений. Закройте одно из них перед возобновлением." });
     notifyAdminsAboutTicketStatusChange({
       ticketId: updated.id,
       clientId: updated.clientId,

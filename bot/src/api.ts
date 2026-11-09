@@ -53,7 +53,8 @@ function retryDelay(attempt: number): Promise<void> {
 }
 
 export async function requestWithRetry(url: string, init: RequestOptions = {}): Promise<Response> {
-  const attempts = Math.max(1, init.retries ?? RETRY_ATTEMPTS);
+  const readOnly = ["GET", "HEAD", "OPTIONS"].includes((init.method ?? "GET").toUpperCase());
+  const attempts = readOnly ? Math.max(1, init.retries ?? RETRY_ATTEMPTS) : 1;
   const timeoutMs = init.timeoutMs ?? REQUEST_TIMEOUT_MS;
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -67,7 +68,7 @@ export async function requestWithRetry(url: string, init: RequestOptions = {}): 
       return response;
     } catch (error) {
       lastError = error;
-      if (attempt < attempts - 1 && retryableNetworkError(error)) {
+      if (!init.signal?.aborted && attempt < attempts - 1 && retryableNetworkError(error)) {
         await retryDelay(attempt);
         continue;
       }

@@ -84,7 +84,7 @@ try {
     assert.equal(reply.status, 201, JSON.stringify(reply.data));
     assert.equal((await prisma.ticket.findUniqueOrThrow({ where: { id: ids[0] } })).status, 'open');
     const denied = await request(`/client/tickets/${ids[0]}`, undefined, 'DELETE', signClientToken(other.id));
-    assert.equal(denied.status, 404);
+    assert.equal(denied.status, 403);
   });
   await test('delete closed removes closed tickets, leaves open ones intact and rejects invalid scope', async () => {
     assert.equal((await request('/admin/tickets/delete-all', { scope: 'invalid' })).status, 400);
@@ -100,6 +100,21 @@ try {
     assert.equal(config.data.backupRetentionValue, 0);
     assert.equal(config.data.backupRetentionUnit, 'hours');
     assert.equal(config.data.ticketRetentionValue, 0);
+  });
+  await test('concurrent client requests cannot exceed five open tickets and history cannot be deleted', async () => {
+    const credential = signClientToken(other.id);
+    const results = await Promise.all(Array.from({ length: 8 }, (_, i) => request('/client/tickets', { subject: 'Concurrent ' + i, message: 'Test message' }, 'POST', credential)));
+    assert.equal(results.filter(r => r.status === 201).length, 5);
+    assert.equal(results.filter(r => r.status === 400).length, 3);
+    const closed = await prisma.ticket.create({ data: { clientId: other.id, subject: 'Closed fixture', status: 'closed', closedAt: new Date() } });
+    assert.equal((await request(`/client/tickets/${closed.id}/status`, { status: 'open' }, 'PATCH', credential)).status, 400);
+    const reply = new FormData(); reply.append('content', 'Reopen by reply');
+    assert.equal((await request(`/client/tickets/${closed.id}/messages`, reply, 'POST', credential)).status, 400);
+    assert.equal((await request(`/client/tickets/${closed.id}`, undefined, 'DELETE', credential)).status, 403);
+    assert.equal(await prisma.ticket.count({ where: { clientId: other.id, status: 'open' } }), 5);
+    const active = await prisma.ticket.findFirstOrThrow({ where: { clientId: other.id, status: 'open' } });
+    assert.equal((await request(`/client/tickets/${active.id}/status`, { status: 'closed' }, 'PATCH', credential)).status, 200);
+    assert.equal((await request(`/client/tickets/${closed.id}/status`, { status: 'open' }, 'PATCH', credential)).status, 200);
   });
 } finally {
   await prisma.client.deleteMany({ where: { id: { in: [client.id, other.id] } } });

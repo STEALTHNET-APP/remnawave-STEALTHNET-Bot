@@ -1,3 +1,4 @@
+import { canSafelyApplyUpdate } from "./update-safety";
 import { Component, lazy, Suspense, type ComponentType, type ReactNode } from "react";
 
 const CHUNK_RETRY_KEY = "chunk_retry_timestamp";
@@ -15,19 +16,12 @@ export function isChunkLoadError(error: unknown): boolean {
   return CHUNK_ERROR_PATTERNS.some(pattern => pattern.test(message));
 }
 
-async function clearApplicationCaches(): Promise<void> {
-  if (typeof window === "undefined" || !("caches" in window)) return;
-  try {
-    const names = await window.caches.keys();
-    await Promise.all(names.map(name => window.caches.delete(name)));
-  } catch {}
-}
-
 function reloadWithCleanup(): void {
-  void clearApplicationCaches().finally(() => window.location.reload());
+  window.location.reload();
 }
 
 export function recoverChunkLoad(now = Date.now()): boolean {
+  if (!canSafelyApplyUpdate({ now })) return false;
   let lastAttempt = 0;
   try {
     lastAttempt = Number(sessionStorage.getItem(CHUNK_RETRY_KEY)) || 0;

@@ -274,9 +274,10 @@ export const paymentActionsApi = {
       method: "POST",
       body: JSON.stringify(opts),
     }),
-  retryActivation: (token: string, paymentId: string) =>
+  retryActivation: (token: string, paymentId: string, confirmNotDelivered = false) =>
     req<{ ok: boolean; result: unknown }>(token, `/payments/${encodeURIComponent(paymentId)}/retry-activation`, {
       method: "POST",
+      body: JSON.stringify({ confirmNotDelivered }),
     }),
 };
 

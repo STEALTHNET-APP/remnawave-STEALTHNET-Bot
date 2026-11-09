@@ -1,3 +1,4 @@
+import { startPaymentDeliveryScheduler } from "./modules/payment/payment-delivery.service.js";
 import { startCloudPaymentsScheduler } from "./modules/cloudpayments/cloudpayments.worker.js";
 import { reconcileWebPanels } from "./modules/amnezia-web/service.js";
 import { reconcileStarsPayments } from "./modules/telegram-stars/stars.service.js";
@@ -98,6 +99,7 @@ async function main() {
   startContestDailyReminderScheduler(env.CONTEST_REMINDER_CRON ?? undefined);
   startAutoRenewScheduler();
   startCloudPaymentsScheduler();
+  startPaymentDeliveryScheduler();
   setInterval(() => { void reconcileStarsPayments().catch(() => console.error("[Stars] Не удалось сверить оплаты Telegram")); }, 60000).unref();
   startReferralRewardsScheduler();
   startRemnaSyncScheduler();

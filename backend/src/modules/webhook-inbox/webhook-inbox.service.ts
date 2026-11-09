@@ -167,7 +167,11 @@ export async function listWebhookEvents(query: WebhookQuery) {
 }
 
 export async function getWebhookEvent(id: string) {
-  return prisma.webhookEvent.findUnique({ where: { id } });
+  const event = await prisma.webhookEvent.findUnique({ where: { id } });
+  if (!event) return null;
+  const headers = { ...(event.headers as Record<string, unknown> ?? {}) };
+  for (const key of Object.keys(headers)) if (/authorization|api[-_]?key|secret|token/i.test(key)) headers[key] = "[скрыто]";
+  return { ...event, headers };
 }
 
 /**
@@ -199,7 +203,7 @@ export async function replayWebhook(
       body: original.rawBody,
       signal: AbortSignal.timeout(30_000),
     });
-    return { ok: true, status: res.status };
+    return { ok: res.ok, status: res.status, ...(res.ok ? {} : { error: `Обработчик отклонил повтор: HTTP ${res.status}` }) };
   } catch (e) {
     return { ok: false, error: String(e) };
   }

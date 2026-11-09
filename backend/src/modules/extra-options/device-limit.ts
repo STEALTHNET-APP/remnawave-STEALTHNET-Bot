@@ -50,7 +50,7 @@ export async function validateTariffDevices(db: Pick<Prisma.TransactionClient, "
   if (typeof meta.extendsSecondarySubId === "string" && meta.removeExtrasOnActivate !== true) {
     const sub = await db.subscription.findFirst({ where: { id: meta.extendsSecondarySubId, OR: [{ ownerId: clientId }, { giftedToClientId: clientId }] }, select: { extraDevices: true } });
     existing = sub?.extraDevices ?? 0;
-  } else if (!meta.extendsSecondarySubId && meta.isAdditionalSubscription !== true && meta.purchasedAsGift !== true) {
+  } else if (!meta.extendsSecondarySubId && meta.autoRenew === true && meta.removeExtrasOnActivate !== true) {
     const sub = await db.subscription.findFirst({ where: { ownerId: clientId, subscriptionIndex: 0, tariffId }, select: { extraDevices: true } });
     existing = sub?.extraDevices ?? 0;
   }
