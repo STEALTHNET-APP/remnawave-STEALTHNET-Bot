@@ -22,6 +22,14 @@ test("widget escapes untrusted content and uses opaque actions within Telegram l
   assert.equal([...widget.actions.values()][0], 'pay:private-id');
   assert.ok([...widget.actions.keys()].every(id => Buffer.byteLength(id) <= 64));
 });
+test("text pages preserve words, line breaks and emoji", () => {
+  const text = 'Подписка активна\n' + 'Доступно устройств: 3. '.repeat(25) + '😀';
+  const widget = buildWidget(text, [], 'Test')!;
+  const pages: string[] = JSON.parse(widget.html.match(/var t=(\[.*?\]),b=/)![1]);
+  assert.equal(pages.join(''), text);
+  assert.ok(pages.length > 1);
+  assert.ok(pages.slice(0, -1).every(page => /\s$/.test(page)));
+});
 test("unsupported inline controls stay in ordinary messages", () => {
   assert.equal(buildWidget('Invoice', [[{ text: 'Pay', pay: true } as any]], 'Test'), null);
 });
@@ -30,6 +38,8 @@ test("widget requests bind actions to sender and message, reject replay, and reu
   const first = fixture(message());
   await middleware(first.ctx, async () => { await first.ctx.reply('Выберите тариф', { reply_markup: { inline_keyboard: [[{ text: 'Тариф', callback_data: 'tariff:one' }]] } }); });
   const sent = first.calls.find(c => c.method === 'sendWidget')!; assert.ok(sent);
+  assert.equal(sent.payload.height, undefined);
+  assert.equal(sent.payload.caption, undefined);
   const id = messageId;
   const token = JSON.parse(sent.payload.html.match(/,b=(\[.*?\]),p=0/)![1])[0].value;
   const query = (sender = 123, mid = id) => ({ update_id: 2, widget_query: { id: 'q1', from: { id: sender, is_bot: false, first_name: 'User' }, chat: { id: sender, type: 'private' }, message_id: mid, data: token, chat_instance: 'chat', type: { type: 'data' } } });
