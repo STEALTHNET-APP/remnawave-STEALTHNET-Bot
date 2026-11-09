@@ -149,6 +149,10 @@ export async function startCheckout(
       const res = await api.rollypayCreatePayment(token, base);
       return { url: res.payUrl, provider: method.label, paymentId: res.paymentId };
     }
+    case "cispay": {
+      const res = await api.cispayCreatePayment(token, base);
+      return { url: res.payUrl, provider: method.label, paymentId: res.paymentId };
+    }
     case "paritypay": {
       const res = await api.paritypayCreatePayment(token, base);
       return { url: res.payUrl, provider: method.label, paymentId: res.paymentId };

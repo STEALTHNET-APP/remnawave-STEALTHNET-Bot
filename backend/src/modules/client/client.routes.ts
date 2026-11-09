@@ -1,3 +1,4 @@
+import { createCispayPayment } from "../cispay/cispay.service.js";
 import { cloudTrialUsed } from "../cloudpayments/cloudpayments-trial.js";
 import { prepareCloudCheckout, cloudClientRouter } from "../cloudpayments/cloudpayments.routes.js";
 import { asyncHandler } from "../../lib/async-handler.js";
@@ -6478,19 +6479,21 @@ clientRouter.post("/heleket/create-payment", requireRemnaPaymentOnline, asyncHan
   }
 }));
 
-clientRouter.post("/rollypay/create-payment", requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
+clientRouter.post(["/rollypay/create-payment", "/cispay/create-payment"], requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   try {
+    const provider = req.path === "/cispay/create-payment" ? "cispay" : "rollypay";
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = heleketCreatePaymentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Неверные параметры", errors: parsed.error.flatten() });
     const config = await getSystemConfig();
-    if (!config.rollypayEnabled) return res.status(503).json({ message: "RollyPay отключён" });
+    if (provider === "cispay" && (!config.cispayEnabled || !config.cispayShopId || !config.cispayApiKey)) return res.status(503).json({ message: "CisPay не настроен или отключён" });
+    if (provider === "rollypay" && !config.rollypayEnabled) return res.status(503).json({ message: "RollyPay отключён" });
     const rollypayConfig = {
       apiKey: (config as { rollypayApiKey?: string | null }).rollypayApiKey ?? "",
       signingSecret: (config as { rollypaySigningSecret?: string | null }).rollypaySigningSecret ?? "",
       testMode: (config as { rollypayTestMode?: boolean }).rollypayTestMode === true,
     };
-    if (!isRollypayConfigured(rollypayConfig)) return res.status(503).json({ message: "RollyPay не настроен" });
+    if (provider === "rollypay" && !isRollypayConfigured(rollypayConfig)) return res.status(503).json({ message: "RollyPay не настроен" });
     const { extendsSecondarySubId, removeExtrasOnActivate, asGift, asAdditional } = parsed.data;
 
     const { amount: amountBody, currency: currencyBody, tariffId: tariffIdBody, proxyTariffId: proxyTariffIdBody, singboxTariffId: singboxTariffIdBody, promoCode: promoCodeStr, extraOption, customBuild: customBuildBody } = parsed.data;
@@ -6575,6 +6578,7 @@ clientRouter.post("/rollypay/create-payment", requireRemnaPaymentOnline, asyncHa
         let effectiveDaysCalc = tariff.durationDays;
         if (parsed.data.tariffPriceOptionId) {
           const opt = (tariff.priceOptions ?? []).find((p) => p.id === parsed.data.tariffPriceOptionId);
+          if (!opt) return res.status(400).json({ message: "Срок тарифа не найден" });
           if (opt) {
             unitPriceCalc = opt.price;
             effectiveDaysCalc = opt.durationDays;
@@ -6613,18 +6617,22 @@ clientRouter.post("/rollypay/create-payment", requireRemnaPaymentOnline, asyncHa
         const proxyTariff = await prisma.proxyTariff.findUnique({ where: { id: proxyTariffIdBody } });
         if (!proxyTariff || !proxyTariff.enabled) return res.status(400).json({ message: "Прокси-тариф не найден" });
         proxyTariffIdToStore = proxyTariffIdBody;
-        amountRounded = Math.round((amountBody ?? proxyTariff.price) * 100) / 100;
+        amountRounded = Math.round(proxyTariff.price * 100) / 100;
+        currencyUpper = proxyTariff.currency.toUpperCase();
       } else if (singboxTariffIdBody) {
         const singboxTariff = await prisma.singboxTariff.findUnique({ where: { id: singboxTariffIdBody } });
         if (!singboxTariff || !singboxTariff.enabled) return res.status(400).json({ message: "Тариф Sing-box не найден" });
         singboxTariffIdToStore = singboxTariffIdBody;
-        amountRounded = Math.round((amountBody ?? singboxTariff.price) * 100) / 100;
+        amountRounded = Math.round(singboxTariff.price * 100) / 100;
+        currencyUpper = singboxTariff.currency.toUpperCase();
       } else {
         if (amountBody == null) return res.status(400).json({ message: "Укажите сумму" });
         amountRounded = Math.round(amountBody * 100) / 100;
       }
     }
 
+    if (provider === "cispay" && !["RUB", "USD"].includes(currencyUpper)) return res.status(400).json({ message: "CisPay принимает RUB и USD" });
+    if (extraOption?.targetSubscriptionId && metadataObj.extraOption) metadataObj.targetSubscriptionId = extraOption.targetSubscriptionId;
     if (amountRounded < 1) return res.status(400).json({ message: "Минимальная сумма платежа — 1" });
 
     // Персональная скидка админа — на продуктовые оплаты, не на чистое пополнение.
@@ -6669,7 +6677,7 @@ clientRouter.post("/rollypay/create-payment", requireRemnaPaymentOnline, asyncHa
         amount: rpSnap.amount,
         currency: currencyUpper,
         status: "PENDING",
-        provider: "rollypay",
+        provider,
         tariffId: tariffIdToStore,
         tariffPriceOptionId: parsed.data.tariffPriceOptionId ?? null,
         deviceCount: parsed.data.deviceCount ?? null,
@@ -6677,7 +6685,7 @@ clientRouter.post("/rollypay/create-payment", requireRemnaPaymentOnline, asyncHa
         singboxTariffId: singboxTariffIdToStore,
         // see yookassa endpoint for explanation.
         metadata: (() => {
-          const meta: Record<string, unknown> = { ...metadataObj, rollypayTestMode: rollypayConfig.testMode === true };
+          const meta: Record<string, unknown> = { ...metadataObj, ...(provider === "cispay" ? { cispaySandbox: config.cispaySandbox, cispayShopId: config.cispayShopId } : { rollypayTestMode: rollypayConfig.testMode === true }) };
           if (asAdditional && tariffIdToStore) {
             meta.isAdditionalSubscription = true;
           }
@@ -6707,7 +6715,7 @@ clientRouter.post("/rollypay/create-payment", requireRemnaPaymentOnline, asyncHa
     const urlSuccess = appUrl ? `${appUrl}/cabinet?rollypay=success` : undefined;
     const urlFail = appUrl ? `${appUrl}/cabinet?rollypay=fail` : undefined;
 
-    const result = await createRollypayPayment({
+    const result = provider === "cispay" ? await createCispayPayment({ config: { shopId: config.cispayShopId, apiKey: config.cispayApiKey }, amount: rpCharge, currency: currencyUpper, orderId, customerId: clientId, description: `${serviceName}: ${orderId}`, returnUrl: appUrl ? `${appUrl}/cabinet?cispay=return` : undefined }) : await createRollypayPayment({
       config: rollypayConfig,
       amount: String(rpCharge),
       currency: currencyUpper,
@@ -6720,10 +6728,11 @@ clientRouter.post("/rollypay/create-payment", requireRemnaPaymentOnline, asyncHa
     });
 
     if (!result.ok) {
-      await prisma.payment.delete({ where: { id: payment.id } }).catch(() => {});
-      return res.status(500).json({ message: result.error });
+      await prisma.payment.updateMany({ where: { id: payment.id, status: "PENDING" }, data: { metadata: JSON.stringify({ ...JSON.parse(payment.metadata || "{}"), providerCreationError: result.error }) } });
+      return res.status(502).json({ message: result.error, paymentId: payment.id });
     }
 
+    if (result.paymentId) await prisma.payment.updateMany({ where: { id: payment.id, externalId: null }, data: { externalId: result.paymentId } });
     const payUrl = await saveRedirectAndBuildUrl(payment.id, orderId, result.url, config.publicAppUrl);
 
     return res.status(201).json({
@@ -6732,7 +6741,8 @@ clientRouter.post("/rollypay/create-payment", requireRemnaPaymentOnline, asyncHa
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[rollypay/create-payment]", message, err);
+    if (["EXTRA_DEVICE_LIMIT", "SUBSCRIPTION_TARGET_INVALID", "SUBSCRIPTION_INACTIVE", "TARIFF_RESTRICTED"].includes((err as { code?: string })?.code ?? "")) return res.status(400).json({ message, code: (err as { code: string }).code });
+    console.error("[hosted/create-payment]", message);
     return res.status(500).json({ message: message || "Ошибка создания платежа" });
   }
 }));

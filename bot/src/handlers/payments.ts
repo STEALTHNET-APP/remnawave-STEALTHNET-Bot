@@ -984,8 +984,8 @@ export function createPaymentHandlers(): Composer<Context> {
       }
       return;
     }
-if (data.startsWith("pay_tariff_rollypay:")) {
-      const tariffId = data.slice("pay_tariff_rollypay:".length);
+if (data.startsWith("pay_tariff_rollypay:") || data.startsWith("pay_tariff_cispay:")) {
+      const tariffId = data.slice(data.indexOf(":") + 1);
       const { items } = await api.getPublicTariffs();
       const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
       if (!tariff) {
@@ -1028,7 +1028,7 @@ if (data.startsWith("pay_tariff_rollypay:")) {
         const meHeleket = await api.getMe(token);
         const pdHeleket = meHeleket?.personalDiscountPercent ?? 0;
         const { discountArg, finalPrice: priceWithDiscountHeleket } = buildTariffDiscountArg(totalPrice, pdHeleket, discountInfo, tariff.currency);
-        const payment = await api.createRollypayPayment(token, {
+        const payment = await (data.startsWith("pay_tariff_cispay:") ? api.createCispayPayment : api.createRollypayPayment)(token, {
           amount: totalPrice,
           currency: tariff.currency,
           tariffId: tariff.id,
@@ -2052,8 +2052,8 @@ if (data.startsWith("pay_tariff_rollypay:")) {
       }
       return;
     }
-if (data.startsWith("topup_rollypay:")) {
-      const amountStr = data.slice("topup_rollypay:".length);
+if (data.startsWith("topup_rollypay:") || data.startsWith("topup_cispay:")) {
+      const amountStr = data.slice(data.indexOf(":") + 1);
       const amount = Number(amountStr);
       if (!Number.isFinite(amount) || amount <= 0) {
         await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
@@ -2061,7 +2061,7 @@ if (data.startsWith("topup_rollypay:")) {
       }
       const client = await api.getMe(token);
       try {
-        const payment = await api.createRollypayPayment(token, { amount, currency: client.preferredCurrency ?? "RUB" });
+        const payment = await (data.startsWith("topup_cispay:") ? api.createCispayPayment : api.createRollypayPayment)(token, { amount, currency: client.preferredCurrency ?? "RUB" });
         const rpTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
         await editMessageContent(ctx, rpTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), rpTopup.entities);
       } catch (e: unknown) {
@@ -2148,7 +2148,7 @@ if (data.startsWith("topup_paritypay:")) {
       const paritypayEnabled = !!config?.paritypayEnabled;
       const lavaEnabled = !!config?.lavaEnabled;
       // Если есть >1 способа любого типа — показываем выбор
-      const anyOnline = config?.telegramStarsEnabled || yooEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || config?.cloudpaymentsEnabled || lavaEnabled;
+      const anyOnline = config?.telegramStarsEnabled || yooEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || config?.cispayEnabled || paritypayEnabled || config?.cloudpaymentsEnabled || lavaEnabled;
       if (methods.length > 1 || anyOnline) {
         const topupPay2 = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency)}\n\nВыберите способ оплаты:`, config?.botEmojis);
         await editMessageContent(ctx, topupPay2.text, topupPaymentMethodButtons(amountStr, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, { currency: client.preferredCurrency, yoomoneyEnabled: yooEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, rollypayEnabled, paritypayEnabled, cloudpaymentsEnabled: !!config?.cloudpaymentsEnabled, lavaEnabled }), topupPay2.entities);
@@ -2480,7 +2480,7 @@ export function createPaymentNumericHandlers(): Composer<Context> {
     const rollypayEnabledMsg = !!config?.rollypayEnabled;
     const paritypayEnabledMsg = !!config?.paritypayEnabled;
     const lavaEnabledMsg = !!config?.lavaEnabled;
-    if (!methods.length && !yooEnabled && !yookassaEnabledMsg && !cryptopayEnabledMsg && !heleketEnabledMsg && !rollypayEnabledMsg && !paritypayEnabledMsg && !config?.cloudpaymentsEnabled && !lavaEnabledMsg && !config?.telegramStarsEnabled) {
+    if (!methods.length && !yooEnabled && !yookassaEnabledMsg && !cryptopayEnabledMsg && !heleketEnabledMsg && !rollypayEnabledMsg && !config?.cispayEnabled && !paritypayEnabledMsg && !config?.cloudpaymentsEnabled && !lavaEnabledMsg && !config?.telegramStarsEnabled) {
       await ctx.reply("Пополнение временно недоступно.");
       return;
     }
@@ -2498,7 +2498,7 @@ export function createPaymentNumericHandlers(): Composer<Context> {
           connect: botEmojis.SERVERS?.tgEmojiId || botEmojis.CONNECT?.tgEmojiId,
         }
       : undefined;
-    const enabledOnlineMsg = [config?.telegramStarsEnabled, yooEnabled, yookassaEnabledMsg, cryptopayEnabledMsg, heleketEnabledMsg, rollypayEnabledMsg, paritypayEnabledMsg, lavaEnabledMsg].filter(Boolean).length;
+    const enabledOnlineMsg = [config?.telegramStarsEnabled, yooEnabled, yookassaEnabledMsg, cryptopayEnabledMsg, heleketEnabledMsg, rollypayEnabledMsg, config?.cispayEnabled, config?.cloudpaymentsEnabled, paritypayEnabledMsg, lavaEnabledMsg].filter(Boolean).length;
     const anyOnlineMsg = enabledOnlineMsg > 0;
     if (methods.length > 1 || anyOnlineMsg) {
       const topupMsg1 = titleWithEmoji("CARD", `Пополнение на ${formatMoney(num, client.preferredCurrency)}\n\nВыберите способ оплаты:`, config?.botEmojis);

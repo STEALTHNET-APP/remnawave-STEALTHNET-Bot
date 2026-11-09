@@ -27,7 +27,7 @@ interface Props {
 
 interface PaymentMethodItem {
   id: string;
-  kind: "yookassa" | "yoomoney" | "cryptopay" | "telegram_stars" | "platega" | "heleket" | "rollypay" | "paritypay" | "cloudpayments" | "lava" | "overpay";
+  kind: "yookassa" | "yoomoney" | "cryptopay" | "telegram_stars" | "platega" | "heleket" | "rollypay" | "cispay" | "paritypay" | "cloudpayments" | "lava" | "overpay";
   label: string;
   subLabel?: string;
   plategaId?: number;
@@ -127,6 +127,16 @@ export function AuroraTopUpSheet({ open, onClose }: Props) {
         id: "rollypay",
         kind: "rollypay",
         label: providerLabel("rollypay", "RollyPay"),
+        subLabel: "Банковские карты",
+        icon: CreditCard,
+      });
+    }
+
+    if (Boolean(config.cispayEnabled) && ["RUB", "USD"].includes(currency.toUpperCase())) {
+      list.push({
+        id: "cispay",
+        kind: "cispay",
+        label: providerLabel("cispay", "CisPay"),
         subLabel: "Банковские карты",
         icon: CreditCard,
       });
@@ -271,6 +281,11 @@ if (Boolean(config.paritypayEnabled) && isRub) {
         const res = await api.rollypayCreatePayment(token, { amount: num, currency });
         if (res.payUrl) {
           setReadyUrl({ url: res.payUrl, provider: "RollyPay", paymentId: res.paymentId });
+        }
+      } else if (method.kind === "cispay") {
+        const res = await api.cispayCreatePayment(token, { amount: num, currency });
+        if (res.payUrl) {
+          setReadyUrl({ url: res.payUrl, provider: "CisPay", paymentId: res.paymentId });
         }
       } else if (method.kind === "cloudpayments") {
         const res = await api.cloudpaymentsCreatePayment(token, { amount: num, currency });

@@ -2908,7 +2908,7 @@ adminRouter.get("/clients/:id/remna/usage", async (req, res) => {
 // Настройки (языки, валюты, название сервиса) — для бота, mini app, сайта
 adminRouter.get("/settings", asyncRoute(async (_req, res) => {
   const config = await getSystemConfig();
-  return res.json({ ...config, botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
+  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
 }));
 
 /** Версия панели — для мониторинга. Под auth, чтобы не светить наружу. */
@@ -3157,6 +3157,10 @@ const updateSettingsSchema = z.object({
   paritypayApiKey: z.string().max(500).nullable().optional(),
   paritypaySigningSecret: z.string().max(500).nullable().optional(),
   paritypayEnabled: z.boolean().optional(),
+  cispayEnabled: z.boolean().optional(),
+  cispayShopId: z.union([z.string().uuid(), z.literal("")]).optional(),
+  cispayApiKey: z.string().max(500).optional(),
+  cispaySandbox: z.boolean().optional(),
   rollypayApiKey: z.string().max(500).nullable().optional(),
   rollypaySigningSecret: z.string().max(500).nullable().optional(),
   rollypayTestMode: z.boolean().optional(),
@@ -3407,6 +3411,7 @@ const updateSettingsSchema = z.object({
   botTariffsShowExtraDevicesButton: z.boolean().optional(),
   botTariffsShowBalanceButton: z.boolean().optional(),
   // меню выбора категорий перед списком тарифов в боте (default true)
+  botHtmlBubblesTest: z.boolean().optional(),
   botShowTariffCategories: z.boolean().optional(),
 });
 
@@ -3883,6 +3888,11 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.paritypayEnabled !== undefined) {
     const val = updates.paritypayEnabled ? "true" : "false";
     await prisma.systemSetting.upsert({ where: { key: "paritypay_enabled" }, create: { key: "paritypay_enabled", value: val }, update: { value: val } });
+  }
+  for (const [field, key] of [["cispayEnabled", "cispay_enabled"], ["cispayShopId", "cispay_shop_id"], ["cispayApiKey", "cispay_api_key"], ["cispaySandbox", "cispay_sandbox"]] as const) {
+    const value = updates[field];
+    if (value === undefined || (field === "cispayApiKey" && value === "********")) continue;
+    await prisma.systemSetting.upsert({ where: { key }, create: { key, value: String(value) }, update: { value: String(value) } });
   }
   if (updates.rollypayApiKey !== undefined) {
     const val = updates.rollypayApiKey ?? "";
@@ -4589,6 +4599,7 @@ adminRouter.patch("/settings", async (req, res) => {
     ["botTariffsShowExtraDevicesButton", "bot_tariffs_show_extra_devices_button"],
     ["botTariffsShowBalanceButton", "bot_tariffs_show_balance_button"],
     ["botShowTariffCategories", "bot_show_tariff_categories"],
+    ["botHtmlBubblesTest", "bot_htmlbubbles_test"],
   ];
   for (const [key, dbKey] of giftKeys) {
     const v = updates[key];
@@ -4603,7 +4614,7 @@ adminRouter.patch("/settings", async (req, res) => {
   // invalidate cache до возврата свежего config'а.
   invalidateSystemConfigCache();
   const config = await getSystemConfig();
-  return res.json({ ...config, botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
+  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
 });
 
 adminRouter.post("/nalog/test", asyncRoute(async (_req, res) => {
@@ -4648,7 +4659,7 @@ adminRouter.post("/settings/reset-landing-text", asyncRoute(async (req, res) => 
     });
   }
   const config = await getSystemConfig();
-  return res.json({ ...config, botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
+  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
 }));
 
 // ——— Тикеты (админ: список, просмотр, закрытие, ответ, массовые действия)

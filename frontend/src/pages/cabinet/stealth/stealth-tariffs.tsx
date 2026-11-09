@@ -63,6 +63,7 @@ type PayMethod =
   | { kind: "cryptopay"; label: string; icon: typeof Bitcoin }
   | { kind: "heleket"; label: string; icon: typeof Bitcoin }
   | { kind: "rollypay"; label: string; icon: typeof Wallet }
+  | { kind: "cispay"; label: string; icon: typeof Wallet }
   | { kind: "paritypay"; label: string; icon: typeof Wallet }
   | { kind: "cloudpayments"; label: string; icon: typeof Wallet }
   | { kind: "lava"; label: string; icon: typeof Wallet }
@@ -267,6 +268,7 @@ export function StealthTariffs() {
     if (config.cryptopayEnabled) list.push({ kind: "cryptopay", label: labelFor("cryptopay", "Crypto Pay"), icon: Bitcoin });
     if (config.heleketEnabled) list.push({ kind: "heleket", label: labelFor("heleket", "Heleket"), icon: Bitcoin });
     if ((config as { rollypayEnabled?: boolean }).rollypayEnabled) list.push({ kind: "rollypay", label: labelFor("rollypay", "RollyPay"), icon: Wallet });
+    if ((config as { cispayEnabled?: boolean }).cispayEnabled) list.push({ kind: "cispay", label: labelFor("cispay", "CisPay"), icon: Wallet });
     if ((config as { cloudpaymentsEnabled?: boolean }).cloudpaymentsEnabled) list.push({ kind: "cloudpayments", label: labelFor("cloudpayments", "CloudPayments"), icon: Wallet });
     if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kind: "paritypay", label: labelFor("paritypay", "ParityPay"), icon: Wallet });
     if (config.lavaEnabled) list.push({ kind: "lava", label: labelFor("lava", "Lava"), icon: Wallet });
@@ -444,6 +446,10 @@ export function StealthTariffs() {
         paymentId = r.paymentId;
       } else if (selectedMethod.kind === "rollypay") {
         const r = await api.rollypayCreatePayment(state.token, base);
+        url = r.payUrl;
+        paymentId = r.paymentId;
+      } else if (selectedMethod.kind === "cispay") {
+        const r = await api.cispayCreatePayment(state.token, base);
         url = r.payUrl;
         paymentId = r.paymentId;
       } else if (selectedMethod.kind === "lava") {

@@ -93,7 +93,7 @@ botWebhookAdminRouter.post("/set", async (req, res) => {
   }
 });
 
-const ALLOWED_UPDATES = ["message", "callback_query", "pre_checkout_query", "my_chat_member"];
+const ALLOWED_UPDATES = ["message", "callback_query", "pre_checkout_query", "my_chat_member", "widget_query"];
 
 async function callTelegram(token: string, method: string, payload: Record<string, unknown> = {}): Promise<{ result?: unknown }> {
   const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
@@ -117,7 +117,7 @@ async function botRuntimeMode(): Promise<string | null> {
 async function currentAllowedUpdates(token: string): Promise<string[]> {
   const data = await callTelegram(token, "getWebhookInfo").catch(() => null);
   const list = (data?.result as { allowed_updates?: unknown } | undefined)?.allowed_updates;
-  return Array.isArray(list) && list.length > 0 && list.every(item => typeof item === "string") ? list as string[] : ALLOWED_UPDATES;
+  return Array.isArray(list) && list.length > 0 && list.every(item => typeof item === "string") ? [...new Set([...list as string[], ...ALLOWED_UPDATES])] : ALLOWED_UPDATES;
 }
 
 botWebhookAdminRouter.post("/delete", async (req, res) => {

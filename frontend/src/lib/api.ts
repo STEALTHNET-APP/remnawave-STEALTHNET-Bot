@@ -2644,6 +2644,32 @@ export const api = {
   ): Promise<{ paymentId: string; payUrl: string }> {
     return request("/client/rollypay/create-payment", { method: "POST", body: JSON.stringify(data), token });
   },
+  async cispayCreatePayment(
+    token: string,
+    data: {
+      amount?: number;
+      currency?: string;
+      tariffId?: string;
+      tariffPriceOptionId?: string;
+      deviceCount?: number;
+      proxyTariffId?: string;
+      singboxTariffId?: string;
+      promoCode?: string;
+      extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string; targetSubscriptionId?: string };
+      customBuild?: { days: number; devices: number; trafficGb?: number };
+      // мульти-подписки как в боте.
+      // extendsSecondarySubId — продлить КОНКРЕТНУЮ подписку; asAdditional — купить НОВУЮ доп.;
+      // asGift — подарочная; removeExtrasOnActivate — сбросить доп. устройства при активации.
+      extendsSecondarySubId?: string;
+      asAdditional?: boolean;
+      asGift?: boolean;
+      removeExtrasOnActivate?: boolean;
+      /** какой триал заменить этой покупкой. */
+      replaceTrialSubId?: string;
+    }
+  ): Promise<{ paymentId: string; payUrl: string }> {
+    return request("/client/cispay/create-payment", { method: "POST", body: JSON.stringify(data), token });
+  },
   async paritypayCreatePayment(
     token: string,
     data: {
@@ -3689,6 +3715,9 @@ export type UpdateSettingsPayload = {
   cryptopayTestnet?: boolean;
   heleketMerchantId?: string | null;
   heleketApiKey?: string | null;
+  cispayShopId?: string;
+  cispayApiKey?: string;
+  cispaySandbox?: boolean;
   rollypayApiKey?: string | null;
   paritypayShopId?: string | null;
   cloudpaymentsEnabled?: boolean;
@@ -3707,6 +3736,7 @@ export type UpdateSettingsPayload = {
   rollypaySigningSecret?: string | null;
   paritypaySigningSecret?: string | null;
   rollypayTestMode?: boolean;
+  cispayEnabled?: boolean;
   rollypayEnabled?: boolean;
   lavaShopId?: string | null;
   lavaSecretKey?: string | null;
@@ -3777,6 +3807,7 @@ export type UpdateSettingsPayload = {
   botTariffsShowExtraDevicesButton?: boolean;
   botTariffsShowBalanceButton?: boolean;
   /** меню выбора категорий перед списком тарифов в боте (default true) */
+  botHtmlBubblesTest?: boolean;
   botShowTariffCategories?: boolean;
   sellOptionsEnabled?: boolean;
   sellOptionsTrafficEnabled?: boolean;
@@ -4229,6 +4260,9 @@ export interface AdminSettings {
   cryptopayTestnet?: boolean;
   heleketMerchantId?: string | null;
   heleketApiKey?: string | null;
+  cispayShopId?: string;
+  cispayApiKey?: string;
+  cispaySandbox?: boolean;
   rollypayApiKey?: string | null;
   paritypayShopId?: string | null;
   cloudpaymentsEnabled?: boolean;
@@ -4247,6 +4281,7 @@ export interface AdminSettings {
   rollypaySigningSecret?: string | null;
   paritypaySigningSecret?: string | null;
   rollypayTestMode?: boolean;
+  cispayEnabled?: boolean;
   rollypayEnabled?: boolean;
   lavaShopId?: string | null;
   lavaSecretKey?: string | null;
@@ -4336,6 +4371,7 @@ export interface AdminSettings {
   /** Кнопка «💼 Мой баланс» на экране Тарифов бота (default true) */
   botTariffsShowBalanceButton?: boolean;
   /** Меню выбора категорий перед списком тарифов в боте (default true) */
+  botHtmlBubblesTest?: boolean;
   botShowTariffCategories?: boolean;
   /** Продажа опций: доп. трафик, устройства, серверы */
   sellOptionsEnabled?: boolean;
@@ -5776,6 +5812,7 @@ export interface PublicConfig {
   telegramStarsRubPerStar?: number;
   cryptopayEnabled?: boolean;
   heleketEnabled?: boolean;
+  cispayEnabled?: boolean;
   rollypayEnabled?: boolean;
   cloudpaymentsEnabled?: boolean;
   cloudpaymentsTrialDays?: number;

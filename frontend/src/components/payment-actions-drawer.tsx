@@ -107,6 +107,7 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
         reason: reason || undefined,
       });
       setActionResult(
+        data?.payment.provider === "cispay" ? "Запрос возврата отправлен в CisPay. Статус обновится после подтверждения платёжной системы." :
         data?.payment.provider === "cloudpayments" ? "Запрос возврата отправлен в CloudPayments. Статус обновится после подтверждения банка." :
         data?.payment.provider === "telegram_stars" ? "Звёзды возвращены покупателю в Telegram." :
         `Возврат выполнен. На баланс: ${r.summary.creditedToBalance.toFixed(2)}; ` +
@@ -347,7 +348,9 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
                 {/* Refund — для PAID */}
                 {isPaid && (
                   <>
-                    {p?.provider === "cloudpayments" ? (
+                    {p?.provider === "cispay" ? (
+                      <p className="text-xs text-muted-foreground">Запрос полного возврата карты или СБП будет отправлен в CisPay. Пополнение и реферальные начисления отменятся после подтверждения. Выданный доступ отключите отдельно; криптовалюта через API не возвращается.</p>
+                    ) : p?.provider === "cloudpayments" ? (
                       <p className="text-xs text-muted-foreground">Возврат будет отправлен на карту через CloudPayments. Начисления за пополнение и денежные реферальные бонусы будут отменены после подтверждения банка. Выданный доступ при необходимости отключите отдельно.</p>
                     ) : p?.provider === "telegram_stars" ? (
                       <p className="text-xs text-muted-foreground">Звёзды вернутся на счёт Telegram покупателя. Пополнение баланса и денежные реферальные начисления будут отменены. Выданную подписку и бонусные дни при необходимости отключите отдельно.</p>

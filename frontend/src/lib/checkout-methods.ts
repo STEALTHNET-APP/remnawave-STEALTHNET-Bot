@@ -15,6 +15,7 @@ export type CheckoutMethodKind =
   | "telegram_stars"
   | "cryptopay"
   | "heleket"
+  | "cispay"
   | "rollypay"
   | "paritypay"
   | "cloudpayments"
@@ -37,6 +38,7 @@ const DEFAULT_ORDER: CheckoutMethodKind[] = [
   "telegram_stars",
   "cryptopay",
   "heleket",
+  "cispay",
   "rollypay",
   "paritypay",
   "cloudpayments",
@@ -93,6 +95,9 @@ export function checkoutMethods(
   }
   if (config.rollypayEnabled && rub) {
     list.push({ id: "rollypay", kind: "rollypay", label: label("rollypay", "RollyPay"), subLabel: "Банковские карты" });
+  }
+  if (config.cispayEnabled && ["RUB", "USD"].includes(currency.toUpperCase())) {
+    list.push({ id: "cispay", kind: "cispay", label: label("cispay", "CisPay"), subLabel: "Карта, СБП или криптовалюта" });
   }
   if (config.paritypayEnabled && rub) {
     list.push({ id: "paritypay", kind: "paritypay", label: label("paritypay", "ParityPay"), subLabel: "Банковские карты" });

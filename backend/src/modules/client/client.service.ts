@@ -141,6 +141,7 @@ export const SYSTEM_CONFIG_KEYS = [
   "cloudpayments_receipt", "cloudpayments_bot_direct", "bot_commands",
   "cloudpayments_public_id", "cloudpayments_api_secret", "cloudpayments_enabled", "cloudpayments_trial_days", "cloudpayments_trial_amount", "cloudpayments_trial_tariff_id", "cloudpayments_grace_days", "cloudpayments_test_mode",
   "paritypay_shop_id", "paritypay_api_key", "paritypay_signing_secret", "paritypay_enabled",
+  "cispay_enabled", "cispay_shop_id", "cispay_api_key", "cispay_sandbox",
   "rollypay_api_key", "rollypay_signing_secret", "rollypay_test_mode", "rollypay_enabled",
   "lava_shop_id", "lava_secret_key", "lava_additional_key",
   "lavatop_api_key", "lavatop_default_offer_id",
@@ -181,7 +182,7 @@ export const SYSTEM_CONFIG_KEYS = [
   "bot_tariffs_show_extra_devices_button",
   "bot_tariffs_show_balance_button",
   // меню выбора категорий перед списком тарифов в боте (default true)
-  "bot_show_tariff_categories",
+  "bot_show_tariff_categories", "bot_htmlbubbles_test",
   // заявки на вывод реф. баланса: вкл/выкл + мин. сумма + доступные способы вывода
   "withdrawals_enabled", "withdrawal_min_amount",
   "withdrawal_methods_sbp", "withdrawal_methods_card", "withdrawal_methods_usdt",
@@ -762,6 +763,10 @@ async function loadSystemConfigFromDb() {
     paritypayApiKey: (map.paritypay_api_key ?? "").trim() || null,
     paritypaySigningSecret: (map.paritypay_signing_secret ?? "").trim() || null,
     paritypayEnabled: map.paritypay_enabled === "true",
+    cispayEnabled: map.cispay_enabled === "true",
+    cispayShopId: (map.cispay_shop_id ?? "").trim(),
+    cispayApiKey: (map.cispay_api_key ?? "").trim(),
+    cispaySandbox: map.cispay_sandbox === "true",
     rollypayApiKey: (map.rollypay_api_key ?? "").trim() || null,
     rollypaySigningSecret: (map.rollypay_signing_secret ?? "").trim() || null,
     rollypayTestMode: (map.rollypay_test_mode ?? "false") === "true",
@@ -909,6 +914,7 @@ async function loadSystemConfigFromDb() {
     botTariffsShowExtraDevicesButton: map.bot_tariffs_show_extra_devices_button !== "false" && map.bot_tariffs_show_extra_devices_button !== "0",
     botTariffsShowBalanceButton: map.bot_tariffs_show_balance_button !== "false" && map.bot_tariffs_show_balance_button !== "0",
     // меню выбора категорий перед тарифами: дефолт true, выключение явное.
+    botHtmlBubblesTest: map.bot_htmlbubbles_test === "true",
     botShowTariffCategories: map.bot_show_tariff_categories !== "false" && map.bot_show_tariff_categories !== "0",
     // дефолт true (фича существовала всегда) — выключение явное.
     withdrawalsEnabled: map.withdrawals_enabled !== "false" && map.withdrawals_enabled !== "0",
@@ -1110,6 +1116,7 @@ const DEFAULT_PLATEGA_METHODS: PlategaMethodConfig[] = [
 export type PaymentProviderConfig = { id: string; label: string; sortOrder: number };
 const DEFAULT_PAYMENT_PROVIDERS: PaymentProviderConfig[] = [
   { id: "platega_2", label: "Platega (СБП)", sortOrder: 0 },
+  { id: "cispay", label: "CisPay", sortOrder: 1 },
   { id: "rollypay", label: "RollyPay", sortOrder: 1 },
   { id: "yookassa", label: "ЮKassa (СБП / Карты)", sortOrder: 2 },
   { id: "yoomoney", label: "ЮMoney (Карты)", sortOrder: 3 },
@@ -1428,6 +1435,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     cloudpaymentsTrialAmount: full.cloudpaymentsTrialAmount,
     cloudpaymentsTrialTariffId: full.cloudpaymentsTrialTariffId,
     paritypayEnabled: Boolean(full.paritypayEnabled && full.paritypayShopId && full.paritypayApiKey && full.paritypaySigningSecret),
+    cispayEnabled: Boolean(full.cispayEnabled && full.cispayShopId && full.cispayApiKey),
     rollypayEnabled: Boolean((full as { rollypayEnabled?: boolean }).rollypayEnabled !== false && (full as { rollypayApiKey?: string | null }).rollypayApiKey?.trim() && (full as { rollypaySigningSecret?: string | null }).rollypaySigningSecret?.trim()),
     lavaEnabled: Boolean((full as { lavaShopId?: string | null }).lavaShopId?.trim() && (full as { lavaSecretKey?: string | null }).lavaSecretKey?.trim()),
     lavatopEnabled: Boolean((full as { lavatopApiKey?: string | null }).lavatopApiKey?.trim()),
@@ -1513,6 +1521,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     botTariffsShowExtraDevicesButton: (full as { botTariffsShowExtraDevicesButton?: boolean }).botTariffsShowExtraDevicesButton ?? true,
     botTariffsShowBalanceButton: (full as { botTariffsShowBalanceButton?: boolean }).botTariffsShowBalanceButton ?? true,
     // меню выбора категорий перед тарифами (default true)
+    botHtmlBubblesTest: full.botHtmlBubblesTest === true,
     botShowTariffCategories: (full as { botShowTariffCategories?: boolean }).botShowTariffCategories ?? true,
     withdrawalsEnabled: (full as { withdrawalsEnabled?: boolean }).withdrawalsEnabled ?? true,
     withdrawalMinAmount: (full as { withdrawalMinAmount?: number }).withdrawalMinAmount ?? 3000,

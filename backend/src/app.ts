@@ -29,6 +29,7 @@ import { yoomoneyWebhooksRouter } from "./modules/webhooks/yoomoney.webhooks.rou
 import { yookassaWebhooksRouter } from "./modules/webhooks/yookassa.webhooks.routes.js";
 import { cryptopayWebhooksRouter } from "./modules/webhooks/cryptopay.webhooks.routes.js";
 import { heleketWebhooksRouter } from "./modules/webhooks/heleket.webhooks.routes.js";
+import { cispayWebhooksRouter } from "./modules/cispay/cispay.webhooks.js";
 import { rollypayWebhooksRouter } from "./modules/webhooks/rollypay.webhooks.routes.js";
 import { overpayWebhooksRouter } from "./modules/webhooks/overpay.webhooks.routes.js";
 import { lavaWebhooksRouter } from "./modules/webhooks/lava.webhooks.routes.js";
@@ -154,6 +155,7 @@ app.use("/api/webhooks/cryptopay", express.raw({ type: "application/json" }), cr
 app.use("/api/webhooks/heleket", express.raw({ type: "application/json" }), heleketWebhooksRouter);
 // RollyPay подписывает СЫРОЕ тело — express.raw обязателен, иначе подпись не сойдётся.
 app.use("/api/webhooks/paritypay", express.raw({ type: "application/json", limit: "64kb" }), paritypayWebhooksRouter);
+app.use("/api/webhooks/cispay", express.raw({ type: "application/json", limit: "64kb" }), cispayWebhooksRouter);
 app.use("/api/webhooks/rollypay", express.raw({ type: "application/json" }), rollypayWebhooksRouter);
 app.use("/api/webhooks/lava", express.raw({ type: "application/json" }), lavaWebhooksRouter);
 // Platega — HMAC проверяет raw body. Apply path-specific raw middleware ДО express.json,

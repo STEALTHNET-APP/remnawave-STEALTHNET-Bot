@@ -90,6 +90,7 @@ function ClassicProxyPage() {
   const [cryptopayEnabled, setCryptopayEnabled] = useState(false);
   const [heleketEnabled, setHeleketEnabled] = useState(false);
   const [rollypayEnabled, setRollypayEnabled] = useState(false);
+  const [cispayEnabled, setCispayEnabled] = useState(false);
   const [paritypayEnabled, setParitypayEnabled] = useState(false);
   const [cloudpaymentsEnabled, setCloudpaymentsEnabled] = useState(false);
   const [lavaEnabled, setLavaEnabled] = useState(false);
@@ -121,6 +122,7 @@ function ClassicProxyPage() {
       setTelegramStarsEnabled(Boolean(c.telegramStarsEnabled));
       setHeleketEnabled(Boolean(c.heleketEnabled));
       setRollypayEnabled(Boolean(c.rollypayEnabled));
+      setCispayEnabled(Boolean(c.cispayEnabled));
       setParitypayEnabled(Boolean(c.paritypayEnabled));
       setCloudpaymentsEnabled(Boolean(c.cloudpaymentsEnabled));
       setLavaEnabled(Boolean(c.lavaEnabled));
@@ -254,6 +256,23 @@ function ClassicProxyPage() {
         proxyTariffId: tariff.id,
       });
       if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "RollyPay" });
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : "Ошибка");
+    } finally {
+      setPayLoading(false);
+    }
+  }
+  async function startCispayPayment(tariff: ProxyTariff) {
+    if (!token) return;
+    setPayError(null);
+    setPayLoading(true);
+    try {
+      const res = await api.cispayCreatePayment(token, {
+        amount: tariff.price,
+        currency: tariff.currency,
+        proxyTariffId: tariff.id,
+      });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "CisPay" });
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка");
     } finally {
@@ -466,6 +485,7 @@ async function startCloudpaymentsPayment(tariff: ProxyTariff) {
                 cryptopay: { bg10: "bg-yellow-500/10", bg20: "group-hover:bg-yellow-500/20", text: "text-yellow-500" },
                 heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
                 rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                cispay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 paritypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 cloudpayments: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 yookassa: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
@@ -480,6 +500,7 @@ async function startCloudpaymentsPayment(tariff: ProxyTariff) {
                 { id: "cryptopay", enabled: cryptopayEnabled, onClick: () => startCryptopayPayment(payModal), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
                 { id: "heleket", enabled: heleketEnabled, onClick: () => startHeleketPayment(payModal), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
                 { id: "rollypay", enabled: rollypayEnabled, onClick: () => startRollypayPayment(payModal), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
+                { id: "cispay", enabled: cispayEnabled, onClick: () => startCispayPayment(payModal), label: providerLabel("cispay", "CisPay"), icon: "card" },
                 { id: "paritypay", enabled: paritypayEnabled, onClick: () => startParitypayPayment(payModal), label: providerLabel("paritypay", "ParityPay"), icon: "card" },
                 { id: "cloudpayments", enabled: cloudpaymentsEnabled, onClick: () => startCloudpaymentsPayment(payModal), label: providerLabel("cloudpayments", "CloudPayments"), icon: "card" },
                 { id: "yookassa", enabled: yookassaEnabled && payModal.currency.toUpperCase() === "RUB", onClick: () => startYookassaPayment(payModal), label: providerLabel("yookassa", "СБП / Карты РФ"), icon: "card" },

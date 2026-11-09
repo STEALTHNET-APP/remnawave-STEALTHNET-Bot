@@ -198,13 +198,16 @@ export function ExtendSubscriptionDialog({
         url = r.payUrl;
       } else if (providerId === "cloudpayments") {
         const r = await api.cloudpaymentsCreatePayment(token, payBase);
-        url = r.payUrl; paymentId = r.paymentId; providerLabel = "Heleket";
+        url = r.payUrl; paymentId = r.paymentId; providerLabel = "CloudPayments";
       } else if (providerId === "paritypay") {
         const r = await api.paritypayCreatePayment(token, payBase);
-        url = r.payUrl; paymentId = r.paymentId; providerLabel = "Heleket";
+        url = r.payUrl; paymentId = r.paymentId; providerLabel = "ParityPay";
       } else if (providerId === "rollypay") {
         const r = await api.rollypayCreatePayment(token, payBase);
-        url = r.payUrl; paymentId = r.paymentId; providerLabel = "Heleket";
+        url = r.payUrl; paymentId = r.paymentId; providerLabel = "RollyPay";
+      } else if (providerId === "cispay") {
+        const r = await api.cispayCreatePayment(token, payBase);
+        url = r.payUrl; paymentId = r.paymentId; providerLabel = "CisPay";
       } else if (providerId === "lava") {
         const r = await api.lavaCreatePayment(token, payBase);
         url = r.payUrl; paymentId = r.paymentId; providerLabel = "LAVA";
@@ -234,6 +237,7 @@ export function ExtendSubscriptionDialog({
       { id: "cryptopay", enabled: Boolean(config.cryptopayEnabled), fb: "Crypto Bot" },
       { id: "heleket", enabled: Boolean(config.heleketEnabled), fb: "Heleket" },
       { id: "rollypay", enabled: Boolean(config.rollypayEnabled), fb: "RollyPay" },
+      { id: "cispay", enabled: Boolean(config.cispayEnabled), fb: "CisPay" },
       { id: "paritypay", enabled: Boolean(config.paritypayEnabled), fb: "ParityPay" },
       { id: "cloudpayments", enabled: Boolean(config.cloudpaymentsEnabled), fb: "CloudPayments" },
       { id: "yookassa", enabled: Boolean(config.yookassaEnabled) && isRub, fb: "СБП / Карты РФ" },

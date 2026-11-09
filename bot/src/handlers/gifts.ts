@@ -163,7 +163,7 @@ export function createGiftHandlers(): Composer<Context> {
       return;
     }
 
-    if (data.startsWith("gift_pay_stars:") || data.startsWith("gift_pay_yookassa:") || data.startsWith("gift_pay_yoomoney:") || data.startsWith("gift_pay_cryptopay:") || data.startsWith("gift_pay_heleket:") || data.startsWith("gift_pay_lava:") || data.startsWith("gift_pay_paritypay:") || data.startsWith("gift_pay_cloudpayments:") || data.startsWith("gift_pay_platega:")) {
+    if (data.startsWith("gift_pay_cispay:") || data.startsWith("gift_pay_stars:") || data.startsWith("gift_pay_yookassa:") || data.startsWith("gift_pay_yoomoney:") || data.startsWith("gift_pay_cryptopay:") || data.startsWith("gift_pay_heleket:") || data.startsWith("gift_pay_lava:") || data.startsWith("gift_pay_paritypay:") || data.startsWith("gift_pay_cloudpayments:") || data.startsWith("gift_pay_platega:")) {
       const isPlategaGift = data.startsWith("gift_pay_platega:");
       const giftParts = isPlategaGift ? data.split(":") : [];
       const plategaMethodId = isPlategaGift ? Number(giftParts[2]) : null;
@@ -171,6 +171,7 @@ export function createGiftHandlers(): Composer<Context> {
         : data.startsWith("gift_pay_yoomoney:") ? "yoomoney"
         : data.startsWith("gift_pay_cryptopay:") ? "cryptopay"
         : data.startsWith("gift_pay_heleket:") ? "heleket"
+        : data.startsWith("gift_pay_cispay:") ? "cispay"
         : data.startsWith("gift_pay_cloudpayments:") ? "cloudpayments"
         : data.startsWith("gift_pay_paritypay:") ? "paritypay"
         : isPlategaGift ? "platega"
@@ -238,6 +239,9 @@ export function createGiftHandlers(): Composer<Context> {
           payUrl = p.payUrl;
         } else if (provider === "heleket") {
           const p = await api.createHeleketPayment(token, { amount: effectivePrice, currency: tariff.currency, tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
+          payUrl = p.payUrl;
+        } else if (provider === "cispay") {
+          const p = await api.createCispayPayment(token, { amount: effectivePrice, currency: tariff.currency, tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
           payUrl = p.payUrl;
         } else if (provider === "cloudpayments") {
           const p = await api.createCloudpaymentsPayment(token, { amount: effectivePrice, currency: "RUB", tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });

@@ -1,3 +1,4 @@
+import { createWidgetMiddleware } from "./widgets.js";
 import dns from "node:dns";
 import "dotenv/config";
 import { Bot, Composer, Context } from "grammy";
@@ -127,6 +128,7 @@ if (!token) {
 
 const b = await createBotWithProxy(token);
 b.api.config.use(ignoreNotModified);
+b.use(createWidgetMiddleware(api.getPublicConfig));
 b.use(sequentialize((ctx) => [ctx.from?.id ? `user:${ctx.from.id}` : undefined, ctx.chat?.id ? `chat:${ctx.chat.id}` : undefined].filter((key): key is string => !!key)));
 b.use(composer);
 b.catch((err) => {
@@ -154,13 +156,13 @@ const modeController = createModeController({
   config: () => api.getBotRuntimeConfig(),
   setWebhook: (url, secret) => b.api.setWebhook(url, {
     secret_token: secret,
-    allowed_updates: ["message", "callback_query", "pre_checkout_query", "my_chat_member"],
+    allowed_updates: ["message", "callback_query", "pre_checkout_query", "my_chat_member", "widget_query"] as any,
     drop_pending_updates: false,
   }),
   deleteWebhook: () => b.api.deleteWebhook({ drop_pending_updates: false }),
   startPolling: () => {
     const runner = run(b, {
-      runner: { fetch: { allowed_updates: ["message", "callback_query", "pre_checkout_query", "my_chat_member"] } },
+      runner: { fetch: { allowed_updates: ["message", "callback_query", "pre_checkout_query", "my_chat_member", "widget_query"] as any } },
       sink: { concurrency: 50 },
     });
     runner.task()?.catch(() => console.error("[Bot] Polling stopped; retrying on next reconciliation"));

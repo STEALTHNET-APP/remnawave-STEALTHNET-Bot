@@ -13,7 +13,7 @@ const PAYMENT_PARAM_NAMES = [
   "payment", "paymentid", "payment_id",
   "invoice", "invoiceid", "invoice_id",
   "order", "orderid", "order_id",
-  "yookassa", "heleket", "rollypay", "paritypay",
+  "yookassa", "heleket", "rollypay", "cispay", "paritypay",
   "lava", "lavatop", "overpay", "yoomoney_form",
   "cryptopay", "stars", "redirect",
 ];

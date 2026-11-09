@@ -215,6 +215,23 @@ function ClassicCustomBuildPage() {
       setPayLoading(false);
     }
   }
+  async function payByCispay() {
+    if (!token || !cb) return;
+    setPayError(null);
+    setPayLoading(true);
+    try {
+      const res = await api.cispayCreatePayment(token, {
+        customBuild: customBuildPayload,
+        currency: cb.currency,
+        promoCode: promoCode.trim() || undefined,
+      });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "CisPay" });
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
+    } finally {
+      setPayLoading(false);
+    }
+  }
 async function payByParitypay() {
     if (!token || !cb) return;
     setPayError(null);
@@ -512,6 +529,7 @@ async function payByCloudpayments() {
                   cryptopay: { bg10: "bg-yellow-500/10", bg20: "group-hover:bg-yellow-500/20", text: "text-yellow-500" },
                   heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
                   rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                  cispay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                   paritypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                   cloudpayments: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                   yookassa: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
@@ -527,6 +545,7 @@ async function payByCloudpayments() {
                   { id: "cryptopay", enabled: !!config?.cryptopayEnabled, onClick: () => payByCryptopay(), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
                   { id: "heleket", enabled: !!config?.heleketEnabled, onClick: () => payByHeleket(), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
                   { id: "rollypay", enabled: !!config?.rollypayEnabled, onClick: () => payByRollypay(), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
+                  { id: "cispay", enabled: !!config?.cispayEnabled, onClick: () => payByCispay(), label: providerLabel("cispay", "CisPay"), icon: "card" },
                   { id: "paritypay", enabled: !!config?.paritypayEnabled, onClick: () => payByParitypay(), label: providerLabel("paritypay", "ParityPay"), icon: "card" },
                   { id: "cloudpayments", enabled: !!config?.cloudpaymentsEnabled, onClick: () => payByCloudpayments(), label: providerLabel("cloudpayments", "CloudPayments"), icon: "card" },
                   { id: "yookassa", enabled: !!config?.yookassaEnabled && cb.currency.toUpperCase() === "RUB", onClick: () => payByYookassa(), label: providerLabel("yookassa", "СБП / Карты РФ"), icon: "card" },

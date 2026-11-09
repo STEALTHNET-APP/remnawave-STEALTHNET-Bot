@@ -1,3 +1,4 @@
+import { CispaySettings } from "@/components/admin/cispay-settings";
 import { BotCommandsSettings } from "@/components/admin/bot-commands-settings";
 import { CloudPaymentsSettings } from "@/components/admin/cloudpayments-settings";
 import { adminAlert } from "@/lib/admin-dialogs";
@@ -413,6 +414,8 @@ function isPaymentProviderActive(id: string, s: AdminSettings | null): boolean {
         s.paritypayApiKey?.trim() &&
         s.paritypaySigningSecret?.trim()
       );
+    case "cispay":
+      return Boolean(s.cispayEnabled && s.cispayShopId?.trim() && s.cispayApiKey?.trim());
     case "rollypay":
       return Boolean(
         s.rollypayEnabled !== false &&
@@ -1061,6 +1064,10 @@ export function SettingsPage() {
         paritypayApiKey: settings.paritypayApiKey === "********" ? undefined : (settings.paritypayApiKey || null),
         paritypaySigningSecret: settings.paritypaySigningSecret === "********" ? undefined : (settings.paritypaySigningSecret || null),
         paritypayEnabled: settings.paritypayEnabled === true,
+        cispayEnabled: settings.cispayEnabled === true,
+        cispayShopId: settings.cispayShopId ?? "",
+        cispayApiKey: settings.cispayApiKey === "********" ? undefined : (settings.cispayApiKey ?? ""),
+        cispaySandbox: settings.cispaySandbox === true,
         rollypayApiKey: settings.rollypayApiKey === "********" ? undefined : (settings.rollypayApiKey || null),
         rollypaySigningSecret: settings.rollypaySigningSecret === "********" ? undefined : (settings.rollypaySigningSecret || null),
         rollypayEnabled: settings.rollypayEnabled !== false,
@@ -1133,6 +1140,7 @@ export function SettingsPage() {
         // тогглы кнопок экрана «Тарифы» бота (default true)
         botTariffsShowExtraDevicesButton: settings.botTariffsShowExtraDevicesButton !== false,
         botTariffsShowBalanceButton: settings.botTariffsShowBalanceButton !== false,
+        botHtmlBubblesTest: settings.botHtmlBubblesTest === true,
         botShowTariffCategories: settings.botShowTariffCategories !== false,
         allowUserThemeChange: false,
         sellOptionsEnabled: settings.sellOptionsEnabled ?? false,
@@ -1304,9 +1312,10 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="grid items-start gap-5 xl:grid-cols-[240px_minmax(0,1fr)]">
         <SettingsNavigation activeTab={activeTab} onChange={setActiveTab} isAdmin={state.admin?.role === "ADMIN"} />
 
+        <div className="min-w-0 [&_[role=tabpanel]]:mt-0">
         {state.admin?.role === "ADMIN" && <TabsContent value="updates"><PanelUpdates token={token} /></TabsContent>}
         {activeTab === "server-ssh" && <div className="mt-4"><ConsoleAccessCard token={token} /></div>}
         <form onSubmit={handleSubmit}>
@@ -2562,6 +2571,10 @@ export function SettingsPage() {
                           }
                         />
                         <Label className="text-sm">Кнопка «Мой баланс» в Тарифах</Label>
+                      </div>
+                      <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-3">
+                        <Switch id="htmlbubbles-test" checked={settings.botHtmlBubblesTest === true} onCheckedChange={checked => setSettings(s => s ? { ...s, botHtmlBubblesTest: checked === true } : s)} />
+                        <div className="space-y-1"><Label htmlFor="htmlbubbles-test">htmlbubbles test</Label><p className="text-xs text-muted-foreground">Интерактивные меню внутри сообщений Telegram. Только личные чаты и актуальные клиенты. Email, промокоды и обращения вводятся сообщением боту. Под каждым виджетом доступен переход к обычному меню.</p></div>
                       </div>
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-card border border-border">
                         <Switch
@@ -3964,6 +3977,7 @@ export function SettingsPage() {
               {/* RollyPay — приём рублей (СБП/карты/крипта) с конвертацией в USDT.
                   Кнопка у клиента появляется только когда заполнены ОБА поля: без секрета
                   подписи вебхук всё равно будет отвергнут. */}
+              <CispaySettings settings={settings} onChange={patch => setSettings(s => s ? { ...s, ...patch } : s)} saving={saving} />
               <Collapsible defaultOpen={false} className="group mt-4">
                 <CollapsibleTrigger asChild>
                   <button
@@ -6288,6 +6302,7 @@ export function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        </div>
       </Tabs>
 
       <Dialog open={twoFaEnableOpen} onOpenChange={(open) => !open && closeTwoFaEnable()}>

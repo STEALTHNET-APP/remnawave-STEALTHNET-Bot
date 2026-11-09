@@ -41,7 +41,7 @@ export async function processPaymentDelivery(paymentId: string): Promise<void> {
   const claim = await prisma.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM payments WHERE id = ${paymentId} FOR UPDATE`;
     const payment = await tx.payment.findUnique({ where: { id: paymentId } });
-    if (payment?.status !== "PAID") return { count: 0 };
+    if (payment?.status !== "PAID" || metadata(payment.metadata).cispayRefundRequestedAt) return { count: 0 };
     return tx.paymentDelivery.updateMany({ where: { paymentId, state: "PENDING" }, data: { state: "PROCESSING", startedAt } });
   });
   if (!claim.count) return;
