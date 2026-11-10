@@ -41,7 +41,9 @@ export type CreateCryptopayInvoiceParams = {
 
 export type CreateCryptopayInvoiceResult =
   | { ok: true; invoiceId: number; payUrl: string; miniAppPayUrl?: string; webAppPayUrl?: string }
-  | { ok: false; error: string; status?: number };
+  | { ok: false; error: string; status?: number; providerCode?: string | number; providerError?: string };
+
+const INVOICE_UNAVAILABLE = "Не удалось создать счёт Crypto Bot. Выберите другой способ оплаты или обратитесь в поддержку.";
 
 /**
  * Создаёт инвойс в Crypto Pay. Возвращает URL для оплаты (bot_invoice_url).
@@ -90,22 +92,32 @@ export async function createCryptopayInvoice(params: CreateCryptopayInvoiceParam
         mini_app_invoice_url?: string;
         web_app_invoice_url?: string;
       };
-      error?: { code?: string; name?: string };
+      error?: { code?: string | number; name?: string };
     };
     try {
       data = (await res.json()) as typeof data;
     } catch {
-      return { ok: false, error: `Crypto Pay: не JSON (${res.status})`, status: res.status };
+      return { ok: false, error: INVOICE_UNAVAILABLE, status: res.status };
     }
 
-    if (!data.ok || !data.result) {
-      const code = data.error?.code ?? data.error?.name ?? res.statusText;
-      return { ok: false, error: `Crypto Pay: ${code}`, status: res.status };
+    if (!res.ok || !data?.ok || !data.result) {
+      const providerError = typeof data?.error?.name === "string" && /^[A-Z0-9_]{1,100}$/.test(data.error.name) ? data.error.name : undefined;
+      const code = data?.error?.code;
+      const providerCode = typeof code === "number" && Number.isFinite(code) ? code : typeof code === "string" && /^[A-Z0-9_]{1,100}$/.test(code) ? code : undefined;
+      return {
+        ok: false,
+        error: providerError === "METHOD_BLOCKED" || providerCode === "METHOD_BLOCKED"
+          ? "Оплата через Crypto Bot сейчас недоступна. Выберите другой способ оплаты или обратитесь в поддержку."
+          : INVOICE_UNAVAILABLE,
+        status: res.status,
+        providerCode,
+        providerError,
+      };
     }
 
     const payUrl = data.result.bot_invoice_url ?? data.result.mini_app_invoice_url ?? data.result.web_app_invoice_url;
     if (!data.result.invoice_id || !payUrl) {
-      return { ok: false, error: "Crypto Pay: нет invoice_id или pay URL в ответе" };
+      return { ok: false, error: INVOICE_UNAVAILABLE };
     }
 
     return {
@@ -121,7 +133,7 @@ export async function createCryptopayInvoice(params: CreateCryptopayInvoiceParam
     if (message.includes("fetch") || message.includes("ECONNREFUSED") || message.includes("ENOTFOUND") || message.includes("ETIMEDOUT") || (e instanceof Error && e.name === "AbortError")) {
       return { ok: false, error: "Нет связи с Crypto Pay. Проверьте интернет и настройки." };
     }
-    return { ok: false, error: message };
+    return { ok: false, error: INVOICE_UNAVAILABLE };
   }
 }
 

@@ -6179,6 +6179,7 @@ clientRouter.post(["/cryptopay/create-payment", "/telegram-stars/create-payment"
     });
 
     if (!result.ok) {
+      console.warn("[cryptopay/create-payment] invoice rejected", { paymentId: payment.id, status: result.status, providerCode: result.providerCode, providerError: result.providerError });
       await prisma.payment.delete({ where: { id: payment.id } }).catch(() => {});
       return res.status(500).json({ message: result.error });
     }
