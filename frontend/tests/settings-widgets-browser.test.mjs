@@ -32,6 +32,18 @@ const base=`http://127.0.0.1:${server.address().port}`;
 const output=process.env.UI_OUTPUT_DIR;
 if(output)await mkdir(output,{recursive:true});
 try{
+ await test('CisPay partner offer copies the code without saving payment settings',async()=>{
+  const page=await browser.newPage({viewport:{width:390,height:844}});
+  await page.addInitScript(()=>Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{window.copiedPromo=text}}}));
+  await page.goto(base+'/admin/settings?tab=payments');
+  await page.getByRole('button',{name:'Скопировать код',exact:true}).click();
+  assert.equal(await page.evaluate(()=>window.copiedPromo),'STEALTHNET_BOOSTED');
+  await page.getByRole('button',{name:'Код скопирован',exact:true}).waitFor();
+  assert.equal(saved,undefined);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  if(output)await page.screenshot({path:output+'/cispay-partner-mobile.png'});
+  await page.close();
+ });
  await test('desktop settings navigation, search and CisPay save preserve form fields',async()=>{
   const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.setDefaultTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base+'/admin/settings?tab=payments');
@@ -42,7 +54,7 @@ try{
   await page.getByLabel('Секретный API-ключ',{exact:true}).press('Enter');
   await page.waitForFunction(()=>document.body.innerText.includes('сохран')||document.body.innerText.includes('Сохран'));
   await page.waitForTimeout(500);
-  assert.equal(saved?.cispayEnabled,true);assert.equal(saved?.cispayApiKey,'cis_sec_fixture');assert.equal(saved?.cispayShopId,'00000000-0000-4000-8000-000000000002');
+  assert.equal(await page.getByRole('region',{name:'Партнёрское предложение CisPay'}).count(),0);assert.equal(saved?.cispayEnabled,true);assert.equal(saved?.cispayApiKey,'cis_sec_fixture');assert.equal(saved?.cispayShopId,'00000000-0000-4000-8000-000000000002');
   const search=page.getByRole('searchbox');await search.fill('бот');
   await page.getByRole('navigation').getByRole('button',{name:'Telegram-бот',exact:true}).click();
   await page.getByRole('tab',{name:/Поведение/}).click();
@@ -65,7 +77,7 @@ try{
  });
  await test('widget markup pages actions and sends an opaque query without overflow',async()=>{
   const {buildWidget}=await import('../../bot/dist/widgets.js');
-  const widget=buildWidget('Ваша подписка активна. Осталось 23 дня.\nУстройства: 1 из 3.\nБаланс: 260 ₽.',[[{text:'Подключиться',callback_data:'connect:fixture'},{text:'Продлить подписку',callback_data:'renew:fixture'},{text:'Пополнить баланс',callback_data:'topup:fixture'},{text:'Помощь',callback_data:'help:fixture'}]],'STEALTHNET');
+  const widget=buildWidget('Ваша подписка активна. Осталось 23 дня.\nУстройства: 1 из 3.\nБаланс: 260 ₽.',[[{text:'Подключиться',callback_data:'connect:fixture'},{text:'Продлить подписку',callback_data:'renew:fixture'},{text:'Пополнить баланс',callback_data:'topup:fixture'},{text:'Баланс',callback_data:'balance:fixture'},{text:'Устройства',callback_data:'devices:fixture'},{text:'Профиль',callback_data:'profile:fixture'},{text:'Помощь',callback_data:'help:fixture'}]],'STEALTHNET');
   const page=await browser.newPage({viewport:{width:320,height:560}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.evaluate(()=>{window.queries=[];window.TelegramWidget={request:async(token)=>{window.queries.push(token);return {result:'Готово'};},openLink:()=>{},openTelegramLink:()=>{},copyText:()=>{}};});
   await page.setContent(widget.html);

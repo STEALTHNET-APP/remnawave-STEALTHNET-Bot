@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { Api, Context } from "grammy";
 import { deflateSync } from "node:zlib";
 import { buildWidget, createWidgetMiddleware } from "./widgets.js";
+import { splitWidgetText } from "./widget-presentation.js";
 const info = { id: 999, is_bot: true as const, first_name: "Test", username: "test_bot", can_join_groups: false, can_read_all_group_messages: false, supports_inline_queries: false, can_connect_to_business: false, has_main_web_app: false };
 let messageId = 100;
 function fixture(update: unknown) {
@@ -24,11 +25,27 @@ test("widget escapes untrusted content and uses opaque actions within Telegram l
 });
 test("text pages preserve words, line breaks and emoji", () => {
   const text = 'Подписка активна\n' + 'Доступно устройств: 3. '.repeat(25) + '😀';
-  const widget = buildWidget(text, [], 'Test')!;
-  const pages: string[] = JSON.parse(widget.html.match(/var t=(\[.*?\]),b=/)![1]);
+  const pages = splitWidgetText(text);
   assert.equal(pages.join(''), text);
   assert.ok(pages.length > 1);
   assert.ok(pages.slice(0, -1).every(page => /\s$/.test(page)));
+});
+test("account widget uses structured data without repeating legacy menu text", async () => {
+  const { buildMainMenuText } = await import('./handlers/shared.js');
+  const menu = buildMainMenuText({ serviceName: 'TEST', telegramId: 123, balance: 25, currency: 'RUB', tariffDisplayName: '🎁 Пробная 1', menuLineVisibility: {balancePrefix:true,tariffPrefix:true,subscriptionPrefix:true,trafficPrefix:true,devicesLabel:true}, subscription: { hwidDeviceLimit: 3, user: { status: 'EXPIRED', expireAt: '2026-10-22T12:21:00Z', hwidDeviceLimit: 3, trafficLimitBytes: 5 * 1024 ** 3, usedTrafficBytes: 0 } } });
+  assert.ok(menu.widgetSummary);
+  assert.equal(menu.widgetSummary.tariff, 'Пробная 1');
+  const widget = buildWidget(menu.text, [[{text:'📦 Тарифы',callback_data:'tariffs'}]], 'TEST', menu.widgetSummary)!;
+  assert.ok(widget);
+  assert.equal(widget.html.includes('Добро пожаловать'), false);
+  assert.equal(widget.html.includes('Ваш тариф'), false);
+  assert.ok(widget.html.includes('Баланс'));
+  assert.ok(widget.html.includes('Трафик'));
+  const hidden = buildMainMenuText({serviceName:'TEST',telegramId:123,balance:25,currency:'RUB',subscription:null,menuLineVisibility:{balancePrefix:false,telegramIdPrefix:false,tariffPrefix:false,trafficPrefix:false}});
+  assert.equal(hidden.widgetSummary?.balance,undefined);
+  assert.equal(hidden.widgetSummary?.account,undefined);
+  assert.equal(hidden.widgetSummary?.tariff,undefined);
+  assert.equal(hidden.widgetSummary,undefined);
 });
 test("unsupported inline controls stay in ordinary messages", () => {
   assert.equal(buildWidget('Invoice', [[{ text: 'Pay', pay: true } as any]], 'Test'), null);

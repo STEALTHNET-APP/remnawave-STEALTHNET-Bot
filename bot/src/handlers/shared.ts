@@ -1,3 +1,4 @@
+import { cleanWidgetLabel, type WidgetSummary } from "../widget-presentation.js";
 import { createHash } from "node:crypto";
 import { InputFile } from "grammy";
 import type { Context } from "grammy";
@@ -1008,11 +1009,13 @@ export function buildMainMenuText(opts: {
       tariffMenuEmoji?: string | null;
     }>;
   } | null;
-}): { text: string; entities: CustomEmojiEntity[] } {
+}): { text: string; entities: CustomEmojiEntity[]; widgetSummary?: WidgetSummary } {
   const { serviceName, balance, currency, subscription, tariffDisplayName, menuTexts, menuLineVisibility, menuTextCustomEmojiIds, botEmojis, infoBlock, allSubs } = opts;
   const name = serviceName.trim() || "Кабинет";
   const balanceStr = formatMoney(balance, currency);
   const lines: string[] = [];
+  let widgetTraffic = "0 GB";
+  let widgetDevices: string | undefined;
   const lineStartKeys: (string | null)[] = [];
   const lineEntitiesByIndex: CustomEmojiEntity[][] = [];
   // Учитываем DEFAULT_MENU_LINE_VISIBILITY (см. константу выше).
@@ -1107,6 +1110,7 @@ export function buildMainMenuText(opts: {
       : rawDeviceLimit != null && Number.isFinite(Number(rawDeviceLimit)) ? Number(rawDeviceLimit) : null;
     const devicesUsed = user?.devicesUsed ?? user?.devices_used;
     if (deviceLimit != null && typeof deviceLimit === "number") {
+      widgetDevices = deviceLimit === 0 ? "Без лимита" : devicesUsed != null ? `${devicesUsed} / ${deviceLimit}` : `До ${deviceLimit}`;
       const available = devicesUsed != null ? Math.max(0, deviceLimit - Number(devicesUsed)) : deviceLimit;
       pushLine("devicesLabel", t(menuTexts, "devicesLabel") + available + t(menuTexts, "devicesAvailable"));
     }
@@ -1122,9 +1126,11 @@ export function buildMainMenuText(opts: {
       const pct = usedNum / limitNum;
       const usedGb = bytesToGb(usedNum);
       const limitGb = bytesToGb(limitNum);
+      widgetTraffic = `${usedGb} / ${limitGb} GB`;
       const pctInt = Math.round(Math.min(100, pct * 100));
       pushLine("trafficPrefix", t(menuTexts, "trafficPrefix") + `🟢 ${progressBar(pct, 14)} ${pctInt}% (${usedGb} / ${limitGb} GB)`);
     } else if (Number.isFinite(usedNum)) {
+      widgetTraffic = `${bytesToGb(usedNum)} GB`;
       pushLine("trafficPrefix", t(menuTexts, "trafficPrefix") + ` ${bytesToGb(usedNum)} GB`);
     } else {
       pushLine("trafficPrefix", t(menuTexts, "trafficPrefix") + " 0.00 GB");
@@ -1171,7 +1177,28 @@ export function buildMainMenuText(opts: {
     }
     offset += lines[i]!.length + 1;
   }
-  return { text, entities };
+  const valueFor = (key: string) => {
+    const index = lineStartKeys.indexOf(key);
+    if (index < 0) return undefined;
+    const prefix = applyMarkdownAndEmoji(t(menuTexts, key), botEmojis).text;
+    return cleanWidgetLabel(lines[index]!.startsWith(prefix) ? lines[index]!.slice(prefix.length) : lines[index]!);
+  };
+  const details: WidgetSummary["details"] = [];
+  const expiry = valueFor("expirePrefix");
+  if (expiry) details.push({ label: "Срок подписки", value: expiry });
+  const days = valueFor("daysLeftPrefix");
+  if (days) details.push({ label: "Осталось", value: days });
+  if (widgetDevices && shouldShow("devicesLabel")) details.push({ label: "Устройства", value: widgetDevices });
+  if (shouldShow("trafficPrefix")) details.push({ label: "Трафик", value: widgetTraffic });
+  const widgetSummary: WidgetSummary | undefined = (allSubs?.items.length ?? 0) > 1 || !["tariffPrefix", "subscriptionPrefix", "expirePrefix"].some(shouldShow) ? undefined : {
+    balance: shouldShow("balancePrefix") ? balanceStr : undefined,
+    tariff: shouldShow("tariffPrefix") ? cleanWidgetLabel(tariffName) : undefined,
+    status: valueFor("subscriptionPrefix"),
+    details,
+    account: shouldShow("telegramIdPrefix") ? String(opts.telegramId) : undefined,
+    note: [trimmedInfo, shouldShow("linkLabel") ? url : ""].filter(Boolean).join("\n\n") || undefined,
+  };
+  return { text, entities, widgetSummary };
 }
 
 export const TELEGRAM_CAPTION_MAX = 1024;

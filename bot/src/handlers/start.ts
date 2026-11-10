@@ -1,3 +1,4 @@
+import { setWidgetSummary } from "../widget-presentation.js";
 import { Composer } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
@@ -366,7 +367,7 @@ export async function handleStart(ctx: Context, payload: string) {
     const showSingbox = singboxRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
     const appUrl = config?.publicAppUrl?.replace(/\/$/, "") ?? null;
 
-    const { text, entities } = buildMainMenuText({
+    const { text, entities, widgetSummary } = buildMainMenuText({
       serviceName: name,
       telegramId: from.id,
       balance: client?.balance ?? 0,
@@ -381,6 +382,7 @@ export async function handleStart(ctx: Context, payload: string) {
       multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
       allSubs: allSubsRes,
     });
+    setWidgetSummary(ctx, text, widgetSummary);
     const caption = text.length > TELEGRAM_CAPTION_MAX ? text.slice(0, TELEGRAM_CAPTION_MAX - 3) + "..." : text;
     const captionEntities = text.length > TELEGRAM_CAPTION_MAX && entities.length ? entities.filter((e) => e.offset + e.length <= TELEGRAM_CAPTION_MAX - 3) : entities;
     const hasVideoInstructions = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
@@ -495,7 +497,7 @@ async function showMainMenuScreen(
   const showProxy = proxyRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
   const showSingbox = singboxRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
   const name = config?.serviceName?.trim() || "Кабинет";
-  const { text, entities } = buildMainMenuText({
+  const { text, entities, widgetSummary } = buildMainMenuText({
     serviceName: name,
     telegramId: userId,
     balance: client?.balance ?? 0,
@@ -510,6 +512,7 @@ async function showMainMenuScreen(
     multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
     allSubs: allSubsRes,
   });
+  setWidgetSummary(ctx, text, widgetSummary);
   const hasVideoInstructionsCb = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
   const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructionsCb);
   const backMarkup = mainMenu({
@@ -616,7 +619,7 @@ composer.command("link", async (ctx) => {
       const showProxy = proxyRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
       const showSingbox = singboxRes.items?.some((c: { tariffs: unknown[] }) => c.tariffs?.length > 0) ?? false;
       const appUrl = config?.publicAppUrl?.replace(/\/$/, "") ?? null;
-      const { text, entities } = buildMainMenuText({
+      const { text, entities, widgetSummary } = buildMainMenuText({
         serviceName: config?.serviceName?.trim() || "Кабинет",
         telegramId: userId,
         balance: me.balance ?? 0,
@@ -631,6 +634,7 @@ composer.command("link", async (ctx) => {
         multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
         allSubs: allSubsRes,
       });
+      setWidgetSummary(ctx, text, widgetSummary);
       const hasVideoInstructions = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
       const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructions);
       const markup = mainMenu({
