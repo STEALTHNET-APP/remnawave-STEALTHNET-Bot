@@ -70,7 +70,7 @@ export function AuroraTabs() {
                 <Icon
                   className={cn(
                     "relative z-10 h-[19px] w-[19px] transition-colors",
-                    active ? "text-white" : "text-[color:var(--au-muted)]",
+                    active ? "text-[var(--au-on-accent)]" : "text-[color:var(--au-muted)]",
                   )}
                   strokeWidth={active ? 2.4 : 2}
                 />

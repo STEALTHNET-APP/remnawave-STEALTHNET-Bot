@@ -1196,7 +1196,7 @@ export function buildMainMenuText(opts: {
     status: valueFor("subscriptionPrefix"),
     details,
     account: shouldShow("telegramIdPrefix") ? String(opts.telegramId) : undefined,
-    note: [trimmedInfo, shouldShow("linkLabel") ? url : ""].filter(Boolean).join("\n\n") || undefined,
+    note: [trimmedInfo ? applyCustomEmojiPlaceholders(trimmedInfo, botEmojis).text : "", shouldShow("linkLabel") ? url : ""].filter(Boolean).join("\n\n") || undefined,
   };
   return { text, entities, widgetSummary };
 }

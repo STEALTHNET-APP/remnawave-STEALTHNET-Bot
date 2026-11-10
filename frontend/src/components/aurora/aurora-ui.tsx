@@ -127,7 +127,7 @@ export function AuButton({
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" | "danger" | "surface"; loading?: boolean }) {
   const styles =
     variant === "primary"
-      ? "bg-[var(--au-from)] text-white"
+      ? "bg-[var(--au-from)] text-[var(--au-on-accent)]"
       : variant === "danger"
         ? "border-2 border-red-500/25 bg-red-500/10 text-red-600 dark:text-red-400"
         : variant === "surface"

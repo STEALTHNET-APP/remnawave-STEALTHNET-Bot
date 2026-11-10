@@ -233,7 +233,7 @@ export function AuroraDashboard() {
           <button
             type="button"
             onClick={() => navigate("/cabinet/profile?tab=topup")}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-[14px] bg-[var(--au-from)] px-4 py-2.5 text-[14px] font-bold text-white transition-transform active:scale-[0.98]"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-[14px] bg-[var(--au-from)] px-4 py-2.5 text-[14px] font-bold text-[var(--au-on-accent)] transition-transform active:scale-[0.98]"
           >
             <Plus className="h-4 w-4" />
             {t("aurora.topup")}
@@ -288,10 +288,10 @@ export function AuroraDashboard() {
         const usedPercent = unlimited ? 0 : Math.min(100, Math.round((used / Math.max(1, trafficLimit)) * 100));
         const title = item.customName?.trim() || item.tariffDisplayName?.trim() || info.productName || t("aurora.subscription");
         const trialConvertible = item.trialId ? item.trialConvertEnabled !== false : true;
-        const muted = isMain ? "text-white/75" : "text-[var(--au-muted)]";
-        const strong = isMain ? "text-white" : "text-[var(--au-ink)]";
+        const muted = isMain ? "text-[var(--au-on-accent)]" : "text-[var(--au-muted)]";
+        const strong = isMain ? "text-[var(--au-on-accent)]" : "text-[var(--au-ink)]";
         const utility = isMain
-          ? "border-0 bg-white/18 text-white hover:bg-white/25"
+          ? "border-0 bg-[color-mix(in_srgb,var(--au-on-accent)_18%,transparent)] text-[var(--au-on-accent)] hover:bg-[color-mix(in_srgb,var(--au-on-accent)_25%,transparent)]"
           : "border-0 bg-[var(--au-bg)] text-[var(--au-ink)]";
 
         return (
@@ -300,7 +300,7 @@ export function AuroraDashboard() {
             className={cn(
               "overflow-hidden rounded-[26px] p-5",
               isMain
-                ? "au-hero bg-[linear-gradient(150deg,var(--au-from),var(--au-to))] text-white shadow-[0_18px_40px_-24px_color-mix(in_srgb,var(--au-from)_70%,transparent)]"
+                ? "au-hero bg-[linear-gradient(150deg,var(--au-from),var(--au-to))] text-[var(--au-on-accent)] shadow-[0_18px_40px_-24px_color-mix(in_srgb,var(--au-from)_70%,transparent)]"
                 : "au-card text-[var(--au-ink)]",
             )}
           >
@@ -309,14 +309,14 @@ export function AuroraDashboard() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={cn("truncate text-[17px] font-bold", strong)}>{title}</span>
                   {item.trialId && (
-                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold", isMain ? "bg-white/25" : "bg-[var(--au-bg)] text-[var(--au-from)]")}>
+                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold", isMain ? "bg-[color-mix(in_srgb,var(--au-on-accent)_25%,transparent)]" : "bg-[var(--au-bg)] text-[var(--au-from)]")}>
                       {t("aurora.trial_badge")}
                     </span>
                   )}
                   {item.subscriptionIndex != null && <span className={cn("text-[12px]", muted)}>#{item.subscriptionIndex}</span>}
                 </div>
                 <div className={cn("mt-1.5 flex flex-wrap items-center gap-2 text-[13px]", muted)}>
-                  <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11.5px] font-semibold", active ? (isMain ? "bg-white/20 text-white" : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400") : (isMain ? "bg-white/20 text-white" : "bg-red-500/15 text-red-600 dark:text-red-400"))}>
+                  <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11.5px] font-semibold", active ? (isMain ? "bg-[color-mix(in_srgb,var(--au-on-accent)_20%,transparent)] text-[var(--au-on-accent)]" : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400") : (isMain ? "bg-[color-mix(in_srgb,var(--au-on-accent)_20%,transparent)] text-[var(--au-on-accent)]" : "bg-red-500/15 text-red-600 dark:text-red-400"))}>
                     <span className="h-1.5 w-1.5 rounded-full bg-current" />
                     {active ? t("aurora.active") : t("aurora.inactive")}
                   </span>
@@ -329,7 +329,7 @@ export function AuroraDashboard() {
                 aria-label={t("aurora.manage_subscription")}
                 className={cn(
                   "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95",
-                  isMain ? "bg-white/18 text-white" : "bg-[var(--au-bg)] text-[var(--au-muted)]",
+                  isMain ? "bg-[color-mix(in_srgb,var(--au-on-accent)_18%,transparent)] text-[var(--au-on-accent)]" : "bg-[var(--au-bg)] text-[var(--au-muted)]",
                 )}
               >
                 <MoreHorizontal className="h-[18px] w-[18px]" />
@@ -354,7 +354,7 @@ export function AuroraDashboard() {
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <div className={cn("rounded-[18px] p-3", isMain ? "bg-white/14" : "bg-[var(--au-bg)]")}>
+              <div className={cn("rounded-[18px] p-3", isMain ? "bg-[color-mix(in_srgb,var(--au-on-accent)_14%,transparent)]" : "bg-[var(--au-bg)]")}>
                 <div className={cn("flex items-center gap-1.5 text-[12px]", muted)}>
                   <Smartphone className="h-3.5 w-3.5" />
                   {t("aurora.devices")}
@@ -363,7 +363,7 @@ export function AuroraDashboard() {
                   {limit != null ? `${deviceCount}/${limit}` : deviceCount}
                 </div>
               </div>
-              <div className={cn("rounded-[18px] p-3", isMain ? "bg-white/14" : "bg-[var(--au-bg)]")}>
+              <div className={cn("rounded-[18px] p-3", isMain ? "bg-[color-mix(in_srgb,var(--au-on-accent)_14%,transparent)]" : "bg-[var(--au-bg)]")}>
                 <div className={cn("flex items-center gap-1.5 text-[12px]", muted)}>
                   <Wifi className="h-3.5 w-3.5" />
                   {t("aurora.traffic")}
@@ -372,9 +372,9 @@ export function AuroraDashboard() {
                   {unlimited ? t("aurora.unlimited") : `${formatTraffic(rest)} / ${formatTraffic(trafficLimit)}`}
                 </div>
                 {!unlimited && (
-                  <div className={cn("mt-2 h-1.5 overflow-hidden rounded-full", isMain ? "bg-white/25" : "bg-[var(--au-surface)]")}>
+                  <div className={cn("mt-2 h-1.5 overflow-hidden rounded-full", isMain ? "bg-[color-mix(in_srgb,var(--au-on-accent)_25%,transparent)]" : "bg-[var(--au-surface)]")}>
                     <div
-                      className={cn("h-full rounded-full", isMain ? "bg-white" : "bg-[var(--au-from)]")}
+                      className={cn("h-full rounded-full", isMain ? "bg-[var(--au-on-accent)]" : "bg-[var(--au-from)]")}
                       style={{ width: `${Math.max(4, 100 - usedPercent)}%` }}
                     />
                   </div>
@@ -388,8 +388,8 @@ export function AuroraDashboard() {
               className={cn(
                 "mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-[16px] px-4 text-[15px] font-bold transition-transform active:scale-[0.99]",
                 isMain
-                  ? "bg-white text-[var(--au-from)]"
-                  : "bg-[var(--au-from)] text-white",
+                  ? "bg-[var(--au-on-accent)] text-[var(--au-from)]"
+                  : "bg-[var(--au-from)] text-[var(--au-on-accent)]",
               )}
             >
               <Wifi className="h-4 w-4" />
@@ -431,8 +431,8 @@ export function AuroraDashboard() {
                 className={cn(
                   "mt-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-[16px] px-4 text-[15px] font-bold transition-transform active:scale-[0.98]",
                   isMain
-                    ? "bg-white/20 text-white ring-1 ring-white/40"
-                    : "bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white",
+                    ? "bg-[color-mix(in_srgb,var(--au-on-accent)_20%,transparent)] text-[var(--au-on-accent)] ring-1 ring-[color-mix(in_srgb,var(--au-on-accent)_40%,transparent)]"
+                    : "bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-[var(--au-on-accent)]",
                 )}
               >
                 <Zap className="h-4 w-4" />
@@ -487,8 +487,8 @@ export function AuroraDashboard() {
           className="flex w-full items-center justify-between gap-3 rounded-[20px] border border-white/40 bg-[var(--au-surface)] px-4 py-3.5 text-left transition-transform active:scale-[0.99] dark:border-white/5"
         >
           <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white shadow-md">
-              <Gift size={20} className="text-white" />
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-[var(--au-on-accent)] shadow-md">
+              <Gift size={20} className="text-[var(--au-on-accent)]" />
             </span>
             <div>
               <div className="text-[15px] font-bold text-[var(--au-ink)]">{t("aurora.trials")}</div>

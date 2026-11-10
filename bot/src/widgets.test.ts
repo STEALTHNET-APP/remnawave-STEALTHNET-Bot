@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Api, Context } from "grammy";
 import { deflateSync } from "node:zlib";
+import { runInNewContext } from "node:vm";
 import { buildWidget, createWidgetMiddleware } from "./widgets.js";
 import { splitWidgetText } from "./widget-presentation.js";
 const info = { id: 999, is_bot: true as const, first_name: "Test", username: "test_bot", can_join_groups: false, can_read_all_group_messages: false, supports_inline_queries: false, can_connect_to_business: false, has_main_web_app: false };
@@ -16,6 +17,17 @@ function fixture(update: unknown) {
   return { ctx: new Context(update as any, api, info as any), calls };
 }
 const message = (id = 123, type = "private") => ({ update_id: 1, message: { message_id: 1, date: 1, chat: { id, type }, from: { id: 123, is_bot: false, first_name: "Test" }, text: "/start" } });
+async function widgetQueryFixture(action: string) {
+  const middleware = createWidgetMiddleware(async () => ({ botHtmlBubblesTest: true }));
+  const first = fixture(message());
+  await middleware(first.ctx, async () => {
+    await first.ctx.reply('Menu', { reply_markup: { inline_keyboard: [[{ text: 'Action', callback_data: action }]] } });
+  });
+  const sent = first.calls.find(c => c.method === 'sendWidget')!;
+  const token = JSON.parse(sent.payload.html.match(/,b=(\[.*?\]),p=0/)![1])[0].value;
+  const update = { update_id: 2, widget_query: { id: `query:${messageId}`, from: { id: 123, is_bot: false, first_name: 'User' }, chat: { id: 123, type: 'private' }, message_id: messageId, data: token, chat_instance: 'chat' } };
+  return { middleware, update, request: fixture(update) };
+}
 test("widget escapes untrusted content and uses opaque actions within Telegram limits", () => {
   const widget = buildWidget('<b>Привет</b> </script><script>alert(1)</script>', [[{ text: 'Оплатить', callback_data: 'pay:private-id' }]], 'A <script>');
   assert.ok(widget); assert.ok(Buffer.byteLength(widget.html) <= 32768); assert.ok(deflateSync(widget.html, { level: 9 }).length <= 4096);
@@ -29,6 +41,29 @@ test("text pages preserve words, line breaks and emoji", () => {
   assert.equal(pages.join(''), text);
   assert.ok(pages.length > 1);
   assert.ok(pages.slice(0, -1).every(page => /\s$/.test(page)));
+});
+test("long text retains its final action group on every remaining page", () => {
+  for (const count of [3, 7]) {
+    const labels = Array.from({ length: count }, (_, i) => `Действие ${i + 1}`);
+    const text = Array.from({ length: 24 }, (_, i) => `Строка ${i + 1}: ${'описание подписки '.repeat(4)}`).join('\n');
+    const widget = buildWidget(text, [labels.map(label => ({ text: label, callback_data: label }))], 'Test')!;
+    const element = () => ({
+      children: [] as any[], textContent: '', style: {} as Record<string, string>, disabled: false, onclick: () => {},
+      appendChild(child: unknown) { this.children.push(child); },
+      set innerHTML(_value: string) { this.children = []; },
+    });
+    const nodes = Object.fromEntries(['text', 'buttons', 'nav', 'prev', 'next', 'page', 'status'].map(id => [id, element()]));
+    runInNewContext(widget.html.match(/<script>([\s\S]*)<\/script>/)![1], { TelegramWidget: {}, document: { getElementById: (id: string) => nodes[id], createElement: element } });
+    assert.deepEqual(nodes.buttons!.children.map(button => button.textContent), labels.slice(0, 6));
+    let pages = 1;
+    while (!nodes.next!.disabled) {
+      nodes.next!.onclick();
+      pages++;
+      assert.deepEqual(nodes.buttons!.children.map(button => button.textContent), labels.slice(count > 6 ? 6 : 0));
+      assert.ok(pages < 30);
+    }
+    assert.ok(pages > 2);
+  }
 });
 test("account widget uses structured data without repeating legacy menu text", async () => {
   const { buildMainMenuText } = await import('./handlers/shared.js');
@@ -50,6 +85,100 @@ test("account widget uses structured data without repeating legacy menu text", a
 test("unsupported inline controls stay in ordinary messages", () => {
   assert.equal(buildWidget('Invoice', [[{ text: 'Pay', pay: true } as any]], 'Test'), null);
 });
+test("Mini App controls retain native launch semantics and button attributes", async () => {
+  const app = { text: 'Рулетка', web_app: { url: 'https://example.com/cabinet/roulette' }, style: 'primary', icon_custom_emoji_id: '12345' };
+  const f = fixture(message());
+  await createWidgetMiddleware(async () => ({ botHtmlBubblesTest: true }))(f.ctx, async () => {
+    await f.ctx.reply('Menu', { reply_markup: { inline_keyboard: [[{ text: 'Тарифы', callback_data: 'tariffs' }, app], [{ text: 'Помощь', url: 'https://example.com/help' }]] } as any });
+  });
+  const sent = f.calls.find(c => c.method === 'sendWidget')!;
+  assert.deepEqual(sent.payload.reply_markup.inline_keyboard, [[app], [{ text: 'Обычное меню', callback_data: 'widgets:classic' }]]);
+  assert.equal(sent.payload.html.includes(app.web_app.url), false);
+  assert.ok(sent.payload.html.includes('https://example.com/help'));
+});
+test("account notes resolve configured emoji placeholders", async () => {
+  const { buildMainMenuText } = await import('./handlers/shared.js');
+  const menu = buildMainMenuText({ serviceName: 'Test', telegramId: 123, balance: 0, currency: 'RUB', subscription: { user: { status: 'EXPIRED' } }, infoBlock: '{{INFO}} Важное сообщение', botEmojis: { INFO: { unicode: 'ℹ️' } }, menuLineVisibility: { subscriptionPrefix: true } });
+  assert.equal(menu.widgetSummary?.note, 'ℹ️ Важное сообщение');
+});
+test("empty acknowledgments do not swallow alerts and safe subscription checks can retry", async () => {
+  const { middleware, update, request } = await widgetQueryFixture('check_subscribe');
+  const respond = async (ctx: Context) => {
+    await ctx.answerCallbackQuery();
+    await ctx.answerCallbackQuery({ text: 'Сначала подпишитесь на канал', show_alert: true });
+  };
+  await middleware(request.ctx, () => respond(request.ctx));
+  assert.deepEqual(request.calls.filter(c => c.method === 'answerWidgetQuery').map(c => c.payload.data), ['Сначала подпишитесь на канал']);
+  assert.equal(request.calls.some(c => c.method === 'answerCallbackQuery'), false);
+  const retry = fixture(update);
+  let handled = false;
+  await middleware(retry.ctx, async () => { handled = true; await respond(retry.ctx); });
+  assert.equal(handled, true);
+});
+test("confirmation text reaches the widget before its replacement", async () => {
+  const { middleware, request } = await widgetQueryFixture('check_subscribe');
+  await middleware(request.ctx, async () => {
+    await request.ctx.answerCallbackQuery();
+    await request.ctx.answerCallbackQuery({ text: 'Подписка подтверждена' });
+    await request.ctx.editMessageText('Личный кабинет');
+  });
+  assert.equal(request.calls[0]!.method, 'answerWidgetQuery');
+  assert.equal(request.calls[0]!.payload.data, 'Подписка подтверждена');
+  assert.equal(request.calls.filter(c => c.method === 'answerWidgetQuery').length, 1);
+  assert.ok(request.calls.some(c => c.method === 'sendWidget'));
+});
+test("business callbacks stay consumed after an alert or an uncertain failure", async () => {
+  for (const throws of [false, true]) {
+    const { middleware, update, request } = await widgetQueryFixture('payment:confirm');
+    let attempts = 0;
+    const run = async () => middleware(request.ctx, async () => {
+      attempts++;
+      await request.ctx.answerCallbackQuery();
+      if (throws) throw Error('Connection lost after payment');
+      await request.ctx.answerCallbackQuery({ text: 'Проверьте результат операции', show_alert: true });
+    });
+    if (throws) await assert.rejects(run, /Connection lost/); else await run();
+    assert.equal(request.calls.filter(c => c.method === 'answerWidgetQuery').length, 1);
+    if (throws) assert.match(request.calls[0]!.payload.data, /Не удалось подтвердить результат/);
+    const retry = fixture(update);
+    await middleware(retry.ctx, async () => { attempts++; });
+    assert.equal(attempts, 1);
+    assert.match(retry.calls[0]!.payload.data, /устарело/);
+  }
+});
+test("slow callbacks answer before Telegram's deadline and deliver late notices", async (t) => {
+  const { middleware, update, request } = await widgetQueryFixture('payment:confirm');
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  let started!: () => void;
+  const entered = new Promise<void>(resolve => { started = resolve; });
+  const run = middleware(request.ctx, async () => {
+    started();
+    await pending;
+    await request.ctx.answerCallbackQuery({ text: 'Оплата получена' });
+  });
+  await entered;
+  t.mock.timers.tick(10_000);
+  await Promise.resolve();
+  assert.equal(request.calls.filter(c => c.method === 'answerWidgetQuery').length, 1);
+  assert.match(request.calls[0]!.payload.data, /ещё выполняется/);
+  release();
+  await run;
+  assert.equal(request.calls.filter(c => c.method === 'answerWidgetQuery').length, 1);
+  assert.ok(request.calls.some(c => c.method === 'sendWidget' && c.payload.html.includes('Оплата получена')));
+  let retried = false;
+  await middleware(fixture(update).ctx, async () => { retried = true; });
+  assert.equal(retried, false);
+});
+test("widget answers preserve UTF-8 within the 1024-byte response limit", async () => {
+  const { middleware, request } = await widgetQueryFixture('gift:noop:one');
+  await middleware(request.ctx, async () => { await request.ctx.answerCallbackQuery({ text: '✅'.repeat(400) }); });
+  const data = request.calls.find(c => c.method === 'answerWidgetQuery')!.payload.data;
+  assert.ok(Buffer.byteLength(data) <= 1024);
+  assert.equal(data.includes('\uFFFD'), false);
+  assert.ok(data.length > 0);
+});
 test("widget requests bind actions to sender and message, reject replay, and reuse existing callbacks", async () => {
   const middleware = createWidgetMiddleware(async () => ({ botHtmlBubblesTest: true, serviceName: 'Test' }));
   const first = fixture(message());
@@ -68,6 +197,7 @@ test("widget requests bind actions to sender and message, reject replay, and reu
   const good = fixture(query()); let handled = 0;
   await middleware(good.ctx, async () => { handled++; assert.equal(good.ctx.callbackQuery?.data, 'tariff:one'); await good.ctx.editMessageText('Тариф выбран', { reply_markup: { inline_keyboard: [[{ text: 'Назад', callback_data: 'back' }]] } }); });
   assert.equal(handled, 1); assert.ok(good.calls.some(c => c.method === 'sendWidget')); assert.ok(good.calls.some(c => c.method === 'deleteMessage'));
+  assert.equal(good.calls[0]!.method, 'answerWidgetQuery');
   await middleware(fixture(query()).ctx, async () => { handled++; }); assert.equal(handled, 1);
 });
 test("disabled mode and group chats retain ordinary Telegram API", async () => {
