@@ -5,7 +5,7 @@
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useScrollReveal } from "../scroll-reveal";
+import { Reveal } from "../reveal";
 import { useUtmCaptureAndBuildLink, txt, p, useLandingTheme } from "../utils";
 import type { LandingApiBlock } from "../types";
 
@@ -20,12 +20,12 @@ export function CtaBanner({ block }: { block: LandingApiBlock }) {
   const ctaUrl = p(block.props, "ctaUrl", "/cabinet/register");
 
   const accentBg = accentTheme.ctaBg;
-  const bannerRef = useScrollReveal<HTMLDivElement>([], { y: 20, dur: 0.45, stagger: 0 });
 
   return (
     <section className="max-w-7xl mx-auto px-4 pb-20 pt-4 md:pb-28">
-      <div
-        ref={bannerRef}
+      <Reveal
+        y={20}
+        duration={0.45}
         className="relative overflow-hidden rounded-[36px] p-10 text-center md:p-16"
         style={{ background: accentBg }}
       >
@@ -42,7 +42,7 @@ export function CtaBanner({ block }: { block: LandingApiBlock }) {
             </Link>
           </Button>
         </div>
-      </div>
+      </Reveal>
     </section>
   );
 }

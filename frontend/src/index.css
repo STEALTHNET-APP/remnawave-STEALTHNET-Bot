@@ -418,7 +418,7 @@ html[data-tg-miniapp] {
   min-height: var(--stable-h, 0px);
 }
 
-/* Shimmer-полоса скелетона (stealth-tariffs) — CSS вместо gsap/framer:
+/* Shimmer-полоса скелетона (stealth-tariffs) — CSS вместо JS-анимации:
    бесконечный проезд x с задержками по индексу. */
 .shimmer-bar {
   animation: shimmer-x 1.4s linear infinite;

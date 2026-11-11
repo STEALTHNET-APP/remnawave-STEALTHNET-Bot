@@ -13,10 +13,9 @@ import { CopyLinkButton, SubscriptionQrButton } from "@/components/subscription-
  * `Telegram.WebApp.openLink` (иначе кастомные схемы заблокированы).
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import gsap from "gsap";
-import { EASE_OUT, reducedMotion } from "@/lib/gsap-utils";
+import { AnimatePresence, motion, useReducedMotion, type Variants } from "framer-motion";
 import { Laptop, Download, Key, Check, ArrowRight, Smartphone, MonitorSmartphone, Apple, Tv, ExternalLink, Plus } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type SubscriptionPageConfig } from "@/lib/api";
@@ -130,9 +129,12 @@ export function StealthSubscribe() {
   const [platform, setPlatform] = useState<Platform>(() => detectPlatform());
   const [showOtherDevices, setShowOtherDevices] = useState(false);
   const [selectedAppIdx, setSelectedAppIdx] = useState(0);
-  // Смена шага wizard'а: gsap slide-in на контейнер шага (бывший
-  // AnimatePresence mode="wait": slide-out → unmount → slide-in).
-  const stepRef = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
+  const appListVariants: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
+  const appCardVariants: Variants = {
+    hidden: { opacity: 0, y: 12 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
+  };
 
   // мультиподписки. Грузим ВСЕ подписки клиента (единый код
   // для любой — без спецслучаев на «нулевую») и даём выбрать, какую настраивать.
@@ -215,40 +217,6 @@ export function StealthSubscribe() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apps.length]);
 
-  // Смена шага: gsap slide-in контейнера шага (x 24→0) — один твин на шаг,
-  // вместо AnimatePresence mode="wait" (slide-out 0.3s + slide-in 0.3s).
-  useEffect(() => {
-    const el = stepRef.current;
-    if (!el) return;
-    if (reducedMotion()) return;
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        el,
-        { opacity: 0, x: 24 },
-        { opacity: 1, x: 0, duration: 0.3, ease: EASE_OUT, clearProps: "transform" },
-      );
-    }, el);
-    return () => ctx.revert();
-  }, [step]);
-
-  // Карточки выбора клиента — stagger-появление (бывший framer-motion
-  // initial/animate с delay idx * 0.05). Выбор карточки — CSS transition
-  // (scale-2 уже был в hover/tap классах).
-  useEffect(() => {
-    const el = stepRef.current;
-    if (!el) return;
-    const cards = el.querySelectorAll<HTMLElement>("[data-app-card]");
-    if (!cards.length || reducedMotion()) return;
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        cards,
-        { opacity: 0, y: 12 },
-        { opacity: 1, y: 0, duration: 0.3, stagger: 0.05, ease: EASE_OUT, overwrite: "auto", clearProps: "transform" },
-      );
-    }, el);
-    return () => ctx.revert();
-  }, [platform, apps.length, loading]);
-
 
   function openDeeplink(href: string) {
     if (typeof window === "undefined") return;
@@ -283,7 +251,15 @@ export function StealthSubscribe() {
         onClose={() => navigate("/cabinet/dashboard")}
       />
 
-      <div ref={stepRef} className="space-y-5">
+      <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={step}
+        initial={reduceMotion ? false : { opacity: 0, x: 24 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -24 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className="space-y-5"
+      >
       {/* Step 1: choose client */}
       {step === 1 && (
         <div className="space-y-5">
@@ -332,16 +308,16 @@ export function StealthSubscribe() {
                 Выберите другую платформу ниже.
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2.5">
+              <motion.div initial="hidden" animate="show" variants={appListVariants} className="grid grid-cols-2 gap-2.5">
                 {apps.map((app, idx) => {
                   const active = idx === selectedAppIdx;
                   const isFeatured = idx === featuredIdx || app.isFeatured;
                   return (
-                    <button
+                    <motion.button
                       key={`${app.name}-${idx}`}
                       type="button"
+                      variants={appCardVariants}
                       onClick={() => setSelectedAppIdx(idx)}
-                      data-app-card
                       className={cn(
                         "relative rounded-2xl border-2 bg-white/[0.03] backdrop-blur-xl p-3.5 text-left transition-colors duration-300",
                         // Активный (не featured) → ярко-розовый акцент
@@ -397,10 +373,10 @@ export function StealthSubscribe() {
                           </div>
                         </div>
                       </div>
-                    </button>
+                    </motion.button>
                   );
                 })}
-              </div>
+              </motion.div>
             )}
           </div>
 
@@ -550,7 +526,8 @@ export function StealthSubscribe() {
           </div>
         </div>
       )}
-      </div>
+      </motion.div>
+      </AnimatePresence>
     </div>
   );
 }

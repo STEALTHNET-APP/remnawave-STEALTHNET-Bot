@@ -3,7 +3,7 @@
  * Картинки в greyscale + hover full-color для tasteful look.
  */
 
-import { useScrollReveal } from "../scroll-reveal";
+import { Reveal } from "../reveal";
 import { txt, arr, SECTION_SCROLL_OFFSET } from "../utils";
 
 interface LogoItem {
@@ -16,7 +16,6 @@ export function LogosStrip({ block }: { block: import("../types").LandingApiBloc
   const items = arr<LogoItem>(block.props, "items", []);
   const title = txt(block.text, "title");
   const subtitle = txt(block.text, "subtitle");
-  const rowRef = useScrollReveal<HTMLDivElement>([items.length], { y: 12, dur: 0.4, stagger: 0 });
 
   if (items.length === 0) {
     return (
@@ -37,10 +36,7 @@ export function LogosStrip({ block }: { block: import("../types").LandingApiBloc
         </div>
       ) : null}
 
-      <div
-        ref={rowRef}
-        className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6"
-      >
+      <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
         {items.map((logo, idx) => {
           const img = (
             <img
@@ -50,12 +46,16 @@ export function LogosStrip({ block }: { block: import("../types").LandingApiBloc
               loading="lazy"
             />
           );
-          return logo.href ? (
-            <a key={idx} href={logo.href} target="_blank" rel="noreferrer noopener" className="block">
-              {img}
-            </a>
-          ) : (
-            <div key={idx}>{img}</div>
+          return (
+            <Reveal key={idx} y={12}>
+              {logo.href ? (
+                <a href={logo.href} target="_blank" rel="noreferrer noopener" className="block">
+                  {img}
+                </a>
+              ) : (
+                img
+              )}
+            </Reveal>
           );
         })}
       </div>

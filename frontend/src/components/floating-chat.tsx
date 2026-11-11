@@ -1,9 +1,8 @@
 import { SupportMessage } from "@/components/support-message";
 import "@/pages/cabinet/cabinet-support.css";
 import { useTranslation } from "react-i18next";
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
-import gsap from "gsap";
-import { EASE_OUT, EASE_SPRING, reducedMotion } from "@/lib/gsap-utils";
+import { useState, useRef, useEffect } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { MessageCircle, X, Send, User, Sparkles, Headset, ArrowLeft, MessageSquarePlus, CircleDot, CircleCheck, CheckCircle2, Inbox, Loader2, Maximize2, Minimize2, Paperclip, X as XIcon, RotateCcw } from "lucide-react";
 import { askConfirm } from "@/lib/confirm";
 import { Button } from "@/components/ui/button";
@@ -397,9 +396,18 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
             ) : detail?.messages?.length === 0 ? (
               <div className="flex h-full items-center justify-center text-muted-foreground text-sm font-medium">Нет сообщений</div>
             ) : (
-              <div data-msg-list>
-                {detail?.messages?.map((m: any) => <SupportMessage key={m.id} support={m.authorType === "support"} content={m.content} date={m.createdAt}><TicketAttachments items={m.attachments ?? []} /></SupportMessage>)}
-              </div>
+              <motion.div
+                data-msg-list
+                initial="hidden"
+                animate="show"
+                variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
+              >
+                {detail?.messages?.map((m: any) => (
+                  <motion.div key={m.id} variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }}>
+                    <SupportMessage support={m.authorType === "support"} content={m.content} date={m.createdAt}><TicketAttachments items={m.attachments ?? []} /></SupportMessage>
+                  </motion.div>
+                ))}
+              </motion.div>
             )}
             <div ref={messagesEndRef} className="h-1" />
           </div>
@@ -671,12 +679,7 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeChat, setActiveChat] = useState<ChatType>("support");
   const [hasOpenDialog, setHasOpenDialog] = useState(false);
-  // Panel visibility is driven manually: `isOpen` управляет анимацией,
-  // `panelVisible` монтирует/размонтирует DOM (замена AnimatePresence).
-  const [panelVisible, setPanelVisible] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const fabRef = useRef<HTMLButtonElement>(null);
-  const closeTimerRef = useRef<number | null>(null);
+  const reduceMotion = useReducedMotion();
   const [aiChats, setAiChats] = useState<Message[]>(() => getInitialAiMessage("Сервис"));
   useEffect(() => {
     setAiChats((prev) => {
@@ -689,160 +692,6 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
   const [supportUnread, setSupportUnread] = useState(0);
   const [isScrolled, setIsScrolled] = useState(false);
 
-
-  // Панель: открытие/закрытие через gsap (opacity+scale+y), exit перед unmount.
-  // МOUNT-TWICE-паттерн: при open→true сначала монтируем панель (panelVisible),
-  // вход проигрывает второй эффект; при open→false — быстрый выход 0.18s,
-  // затем unmount по таймеру (замена AnimatePresence).
-  useEffect(() => {
-    if (closeTimerRef.current !== null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-    if (isOpen) {
-      setPanelVisible(true);
-    } else if (panelVisible) {
-      if (reducedMotion()) {
-        setPanelVisible(false);
-        return;
-      }
-      const panel = panelRef.current;
-      if (!panel) {
-        setPanelVisible(false);
-        return;
-      }
-      const ctx = gsap.context(() => {
-        gsap.to(panel, {
-          opacity: 0,
-          scale: 0.95,
-          y: 20,
-          filter: "blur(4px)",
-          duration: 0.18,
-          ease: "power2.in",
-          overwrite: "auto",
-        });
-      }, panel);
-      closeTimerRef.current = window.setTimeout(() => {
-        closeTimerRef.current = null;
-        ctx.revert();
-        gsap.set(panel, { clearProps: "all" });
-        setPanelVisible(false);
-      }, 180);
-      return () => {
-        window.clearTimeout(closeTimerRef.current ?? 0);
-        ctx.revert();
-      };
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
-
-  // Вход панели после монтирования (когда panelRef уже указывает на DOM).
-  useLayoutEffect(() => {
-    const panel = panelRef.current;
-    if (!panel || !panelVisible || !isOpen) return;
-    if (reducedMotion()) {
-      gsap.set(panel, { clearProps: "all" });
-      return;
-    }
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        panel,
-        { opacity: 0, scale: 0.95, y: 20, filter: "blur(4px)" },
-        { opacity: 1, scale: 1, y: 0, filter: "blur(0px)", duration: 0.3, ease: EASE_OUT, overwrite: "auto", clearProps: "filter" },
-      );
-    }, panel);
-    return () => ctx.revert();
-  }, [panelVisible, isOpen]);
-
-  // Иконка FAB: вращение+fade при переключении open/close.
-  useEffect(() => {
-    const icon = fabRef.current?.querySelector("[data-fab-icon]");
-    if (!icon || reducedMotion()) return;
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        icon,
-        { rotate: isOpen ? -90 : 90, opacity: 0 },
-        { rotate: 0, opacity: 1, duration: 0.15, ease: EASE_OUT, overwrite: "auto" },
-      );
-    }, fabRef.current ?? undefined);
-    return () => ctx.revert();
-  }, [isOpen]);
-
-  // Бейдж непрочитанных: pop-in с пружиной (замена motion spring).
-  useEffect(() => {
-    const badge = fabRef.current?.querySelector("[data-fab-badge]");
-    if (!badge) return;
-    if (reducedMotion()) return;
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        badge,
-        { scale: 0, y: 10 },
-        { scale: 1, y: 0, duration: 0.25, ease: EASE_SPRING, overwrite: "auto" },
-      );
-    }, fabRef.current ?? undefined);
-    return () => ctx.revert();
-  }, [aiUnread, supportUnread, isOpen]);
-
-  // Плавающий переключатель при скролле: gsap slide-down вместо AnimatePresence.
-  const floatSwitcherRef = useRef<HTMLDivElement>(null);
-  const switcherShownRef = useRef(false);
-  useEffect(() => {
-    const el = floatSwitcherRef.current;
-    if (!el) return;
-    if (isScrolled) {
-      el.classList.remove("hidden");
-      if (switcherShownRef.current || reducedMotion()) return;
-      switcherShownRef.current = true;
-      const ctx = gsap.context(() => {
-        gsap.fromTo(
-          el,
-          { opacity: 0, y: -20 },
-          { opacity: 1, y: 0, duration: 0.2, ease: EASE_OUT, overwrite: "auto" },
-        );
-      }, el);
-      return () => ctx.revert();
-    }
-    el.classList.add("hidden");
-    gsap.set(el, { clearProps: "all" });
-  }, [isScrolled]);
-
-  // Сообщения: reveal последнего сообщения (AI-чат).
-  const aiMsgCount = aiChats.length;
-  useEffect(() => {
-    const list = panelRef.current?.querySelector("[data-ai-msg-list]");
-    const last = list?.lastElementChild;
-    if (!last || reducedMotion()) return;
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        last,
-        { opacity: 0, y: 10, scale: 0.95 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.2, ease: EASE_OUT, overwrite: "auto", clearProps: "transform" },
-      );
-    }, list);
-    return () => ctx.revert();
-  }, [aiMsgCount]);
-
-  // Сообщения поддержки: reveal последнего сообщения тикета.
-  const [detailMsgCount, setDetailMsgCount] = useState(0);
-  useEffect(() => {
-    const list = panelRef.current?.querySelector("[data-msg-list]");
-    const count = list ? list.childElementCount : 0;
-    if (count !== detailMsgCount) setDetailMsgCount(count);
-  });
-
-  useEffect(() => {
-    const list = panelRef.current?.querySelector("[data-msg-list]");
-    const last = list?.lastElementChild;
-    if (!last || reducedMotion()) return;
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        last,
-        { opacity: 0, y: 10, scale: 0.95 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.2, ease: EASE_OUT, overwrite: "auto", clearProps: "transform" },
-      );
-    }, list);
-    return () => ctx.revert();
-  }, [detailMsgCount]);
 
   useEffect(() => {
     if (!aiChatEnabled && activeChat === "ai") setActiveChat("support");
@@ -984,10 +833,14 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
   return (
     <>
       <div className={cn(placement === "toolbar" ? "cabinet-chat-toolbar relative z-[100]" : "fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-[100]", hasOpenDialog && !isOpen && "pointer-events-none opacity-0")}>
-        {panelVisible && (
-        <div
-          ref={panelRef}
+        <AnimatePresence>
+        {isOpen && (
+        <motion.div
           data-tour="floating-chat"
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: 20 }}
+          transition={reduceMotion ? { duration: 0.15 } : { duration: 0.3, ease: "easeOut" }}
           className={cn(
             "cabinet-floating-chat fixed z-50",
             placement === "toolbar" ? "inset-0 sm:inset-auto sm:top-20 sm:right-6" : "sm:absolute inset-0 sm:inset-auto sm:bottom-20 sm:right-0",
@@ -1011,22 +864,27 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
                     
                     {/* Floating Switcher */}
                     <div className="sticky top-4 z-30 flex justify-center pointer-events-none px-4 w-full h-0 overflow-visible">
-                      <div
-                        ref={floatSwitcherRef}
+                      <motion.div
                         data-float-switcher
-                        className={cn("pointer-events-auto w-full sm:w-auto", !isScrolled && "hidden")}
+                        animate={isScrolled ? { opacity: 1, y: 0 } : { opacity: 0, y: -20 }}
+                        initial={false}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className={cn("w-full sm:w-auto", isScrolled ? "pointer-events-auto" : "pointer-events-none")}
                       >
                         <ChatSwitcher {...headerProps} isFloating={true} />
-                      </div>
+                      </motion.div>
                     </div>
 
                     <div className="p-4 space-y-4 flex-1">
-                      <div data-ai-msg-list>
+                      <div>
                         {aiChats.map((msg) => {
                           const isUser = msg.from === "user";
                           return (
-                            <div
+                            <motion.div
                               key={msg.id}
+                              initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.95 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              transition={{ duration: 0.2, ease: "easeOut" }}
                               className={cn("flex gap-3 max-w-[85%]", isUser ? "ml-auto flex-row-reverse" : "mr-auto")}
                             >
                               <div
@@ -1055,7 +913,7 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
                                   {msg.time}
                                 </p>
                               </div>
-                            </div>
+                            </motion.div>
                           );
                         })}
                       </div>
@@ -1098,13 +956,13 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
               ) : (
                 <SupportTab headerProps={headerProps} onRefreshUnread={refreshUnread} />
               )}
-        </div>
+        </motion.div>
         )}
+        </AnimatePresence>
 
         {/* Toggle button */}
         <div data-tour="floating-chat-button" className={cn("relative group", isOpen && "hidden sm:block")}>
           <button
-            ref={fabRef}
             aria-label={isOpen ? t("cabinet.workspace.close_chat") : t("cabinet.workspace.open_chat")}
             aria-expanded={isOpen}
             onClick={() => setIsOpen((v) => !v)}
@@ -1114,18 +972,26 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
               !isOpen ? "shadow-[0_8px_32px_rgba(0,0,0,0.12)]" : "shadow-lg"
             )}
           >
-            <span data-fab-icon className="flex items-center justify-center">
+            <motion.span
+              key={isOpen ? "close" : "open"}
+              initial={reduceMotion ? false : { rotate: isOpen ? -90 : 90, opacity: 0 }}
+              animate={{ rotate: 0, opacity: 1 }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
+              className="flex items-center justify-center"
+            >
               {isOpen ? <X className="h-7 w-7" /> : <MessageCircle className="h-7 w-7" />}
-            </span>
+            </motion.span>
 
             {/* Unread badge */}
             {(aiUnread + supportUnread) > 0 && !isOpen && (
-              <span
-                data-fab-badge
+              <motion.span
+                initial={reduceMotion ? false : { scale: 0, y: 10 }}
+                animate={{ scale: 1, y: 0 }}
+                transition={{ duration: 0.25, ease: [0.34, 1.56, 0.64, 1] }}
                 className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-destructive text-[11px] font-bold text-white"
               >
                 {aiUnread + supportUnread}
-              </span>
+              </motion.span>
             )}
           </button>
         </div>

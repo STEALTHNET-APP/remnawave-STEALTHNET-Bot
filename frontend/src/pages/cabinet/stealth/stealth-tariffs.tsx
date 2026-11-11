@@ -24,10 +24,9 @@ import { useLocation } from "react-router-dom";
  *     heleketCreatePayment / lavaCreatePayment / yoomoneyCreateFormPayment / clientPayByBalance
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import gsap from "gsap";
-import { EASE_OUT, reducedMotion } from "@/lib/gsap-utils";
+import { motion } from "framer-motion";
 import { Wallet, Bitcoin, Check, AlertCircle, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type TariffConversionPreview } from "@/lib/api";
@@ -165,25 +164,6 @@ export function StealthTariffs() {
     return () => { alive = false; };
   }, [extendParam, state.token]);
 
-  // ── GSAP-анимации (вместо framer-motion) ──
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  // Появление секций (бейдж продления, карточка периода, конвертация).
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    const targets = root.querySelectorAll<HTMLElement>("[data-reveal]");
-    if (!targets.length || reducedMotion()) return;
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        targets,
-        { opacity: 0, y: 10 },
-        { opacity: 1, y: 0, duration: 0.35, ease: EASE_OUT, stagger: 0.05, overwrite: "auto", clearProps: "transform" },
-      );
-    }, root);
-    return () => ctx.revert();
-  }, [loading, extendTarget?.id, selectedCatId, selectedTariffId]);
-
   // В режиме продления каталог сужается до тарифа подписки (как в основном
   // кабинете). Для триальной подписки добавляются тарифы из настройки триала
   // convertTariffIds — переход с пробного сквада на боевой; convertAllTariffs —
@@ -239,19 +219,6 @@ export function StealthTariffs() {
   const totalPrice = basePrice + extendExtrasCost + convExtendExtrasCost;
   const pricePerDay = days > 0 ? totalPrice / days : 0;
   const currency = currentTariff?.currency ?? "rub";
-  // Цена «Итого» — micro-pop при смене периода (бывший framer-motion key-remount).
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root || reducedMotion()) return;
-    const el = root.querySelector<HTMLElement>("[data-price-pop]");
-    if (!el) return;
-    const ctx = gsap.context(() => {
-      gsap.fromTo(el, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.3, ease: EASE_OUT, clearProps: "transform" });
-    }, el);
-    return () => ctx.revert();
-  }, [totalPrice]);
-
-
   // Payment methods доступные сейчас
   const availableMethods: PayMethod[] = useMemo(() => {
     if (!config) return [];
@@ -518,11 +485,13 @@ export function StealthTariffs() {
   }
 
   return (
-    <div ref={rootRef} className="px-4 pt-2 space-y-4 pb-2">
+    <div className="px-4 pt-2 space-y-4 pb-2">
       {/* Режим продления: бейдж с подпиской, каталог сужен до её тарифа */}
       {extendTarget && (
-        <div
-          data-reveal
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
           className="relative overflow-hidden rounded-2xl border border-saccent-500/25 bg-saccent-500/[0.07] backdrop-blur-xl p-3.5 shadow-[0_0_36px_-14px_rgb(var(--stealth-accent)_/_0.4)]"
         >
           <div className="absolute inset-0 bg-gradient-to-r from-saccent-500/10 to-transparent pointer-events-none" />
@@ -562,7 +531,7 @@ export function StealthTariffs() {
               </button>
             </div>
           )}
-        </div>
+        </motion.div>
       )}
 
       {/* Category tabs (только если >1) */}
@@ -624,8 +593,10 @@ export function StealthTariffs() {
       )}
 
       {/* Period selector card */}
-      <div
-        data-reveal
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: "easeOut", delay: 0.05 }}
         className="relative rounded-3xl border border-white/[0.08] bg-white/[0.04] backdrop-blur-2xl p-5 space-y-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_24px_48px_-24px_rgba(0,0,0,0.8)] before:absolute before:inset-0 before:rounded-3xl before:bg-gradient-to-b before:from-white/[0.04] before:to-transparent before:pointer-events-none"
       >
         {priceOptions.length > 0 && (
@@ -663,15 +634,17 @@ export function StealthTariffs() {
 
         <div className="border-t border-white/[0.06] pt-3 flex items-center justify-between">
           <span className="text-sm text-zinc-400">Итого:</span>
-          <span
-            data-price-pop
+          <motion.span
             key={totalPrice}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
             className="text-2xl font-bold tabular-nums bg-gradient-to-r from-saccent-400 via-saccent-300 to-fuchsia-400 bg-clip-text text-transparent drop-shadow-[0_0_18px_rgb(var(--stealth-accent)_/_0.35)]"
           >
             {fmtPrice(totalPrice, currency)}
-          </span>
+          </motion.span>
         </div>
-      </div>
+      </motion.div>
 
       {/* покупка заменяет активный триал (выбор при нескольких). */}
       {!extendTarget && !convPreview?.willConvert && (() => {
@@ -744,8 +717,10 @@ export function StealthTariffs() {
 
       {/* Конвертация: покупка из single-категории обновляет существующую подписку */}
       {convPreview?.willConvert && convPreview.subscription && (
-        <div
-          data-reveal
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: "easeOut", delay: 0.1 }}
           className="relative overflow-hidden rounded-2xl border border-saccent-500/20 bg-saccent-500/[0.06] backdrop-blur-xl p-4 shadow-[0_0_36px_-14px_rgb(var(--stealth-accent)_/_0.35)]"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-saccent-500/10 via-transparent to-transparent pointer-events-none" />
@@ -860,7 +835,7 @@ export function StealthTariffs() {
               )}
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Promo */}

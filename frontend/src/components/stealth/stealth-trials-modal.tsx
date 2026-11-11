@@ -6,9 +6,8 @@
  * на карточку триала (название, длительность, трафик, устройства, описание).
  */
 
-import { useEffect, useRef, useState } from "react";
-import gsap from "gsap";
-import { reducedMotion } from "@/lib/gsap-utils";
+import { useEffect, useState } from "react";
+import { motion, type Variants } from "framer-motion";
 import { Gift, Sparkles, Clock, Wifi, Smartphone, Loader2, AlertCircle, Infinity as InfinityIcon } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type ClientTrialOption } from "@/lib/api";
@@ -55,21 +54,11 @@ export function StealthTrialsModal({ open, onClose, onActivated }: Props) {
     return () => { alive = false; };
   }, [open, state.token]);
 
-  // Появление карточек триалов — gsap stagger вместо framer-motion
-  // AnimatePresence (re-run при каждом открытии модалки → без застревания).
-  const listRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = listRef.current;
-    if (!el || items.length === 0 || reducedMotion()) return;
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        el.children,
-        { y: 8, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.25, stagger: 0.04, ease: "power2.out", clearProps: "transform" },
-      );
-    }, el);
-    return () => ctx.revert();
-  }, [items]);
+  const listVariants: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.04 } } };
+  const cardVariants: Variants = {
+    hidden: { opacity: 0, y: 8 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } },
+  };
 
   async function activate(trial: ClientTrialOption) {
     if (!state.token || activatingId) return;
@@ -118,16 +107,17 @@ export function StealthTrialsModal({ open, onClose, onActivated }: Props) {
         )}
 
         {!loading && items.length > 0 && (
-          <div ref={listRef} className="space-y-2.5">
+          <motion.div initial="hidden" animate="show" variants={listVariants} className="space-y-2.5">
               {items.map((trial) => {
                 const isActivating = activatingId === trial.id;
                 const isDisabled = activatingId !== null && !isActivating;
                 const traffic = formatTrafficLabel(trial.trafficLimitBytes);
                 const devices = trial.deviceLimit ?? trial.includedDevices ?? null;
                 return (
-                  <button
+                  <motion.button
                     key={trial.id}
                     type="button"
+                    variants={cardVariants}
                     onClick={() => activate(trial)}
                     disabled={isDisabled || isActivating}
                     className={cn(
@@ -178,10 +168,10 @@ export function StealthTrialsModal({ open, onClose, onActivated }: Props) {
                         </div>
                       </div>
                     </div>
-                  </button>
+                  </motion.button>
                 );
               })}
-          </div>
+          </motion.div>
         )}
       </div>
     </StealthModal>

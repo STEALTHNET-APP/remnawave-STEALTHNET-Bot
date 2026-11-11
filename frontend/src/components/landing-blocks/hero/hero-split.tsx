@@ -7,7 +7,7 @@
 import { Link } from "react-router-dom";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useStaggerReveal } from "@/lib/gsap-utils";
+import { Reveal } from "../reveal";
 import { useUtmCaptureAndBuildLink, txt, p, SECTION_SCROLL_OFFSET, useLandingTheme } from "../utils";
 import type { LandingApiBlock } from "../types";
 
@@ -19,7 +19,6 @@ interface HeroSplitProps {
 export function HeroSplit({ block, serviceName }: HeroSplitProps) {
   const buildLink = useUtmCaptureAndBuildLink();
   const { accentTheme, resolvedMode } = useLandingTheme();
-  const gridRef = useStaggerReveal<HTMLDivElement>([], { y: 18, dur: 0.5, stagger: 0.1 });
 
   const badge = txt(block.text, "badge", "Приватность · Скорость · Доступ");
   const headline1 = txt(block.text, "headline1", "Подключение, которое");
@@ -44,8 +43,8 @@ export function HeroSplit({ block, serviceName }: HeroSplitProps) {
 
   return (
     <section id="home" className={`max-w-7xl mx-auto px-4 pb-12 pt-12 md:pb-20 md:pt-16 ${SECTION_SCROLL_OFFSET}`}>
-      <div ref={gridRef} className="grid items-start gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
-        <div className="max-w-3xl">
+      <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+        <Reveal y={18} duration={0.5} className="max-w-3xl">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-slate-200/60 dark:border-border bg-card dark:bg-card px-4 py-2 text-xs font-semibold uppercase tracking-[0.32em] text-slate-600 dark:text-slate-300">
             <Sparkles className="h-4 w-4" style={{ color: accentTheme.primary }} />
             {badge}
@@ -77,9 +76,9 @@ export function HeroSplit({ block, serviceName }: HeroSplitProps) {
           </div>
 
           {hint ? <p className="mt-5 text-sm text-slate-500 dark:text-slate-400">{hint}</p> : null}
-        </div>
+        </Reveal>
 
-        <aside className="rounded-[28px] border border-slate-200/60 dark:border-border bg-primary p-6">
+        <Reveal y={18} duration={0.5} delay={0.1} className="rounded-[28px] border border-slate-200/60 dark:border-border bg-primary p-6">
           <div className="text-[11px] font-semibold uppercase tracking-[0.32em]" style={{ color: accentTheme.ctaFg, opacity: 0.9 }}>
             {txt(block.text, "rightCardEyebrow", "Premium Access")}
           </div>
@@ -96,7 +95,7 @@ export function HeroSplit({ block, serviceName }: HeroSplitProps) {
               </span>
             ))}
           </div>
-        </aside>
+        </Reveal>
       </div>
     </section>
   );

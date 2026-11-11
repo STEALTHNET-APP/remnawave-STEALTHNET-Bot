@@ -3,7 +3,7 @@
  */
 
 import { Sparkles, CreditCard, Rocket, type LucideIcon } from "lucide-react";
-import { useScrollReveal } from "../scroll-reveal";
+import { Reveal } from "../reveal";
 import { txt, arr, SECTION_SCROLL_OFFSET, useLandingTheme } from "../utils";
 import type { LandingApiBlock } from "../types";
 
@@ -20,7 +20,6 @@ export function CustomJourney({ block }: { block: LandingApiBlock }) {
   const steps = arr<{ title: string; desc: string }>(block.props, "steps", DEFAULT_STEPS).slice(0, 3);
   const title = txt(block.text, "title", "Как это работает");
   const desc = txt(block.text, "desc", "Три коротких шага: выбрал, оплатил, подключился.");
-  const gridRef = useScrollReveal<HTMLDivElement>([steps.length], { y: 14, dur: 0.4, stagger: 0.08 });
 
   return (
     <section className={`max-w-7xl mx-auto px-4 py-12 md:py-16 ${SECTION_SCROLL_OFFSET}`}>
@@ -29,12 +28,14 @@ export function CustomJourney({ block }: { block: LandingApiBlock }) {
         {desc ? <p className="mx-auto mt-3 max-w-xl text-base text-slate-600 dark:text-slate-300">{desc}</p> : null}
       </div>
 
-      <div ref={gridRef} className="mx-auto mt-10 grid max-w-5xl gap-4 md:grid-cols-3">
+      <div className="mx-auto mt-10 grid max-w-5xl gap-4 md:grid-cols-3">
         {steps.map((step, idx) => {
           const Icon = ICONS[idx % ICONS.length];
           return (
-            <div
+            <Reveal
               key={`${step.title}-${idx}`}
+              y={14}
+              delay={idx * 0.08}
               className="rounded-xl border border-slate-200/70 dark:border-border bg-card dark:bg-card p-6"
             >
               <div className="flex items-center gap-3">
@@ -47,7 +48,7 @@ export function CustomJourney({ block }: { block: LandingApiBlock }) {
               </div>
               <h3 className="mt-5 text-lg font-bold text-slate-950 dark:text-white">{step.title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{step.desc}</p>
-            </div>
+            </Reveal>
           );
         })}
       </div>
