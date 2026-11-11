@@ -5743,33 +5743,43 @@ adminRouter.get("/analytics", async (_req, res) => {
 
   const revenueSeries = fillDaySeries(revenueByDay, day90Ago, now);
 
-  // ─── Клиенты за 90 дней (включая UTM для аналитики по кампаниям) ───
-  const allClients = await prisma.client.findMany({
-    select: {
-      id: true, createdAt: true, telegramId: true, email: true,
-      trialUsed: true, remnawaveUuid: true, referrerId: true, balance: true,
-      utmSource: true, utmCampaign: true,
-    },
-  });
+  const [balanceAgg, [clientStats], recentClients, utmGroups, utmTrialGroups, referrerGroups] = await Promise.all([
+    prisma.client.aggregate({ _sum: { balance: true } }),
+    prisma.$queryRaw<Array<{
+      both_count: bigint;
+      bot_count: bigint;
+      site_count: bigint;
+      trial_count: bigint;
+      referrer_count: bigint;
+    }>>`
+      SELECT
+        COUNT(*) FILTER (WHERE telegram_id IS NOT NULL AND email IS NOT NULL) AS both_count,
+        COUNT(*) FILTER (WHERE telegram_id IS NOT NULL AND email IS NULL) AS bot_count,
+        COUNT(*) FILTER (WHERE telegram_id IS NULL AND email IS NOT NULL) AS site_count,
+        COUNT(*) FILTER (WHERE trial_used = true) AS trial_count,
+        COUNT(*) FILTER (WHERE referrer_id IS NOT NULL) AS referrer_count
+      FROM clients
+    `,
+    prisma.client.findMany({
+      where: { createdAt: { gte: day90Ago } },
+      select: { createdAt: true, trialUsed: true },
+    }),
+    prisma.client.groupBy({ by: ["utmSource", "utmCampaign"], _count: { _all: true } }),
+    prisma.client.groupBy({ by: ["utmSource", "utmCampaign"], where: { trialUsed: true }, _count: { _all: true } }),
+    prisma.client.groupBy({ by: ["referrerId"], where: { referrerId: { not: null } }, _count: { _all: true } }),
+  ]);
+
+  const totalBalance = balanceAgg._sum.balance ?? 0;
+  const botClients = Number(clientStats?.bot_count ?? 0);
+  const siteClients = Number(clientStats?.site_count ?? 0);
+  const bothClients = Number(clientStats?.both_count ?? 0);
+  const trialUsedCount = Number(clientStats?.trial_count ?? 0);
+  const withReferrer = Number(clientStats?.referrer_count ?? 0);
 
   const clientsByDay: Record<string, number> = {};
-  let botClients = 0, siteClients = 0, bothClients = 0;
-  let trialUsedCount = 0;
-  let withReferrer = 0;
-  const totalBalance = allClients.reduce((s, c) => s + c.balance, 0);
-
-  for (const c of allClients) {
-    if (c.createdAt >= day90Ago) {
-      const day = c.createdAt.toISOString().slice(0, 10);
-      clientsByDay[day] = (clientsByDay[day] ?? 0) + 1;
-    }
-    const hasBot = !!c.telegramId;
-    const hasSite = !!c.email;
-    if (hasBot && hasSite) bothClients++;
-    else if (hasBot) botClients++;
-    else if (hasSite) siteClients++;
-    if (c.trialUsed) trialUsedCount++;
-    if (c.referrerId) withReferrer++;
+  for (const c of recentClients) {
+    const day = c.createdAt.toISOString().slice(0, 10);
+    clientsByDay[day] = (clientsByDay[day] ?? 0) + 1;
   }
 
   const clientsSeries = fillDaySeries(clientsByDay, day90Ago, now);
@@ -5781,13 +5791,24 @@ adminRouter.get("/analytics", async (_req, res) => {
     const c = campaign?.trim() || "";
     return `${s}\t${c}`;
   }
-  for (const c of allClients) {
-    const k = keyFor(c.utmSource, c.utmCampaign);
+  for (const group of utmGroups) {
+    const k = keyFor(group.utmSource, group.utmCampaign);
     if (!bySourceKey[k]) bySourceKey[k] = { registrations: 0, trials: 0, payments: 0, revenue: 0 };
-    bySourceKey[k].registrations++;
-    if (c.trialUsed) bySourceKey[k].trials++;
+    bySourceKey[k].registrations += group._count._all;
   }
-  const clientIdToUtm = new Map(allClients.map((c) => [c.id, { source: c.utmSource, campaign: c.utmCampaign }]));
+  for (const group of utmTrialGroups) {
+    const k = keyFor(group.utmSource, group.utmCampaign);
+    if (!bySourceKey[k]) bySourceKey[k] = { registrations: 0, trials: 0, payments: 0, revenue: 0 };
+    bySourceKey[k].trials += group._count._all;
+  }
+  const paymentClientIds = [...new Set(payments90.map((p) => p.clientId))];
+  const paymentClients = paymentClientIds.length > 0
+    ? await prisma.client.findMany({
+        where: { id: { in: paymentClientIds } },
+        select: { id: true, trialUsed: true, utmSource: true, utmCampaign: true },
+      })
+    : [];
+  const clientIdToUtm = new Map(paymentClients.map((c) => [c.id, { source: c.utmSource, campaign: c.utmCampaign }]));
   for (const p of payments90) {
     const utm = clientIdToUtm.get(p.clientId);
     const k = keyFor(utm?.source ?? null, utm?.campaign ?? null);
@@ -5805,18 +5826,17 @@ adminRouter.get("/analytics", async (_req, res) => {
   // ─── Триалы по дням (клиенты с trialUsed, приближаем по createdAt) ───
   // Точной даты триала нет, но можем показать клиентов использовавших триал
   // Вместо этого считаем из promo activations и trial по дням
-  const trialClients = allClients.filter((c) => c.trialUsed && c.createdAt >= day90Ago);
   const trialsByDay: Record<string, number> = {};
-  for (const c of trialClients) {
+  for (const c of recentClients) {
+    if (!c.trialUsed) continue;
     const day = c.createdAt.toISOString().slice(0, 10);
     trialsByDay[day] = (trialsByDay[day] ?? 0) + 1;
   }
   const trialsSeries = fillDaySeries(trialsByDay, day90Ago, now);
 
   // ─── Конверсия: триал → покупка ───
-  const trialClientIds = new Set(allClients.filter((c) => c.trialUsed).map((c) => c.id));
-  const trialToPaid = [...trialClientIds].filter((id) => uniqueBuyers.has(id)).length;
-  const trialConversionRate = trialClientIds.size > 0 ? Math.round((trialToPaid / trialClientIds.size) * 100) : 0;
+  const trialToPaid = paymentClients.filter((c) => c.trialUsed && uniqueBuyers.has(c.id)).length;
+  const trialConversionRate = trialUsedCount > 0 ? Math.round((trialToPaid / trialUsedCount) * 100) : 0;
 
   // ─── Топ тарифов (продажи + доход) ───
   const tariffIds = Object.keys(tariffSalesCount);
@@ -5852,10 +5872,8 @@ adminRouter.get("/analytics", async (_req, res) => {
 
   // Количество рефералов у каждого реферера
   const referralCounts: Record<string, number> = {};
-  for (const c of allClients) {
-    if (c.referrerId) {
-      referralCounts[c.referrerId] = (referralCounts[c.referrerId] ?? 0) + 1;
-    }
+  for (const group of referrerGroups) {
+    if (group.referrerId) referralCounts[group.referrerId] = group._count._all;
   }
 
   const topReferrerIds = Object.entries(refEarnings)
