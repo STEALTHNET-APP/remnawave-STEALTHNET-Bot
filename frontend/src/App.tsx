@@ -115,7 +115,8 @@ const ClientHelpPage = lazyPage(() => import("@/pages/cabinet/client-help").then
 const ClientBotMenuPage = lazyPage(() => import("@/pages/cabinet/client-bot-menu").then(module => ({ default: module.ClientBotMenuPage })));
 
 const GiftActivatePage = lazyPage(() => import("@/pages/gift-activate").then(module => ({ default: module.GiftActivatePage })));
-const LandingPage = lazyPage(() => import("@/pages/landing").then(module => ({ default: module.LandingPage })));
+const loadLandingPage = () => import("@/pages/landing").then(module => ({ default: module.LandingPage }));
+const LandingPage = lazyPage(loadLandingPage);
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { state } = useAuth();
@@ -197,7 +198,10 @@ function RootRoute() {
     // LandingPage перезагрузит контент внутри себя (старое поведение, редкий кейс).
     // Module-level promise: StrictMode (mount→cleanup→mount) не порождает второй fetch.
     getPublicConfigCached()
-      .then((c) => { if (alive) setConfig(c); })
+      .then((c) => {
+        if (c.landingEnabled) void loadLandingPage();
+        if (alive) setConfig(c);
+      })
       .catch(() => { if (alive) setConfig(null); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
