@@ -7,7 +7,7 @@ Use this file to locate code, then read the implementation and tests for the beh
 | Component | Source | Responsibility |
 | --- | --- | --- |
 | API | `backend/src/index.ts`, `backend/src/modules/` | Express API, authentication, billing, subscriptions, integrations and scheduled jobs |
-| Telegram bot | `bot/src/index.ts`, `bot/src/api.ts`, `bot/src/keyboard.ts` | grammY bot, Telegram menus and requests to the API |
+| Telegram bot | `bot/src/index.ts`, `bot/src/api.ts`, `bot/src/keyboard.ts`, `bot/src/handlers/` | grammY bot, Telegram menus, payment gateways and requests to the API |
 | Web UI | `frontend/src/` | React/Vite admin interface, client cabinet and Telegram Mini App |
 | Broadcast worker | `backend/src/worker/broadcast-worker.ts` | Separate process that polls broadcast jobs in the database |
 | SSH console | `console/main.go` | Go/Bubble Tea read-only SSH dashboard; it does not serve the React application |
@@ -16,7 +16,7 @@ Use this file to locate code, then read the implementation and tests for the beh
 
 `docker-compose.yml` defines the services and the `stealthnet` bridge network. The frontend service copies its built assets into a shared volume and exits. Nginx serves those assets and forwards API requests; the API also reads the frontend bundle for the branded SPA shell. The built-in nginx and certbot services use the `builtin-nginx` profile. The SSH console uses host networking and obtains its configuration from the API.
 
-Read the actual Compose file and deployment overrides before changing ports or volumes. Do not infer exposure from comments: the repository currently publishes API port 5000 on `0.0.0.0`. PostgreSQL has no published host port in the base Compose file. Local deployment settings may differ.
+Read the actual Compose file and deployment overrides before changing ports or volumes. Do not infer exposure from comments: the repository currently publishes API port 5000 on `0.0.0.0` by default, but local production deployments bind strictly to `127.0.0.1:5000:5000`. PostgreSQL has no published host port in the base Compose file. Local deployment settings may differ.
 
 Node packages require Node.js 22 or newer. Install and build each package in its own directory. The console is a separate Go module.
 
@@ -31,6 +31,7 @@ Read `backend/prisma/schema.prisma` before writing queries or migrations.
 - A null `tariffId` does not prove that a subscription is empty or disposable. Imported subscriptions and standalone trials require separate handling.
 - Multiple VPN profiles with the same Telegram ID can represent legitimate separate subscriptions. Do not merge or delete them solely because the Telegram ID matches.
 - `Payment` records payment details and purchase metadata. Receiving money and successfully delivering the purchased service are distinct steps.
+- `PaymentDelivery` records fulfillment state for reliable delivery even during Remnawave outages (`PaymentDeliveryService`).
 - `SystemSetting` holds runtime settings loaded by `getSystemConfig()` in `backend/src/modules/client/client.service.ts`.
 
 Follow the purchase intent in `backend/src/modules/tariff/tariff-activation.service.ts`: an explicit target requests a renewal; another purchase may create a new subscription. Also inspect single-subscription mode, trial conversion, gifts and additional devices before changing this behavior. Do not unconditionally reuse slot 0.
@@ -44,14 +45,15 @@ Paths in this table are relative to `backend/src/modules/`.
 | Remna integration and synchronization | `remna/`, `sync/` |
 | Subscriptions, purchases and trials | `subscription/`, `tariff/`, `trial/`, `gift/`, `extra-options/` |
 | Other VPN products | `singbox/`, `proxy/`, `amnezia-web/` |
-| Admin and client access | `admin/`, `admin-permissions/`, `auth/`, `client/`, `api-keys/` |
+| Admin routing and sub-routers | `admin/admin.routes.ts` (aggregator & system settings), plus sub-routers in `admin/`: `remna.routes.ts`, `tariffs.routes.ts`, `tariff-categories.routes.ts`, `analytics.routes.ts`, `clients.routes.ts`, `subscriptions.routes.ts`, `secondary-subscriptions.routes.ts`, `tickets.routes.ts`, `promo.routes.ts`, `trials.routes.ts`, `broadcast.routes.ts`, `tour.routes.ts`, `admins.routes.ts`, `language.routes.ts`, `gramads.routes.ts` |
+| Client and admin access | `admin/`, `admin-permissions/`, `auth/`, `client/`, `api-keys/` |
 | Payments and renewals | `payment/`, `payment-actions/`, `payment-redirect/` and the provider-specific directories |
 | Payment/event intake | `webhooks/`, `webhook-inbox/` and provider routes |
 | Marketing | `referral/`, `promo-code/`, `promo-bulk/`, `contest/`, `roulette/` |
 | Messaging and support | `broadcast/`, `auto-broadcast/`, `ticket/`, `notification/`, `mail/`, `bot-messages/`, `bot-conversations/` |
 | Operations | `backup/`, `diagnostics/`, `update/`, `server/`, `audit/` |
 
-Provider implementations include `yookassa/`, `yoomoney/`, `platega/`, `cryptopay/`, `telegram-stars/`, `heleket/`, `lava/`, `lavatop/`, `overpay/`, `rollypay/` and `paritypay/`. Inspect the route mounting in the API entry point as well as the provider service; webhook handling is not necessarily contained in one directory.
+Provider implementations include `yookassa/`, `yoomoney/`, `platega/`, `cryptopay/`, `telegram-stars/`, `heleket/`, `lava/`, `lavatop/`, `overpay/`, `rollypay/`, `paritypay/` and `cispay/`. Inspect the route mounting in the API entry point as well as the provider service; webhook handling is not necessarily contained in one directory.
 
 For scheduled work, inspect the scheduler registration and the called service together. Useful starting points include `payment/auto-renew.cron.ts`, `sync/sync.scheduler.ts`, `referral/referral-rewards.scheduler.ts` and `gift/gift-expiry.cron.ts`. Frequencies and enabled conditions belong to the implementation and runtime settings; do not assume a fixed schedule from this document.
 
@@ -59,11 +61,15 @@ For scheduled work, inspect the scheduler registration and the called service to
 
 Admin pages live in `frontend/src/pages/`; client pages are in `frontend/src/pages/cabinet/`. Shared UI and behavior live in `frontend/src/components/`, API types and calls in `frontend/src/lib/api.ts`, and translations in `frontend/src/i18n/locales/`.
 
+Admin settings page (`frontend/src/pages/settings.tsx`) delegates tab contents to modular components in `frontend/src/components/admin/settings/tabs/` (e.g. `payments-tab.tsx`, `bot-tab.tsx`).
+
+Client routes, marketplace and landing page are code-split using lazy loading in `frontend/src/App.tsx`. Animations are implemented using `framer-motion` (GSAP is not used).
+
 Check `frontend/src/lib/use-cabinet-design.ts` and the relevant page wrapper for Classic, Aurora and Stealth routing. A component's presence on disk does not prove that a route currently renders it. Test browser and Telegram Mini App behavior separately where it matters.
 
-PWA update behavior is in `frontend/src/components/pwa/pwa-update-prompt.tsx`. Preserve unsaved input and in-progress payment flows when changing reload behavior.
+PWA update behavior is in `frontend/src/components/pwa/pwa-update-prompt.tsx`. Workbox precaching in `frontend/vite.config.js` excludes admin chunks (`globIgnores`) to optimize client offline cache size. Preserve unsaved input and in-progress payment flows when changing reload behavior.
 
-Bot callbacks are handled in `bot/src/index.ts`, with keyboards in `bot/src/keyboard.ts` and API calls in `bot/src/api.ts`. Read existing callback handlers before choosing a namespace. Menu buttons may open inline Telegram flows or cabinet routes depending on settings.
+Bot handlers live in `bot/src/handlers/`. Route registration is in `bot/src/index.ts`, keyboards in `bot/src/keyboard.ts`, API calls in `bot/src/api.ts`, and payment gateways in `bot/src/handlers/payment-gateways.ts`. Device limits are resolved via `bot/src/tariff-device-limit.ts`. Read existing callback handlers before choosing a namespace. Menu buttons may open inline Telegram flows or cabinet routes depending on settings.
 
 ## Rules for changes involving money or VPN state
 
@@ -83,9 +89,9 @@ These are review requirements, not a claim that every current code path already 
 Inspect all parts of an existing similar setting:
 
 - The settings keys, defaults, loading and cache invalidation in `backend/src/modules/client/client.service.ts`.
-- Validation, persistence, permissions and response masking in `backend/src/modules/admin/admin.routes.ts`.
+- Validation, persistence, permissions and response masking in `backend/src/modules/admin/admin.routes.ts` or its sub-routers.
 - The public config response, if clients need a safe public value.
-- API types in `frontend/src/lib/api.ts` and the relevant admin controls.
+- API types in `frontend/src/lib/api.ts` and the relevant admin controls in `frontend/src/components/admin/settings/tabs/`.
 - Bot configuration or worker processes that consume the value.
 
 A setting stored in PostgreSQL does not automatically reconfigure another running process. Check the lifetime of cached configuration and long-running connections explicitly.
@@ -97,6 +103,7 @@ From the repository root, with dependencies installed:
 ```bash
 npm --prefix backend run db:generate
 npm --prefix backend run build
+npm --prefix bot test
 npm --prefix bot run build
 npm --prefix frontend run build
 ```
