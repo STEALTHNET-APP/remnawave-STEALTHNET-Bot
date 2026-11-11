@@ -16,37 +16,35 @@ export function createPaymentHandlers(): Composer<Context> {
     if (!userId) return;
     if (resolveCallbackDomain(data) !== "payments") return next();
     if (data.startsWith("yk_recpt:")) {
-  if (data.startsWith("yk_recpt:")) {
-    const parts = data.split(":");
-    const action = parts[1]; // no | saved | ask
-    const tok = parts.slice(2).join(":");
-    if (action === "ask") {
-      const p = peekPendingReceipt(tok);
+      const parts = data.split(":");
+      const action = parts[1]; // no | saved | ask
+      const tok = parts.slice(2).join(":");
+      if (action === "ask") {
+        const p = peekPendingReceipt(tok);
+        if (!p || p.userId !== userId) {
+          await ctx.reply("⏰ Сессия истекла. Откройте «Оплатить» ещё раз.");
+          return;
+        }
+        setPendingEmailInput(userId, tok);
+        await ctx.reply(EMAIL_PROMPT_TEXT);
+        return;
+      }
+      const p = takePendingReceipt(tok);
       if (!p || p.userId !== userId) {
         await ctx.reply("⏰ Сессия истекла. Откройте «Оплатить» ещё раз.");
         return;
       }
-      setPendingEmailInput(userId, tok);
-      await ctx.reply(EMAIL_PROMPT_TEXT);
+      // для "no" передаём пустую строку (явный отказ),
+      // не undefined: иначе backend сделает fallback на client.email и пришлёт чек.
+      const receiptEmail: string = action === "saved" ? (p.savedEmail ?? "") : "";
+      try {
+        const payment = await p.builder(receiptEmail);
+        await p.finalize(payment, { receiptSentTo: receiptEmail || null });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Ошибка создания платежа ЮKassa";
+        await ctx.reply(`❌ ${msg}`);
+      }
       return;
-    }
-    const p = takePendingReceipt(tok);
-    if (!p || p.userId !== userId) {
-      await ctx.reply("⏰ Сессия истекла. Откройте «Оплатить» ещё раз.");
-      return;
-    }
-    // для "no" передаём пустую строку (явный отказ),
-    // не undefined: иначе backend сделает fallback на client.email и пришлёт чек.
-    const receiptEmail: string = action === "saved" ? (p.savedEmail ?? "") : "";
-    try {
-      const payment = await p.builder(receiptEmail);
-      await p.finalize(payment, { receiptSentTo: receiptEmail || null });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Ошибка создания платежа ЮKassa";
-      await ctx.reply(`❌ ${msg}`);
-    }
-    return;
-  }
     }
     const token = await getOrRestoreToken(userId, ctx.from?.username);
     if (!token) {
