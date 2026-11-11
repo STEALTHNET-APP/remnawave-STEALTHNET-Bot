@@ -272,7 +272,6 @@ export const SYSTEM_CONFIG_KEYS = [
   // Прокси
   "proxy_enabled", "proxy_url", "proxy_telegram", "proxy_payments", "proxy_ai",
   // Мой Налог (самозанятые)
-  "nalog_enabled", "nalog_inn", "nalog_password", "nalog_device_id", "nalog_service_name",
   // Дополнительные подписки и подарки
   "gift_subscriptions_enabled", "gift_code_expiry_hours", "max_additional_subscriptions",
   "gift_code_format_length", "gift_rate_limit_per_minute",
@@ -1058,11 +1057,6 @@ async function loadSystemConfigFromDb() {
     proxyTelegram: map.proxy_telegram === "true" || map.proxy_telegram === "1",
     proxyPayments: map.proxy_payments === "true" || map.proxy_payments === "1",
     proxyAi: map.proxy_ai === "true" || map.proxy_ai === "1",
-    nalogEnabled: map.nalog_enabled === "true" || map.nalog_enabled === "1",
-    nalogInn: (map.nalog_inn ?? "").trim() || null,
-    nalogPassword: (map.nalog_password ?? "").trim() || null,
-    nalogDeviceId: (map.nalog_device_id ?? "").trim() || null,
-    nalogServiceName: (map.nalog_service_name ?? "").trim() || null,
     giftSubscriptionsEnabled: map.gift_subscriptions_enabled === "true" || map.gift_subscriptions_enabled === "1",
     giftCodeExpiryHours: parseInt(map.gift_code_expiry_hours || "72", 10) || 72,
     maxAdditionalSubscriptions: parseInt(map.max_additional_subscriptions || "5", 10) || 5,
