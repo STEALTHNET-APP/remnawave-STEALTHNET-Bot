@@ -46,6 +46,7 @@ Paths in this table are relative to `backend/src/modules/`.
 | Subscriptions, purchases and trials | `subscription/`, `tariff/`, `trial/`, `gift/`, `extra-options/` |
 | Other VPN products | `singbox/`, `proxy/`, `amnezia-web/` |
 | Admin routing and sub-routers | `admin/admin.routes.ts` (aggregator & system settings), plus sub-routers in `admin/`: `remna.routes.ts`, `tariffs.routes.ts`, `tariff-categories.routes.ts`, `analytics.routes.ts`, `clients.routes.ts`, `subscriptions.routes.ts`, `secondary-subscriptions.routes.ts`, `tickets.routes.ts`, `promo.routes.ts`, `trials.routes.ts`, `broadcast.routes.ts`, `tour.routes.ts`, `admins.routes.ts`, `language.routes.ts`, `gramads.routes.ts` |
+| Client routing and sub-routers | `client/client.routes.ts` (aggregator, subscriptions, checkout), plus sub-routers in `client/`: `client-auth.routes.ts`, `client-profile.routes.ts`, `client-public.routes.ts` |
 | Client and admin access | `admin/`, `admin-permissions/`, `auth/`, `client/`, `api-keys/` |
 | Payments and renewals | `payment/`, `payment-actions/`, `payment-redirect/` and the provider-specific directories |
 | Payment/event intake | `webhooks/`, `webhook-inbox/` and provider routes |
