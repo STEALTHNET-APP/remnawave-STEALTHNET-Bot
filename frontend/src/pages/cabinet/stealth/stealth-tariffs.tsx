@@ -1,445 +1,91 @@
-import { useLocation } from "react-router-dom";
-/**
- * Stealth Tariffs / Payment — выбор подписки в стиле Hundler VPN.
- *
- * Структура:
- *   1. (Если >1 категории) — горизонтальный chip-selector категорий
- *   2. (Если в категории >1 тарифа) — chip-selector тарифов
- *   3. Большой блок выбора периода:
- *      - Chip-pills предустановок (3д / 7д / 14д / 30д / 90д / 180д / 365д)
- *      - Заголовок периода + цена за день
- *      - Слайдер (если поддерживается) — пока упрощённо: только chips
- *      - «Итого: ₽X» большая цифра
- *   4. Промокод input + Активировать
- *   5. Tile-сетка способов оплаты (СБП/Карта/Крипто и т.п.) с активным =
- *      тёмная карточка, неактивный = бледнее
- *   6. (Если хватает баланса) — отдельный «Оплатить с баланса»
- *   7. Преимущества checklist
- *   8. БЕЛАЯ кнопка «Оплатить» внизу
- *
- * Использует существующие endpoint'ы:
- *   - api.getPublicTariffs → категории + тарифы + priceOptions
- *   - api.getPublicConfig  → enabled-флаги платежей
- *   - api.clientCreatePlategaPayment / yookassaCreatePayment / cryptopayCreatePayment /
- *     heleketCreatePayment / lavaCreatePayment / yoomoneyCreateFormPayment / clientPayByBalance
- */
-
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Wallet, Bitcoin, Check, AlertCircle, Loader2, Sparkles, RefreshCw } from "lucide-react";
+import { Wallet, Check, AlertCircle, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
-import { api, type TariffConversionPreview } from "@/lib/api";
-import { openPaymentInBrowser, getTelegramWebApp } from "@/lib/open-payment-url";
-import { usePublicTariffs } from "@/lib/queries";
-import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { StadiumButton } from "@/components/stealth/stadium-button";
 import { cn } from "@/lib/utils";
-
-interface PriceOption {
-  id: string;
-  durationDays: number;
-  price: number;
-}
-
-interface TariffLite {
-  id: string;
-  name: string;
-  price: number;
-  currency: string;
-  priceOptions?: PriceOption[];
-  durationDays?: number;
-  trafficLimitBytes?: string | null;
-  deviceLimit?: number | null;
-  includedDevices?: number;
-}
-
-type PayMethod =
-  | { kind: "platega"; id: number; label: string; icon: typeof Wallet }
-  | { kind: "yookassa"; label: string; icon: typeof Wallet }
-  | { kind: "yoomoney"; label: string; icon: typeof Wallet }
-  | { kind: "telegram_stars"; label: string; icon: typeof Bitcoin }
-  | { kind: "cryptopay"; label: string; icon: typeof Bitcoin }
-  | { kind: "heleket"; label: string; icon: typeof Bitcoin }
-  | { kind: "rollypay"; label: string; icon: typeof Wallet }
-  | { kind: "cispay"; label: string; icon: typeof Wallet }
-  | { kind: "paritypay"; label: string; icon: typeof Wallet }
-  | { kind: "cloudpayments"; label: string; icon: typeof Wallet }
-  | { kind: "lava"; label: string; icon: typeof Wallet }
-  | { kind: "balance"; label: string; icon: typeof Wallet };
-
-function fmtPrice(n: number, currency: string) {
-  const sym = currency === "rub" || currency === "RUB" ? "₽" : currency === "usd" || currency === "USD" ? "$" : currency.toUpperCase();
-  return `${Math.round(n)}${sym}`;
-}
-
-// Цена за день — всегда с копейками (2 знака), в отличие от полной цены.
-function fmtPricePerDay(n: number, currency: string) {
-  const sym = currency === "rub" || currency === "RUB" ? "₽" : currency === "usd" || currency === "USD" ? "$" : currency.toUpperCase();
-  return `${n.toFixed(2)}${sym}`;
-}
+import {
+  currencySymbol,
+  formatMoney,
+  formatMoneyPerDay,
+  useCabinetTariffPurchase,
+} from "../use-cabinet-tariff-purchase";
 
 export function StealthTariffs() {
-  const { state, refreshProfile } = useClientAuth();
+  const { state } = useClientAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  // режим продления конкретной подписки (?extend=<subId> с дашборда).
-  // Механика как в основном кабинете: каталог фильтруется до тарифа подписки,
-  // оплата уходит с extendsSecondarySubId — единый код для любой подписки.
-  const extendParam = searchParams.get("extend");
-  const [extendTarget, setExtendTarget] = useState<{ id: string; label: string; tariffId: string | null; isTrial: boolean; convertTariffIds: string[]; trialConvertAllTariffs: boolean; extraDevices: number; extraDevicesMonthlyPrice: number } | null>(null);
-  // судьба доп. устройств при продлении (true = сохранить, цена выше).
-  const [extKeepExtras, setExtKeepExtras] = useState(true);
-
-  // Данные через кеш: тарифы (общие со stealth-tariffs/классиком) + публичный конфиг.
-  const tariffsQuery = usePublicTariffs();
-  const config = useCabinetConfig();
-  const loading = tariffsQuery.isLoading;
-
-  const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
-  const [selectedTariffId, setSelectedTariffId] = useState<string | null>(null);
-  const [selectedPriceOptionId, setSelectedPriceOptionId] = useState<string | null>(null);
-
-  const categories = useMemo(() => (tariffsQuery.data?.items ?? []).filter((cat) => cat.tariffs.length > 0), [tariffsQuery.data]);
-
-  const promoLocation = useLocation();
-  const [promoInput, setPromoInput] = useState(() => typeof promoLocation.state?.promoCode === "string" ? promoLocation.state.promoCode : "");
-  const [promoApplied, setPromoApplied] = useState<string | null>(null);
-  const [promoMsg, setPromoMsg] = useState<string | null>(null);
-  const [promoBusy, setPromoBusy] = useState(false);
-
-  const [selectedMethod, setSelectedMethod] = useState<PayMethod | null>(null);
-  const [paying, setPaying] = useState(false);
-  const [payError, setPayError] = useState<string | null>(null);
-  // превью конвертации (режим «одна подписка из категории»).
-  const [convPreview, setConvPreview] = useState<TariffConversionPreview | null>(null);
-  // судьба доп. устройств при конвертации (true = оставить).
-  const [convKeepExtras, setConvKeepExtras] = useState(true);
-  // Блокирующее подтверждение балансовой покупки (мгновенное списание → замена/удаление подписок).
   const [balConfirm, setBalConfirm] = useState<{ title: string; body: string } | null>(null);
 
+  const {
+    categories,
+    displayCategories,
+    currentCat,
+    selectedTariff: currentTariff,
+    priceOptions,
+    selectedCatId,
+    setSelectedCatId,
+    selectedTariffId,
+    setSelectedTariffId,
+    selectedPriceOptionId,
+    setSelectedPriceOptionId,
+    days,
+    finalPrice,
+    pricePerDay,
+    currency,
+    balance,
+    canPayWithBalance: canPayByBalance,
+    availableMethods,
+    selectedMethod,
+    setSelectedMethod,
+    paying,
+    payError,
+    extendTarget,
+    extKeepExtras,
+    setExtKeepExtras,
+    keepExtrasCost,
+    mySubs,
+    duplicateSubscription,
+    replaceTrialChoice,
+    setReplaceTrialChoice,
+    convPreview,
+    convKeepExtras,
+    setConvKeepExtras,
+    promoInput,
+    setPromoInput,
+    promoApplied,
+    promoMsg,
+    setPromoMsg,
+    promoBusy,
+    applyPromo,
+    doPay,
+    prepareBalancePayment,
+    loading,
+  } = useCabinetTariffPurchase({ autoSelectExtended: "tariffOnly", requirePriceOption: true });
 
-  // Все подписки клиента: для режима продления (?extend) и для подсказки
-  // «у вас уже есть подписка с этим тарифом — продлить или купить ещё одну».
-  const [mySubs, setMySubs] = useState<{ id: string; label: string; tariffId: string | null; expireAt: string | null; isTrial: boolean; trialName: string | null }[]>([]);
-  // покупка заменяет триал: выбор какого (если несколько).
-  const [replaceTrialChoice, setReplaceTrialChoice] = useState<string | null>(null);
-  useEffect(() => {
-    if (!state.token) { setExtendTarget(null); setMySubs([]); return; }
-    let alive = true;
-    api.clientAllSubscriptions(state.token).then((r) => {
-      if (!alive) return;
-      const items = r.items ?? [];
-      setMySubs(items.map((it) => {
-        const raw = it.subscription as Record<string, unknown> | null;
-        const payload = (raw && typeof raw === "object" && raw.response && typeof raw.response === "object")
-          ? (raw.response as Record<string, unknown>)
-          : raw;
-        return {
-          id: it.id,
-          label: it.tariffDisplayName?.trim() || `Подписка #${it.subscriptionIndex ?? 0}`,
-          tariffId: it.tariffId ?? null,
-          expireAt: payload && typeof payload.expireAt === "string" ? payload.expireAt : null,
-          isTrial: Boolean(it.trialId),
-          trialName: it.trialName ?? null,
-        };
-      }));
-      if (!extendParam) { setExtendTarget(null); return; }
-      const it = items.find((s) => s.id === extendParam);
-      if (!it) { setExtendTarget(null); return; }
-      const idx = it.subscriptionIndex ?? 0;
-      setExtendTarget({
-        id: it.id,
-        label: it.tariffDisplayName?.trim() || `Подписка #${idx}`,
-        tariffId: it.tariffId ?? null,
-        isTrial: Boolean(it.trialId),
-        convertTariffIds: it.convertTariffIds ?? [],
-        trialConvertAllTariffs: it.trialConvertAllTariffs ?? false,
-        extraDevices: it.extraDevices ?? 0,
-        extraDevicesMonthlyPrice: it.extraDevicesMonthlyPrice ?? 0,
-      });
-      setExtKeepExtras(true);
-    }).catch(() => { if (alive) { setExtendTarget(null); setMySubs([]); } });
-    return () => { alive = false; };
-  }, [extendParam, state.token]);
-
-  // В режиме продления каталог сужается до тарифа подписки (как в основном
-  // кабинете). Для триальной подписки добавляются тарифы из настройки триала
-  // convertTariffIds — переход с пробного сквада на боевой; convertAllTariffs —
-  // каталог не фильтруется вовсе. Standalone-триал (без тарифа) — только разрешённые.
-  const displayCategories = useMemo(() => {
-    if (!extendTarget) return categories;
-    if (extendTarget.isTrial && extendTarget.trialConvertAllTariffs) return categories;
-    const allowed = [
-      ...(extendTarget.tariffId ? [extendTarget.tariffId] : []),
-      ...(extendTarget.isTrial ? extendTarget.convertTariffIds : []),
-    ];
-    if (allowed.length === 0) return categories;
-    const filtered = categories
-      .map((c) => ({ ...c, tariffs: c.tariffs.filter((t) => allowed.includes(t.id)) }))
-      .filter((c) => c.tariffs.length > 0);
-    // Тариф подписки удалён из каталога — fallback на полный список.
-    return filtered.length > 0 ? filtered : categories;
-  }, [categories, extendTarget]);
-
-  // Предвыбор категории/тарифа подписки при входе в режим продления.
-  useEffect(() => {
-    if (!extendTarget?.tariffId || categories.length === 0) return;
-    const cat = categories.find((c) => c.tariffs.some((t) => t.id === extendTarget.tariffId));
-    const tariff = cat?.tariffs.find((t) => t.id === extendTarget.tariffId) as TariffLite | undefined;
-    if (!cat || !tariff) return;
-    setSelectedCatId(cat.id);
-    setSelectedTariffId(tariff.id);
-    const opts = tariff.priceOptions ?? [];
-    if (opts.length > 0) {
-      const def = opts.find((o) => o.durationDays === 30) ?? opts[0];
-      setSelectedPriceOptionId(def.id);
-    }
-  }, [extendTarget?.tariffId, categories]);
-
-  const currentCat = displayCategories.find((c) => c.id === selectedCatId);
-  const currentTariff = currentCat?.tariffs.find((t) => t.id === selectedTariffId) as TariffLite | undefined;
   const currentTariffDeviceLimit = Math.max(currentTariff?.includedDevices ?? 0, currentTariff?.deviceLimit ?? 0) || null;
-  const priceOptions: PriceOption[] = currentTariff?.priceOptions ?? [];
-  const currentOption = priceOptions.find((o) => o.id === selectedPriceOptionId);
-  const basePrice = currentOption?.price ?? currentTariff?.price ?? 0;
-  const days = currentOption?.durationDays ?? currentTariff?.durationDays ?? 30;
-  // доплата за СОХРАНЯЕМЫЕ доп. устройства при продлении
-  // (цена хранится за 30 дней — масштабируем на выбранный срок). Раньше stealth
-  // не показывал её, и бэк списывал больше, чем юзер видел в «Итого».
-  const extendExtrasCost = extendTarget && extKeepExtras && extendTarget.extraDevices > 0
-    ? Math.round(extendTarget.extraDevicesMonthlyPrice * (Math.max(1, days) / 30))
-    : 0;
-  // same-tariff продление (single-режим, без ?extend): доплата за
-  // сохраняемые устройства из превью — чтобы «Итого» совпадало со списанием.
-  const convExtendExtrasCost = !extendTarget && convPreview?.mode === "extend" && convKeepExtras && (convPreview.extras?.extraDevices ?? 0) > 0
-    ? Math.round((convPreview.extras?.extraDevicesMonthlyPrice ?? 0) * (Math.max(1, days) / 30))
-    : 0;
-  const totalPrice = basePrice + extendExtrasCost + convExtendExtrasCost;
-  const pricePerDay = days > 0 ? totalPrice / days : 0;
-  const currency = currentTariff?.currency ?? "rub";
-  // Payment methods доступные сейчас
-  const availableMethods: PayMethod[] = useMemo(() => {
-    if (!config) return [];
-    const list: PayMethod[] = [];
-    const labels = new Map((config.paymentProviders ?? []).map((p) => [p.id, p.label]));
-    const labelFor = (id: string, fallbackLabel: string) => labels.get(id)?.trim() || fallbackLabel;
-    (config.plategaMethods ?? []).forEach((m) => {
-      const id = `platega_${m.id}`;
-      list.push({ kind: "platega", id: m.id, label: labelFor(id, m.label), icon: Wallet });
-    });
-    if (config.yookassaEnabled) list.push({ kind: "yookassa", label: labelFor("yookassa", "YooKassa"), icon: Wallet });
-    if (config.yoomoneyEnabled) list.push({ kind: "yoomoney", label: labelFor("yoomoney", "YooMoney"), icon: Wallet });
-    if (config.telegramStarsEnabled && currency.toUpperCase() === "RUB") list.push({ kind: "telegram_stars", label: labelFor("telegram_stars", "⭐ Telegram Stars"), icon: Wallet });
-    if (config.cryptopayEnabled) list.push({ kind: "cryptopay", label: labelFor("cryptopay", "Crypto Pay"), icon: Bitcoin });
-    if (config.heleketEnabled) list.push({ kind: "heleket", label: labelFor("heleket", "Heleket"), icon: Bitcoin });
-    if ((config as { rollypayEnabled?: boolean }).rollypayEnabled) list.push({ kind: "rollypay", label: labelFor("rollypay", "RollyPay"), icon: Wallet });
-    if ((config as { cispayEnabled?: boolean }).cispayEnabled) list.push({ kind: "cispay", label: labelFor("cispay", "CisPay"), icon: Wallet });
-    if ((config as { cloudpaymentsEnabled?: boolean }).cloudpaymentsEnabled) list.push({ kind: "cloudpayments", label: labelFor("cloudpayments", "CloudPayments"), icon: Wallet });
-    if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kind: "paritypay", label: labelFor("paritypay", "ParityPay"), icon: Wallet });
-    if (config.lavaEnabled) list.push({ kind: "lava", label: labelFor("lava", "Lava"), icon: Wallet });
-    const methodId = (m: PayMethod) => m.kind === "platega" ? `platega_${m.id}` : m.kind;
-    const order = new Map((config.paymentProviders ?? []).map((p, i) => [p.id, p.sortOrder ?? i]));
-    const fallback = new Map(list.map((m, i) => [methodId(m), 100 + i]));
-    return list.sort((a, b) => (order.get(methodId(a)) ?? fallback.get(methodId(a)) ?? 999) - (order.get(methodId(b)) ?? fallback.get(methodId(b)) ?? 999));
-  }, [config, currency]);
+  const trialsOwned = mySubs.filter((sub) => sub.isTrial);
 
-  // Auto-select first method when methods load
-  useEffect(() => {
-    if (!selectedMethod && availableMethods.length > 0) {
-      setSelectedMethod(availableMethods[0]);
-    }
-  }, [availableMethods, selectedMethod]);
-
-  // Свежий баланс: профиль мог быть не загружен/устаревшим — без этого тайл
-  // «Баланс» показывал 0 и решение о доступности оплаты было неверным.
-  useEffect(() => {
-    refreshProfile().catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Balance available?
-  const balance = state.client?.balance ?? 0;
-  const canPayByBalance = balance >= totalPrice && totalPrice > 0;
-
-  // Если выбран «Баланс», а юзер переключился на тариф дороже остатка —
-  // мягко возвращаем первый доступный метод, чтобы не отправлять заведомо
-  // провальную оплату.
-  useEffect(() => {
-    if (selectedMethod?.kind === "balance" && !canPayByBalance) {
-      setSelectedMethod(availableMethods[0] ?? null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canPayByBalance]);
-
-  // Превью конвертации: если тариф из single-категории и у клиента уже есть
-  // подписка этой категории — покупка обновит её, а не создаст вторую. Показываем
-  // юзеру расчёт до оплаты. В режиме явного продления (?extend) превью не нужно.
-  useEffect(() => {
-    if (!state.token || !selectedTariffId || extendTarget) { setConvPreview(null); return; }
-    let alive = true;
-    setConvKeepExtras(true);
-    api.clientTariffConversionPreview(state.token, {
-      tariffId: selectedTariffId,
-      priceOptionId: selectedPriceOptionId ?? undefined,
-    })
-      .then((p) => { if (alive) setConvPreview(p); })
-      .catch(() => { if (alive) setConvPreview(null); });
-    return () => { alive = false; };
-  }, [state.token, selectedTariffId, selectedPriceOptionId, extendTarget]);
-
-  async function applyPromo() {
-    if (!state.token || !promoInput.trim()) return;
-    setPromoBusy(true);
-    setPromoMsg(null);
-    try {
-      // clientCheckPromoCode возвращает данные промо при успехе или throws при ошибке
-      await api.clientCheckPromoCode(state.token, promoInput.trim());
-      setPromoApplied(promoInput.trim());
-      setPromoMsg("Промокод применён");
-    } catch (e) {
-      setPromoApplied(null);
-      setPromoMsg(e instanceof Error ? e.message : "Промокод недействителен");
-    } finally {
-      setPromoBusy(false);
-    }
-  }
-
-  // Баланс списывает МГНОВЕННО → перед заменой/удалением подписок показываем
-  // блокирующее подтверждение (как в боте). Чистое продление того же тарифа — без окна.
   async function pay() {
-    if (!state.token || !selectedTariffId || !selectedPriceOptionId || !selectedMethod) return;
-    if (selectedMethod.kind === "balance") {
-      setPaying(true);
-      setPayError(null);
-      const prev = await api.clientTariffConversionPreview(state.token, {
-        tariffId: selectedTariffId,
-        priceOptionId: selectedPriceOptionId ?? undefined,
-      }).catch(() => null);
-      setPaying(false);
-      const willReplace = !!(prev && prev.willConvert && (prev.mode !== "extend" || (prev.othersToRemove ?? 0) > 0));
-      if (willReplace) {
-        const subName = prev!.subscription?.tariffName ? `«${prev!.subscription.tariffName}»` : "текущую подписку";
-        const bodyMain = prev!.mode === "replace"
-          ? `Старая подписка удалится, остаток ${prev!.remainingDays ?? 0} дн. сгорит — создастся новая на выбранный тариф (${prev!.purchasedDays ?? 0} дн. с нуля). VPN-ссылка сохранится.`
-          : prev!.mode === "extend"
+    if (selectedMethod?.kind === "balance") {
+      const info = await prepareBalancePayment();
+      if (info?.willReplace && info.preview) {
+        const preview = info.preview;
+        const subName = preview.subscription?.tariffName ? `«${preview.subscription.tariffName}»` : "текущую подписку";
+        const bodyMain = preview.mode === "replace"
+          ? `Старая подписка удалится, остаток ${preview.remainingDays ?? 0} дн. сгорит — создастся новая на выбранный тариф (${preview.purchasedDays ?? 0} дн. с нуля). VPN-ссылка сохранится.`
+          : preview.mode === "extend"
             ? `Этот тариф у вас уже есть — он будет продлён.`
-            : `Текущая подписка будет переведена на новый тариф. Остаток ${prev!.remainingDays ?? 0} дн. пересчитается в ${prev!.convertedDays ?? 0} дн. по цене нового тарифа.`;
-        const othersLine = (prev!.othersToRemove ?? 0) > 0 ? `\n⚠️ Остальные ${prev!.othersToRemove} ваши подписки будут удалены — останется одна.` : "";
+            : `Текущая подписка будет переведена на новый тариф. Остаток ${preview.remainingDays ?? 0} дн. пересчитается в ${preview.convertedDays ?? 0} дн. по цене нового тарифа.`;
+        const othersLine = (preview.othersToRemove ?? 0) > 0 ? `\n⚠️ Остальные ${preview.othersToRemove} ваши подписки будут удалены — останется одна.` : "";
         setBalConfirm({
-          title: prev!.mode === "extend" ? `Продление затронет ${subName}` : `Покупка заменит ${subName}`,
+          title: preview.mode === "extend" ? `Продление затронет ${subName}` : `Покупка заменит ${subName}`,
           body: bodyMain + othersLine,
         });
         return;
       }
     }
     await doPay();
-  }
-
-  async function doPay() {
-    if (!state.token || !selectedTariffId || !selectedPriceOptionId || !selectedMethod) return;
-    setPaying(true);
-    setPayError(null);
-    try {
-      const base = {
-        tariffId: selectedTariffId,
-        tariffPriceOptionId: selectedPriceOptionId,
-        promoCode: promoApplied ?? undefined,
-        // режим продления конкретной подписки (?extend=) —
-        // оплата продлевает ИМЕННО её, а не создаёт новую.
-        ...(extendTarget ? { extendsSecondarySubId: extendTarget.id } : {}),
-        // юзер выбрал продлить БЕЗ доп. устройств — бэк удалит их
-        // после успешной оплаты и не начислит доплату.
-        ...(extendTarget && extendTarget.extraDevices > 0 && !extKeepExtras
-          ? { removeExtrasOnActivate: true }
-          : {}),
-        // same-tariff (single-режим): покупка того же тарифа = честное
-        // продление через extend-флоу (единая логика доплаты/устройств).
-        ...(!extendTarget && convPreview?.mode === "extend" && convPreview.subscription
-          ? {
-              extendsSecondarySubId: convPreview.subscription.id,
-              ...(((convPreview.extras?.extraDevices ?? 0) > 0 && !convKeepExtras) ? { removeExtrasOnActivate: true } : {}),
-            }
-          : {}),
-        // конвертация: юзер выбрал убрать доп. устройства —
-        // их остаточная ценность уйдёт в дни нового тарифа.
-        ...(convPreview?.willConvert && convPreview.mode !== "extend" && (convPreview.extras?.extraDevices ?? 0) > 0 && !convKeepExtras
-          ? { removeExtrasOnActivate: true }
-          : {}),
-        // покупка заменяет активный триал (выбор при нескольких).
-        ...(() => {
-          if (extendTarget || convPreview?.willConvert) return {};
-          const trialsOwned = mySubs.filter((s) => s.isTrial);
-          return trialsOwned.length > 0
-            ? { replaceTrialSubId: replaceTrialChoice ?? trialsOwned[0].id }
-            : {};
-        })(),
-      };
-      let url: string | null = null;
-      let paymentId: string | null = null;
-      if (selectedMethod.kind === "platega") {
-        const r = await api.clientCreatePlategaPayment(state.token, { ...base, paymentMethod: selectedMethod.id });
-        url = r.paymentUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "yookassa") {
-        const r = await api.yookassaCreatePayment(state.token, base);
-        url = r.confirmationUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "yoomoney") {
-        const r = await api.yoomoneyCreateFormPayment(state.token, { ...base, paymentType: "AC" });
-        url = r.paymentUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "telegram_stars") {
-        const r = await api.starsCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "cryptopay") {
-        const r = await api.cryptopayCreatePayment(state.token, base);
-        // CryptoBot mini-app preferred when in Telegram, иначе fallback
-        url = r.miniAppPayUrl ?? r.webAppPayUrl ?? r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "heleket") {
-        const r = await api.heleketCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "cloudpayments") {
-        const r = await api.cloudpaymentsCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "paritypay") {
-        const r = await api.paritypayCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "rollypay") {
-        const r = await api.rollypayCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "cispay") {
-        const r = await api.cispayCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "lava") {
-        const r = await api.lavaCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "balance") {
-        await api.clientPayByBalance(state.token, base);
-        await refreshProfile();
-        navigate("/cabinet/dashboard?paid=balance");
-        return;
-      }
-      if (url) {
-        openPaymentInBrowser(url);
-        if (paymentId && getTelegramWebApp()) {
-          navigate(`/cabinet/payment-wait?id=${encodeURIComponent(paymentId)}&kind=tariff`, { state: { url, provider: selectedMethod.label } });
-        }
-      }
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
-    } finally {
-      setPaying(false);
-    }
   }
 
   if (loading) {
@@ -516,7 +162,7 @@ export function StealthTariffs() {
                 )}
               >
                 <p className="text-[11px] font-bold">📱 +{extendTarget.extraDevices} устройств</p>
-                <p className="text-[10px] text-zinc-400">сохранить (+{fmtPrice(Math.round(extendTarget.extraDevicesMonthlyPrice * (Math.max(1, days) / 30)), currency)})</p>
+                <p className="text-[10px] text-zinc-400">сохранить (+{formatMoney(keepExtrasCost, currency, "stealth")})</p>
               </button>
               <button
                 type="button"
@@ -547,7 +193,7 @@ export function StealthTariffs() {
                   const firstT = c.tariffs[0];
                   if (firstT) {
                     setSelectedTariffId(firstT.id);
-                    const opts = (firstT as TariffLite).priceOptions ?? [];
+                    const opts = firstT.priceOptions ?? [];
                     setSelectedPriceOptionId((opts.find((o) => o.durationDays === 30) ?? opts[0])?.id ?? null);
                   }
                 }}
@@ -575,7 +221,7 @@ export function StealthTariffs() {
                 key={t.id}
                 onClick={() => {
                   setSelectedTariffId(t.id);
-                  const opts = (t as TariffLite).priceOptions ?? [];
+                  const opts = t.priceOptions ?? [];
                   setSelectedPriceOptionId((opts.find((o) => o.durationDays === 30) ?? opts[0])?.id ?? null);
                 }}
                 className={cn(
@@ -627,7 +273,7 @@ export function StealthTariffs() {
             <div className="text-xs text-zinc-500 mt-1.5">дн.</div>
           </div>
           <div className="text-right">
-            <div className="text-2xl font-bold tabular-nums">{fmtPricePerDay(pricePerDay, currency)}</div>
+            <div className="text-2xl font-bold tabular-nums">{formatMoneyPerDay(pricePerDay, currency, "stealth")}</div>
             <div className="text-xs text-zinc-500">/день</div>
           </div>
         </div>
@@ -635,20 +281,19 @@ export function StealthTariffs() {
         <div className="border-t border-white/[0.06] pt-3 flex items-center justify-between">
           <span className="text-sm text-zinc-400">Итого:</span>
           <motion.span
-            key={totalPrice}
+            key={finalPrice}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, ease: "easeOut" }}
             className="text-2xl font-bold tabular-nums bg-gradient-to-r from-saccent-400 via-saccent-300 to-fuchsia-400 bg-clip-text text-transparent drop-shadow-[0_0_18px_rgb(var(--stealth-accent)_/_0.35)]"
           >
-            {fmtPrice(totalPrice, currency)}
+            {formatMoney(finalPrice, currency, "stealth")}
           </motion.span>
         </div>
       </motion.div>
 
       {/* покупка заменяет активный триал (выбор при нескольких). */}
       {!extendTarget && !convPreview?.willConvert && (() => {
-        const trialsOwned = mySubs.filter((s) => s.isTrial);
         if (trialsOwned.length === 0) return null;
         const chosen = replaceTrialChoice ?? trialsOwned[0].id;
         return (
@@ -687,12 +332,7 @@ export function StealthTariffs() {
       {/* без single-режима: подписка с этим тарифом уже есть —
           предлагаем продлить её, либо продолжить покупку ещё одной. */}
       {!extendTarget && !convPreview?.willConvert && (() => {
-        // среди ВСЕХ подписок с этим тарифом предлагаем «самую живую».
-        // Триалы исключены: их «продление» — конвертация, покупка их заменяет.
-        const matches = selectedTariffId ? mySubs.filter((s) => s.tariffId === selectedTariffId && !s.isTrial) : [];
-        const dup = matches.length > 0
-          ? [...matches].sort((a, b) => (b.expireAt ? Date.parse(b.expireAt) : 0) - (a.expireAt ? Date.parse(a.expireAt) : 0))[0]
-          : null;
+        const dup = duplicateSubscription;
         if (!dup) return null;
         return (
           <div className="relative overflow-hidden rounded-2xl border border-indigo-500/25 bg-indigo-500/[0.07] p-4">
@@ -768,7 +408,7 @@ export function StealthTariffs() {
                       convKeepExtras ? "border-saccent-500/50 bg-saccent-500/10" : "border-white/[0.08] bg-zinc-900/40 hover:border-white/20",
                     )}
                   >
-                    <p className="text-xs font-bold">📱 Сохранить устройства (+{fmtPrice(convPreview.extras.keep.extraCost ?? 0, currency)})</p>
+                    <p className="text-xs font-bold">📱 Сохранить устройства (+{formatMoney(convPreview.extras.keep.extraCost ?? 0, currency, "stealth")})</p>
                     <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
                       Всего {convPreview.extras.keep.totalDevices} устройств. Доплата за устройства
                       добавится к «Итого» выше.
@@ -889,7 +529,7 @@ export function StealthTariffs() {
               и юзеры думали, что оплаты с баланса в приложении нет вовсе). */}
           {state.client && (
             <button
-              onClick={() => canPayByBalance && setSelectedMethod({ kind: "balance", label: `Баланс (${balance.toFixed(0)}${fmtPrice(0, currency).slice(-1)})`, icon: Wallet })}
+              onClick={() => canPayByBalance && setSelectedMethod({ kind: "balance", label: `Баланс (${balance.toFixed(0)}${currencySymbol(currency)})`, icon: Wallet })}
               disabled={!canPayByBalance}
               className={cn(
                 "rounded-2xl border p-4 transition-colors duration-300 flex flex-col items-center gap-1.5 backdrop-blur-xl",
@@ -907,7 +547,7 @@ export function StealthTariffs() {
                 "text-[10px] font-medium tabular-nums",
                 canPayByBalance ? "text-emerald-400/90" : "text-zinc-500",
               )}>
-                {canPayByBalance ? fmtPrice(balance, currency) : `${fmtPrice(balance, currency)} — не хватает`}
+                {canPayByBalance ? formatMoney(balance, currency, "stealth") : `${formatMoney(balance, currency, "stealth")} — не хватает`}
               </span>
             </button>
           )}
@@ -924,7 +564,7 @@ export function StealthTariffs() {
         <ul className="space-y-1.5">
           {[
             currentTariffDeviceLimit ? `До ${currentTariffDeviceLimit} устройств` : "Поддержка нескольких устройств",
-            currentTariff?.trafficLimitBytes && currentTariff.trafficLimitBytes !== "0" ? "Ограниченный трафик" : "Безлимитный трафик",
+            Number(currentTariff?.trafficLimitBytes) > 0 ? "Ограниченный трафик" : "Безлимитный трафик",
             "Минимальные задержки",
           ].map((b, i) => (
             <li key={i} className="flex items-center gap-2 text-sm">
@@ -954,7 +594,7 @@ export function StealthTariffs() {
                 <p className="text-xs text-zinc-300 whitespace-pre-line leading-relaxed">{balConfirm.body}</p>
               </div>
             </div>
-            <p className="text-xs text-zinc-400">Списать {fmtPrice(totalPrice, currency)} с баланса и продолжить?</p>
+            <p className="text-xs text-zinc-400">Списать {formatMoney(finalPrice, currency, "stealth")} с баланса и продолжить?</p>
             <div className="flex gap-2 pt-1">
               <button type="button" onClick={() => setBalConfirm(null)} className="flex-1 rounded-xl border border-zinc-700 py-2.5 text-sm font-semibold text-zinc-300 active:scale-95 transition">Отмена</button>
               <button type="button" onClick={() => { setBalConfirm(null); void doPay(); }} className="flex-1 rounded-xl bg-saccent-500 py-2.5 text-sm font-bold text-white active:scale-95 transition">Да, продолжить</button>
@@ -971,7 +611,7 @@ export function StealthTariffs() {
           disabled={paying || !selectedMethod || !currentTariff}
           iconLeft={paying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
         >
-          {paying ? "Создаём платёж…" : `Оплатить ${fmtPrice(totalPrice, currency)}`}
+          {paying ? "Создаём платёж…" : `Оплатить ${formatMoney(finalPrice, currency, "stealth")}`}
         </StadiumButton>
       </div>
     </div>
