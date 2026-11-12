@@ -36,3 +36,9 @@ export function requireRemnaOnline(_req: Request, res: Response, next: NextFunct
     } else next();
   }).catch(next);
 }
+
+export function requireRemnaPaymentOnline(req: Request, res: Response, next: NextFunction) {
+  const body = req.body ?? {};
+  if (body.tariffId || body.customBuild || body.extraOption) return requireRemnaOnline(req, res, next);
+  next();
+}
