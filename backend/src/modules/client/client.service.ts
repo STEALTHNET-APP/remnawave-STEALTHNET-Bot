@@ -1873,3 +1873,25 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     translations: await loadAllLanguagePacks(full.activeLanguages),
   };
 }
+
+/** Общая валидация промокода — возвращает объект PromoCode или ошибку */
+export type PromoCodeRow = NonNullable<Awaited<ReturnType<typeof prisma.promoCode.findUnique>>>;
+export type ValidateResult = { ok: true; promo: PromoCodeRow } | { ok: false; error: string; status: number };
+
+export async function validatePromoCode(code: string, clientId: string): Promise<ValidateResult> {
+  const promo = await prisma.promoCode.findUnique({ where: { code: code.trim() } });
+  if (!promo || !promo.isActive) return { ok: false, error: "Промокод не найден или неактивен", status: 404 };
+  if (promo.expiresAt && promo.expiresAt < new Date()) return { ok: false, error: "Срок действия промокода истёк", status: 400 };
+
+  if (promo.maxUses > 0) {
+    const totalUsages = await prisma.promoCodeUsage.count({ where: { promoCodeId: promo.id } });
+    if (totalUsages >= promo.maxUses) return { ok: false, error: "Лимит использований промокода исчерпан", status: 400 };
+  }
+
+  const clientUsages = await prisma.promoCodeUsage.count({
+    where: { promoCodeId: promo.id, clientId },
+  });
+  if (clientUsages >= promo.maxUsesPerClient) return { ok: false, error: "Вы уже использовали этот промокод", status: 400 };
+
+  return { ok: true, promo };
+}
