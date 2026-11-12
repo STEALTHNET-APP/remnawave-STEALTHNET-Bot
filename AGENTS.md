@@ -66,7 +66,7 @@ Admin settings page (`frontend/src/pages/settings.tsx`) delegates tab contents t
 
 Client routes, marketplace and landing page are code-split using lazy loading in `frontend/src/App.tsx`. Animations are implemented using `framer-motion` (GSAP is not used).
 
-Check `frontend/src/lib/use-cabinet-design.ts` and the relevant page wrapper for Classic, Aurora and Stealth routing. A component's presence on disk does not prove that a route currently renders it. Test browser and Telegram Mini App behavior separately where it matters.
+Check `frontend/src/lib/use-cabinet-design.ts` and the relevant page wrapper for Classic, Aurora and Stealth routing. Common tariff purchasing, promo codes, and payment execution logic across all three themes is unified in `frontend/src/pages/cabinet/use-cabinet-tariff-purchase.ts`. A component's presence on disk does not prove that a route currently renders it. Test browser and Telegram Mini App behavior separately where it matters.
 
 PWA update behavior is in `frontend/src/components/pwa/pwa-update-prompt.tsx`. Workbox precaching in `frontend/vite.config.js` excludes admin chunks (`globIgnores`) to optimize client offline cache size. Preserve unsaved input and in-progress payment flows when changing reload behavior.
 
