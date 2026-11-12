@@ -9,7 +9,7 @@ import { validateTariffDevices } from "../extra-options/device-limit.js";
 import { createParitypayPayment, isParitypayConfigured } from "../paritypay/paritypay.service.js";
 import { createHmac, randomUUID } from "crypto";
 import { env } from "../../config/index.js";
-import { Router, type Request, type Response, type NextFunction } from "express";
+import { Router } from "express";
 import { z } from "zod";
 import { prisma, createPayment, assertActiveExtraOptionTargetForPayment, assertRenewalTargetForPayment, asPaymentUncheckedCreate } from "../../db.js";
 import {
@@ -21,15 +21,12 @@ import {
   validatePromoCode,
   type PromoCodeRow,
 } from "./client.service.js";
-import { requireClientAuth, requireRemnaOnline } from "./client.middleware.js";
+import { requireClientAuth, requireRemnaOnline, requireRemnaPaymentOnline } from "./client.middleware.js";
 export { requireRemnaOnline };
+export { requireRemnaPaymentOnline };
 import { remnaGetUser } from "../remna/remna.client.js";
+import { calculateDevicesProrataPriceCoefficient, calculateDevicesProrataPriceCoefficientForPrimary, getCustomBuildConfig, heleketCreatePaymentSchema } from "./client-checkout.util.js";
 
-function requireRemnaPaymentOnline(req: Request, res: Response, next: NextFunction) {
-  const body = req.body ?? {};
-  if (body.tariffId || body.customBuild || body.extraOption) return requireRemnaOnline(req, res, next);
-  next();
-}
 import { createPlategaTransaction, isPlategaConfigured } from "../platega/platega.service.js";
 import { activateTariffForClient, activateTariffByPaymentId, findConvertibleSubscription } from "../tariff/tariff-activation.service.js";
 import { saveRedirectAndBuildUrl } from "../payment-redirect/payment-redirect.util.js";
@@ -57,78 +54,6 @@ import { clientTrialsPromoRouter, extractCurrentExpireAt } from "./client-trials
 import { clientSubscriptionsRouter } from "./client-subscriptions.routes.js";
 import { clientTicketsRouter } from "./client-tickets.routes.js";
 export { fetchAvailableTrialsForClient } from "./client-trials-promo.routes.js";
-
-/**
- * вычисляет коэффициент масштабирования цены для доп. устройств.
- * Если в подписке осталось > 30 дней → цена = basePrice × (remainingDays / 30).
- * Иначе минимум = basePrice.
- * Если targetSubId не передан или sub не найдена → коэффициент = 1 (полная цена).
- */
-// T-extras-prorata-fix (портировано из WolfVPN): expireAt из Remna, если в БД пусто
-// (частый рассинхрон для primary #0 — иначе coef=1 и цена за полный месяц вместо pro-rata).
-function extractRemnaExpireAt(data: unknown): Date | null {
-  if (!data || typeof data !== "object") return null;
-  const d = data as Record<string, unknown>;
-  const inner = (d.response && typeof d.response === "object" ? d.response : d) as Record<string, unknown>;
-  const raw = inner.expireAt ?? inner.expire_at;
-  if (typeof raw === "string" || typeof raw === "number") {
-    const dt = new Date(raw);
-    if (!isNaN(dt.getTime())) return dt;
-  }
-  return null;
-}
-
-async function resolveSubExpireAt(expireAtDb: Date | null, remnawaveUuid: string | null | undefined): Promise<Date | null> {
-  if (expireAtDb) return expireAtDb;
-  if (!remnawaveUuid) return null;
-  const u = await remnaGetUser(remnawaveUuid).catch(() => null);
-  if (!u || u.error || !u.data) return null;
-  return extractRemnaExpireAt(u.data);
-}
-
-async function calculateDevicesProrataPriceCoefficient(targetSubId: string | null | undefined): Promise<number> {
-  if (!targetSubId) return 1;
-  const sub = await prisma.subscription.findUnique({
-    where: { id: targetSubId },
-    select: { expireAt: true, remnawaveUuid: true },
-  }).catch(() => null);
-  if (!sub) return 1;
-  const expireAt = await resolveSubExpireAt(sub.expireAt, sub.remnawaveUuid);
-  if (!expireAt) return 1;
-  const daysLeft = (expireAt.getTime() - Date.now()) / 86_400_000;
-  if (daysLeft <= 0) {
-    const error = new Error("Нельзя купить опцию для истёкшей подписки. Сначала продлите подписку.") as Error & { code?: string };
-    error.code = "SUBSCRIPTION_INACTIVE";
-    throw error;
-  }
-  return Math.max(1, daysLeft) / 30;
-}
-
-/**
- * вычисляет коэффициент для primary подписки клиента.
- * Используется когда targetSubscriptionId не передан и нужно применить опцию к primary.
- */
-async function calculateDevicesProrataPriceCoefficientForPrimary(clientId: string): Promise<number> {
-  const client = await prisma.client.findUnique({
-    where: { id: clientId },
-    select: { remnawaveUuid: true },
-  }).catch(() => null);
-  if (!client?.remnawaveUuid) return 1;
-  const primarySub = await prisma.subscription.findFirst({
-    where: { ownerId: clientId, remnawaveUuid: client.remnawaveUuid },
-    select: { expireAt: true, remnawaveUuid: true },
-  }).catch(() => null);
-  // Даже если primarySub не найдена / expireAt пуст — берём дату из Remna по uuid клиента.
-  const expireAt = await resolveSubExpireAt(primarySub?.expireAt ?? null, primarySub?.remnawaveUuid ?? client.remnawaveUuid);
-  if (!expireAt) return 1;
-  const daysLeft = (expireAt.getTime() - Date.now()) / 86_400_000;
-  if (daysLeft <= 0) {
-    const error = new Error("Нельзя купить опцию для истёкшей подписки. Сначала продлите подписку.") as Error & { code?: string };
-    error.code = "SUBSCRIPTION_INACTIVE";
-    throw error;
-  }
-  return Math.max(1, daysLeft) / 30;
-}
 
 // Единый роутер /api/client: /auth (логин, регистрация, me) + кабинет (подписка, платежи)
 export const clientRouter = Router();
@@ -1189,31 +1114,6 @@ clientRouter.post("/payments/balance", requireRemnaPaymentOnline, asyncHandler(a
 }));
 
 // ——— Гибкий тариф (собери сам): расчёт и оплата балансом ———
-function getCustomBuildConfig(config: Awaited<ReturnType<typeof getSystemConfig>>) {
-  const c = config as {
-    customBuildEnabled?: boolean;
-    customBuildPricePerDay?: number;
-    customBuildPricePerDevice?: number;
-    customBuildTrafficMode?: string;
-    customBuildPricePerGb?: number;
-    customBuildSquadUuid?: string | null;
-    customBuildCurrency?: string;
-    customBuildMaxDays?: number;
-    customBuildMaxDevices?: number;
-  };
-  if (!c.customBuildEnabled || !c.customBuildSquadUuid?.trim()) return null;
-  return {
-    pricePerDay: c.customBuildPricePerDay ?? 0,
-    pricePerDevice: c.customBuildPricePerDevice ?? 0,
-    trafficMode: c.customBuildTrafficMode === "per_gb" ? "per_gb" as const : "unlimited" as const,
-    pricePerGb: c.customBuildPricePerGb ?? 0,
-    squadUuid: c.customBuildSquadUuid.trim(),
-    currency: (c.customBuildCurrency || "rub").toLowerCase(),
-    maxDays: Math.min(360, Math.max(1, c.customBuildMaxDays ?? 360)),
-    maxDevices: Math.min(20, Math.max(1, c.customBuildMaxDevices ?? 10)),
-  };
-}
-
 const customBuildPayByBalanceSchema = z.object({
   days: z.number().int().min(1).max(360),
   devices: z.number().int().min(1).max(20),
@@ -2589,33 +2489,6 @@ clientRouter.post(["/cryptopay/create-payment", "/telegram-stars/create-payment"
   }
 }));
 
-const heleketCreatePaymentSchema = z.object({
-  amount: z.number().positive().optional(),
-  currency: z.string().min(1).max(10).optional(),
-  tariffId: z.string().min(1).optional(),
-  tariffPriceOptionId: z.string().min(1).optional(),
-  deviceCount: z.number().int().min(0).max(100).optional(),
-  proxyTariffId: z.string().min(1).optional(),
-  singboxTariffId: z.string().min(1).optional(),
-  promoCode: z.string().max(50).optional(),
-  // покупка как доп. подписка — см. yookassa-схему выше.
-  asAdditional: z.boolean().optional(),
-  // покупка подарочной подписки — будет создана с purchasedAsGift=true.
-  asGift: z.boolean().optional(),
-  // какой триал заменить этой покупкой (несколько триалов —
-  // выбор юзера; без поля заменяется самый старый).
-  replaceTrialSubId: z.string().min(1).max(64).optional(),
-  // продление существующей secondary (вместо создания новой).
-  extendsSecondarySubId: z.string().min(1).max(64).optional(),
-  // при активации платежа удалить все доп. устройства.
-  removeExtrasOnActivate: z.boolean().optional(),
-  extraOption: z.object({
-    kind: z.enum(["traffic", "devices", "servers"]),
-    productId: z.string().min(1),
-    targetSubscriptionId: z.string().min(1).optional(),
-  }).optional(),
-  customBuild: z.object({ days: z.number().int().min(1).max(360), devices: z.number().int().min(1).max(20), trafficGb: z.number().min(0).nullable().optional() }).optional(),
-});
 clientRouter.post("/heleket/create-payment", requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   try {
     const clientId = (req as unknown as { clientId: string }).clientId;
