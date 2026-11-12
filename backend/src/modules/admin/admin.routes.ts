@@ -484,6 +484,46 @@ adminRouter.get("/settings", asyncRoute(async (_req, res) => {
   return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
 }));
 
+adminRouter.post("/settings/groq-models", asyncRoute(async (req, res) => {
+  const rawBody = req.body as { apiKey?: unknown } | undefined;
+  const bodyKey = typeof rawBody?.apiKey === "string" ? rawBody.apiKey.trim() : "";
+  const config = await getSystemConfig();
+  const apiKey = bodyKey || (config as { groqApiKey?: string | null }).groqApiKey?.trim();
+  if (!apiKey) {
+    return res.status(400).json({ message: "API-ключ Groq не указан" });
+  }
+
+  const { proxyFetch } = await import("../proxy-util/proxy-fetch.js");
+  const { getProxyUrl } = await import("../proxy-util/get-proxy-url.js");
+  const aiProxy = await getProxyUrl("ai");
+
+  try {
+    const groqRes = await proxyFetch("https://api.groq.com/openai/v1/models", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    }, aiProxy);
+    const text = await groqRes.text();
+    if (!groqRes.ok) {
+      return res.status(groqRes.status).json({ message: `Groq API ${groqRes.status}: ${text.slice(0, 500)}` });
+    }
+    let payload: { data?: Array<{ id?: unknown; active?: unknown }> };
+    try {
+      payload = JSON.parse(text) as { data?: Array<{ id?: unknown; active?: unknown }> };
+    } catch {
+      return res.status(502).json({ message: "Groq вернул невалидный JSON" });
+    }
+    const models = Array.from(new Set(
+      (payload.data ?? [])
+        .filter((model) => typeof model.id === "string" && model.id.length > 0 && !model.id.startsWith("whisper-") && model.active !== false)
+        .map((model) => model.id as string)
+    )).sort();
+    return res.json({ models });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return res.status(502).json({ message: `Не удалось получить модели Groq: ${message}` });
+  }
+}));
+
 /** Версия панели — для мониторинга. Под auth, чтобы не светить наружу. */
 adminRouter.get("/version", asyncRoute(async (_req, res) => {
   return res.json(APP_BUILD);
@@ -1539,7 +1579,7 @@ adminRouter.patch("/settings", async (req, res) => {
     await prisma.systemSetting.upsert({ where: { key: "groq_api_key" }, create: { key: "groq_api_key", value: val }, update: { value: val } });
   }
   if (updates.groqModel !== undefined) {
-    const val = updates.groqModel ?? "llama3-8b-8192";
+    const val = updates.groqModel ?? "openai/gpt-oss-120b";
     await prisma.systemSetting.upsert({ where: { key: "groq_model" }, create: { key: "groq_model", value: val }, update: { value: val } });
   }
   if (updates.groqFallback1 !== undefined) {

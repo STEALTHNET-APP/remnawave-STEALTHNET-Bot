@@ -793,7 +793,7 @@ async function loadSystemConfigFromDb() {
     overpayLogin: (map.overpay_login ?? "").trim() || null,
     overpayPassword: (map.overpay_password ?? "").trim() || null,
     groqApiKey: (map.groq_api_key ?? "").trim() || null,
-    groqModel: (map.groq_model ?? "").trim() || "llama3-8b-8192",
+    groqModel: (map.groq_model ?? "").trim() || "openai/gpt-oss-120b",
     groqFallback1: (map.groq_fallback_1 ?? "").trim() || null,
     groqFallback2: (map.groq_fallback_2 ?? "").trim() || null,
     groqFallback3: (map.groq_fallback_3 ?? "").trim() || null,

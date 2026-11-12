@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { Download, Upload, Link2, ChevronDown, Check, Plus, Trash2, KeyRound, Loader2, Sparkles, Globe, Plug } from "lucide-react";
+import { Download, Upload, Link2, ChevronDown, Check, Plus, Trash2, KeyRound, Loader2, Sparkles, Globe, Plug, RefreshCw } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ACCENT_PALETTES } from "@/contexts/theme";
@@ -34,6 +34,16 @@ import { MailTelegramTab } from "@/components/admin/settings/tabs/mail-telegram-
 import { ApiTab } from "@/components/admin/settings/tabs/api-tab";
 import { ReferralsTab } from "@/components/admin/settings/tabs/referrals-tab";
 import { GiftsTab } from "@/components/admin/settings/tabs/gifts-tab";
+
+const DEFAULT_GROQ_MODELS = [
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "qwen/qwen3.8-27b",
+];
+const ENTERPRISE_GROQ_MODELS = [
+  "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
+];
 
 export function SettingsPage() {
   const { t } = useTranslation();
@@ -150,6 +160,35 @@ export function SettingsPage() {
   const [landingDevicesList, setLandingDevicesList] = useState<string[]>(defaultDevicesList);
   const [landingQuickStartList, setLandingQuickStartList] = useState<string[]>(defaultQuickStartList);
   const token = state.accessToken!;
+
+  const [groqModels, setGroqModels] = useState<string[]>([]);
+  const [loadingGroqModels, setLoadingGroqModels] = useState(false);
+  const [groqModelsMessage, setGroqModelsMessage] = useState<string | null>(null);
+
+  const handleLoadGroqModels = async () => {
+    setLoadingGroqModels(true);
+    setGroqModelsMessage(null);
+    try {
+      const res = await api.getGroqModels(token, settings?.groqApiKey || undefined);
+      setGroqModels(res.models);
+      setGroqModelsMessage(`Загружено моделей: ${res.models.length}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setGroqModelsMessage(`Ошибка: ${msg}`);
+    } finally {
+      setLoadingGroqModels(false);
+    }
+  };
+
+  const availableModels = Array.from(new Set([
+    ...groqModels,
+    ...DEFAULT_GROQ_MODELS,
+    ...ENTERPRISE_GROQ_MODELS,
+    ...(settings?.groqModel ? [settings.groqModel] : []),
+    ...(settings?.groqFallback1 ? [settings.groqFallback1] : []),
+    ...(settings?.groqFallback2 ? [settings.groqFallback2] : []),
+    ...(settings?.groqFallback3 ? [settings.groqFallback3] : []),
+  ])).filter(Boolean);
 
   /* Данные — через TanStack Query (admin-queries). Формы остаются локальным useState. */
   const qc = useQueryClient();
@@ -1027,28 +1066,30 @@ export function SettingsPage() {
                     <p className="text-xs text-muted-foreground">{t("admin.settings.ai_key_hint")}</p>
                   </div>
                   <div className="space-y-2">
-                    <Label>{t("admin.settings.ai_model")}</Label>
+                    <div className="flex items-center justify-between">
+                      <Label>{t("admin.settings.ai_model")}</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={loadingGroqModels}
+                        onClick={handleLoadGroqModels}
+                      >
+                        {loadingGroqModels ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                        Загрузить модели из Groq
+                      </Button>
+                    </div>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      value={settings.groqModel ?? "llama3-8b-8192"}
+                      value={settings.groqModel ?? "openai/gpt-oss-120b"}
                       onChange={(e) => setSettings((s) => (s ? { ...s, groqModel: e.target.value } : s))}
                     >
-                      <option value="llama3-8b-8192">llama3-8b-8192</option>
-                      <option value="llama3-70b-8192">llama3-70b-8192</option>
-                      <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
-                      <option value="llama-3.1-70b-versatile">llama-3.1-70b-versatile</option>
-                      <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
-                      <option value="deepseek-r1-distill-llama-70b">deepseek-r1-distill-llama-70b</option>
-                      <option value="deepseek-r1-distill-qwen-32b">deepseek-r1-distill-qwen-32b</option>
-                      <option value="qwen-2.5-32b">qwen-2.5-32b</option>
-                      <option value="qwen-2.5-coder-32b">qwen-2.5-coder-32b</option>
-                      <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
-                      <option value="llama3-70b-8192">llama3-70b-8192</option>
-                      <option value="llama3-8b-8192">llama3-8b-8192</option>
-                      <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
-                      <option value="gemma2-9b-it">gemma2-9b-it</option>
+                      {availableModels.map((model) => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
                     </select>
                     <p className="text-xs text-muted-foreground">{t("admin.settings.ai_model_hint")}</p>
+                    {groqModelsMessage && <p className="text-xs text-muted-foreground">{groqModelsMessage}</p>}
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -1063,16 +1104,9 @@ export function SettingsPage() {
                       onChange={(e) => setSettings((s) => (s ? { ...s, groqFallback1: e.target.value || null } : s))}
                     >
                       <option value="">{t("admin.settings.ai_no_fallback")} 1</option>
-                      <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
-                      <option value="deepseek-r1-distill-llama-70b">deepseek-r1-distill-llama-70b</option>
-                      <option value="deepseek-r1-distill-qwen-32b">deepseek-r1-distill-qwen-32b</option>
-                      <option value="qwen-2.5-32b">qwen-2.5-32b</option>
-                      <option value="qwen-2.5-coder-32b">qwen-2.5-coder-32b</option>
-                      <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
-                      <option value="llama3-70b-8192">llama3-70b-8192</option>
-                      <option value="llama3-8b-8192">llama3-8b-8192</option>
-                      <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
-                      <option value="gemma2-9b-it">gemma2-9b-it</option>
+                      {availableModels.map((model) => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
                     </select>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background disabled:opacity-50"
@@ -1080,16 +1114,9 @@ export function SettingsPage() {
                       onChange={(e) => setSettings((s) => (s ? { ...s, groqFallback2: e.target.value || null } : s))}
                     >
                       <option value="">{t("admin.settings.ai_no_fallback")} 2</option>
-                      <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
-                      <option value="deepseek-r1-distill-llama-70b">deepseek-r1-distill-llama-70b</option>
-                      <option value="deepseek-r1-distill-qwen-32b">deepseek-r1-distill-qwen-32b</option>
-                      <option value="qwen-2.5-32b">qwen-2.5-32b</option>
-                      <option value="qwen-2.5-coder-32b">qwen-2.5-coder-32b</option>
-                      <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
-                      <option value="llama3-70b-8192">llama3-70b-8192</option>
-                      <option value="llama3-8b-8192">llama3-8b-8192</option>
-                      <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
-                      <option value="gemma2-9b-it">gemma2-9b-it</option>
+                      {availableModels.map((model) => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
                     </select>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background disabled:opacity-50"
@@ -1097,16 +1124,9 @@ export function SettingsPage() {
                       onChange={(e) => setSettings((s) => (s ? { ...s, groqFallback3: e.target.value || null } : s))}
                     >
                       <option value="">{t("admin.settings.ai_no_fallback")} 3</option>
-                      <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
-                      <option value="deepseek-r1-distill-llama-70b">deepseek-r1-distill-llama-70b</option>
-                      <option value="deepseek-r1-distill-qwen-32b">deepseek-r1-distill-qwen-32b</option>
-                      <option value="qwen-2.5-32b">qwen-2.5-32b</option>
-                      <option value="qwen-2.5-coder-32b">qwen-2.5-coder-32b</option>
-                      <option value="llama-3.1-8b-instant">llama-3.1-8b-instant</option>
-                      <option value="llama3-70b-8192">llama3-70b-8192</option>
-                      <option value="llama3-8b-8192">llama3-8b-8192</option>
-                      <option value="mixtral-8x7b-32768">mixtral-8x7b-32768</option>
-                      <option value="gemma2-9b-it">gemma2-9b-it</option>
+                      {availableModels.map((model) => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

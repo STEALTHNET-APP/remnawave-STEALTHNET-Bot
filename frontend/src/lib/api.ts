@@ -1129,6 +1129,14 @@ export const api = {
     return request("/admin/settings", { token });
   },
 
+  async getGroqModels(token: string, apiKey?: string): Promise<{ models: string[] }> {
+    return request("/admin/settings/groq-models", {
+      method: "POST",
+      body: JSON.stringify({ apiKey: apiKey || undefined }),
+      token,
+    });
+  },
+
   async getReferralNetwork(token: string): Promise<{
     nodes: Array<{
       id: string;
