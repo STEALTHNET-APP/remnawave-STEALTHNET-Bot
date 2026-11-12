@@ -171,7 +171,7 @@ export function SettingsPage() {
     try {
       const res = await api.getGroqModels(token, settings?.groqApiKey || undefined);
       setGroqModels(res.models);
-      setGroqModelsMessage(`Загружено моделей: ${res.models.length}`);
+      setGroqModelsMessage(res.models.length ? t("admin.settings.ai_models_loaded", { count: res.models.length }) : t("admin.settings.ai_models_empty"));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setGroqModelsMessage(`Ошибка: ${msg}`);
@@ -1076,7 +1076,7 @@ export function SettingsPage() {
                         onClick={handleLoadGroqModels}
                       >
                         {loadingGroqModels ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
-                        Загрузить модели из Groq
+                        {t("admin.settings.ai_load_models")}
                       </Button>
                     </div>
                     <select
