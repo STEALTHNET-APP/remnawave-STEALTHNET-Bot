@@ -155,6 +155,31 @@ function RequireClientAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RequireAnonymousClient({ children }: { children: React.ReactNode }) {
+  const { state } = useClientAuth();
+  const location = useLocation();
+  const inTelegram = typeof window !== "undefined" && Boolean((window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData);
+  const showMiniappLoading = state.miniappAuthLoading || (inTelegram && !state.token && !state.miniappAuthAttempted);
+  if (showMiniappLoading) {
+    return (
+      <div className="min-h-svh flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-background to-muted/20">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p className="text-muted-foreground">Загрузка кабинета…</p>
+      </div>
+    );
+  }
+  const hasOAuthHash = typeof window !== "undefined" && window.location.hash.includes("id_token");
+  if (hasOAuthHash) {
+    return <>{children}</>;
+  }
+  if (state.token) {
+    const searchParams = new URLSearchParams(location.search);
+    const returnTo = location.state?.returnTo || searchParams.get("returnTo") || "/cabinet/dashboard";
+    return <Navigate to={returnTo} replace />;
+  }
+  return <>{children}</>;
+}
+
 function RequireOnboarding({ children }: { children: React.ReactNode }) {
   const { state } = useClientAuth();
   const location = useLocation();
@@ -325,41 +350,25 @@ function AppRoutes() {
       <Route
         path="/cabinet/onboarding"
         element={
-          <ClientAuthProvider>
-            <RequireClientAuth>
-              <RequireOnboarding>
-                <CabinetConfigProvider><ClientOnboardingPage /></CabinetConfigProvider>
-              </RequireOnboarding>
-            </RequireClientAuth>
-          </ClientAuthProvider>
+          <RequireClientAuth>
+            <RequireOnboarding>
+              <CabinetConfigProvider><ClientOnboardingPage /></CabinetConfigProvider>
+            </RequireOnboarding>
+          </RequireClientAuth>
         }
       />
 
       {/* Публичная страница подарка — без auth */}
-      <Route
-        path="/gift/:code"
-        element={
-          <ClientAuthProvider>
-            <GiftActivatePage />
-          </ClientAuthProvider>
-        }
-      />
+      <Route path="/gift/:code" element={<GiftActivatePage />} />
 
-      <Route
-        path="/cabinet"
-        element={
-          <ClientAuthProvider>
-            <CabinetLayout />
-          </ClientAuthProvider>
-        }
-      >
+      <Route path="/cabinet" element={<CabinetLayout />}>
         <Route index element={<CabinetIndexRedirect />} />
         <Route path="history" element={<RequireClientAuth><ClientHistoryPage /></RequireClientAuth>} />
         <Route path="wallet" element={<RequireClientAuth><ClientWalletPage /></RequireClientAuth>} />
         <Route path="help" element={<RequireClientAuth><ClientHelpPage /></RequireClientAuth>} />
-        <Route path="login" element={<ClientLoginPage />} />
-        <Route path="register" element={<ClientRegisterPage />} />
-        <Route path="forgot-password" element={<ClientForgotPasswordPage />} />
+        <Route path="login" element={<RequireAnonymousClient><ClientLoginPage /></RequireAnonymousClient>} />
+        <Route path="register" element={<RequireAnonymousClient><ClientRegisterPage /></RequireAnonymousClient>} />
+        <Route path="forgot-password" element={<RequireAnonymousClient><ClientForgotPasswordPage /></RequireAnonymousClient>} />
         <Route path="reset-password" element={<ClientResetPasswordPage />} />
         <Route path="verify-email" element={<ClientVerifyEmailPage />} />
         {/* issue #112/#127: legal-документы — публичные (до auth-гейта), redirect на external link из настроек */}
@@ -616,11 +625,13 @@ export default function App() {
       <BrowserRouter future={routerFutureFlags}>
         <ThemeProvider>
           <AuthProvider>
-            <AdminDialogHost />
-            <AnimatedBackground />
-            <TitleAndThemeSync  />
-            <AppRoutes />
-            <PwaUpdatePrompt />
+            <ClientAuthProvider>
+              <AdminDialogHost />
+              <AnimatedBackground />
+              <TitleAndThemeSync  />
+              <AppRoutes />
+              <PwaUpdatePrompt />
+            </ClientAuthProvider>
           </AuthProvider>
         </ThemeProvider>
       </BrowserRouter>

@@ -100,8 +100,15 @@ export function ClientRegisterPage() {
   const [searchParams] = useSearchParams();
   const refCode = searchParams.get("ref")?.trim() || undefined;
   const utm = useUtmCapture(searchParams);
-  const { register, loginByGoogle, loginByApple } = useClientAuth();
+  const { state, register, loginByGoogle, loginByApple } = useClientAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const hasOAuthHash = typeof window !== "undefined" && window.location.hash.includes("id_token");
+    if (state.token && !hasOAuthHash) {
+      navigate("/cabinet/dashboard", { replace: true });
+    }
+  }, [state.token, navigate]);
 
   function validateEmail(value: string): string {
     if (!value.trim()) return t("cabinet.register.email_required");

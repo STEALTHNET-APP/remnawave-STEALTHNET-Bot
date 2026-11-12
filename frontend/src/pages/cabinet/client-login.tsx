@@ -41,8 +41,15 @@ export function ClientLoginPage() {
   const [publicAppUrl, setPublicAppUrl] = useState<string | null>(null);
   const [appleEnabled, setAppleEnabled] = useState(false);
   const [searchParams] = useSearchParams();
-  const { login, loginByGoogle, loginByApple } = useClientAuth();
+  const { state, login, loginByGoogle, loginByApple } = useClientAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const hasOAuthHash = typeof window !== "undefined" && window.location.hash.includes("id_token");
+    if (state.token && !hasOAuthHash) {
+      navigate("/cabinet/dashboard", { replace: true });
+    }
+  }, [state.token, navigate]);
 
   function validateEmail(value: string): string {
     if (!value.trim()) return t("cabinet.login.email_required");
