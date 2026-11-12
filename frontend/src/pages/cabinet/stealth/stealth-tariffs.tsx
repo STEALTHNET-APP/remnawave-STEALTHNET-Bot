@@ -61,7 +61,7 @@ export function StealthTariffs() {
     doPay,
     prepareBalancePayment,
     loading,
-  } = useCabinetTariffPurchase({ autoSelectExtended: "tariffOnly", requirePriceOption: true });
+  } = useCabinetTariffPurchase({ autoSelectFirst: true, autoSelectExtended: "tariffOnly", requirePriceOption: true });
 
   const currentTariffDeviceLimit = Math.max(currentTariff?.includedDevices ?? 0, currentTariff?.deviceLimit ?? 0) || null;
   const trialsOwned = mySubs.filter((sub) => sub.isTrial);

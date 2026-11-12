@@ -311,10 +311,11 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
   }, [categories, extendTarget, options.catalogFallbackToAll]);
 
   useEffect(() => {
-    if (!options.autoSelectFirst) return;
-    if (categories.length === 0) return;
+    if (!options.autoSelectFirst || extendParam) return;
+    const list = displayCategories.length > 0 ? displayCategories : categories;
+    if (list.length === 0) return;
     if (selectedCatId) return;
-    const category = categories[0];
+    const category = list[0];
     const tariff = category.tariffs[0];
     setSelectedCatId(category.id);
     if (!tariff) return;
@@ -323,7 +324,7 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
     if (priceOptions.length > 0) {
       setSelectedPriceOptionId((priceOptions.find((option) => option.durationDays === 30) ?? priceOptions[0]).id);
     }
-  }, [options.autoSelectFirst, categories, selectedCatId]);
+  }, [options.autoSelectFirst, extendParam, displayCategories, categories, selectedCatId]);
 
   useEffect(() => {
     const mode = options.autoSelectExtended ?? false;
@@ -402,7 +403,7 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
   const pricePerDay = days > 0 ? finalPrice / days : 0;
 
   const balance = state.client?.balance ?? 0;
-  const canPayWithBalance = balance >= finalPrice && finalPrice > 0;
+  const canPayWithBalance = balance >= finalPrice && totalPrice > 0;
   const personalDiscountPct = Math.max(
     0,
     (state.client as { personalDiscountPercent?: number | null } | null)?.personalDiscountPercent ?? 0,
