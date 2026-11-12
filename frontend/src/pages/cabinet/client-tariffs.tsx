@@ -1,9 +1,8 @@
 import { AnimatedMoney } from "@/components/animated-money";
-import { useLocation } from "react-router-dom";
 import { ClassicTariffCatalog } from "./classic-tariff-catalog";
 import "./classic-payment.css";
 import { AuroraTariffs } from "./aurora/aurora-tariffs";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,7 +11,6 @@ import { useClientAuth } from "@/contexts/client-auth";
 import { useCabinetDesign } from "@/lib/use-cabinet-design";
 import { StealthTariffs } from "@/pages/cabinet/stealth/stealth-tariffs";
 import { api } from "@/lib/api";
-import type { PublicTariffCategory, TariffConversionPreview } from "@/lib/api";
 import { formatRuDays } from "@/lib/i18n";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,25 +30,13 @@ import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
 import { PayNowPanel } from "@/components/payment/pay-now-panel";
 import { ExtendSubscriptionDialog } from "@/components/payment/extend-subscription-dialog";
 import { cn } from "@/lib/utils";
-
-function formatMoney(amount: number, currency: string) {
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: currency.toUpperCase() === "USD" ? "USD" : currency.toUpperCase() === "RUB" ? "RUB" : "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-// Цена за день — всегда с двумя знаками; полная цена сохраняет копейки, если они есть.
-function formatMoneyPerDay(amount: number, currency: string) {
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: currency.toUpperCase() === "USD" ? "USD" : currency.toUpperCase() === "RUB" ? "RUB" : "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
+import {
+  applyExtrasPrice,
+  formatMoney,
+  formatMoneyPerDay,
+  useCabinetTariffPurchase,
+  type PayMethod,
+} from "./use-cabinet-tariff-purchase";
 
 type TariffPriceOption = { id: string; durationDays: number; price: number; sortOrder: number };
 type DeviceDiscountTier = { minExtraDevices: number; discountPercent: number };
@@ -71,27 +57,23 @@ type TariffForPay = {
   priceOptions?: TariffPriceOption[];
 };
 
-/**
- * Цена пакета доп. устройств с учётом длительности.
- * pricePerExtra указан за 30 дней (база), для других опций умножается на durationDays/30.
- * Скидка применяется ДО умножения на коэффициент.
- */
 const EXTRA_DEVICE_BASE_DAYS = 30;
-function applyExtrasPrice(
-  pricePerExtra: number,
-  extras: number,
-  tiers: DeviceDiscountTier[] | undefined,
-  durationDays: number = EXTRA_DEVICE_BASE_DAYS,
-): { extrasTotal: number; pct: number } {
-  const safe = Math.max(0, Math.floor(extras));
-  if (safe === 0 || pricePerExtra <= 0) return { extrasTotal: 0, pct: 0 };
-  const sorted = [...(tiers ?? [])].sort((a, b) => b.minExtraDevices - a.minExtraDevices);
-  const tier = sorted.find((t) => safe >= t.minExtraDevices);
-  const pct = tier?.discountPercent ?? 0;
-  const safeDays = Math.max(1, durationDays);
-  const monthly = pricePerExtra * safe * (100 - pct) / 100;
-  return { extrasTotal: Math.round(monthly * (safeDays / EXTRA_DEVICE_BASE_DAYS) * 100) / 100, pct };
-}
+
+const READY_PROVIDER_NAMES: Record<string, string> = {
+  platega: "Platega",
+  yoomoney: "ЮMoney",
+  yookassa: "ЮKassa",
+  telegram_stars: "Telegram Stars",
+  cryptopay: "Crypto Bot",
+  heleket: "Heleket",
+  rollypay: "RollyPay",
+  cispay: "CisPay",
+  paritypay: "ParityPay",
+  cloudpayments: "CloudPayments",
+  lava: "LAVA",
+  lavatop: "Lava.top",
+  overpay: "Overpay",
+};
 
 function hasExtras(t: TariffForPay): boolean {
   return (t.pricePerExtraDevice ?? 0) > 0 && (t.maxExtraDevices ?? 0) > 0;
@@ -109,182 +91,115 @@ function ClassicTariffsPage() {
   const { state, refreshProfile } = useClientAuth();
   const token = state.token;
   const client = state.client;
-  const [tariffs, setTariffs] = useState<PublicTariffCategory[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [catalogError, setCatalogError] = useState(false);
-  const [plategaMethods, setPlategaMethods] = useState<{ id: number; label: string }[]>([]);
-  const [yoomoneyEnabled, setYoomoneyEnabled] = useState(false);
-  const [yookassaEnabled, setYookassaEnabled] = useState(false);
-  const [telegramStarsEnabled, setTelegramStarsEnabled] = useState(false);
-  const [cryptopayEnabled, setCryptopayEnabled] = useState(false);
-  const [heleketEnabled, setHeleketEnabled] = useState(false);
-  const [rollypayEnabled, setRollypayEnabled] = useState(false);
-  const [cispayEnabled, setCispayEnabled] = useState(false);
-  const [paritypayEnabled, setParitypayEnabled] = useState(false);
-  const [cloudpaymentsEnabled, setCloudpaymentsEnabled] = useState(false);
-  const [lavaEnabled, setLavaEnabled] = useState(false);
-  const [lavatopEnabled, setLavatopEnabled] = useState(false);
-  const [overpayEnabled, setOverpayEnabled] = useState(false);
-  const [paymentProviders, setPaymentProviders] = useState<{ id: string; label: string; sortOrder: number }[]>([]);
-  const [trialConfig, setTrialConfig] = useState<{ trialEnabled: boolean; trialDays: number }>({ trialEnabled: false, trialDays: 0 });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const isMobileOrMiniapp = useCabinetMiniapp();
+
   const [payModal, setPayModal] = useState<{ tariff: TariffForPay } | null>(null);
-  const [payLoading, setPayLoading] = useState(false);
-  const [payError, setPayError] = useState<string | null>(null);
-  // превью конвертации (режим «одна подписка из категории»):
-  // показывается в модалке оплаты, чтобы юзер ДО оплаты понимал, что покупка
-  // обновит существующую подписку, а не создаст вторую.
-  const [convPreview, setConvPreview] = useState<TariffConversionPreview | null>(null);
-  // судьба доп. устройств при конвертации: true = переезжают на новый
-  // тариф (дней меньше), false = убираются (их остаток тоже превращается в дни).
-  const [convKeepExtras, setConvKeepExtras] = useState(true);
-  // без single-режима: у юзера уже есть подписка с этим тарифом —
-  // предлагаем продлить её (открывает модалку продления) или купить ещё одну.
-  const [extendDialogSubId, setExtendDialogSubId] = useState<string | null>(null);
   const [readyUrl, setReadyUrl] = useState<{ url: string; provider: string; paymentId?: string } | null>(null);
   const [trialLoading, setTrialLoading] = useState(false);
   const [trialError, setTrialError] = useState<string | null>(null);
 
-  // Активная подписка пользователя (для предупреждения о сбросе трафика)
   const [activeSubInfo, setActiveSubInfo] = useState<{ hasActive: boolean; expireAt: string | null; tariffName: string | null; currentPricePerDay: number | null }>({ hasActive: false, expireAt: null, tariffName: null, currentPricePerDay: null });
-  // Унифицированная модалка покупки: длительность + ДОП. устройства + скидки + total.
   const [purchaseModal, setPurchaseModal] = useState<{ tariff: TariffForPay } | null>(null);
-  const [selectedPriceOptionId, setSelectedPriceOptionId] = useState<string | null>(null);
-  /** Сколько ДОП. устройств клиент докупает поверх tariff.includedDevices (0..maxExtraDevices). */
-  const [selectedExtraDevices, setSelectedExtraDevices] = useState<number>(0);
-  // T-extend-devices (WolfVPN): при продлении — сохранить докупленные доп.устройства (цена выше)
-  // или удалить (стандартная цена тарифа). false = сохранить (дефолт, как в боте). Передаётся
-  // в backend как removeExtrasOnActivate (он сам пересчитает цену/уберёт устройства после оплаты).
-  const [removeExtrasOnExtend, setRemoveExtrasOnExtend] = useState(false);
+  const [extendDialogSubId, setExtendDialogSubId] = useState<string | null>(null);
 
-  // T-unify-cabinet (30.05.2026, WolfVPN): мульти-подписки как в боте.
-  // Список подписок клиента — нужен для режима продления (берём tariffId подписки).
-  const [userSubs, setUserSubs] = useState<{ id: string; subscriptionIndex: number; label: string; expireAt: string | null; emoji: string | null; tariffId: string | null; extraDevices: number; extraDevicesMonthlyPrice: number; isTrial: boolean; convertTariffIds: string[]; trialConvertAllTariffs: boolean; trialName: string | null }[]>([]);
-  // покупка заменяет триал: выбор какого (если их несколько).
-  const [replaceTrialChoice, setReplaceTrialChoice] = useState<string | null>(null);
-  const [buyMode, setBuyMode] = useState<{ kind: "new" } | { kind: "extend"; subId: string; label: string }>({ kind: "new" });
+  const {
+    config,
+    displayCategories: displayTariffs,
+    loading,
+    catalogError,
+    remnaAvailable,
+    refetchCatalog,
+    setSelectedTariffId,
+    selectedPriceOptionId,
+    setSelectedPriceOptionId,
+    extraDevices: selectedExtraDevices,
+    setExtraDevices: setSelectedExtraDevices,
+    extKeepExtras,
+    setExtKeepExtras,
+    convPreview,
+    convKeepExtras,
+    setConvKeepExtras,
+    replaceTrialChoice,
+    setReplaceTrialChoice,
+    refreshSubscriptions: loadUserSubs,
+    ownedTrials,
+    duplicateSubscription,
+    extendTarget,
+    totalPrice,
+    finalPrice,
+    canPayWithBalance,
+    availableMethods,
+    paying: payLoading,
+    payError,
+    setPayError,
+    doPay,
+    setPreviewEnabled,
+    extendExtrasFor,
+    keepExtrasCost,
+    promoInput,
+    setPromoInput,
+    promoApplied,
+    promoInfo,
+    promoMsg,
+    promoBusy,
+    applyPromo,
+    clearPromo,
+  } = useCabinetTariffPurchase({
+    autoSelectExtended: false,
+    catalogFallbackToAll: false,
+    extras: true,
+    extrasDuringExtend: true,
+    convExtendExtras: false,
+    promoDiscount: "total",
+    promoAppliedMessage: null,
+    promoInvalidMessage: t("cabinet.tariffs.error_promo"),
+    clearPromoOnCheck: true,
+    promoActivateOnNonDiscount: async (code) => {
+      if (!token) return;
+      const activateRes = await api.clientActivatePromoCode(token, code);
+      toast.success("Промокод активирован 🎉", activateRes.message);
+      setPayModal(null);
+      await refreshProfile();
+    },
+    additional: "whenSubscriptions",
+    extrasOnExtendPayload: "always",
+    deviceCount: "always",
+    trialReplacement: "owned",
+    preview: "manual",
+    resetTrialChoiceOnPreview: true,
+    refreshProfileOnMount: false,
+    extraProviders: ["lavatop", "overpay"],
+    rubOnlyKinds: ["yookassa", "yoomoney", "lava"],
+    fallbackOrder: ["telegram_stars", "cryptopay", "heleket", "rollypay", "cispay", "paritypay", "cloudpayments", "yookassa", "yoomoney", "lava", "lavatop", "overpay", "platega"],
+    orderByConfigArray: true,
+    sendAmount: true,
+    payErrorMessage: t("cabinet.tariffs.error_payment"),
+    providerLabels: {
+      yookassa: t("cabinet.tariffs.sbp_cards_ru"),
+      yoomoney: t("cabinet.tariffs.yoomoney_cards"),
+      lava: "LAVA",
+      cryptopay: "Crypto Bot",
+    },
+    beforeBalancePay: () => (remnaAvailable ? null : "Панель VPN временно недоступна. Повторите покупку позже."),
+    onBalancePaid: (result) => {
+      setPayModal(null);
+      toast.success("Оплата прошла ✨", result.message);
+      void loadUserSubs();
+    },
+  });
 
-  // T-unify-cabinet: ?extend=<subId> — пришли с кнопки «Продлить» конкретной подписки.
-  // Как в боте (pay_tariff_ext): продлеваем ИМЕННО её и СТРОГО ТЕМ ЖЕ тарифом —
-  // поэтому каталог фильтруется до тарифа подписки (см. displayTariffs ниже).
-  const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const extendParam = searchParams.get("extend");
-  const extendTarget = extendParam ? userSubs.find((s) => s.id === extendParam) ?? null : null;
-
-  /**
-   * T-unify-cabinet: доп. поля для платёжных запросов.
-   *  - extend → продлить КОНКРЕТНУЮ подписку тем же тарифом (extendsSecondarySubId)
-   *  - обычная покупка из каталога → ВСЕГДА новая подписка (как в боте: каталог не продлевает).
-   *    asAdditional=true когда у клиента уже есть подписки (маркер «доп.»), иначе backend создаст первую.
-   */
-  function purchaseExtra(): { extendsSecondarySubId?: string; asAdditional?: boolean; removeExtrasOnActivate?: boolean } {
-    if (buyMode.kind === "extend") return { extendsSecondarySubId: buyMode.subId, removeExtrasOnActivate: removeExtrasOnExtend };
-    // same-tariff (single-режим): покупка того же тарифа = честное
-    // продление через extend-флоу — там единая для всех подписок логика доплаты
-    // за устройства и выбора «сохранить/убрать».
-    if (convPreview?.willConvert && convPreview.mode === "extend" && convPreview.subscription) {
-      return {
-        extendsSecondarySubId: convPreview.subscription.id,
-        ...(((convPreview.extras?.extraDevices ?? 0) > 0) ? { removeExtrasOnActivate: !convKeepExtras } : {}),
-      };
-    }
-    const base: { asAdditional?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string } = userSubs.length > 0 ? { asAdditional: true } : {};
-    // конвертация (single-категория): юзер выбрал убрать доп.
-    // устройства — их остаточная ценность уйдёт в дни нового тарифа.
-    if (convPreview?.willConvert && (convPreview.extras?.extraDevices ?? 0) > 0 && !convKeepExtras) {
-      base.removeExtrasOnActivate = true;
-    }
-    // покупка заменяет триал (полностью, с удалением).
-    // При нескольких триалах юзер выбирает какой; конверт-режим (willConvert)
-    // сам обновляет подписку — замена не нужна.
-    if (!convPreview?.willConvert) {
-      const trialsOwned = userSubs.filter((s) => s.isTrial);
-      if (trialsOwned.length > 0) {
-        base.replaceTrialSubId = replaceTrialChoice ?? trialsOwned[0].id;
-      }
-    }
-    return base;
-  }
-
-  // T-extend-devices (WolfVPN): доплата за СОХРАНЯЕМЫЕ доп.устройства при продлении подписки.
-  // extraDevicesMonthlyPrice хранится за 30 дней → масштабируем на длительность опции.
-  // Возвращает 0 если не продление / устройства удаляются / у подписки нет доп.устройств / тариф не тот.
-  function extendExtraCost(tf: { id?: string; durationDays?: number; priceOptions?: TariffPriceOption[] }, previewDays?: number): number {
-    if (!extendTarget || removeExtrasOnExtend || (extendTarget.extraDevices ?? 0) <= 0) return 0;
-    if (extendTarget.tariffId && tf.id && extendTarget.tariffId !== tf.id) return 0;
-    const opts = tf.priceOptions ?? [];
-    const opt = (selectedPriceOptionId ? opts.find((o) => o.id === selectedPriceOptionId) : null) ?? opts[0];
-    const days = previewDays ?? opt?.durationDays ?? tf.durationDays ?? EXTRA_DEVICE_BASE_DAYS;
-    return Math.round((extendTarget.extraDevicesMonthlyPrice ?? 0) * (Math.max(1, days) / EXTRA_DEVICE_BASE_DAYS));
-  }
-
-  // T-unify-cabinet (30.05.2026, WolfVPN): в режиме продления (?extend) показываем в каталоге
-  // ТОЛЬКО тариф продлеваемой подписки — продлить можно строго тем же тарифом (как бот pay_tariff_ext).
-  // для ТРИАЛЬНОЙ подписки дополнительно показываем тарифы из
-  // настройки триала convertTariffIds — переход с пробного сквада на боевой.
-  // триал с convertAllTariffs=true конвертируется в ЛЮБОЙ тариф — каталог не фильтруем.
-  const extendAllowedTariffIds = extendTarget?.isTrial && extendTarget.trialConvertAllTariffs
-    ? null
-    : extendTarget?.tariffId
-      ? [extendTarget.tariffId, ...(extendTarget.isTrial ? extendTarget.convertTariffIds : [])]
-      : extendTarget?.isTrial && extendTarget.convertTariffIds.length > 0
-        ? extendTarget.convertTariffIds
-        : null;
-  const displayTariffs = extendAllowedTariffIds
-    ? tariffs
-        .map((c) => ({ ...c, tariffs: c.tariffs.filter((tf) => extendAllowedTariffIds.includes(tf.id)) }))
-        .filter((c) => c.tariffs.length > 0)
-    : tariffs;
-
-  // Промокод
-  const promoLocation = useLocation();
-  const [promoInput, setPromoInput] = useState(() => typeof promoLocation.state?.promoCode === "string" ? promoLocation.state.promoCode : "");
-  const [promoChecking, setPromoChecking] = useState(false);
-  const [promoResult, setPromoResult] = useState<{ type: string; discountPercent?: number | null; discountFixed?: number | null; name: string } | null>(null);
-  const [promoError, setPromoError] = useState<string | null>(null);
-  const [remnaAvailable, setRemnaAvailable] = useState<boolean>(true);
-
-  // Триал предлагаем только если у юзера ещё нет активной подписки и триал не использован.
-  // Без проверки hasActive плашка висит даже после покупки тарифа.
+  const trialConfig = { trialEnabled: Boolean(config?.trialEnabled), trialDays: config?.trialDays ?? 0 };
   const showTrial = trialConfig.trialEnabled && !client?.trialUsed && !activeSubInfo.hasActive;
+  const promoResult = promoApplied && promoInfo
+    ? { type: "DISCOUNT", discountPercent: promoInfo.percent, discountFixed: promoInfo.fixed, name: promoInfo.name }
+    : null;
+  const promoError = promoApplied ? null : promoMsg;
 
-  const isMobileOrMiniapp = useCabinetMiniapp();
-  const loadCatalog = useCallback(() => {
-    setLoading(true);
-    setCatalogError(false);
-    api.getPublicTariffs().then((r) => {
-      setTariffs(r.items ?? []);
-      if (r.remnaAvailable !== undefined) setRemnaAvailable(r.remnaAvailable);
-    }).catch(() => setCatalogError(true)).finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => { loadCatalog(); }, [loadCatalog]);
-
-  useEffect(() => {
-    api.getPublicConfig().then((c) => {
-      setPlategaMethods(c.plategaMethods ?? []);
-      setYoomoneyEnabled(Boolean(c.yoomoneyEnabled));
-      setYookassaEnabled(Boolean(c.yookassaEnabled));
-      setCryptopayEnabled(Boolean(c.cryptopayEnabled));
-      setTelegramStarsEnabled(Boolean(c.telegramStarsEnabled));
-      setHeleketEnabled(Boolean(c.heleketEnabled));
-      setRollypayEnabled(Boolean(c.rollypayEnabled));
-      setCispayEnabled(Boolean(c.cispayEnabled));
-      setParitypayEnabled(Boolean(c.paritypayEnabled));
-      setCloudpaymentsEnabled(Boolean(c.cloudpaymentsEnabled));
-      setLavaEnabled(Boolean(c.lavaEnabled));
-      setLavatopEnabled(Boolean(c.lavatopEnabled));
-      setOverpayEnabled(Boolean(c.overpayEnabled));
-      setPaymentProviders(c.paymentProviders ?? []);
-      setTrialConfig({ trialEnabled: !!c.trialEnabled, trialDays: c.trialDays ?? 0 });
-    }).catch(() => { });
-  }, []);
-
-  // Загружаем статус подписки чтобы показать предупреждение о сбросе трафика
   useEffect(() => {
     if (!token) return;
     api.clientSubscription(token).then((res) => {
-      // Remna возвращает данные в subscription.response (или subscription напрямую)
       const sub = res?.subscription as Record<string, unknown> | null;
       const payload = (sub && typeof sub === "object" && sub.response && typeof sub.response === "object")
         ? (sub.response as Record<string, unknown>)
@@ -310,96 +225,33 @@ function ClassicTariffsPage() {
     }).catch(() => { /* not critical */ });
   }, [token]);
 
-  // T-unify-cabinet (30.05.2026, WolfVPN): загружаем ВСЕ подписки клиента (root + secondary),
-  // чтобы предложить выбор «продлить конкретную / купить новую» — точь-в-точь как в боте.
-  const loadUserSubs = useCallback(() => {
-    if (!token) return;
-    api.clientAllSubscriptions(token).then((r) => {
-      const list = (r.items ?? []).map((it) => {
-        // Remna кладёт данные в subscription.response или напрямую.
-        const raw = it.subscription as Record<string, unknown> | null;
-        const payload = (raw && typeof raw === "object" && raw.response && typeof raw.response === "object")
-          ? (raw.response as Record<string, unknown>)
-          : (raw ?? null);
-        const expireAt = payload && typeof payload.expireAt === "string" ? payload.expireAt : null;
-        const idx = it.subscriptionIndex ?? 0;
-        return {
-          id: it.id,
-          subscriptionIndex: idx,
-          label: it.tariffDisplayName?.trim() || `Подписка #${idx}`,
-          expireAt,
-          emoji: it.tariffMenuEmoji ?? null,
-          tariffId: it.tariffId ?? null,
-          extraDevices: it.extraDevices ?? 0,
-          extraDevicesMonthlyPrice: it.extraDevicesMonthlyPrice ?? 0,
-          isTrial: Boolean(it.trialId),
-          convertTariffIds: it.convertTariffIds ?? [],
-          trialConvertAllTariffs: it.trialConvertAllTariffs ?? false,
-          trialName: it.trialName ?? null,
-        };
-      });
-      setUserSubs(list);
-    }).catch(() => { /* not critical */ });
-  }, [token]);
-
-  useEffect(() => { loadUserSubs(); }, [loadUserSubs]);
-
-  // Подгружаем превью конвертации при открытии модалки оплаты (только для
-  // обычной покупки — явное продление и так работает с конкретной подпиской).
   useEffect(() => {
-    if (!payModal || !token || buyMode.kind !== "new") {
-      setConvPreview(null);
-      return;
-    }
-    let alive = true;
-    setConvKeepExtras(true);
-    setReplaceTrialChoice(null);
-    api.clientTariffConversionPreview(token, {
-      tariffId: payModal.tariff.id,
-      priceOptionId: selectedPriceOptionId ?? undefined,
-    })
-      .then((p) => { if (alive) setConvPreview(p); })
-      .catch(() => { if (alive) setConvPreview(null); });
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payModal, token, buyMode.kind]);
+    setPreviewEnabled(Boolean(payModal) && !extendTarget);
+  }, [payModal, extendTarget, setPreviewEnabled]);
 
-  // Запрос на покупку тарифа: открываем единую модалку.
   function requestBuy(tariff: TariffForPay, preferredOptionId?: string) {
     const opts = tariff.priceOptions ?? [];
     const defaultOpt = opts.find((option) => option.id === preferredOptionId) ?? opts[0] ?? null;
+    setSelectedTariffId(tariff.id);
     setSelectedPriceOptionId(defaultOpt?.id ?? null);
     setSelectedExtraDevices(0);
     setPurchaseModal({ tariff });
   }
 
-  // Подтверждение из purchaseModal: total = priceOption.price + extras × pricePerExtra × (1 − pct/100).
   function confirmPurchase() {
     if (!purchaseModal) return;
     const baseTariff = purchaseModal.tariff;
     const opts = baseTariff.priceOptions ?? [];
     const opt = opts.find((o) => o.id === selectedPriceOptionId) ?? opts[0];
-    const unitPrice = opt?.price ?? baseTariff.price;
-    const optDays = opt?.durationDays ?? baseTariff.durationDays ?? 30;
-    const { extrasTotal } = applyExtrasPrice(baseTariff.pricePerExtraDevice ?? 0, selectedExtraDevices, baseTariff.deviceDiscountTiers, optDays);
-    // T-extend-devices: при продлении с сохранением устройств — добавляем их стоимость за период.
-    const total = unitPrice + extrasTotal + extendExtraCost(baseTariff);
-    const tariffWithOption: TariffForPay = {
-      ...baseTariff,
-      durationDays: opt?.durationDays ?? baseTariff.durationDays,
-      price: total,
-    };
     setSelectedPriceOptionId(opt?.id ?? null);
     setPurchaseModal(null);
-    // T-unify-cabinet (30.05.2026, WolfVPN): строго как в боте.
-    //  • Пришли по «Продлить» (?extend) → продление ИМЕННО этой подписки тем же тарифом.
-    //  • Иначе (каталог) → ВСЕГДА новая подписка. Каталог НЕ продлевает чужие подписки.
-    if (extendTarget) {
-      setBuyMode({ kind: "extend", subId: extendTarget.id, label: extendTarget.label });
-    } else {
-      setBuyMode({ kind: "new" });
-    }
-    setPayModal({ tariff: tariffWithOption });
+    setPayModal({
+      tariff: {
+        ...baseTariff,
+        durationDays: opt?.durationDays ?? baseTariff.durationDays,
+        price: totalPrice,
+      },
+    });
   }
 
   async function activateTrial() {
@@ -416,364 +268,32 @@ function ClassicTariffsPage() {
     }
   }
 
-  async function checkPromo() {
-    if (!token || !promoInput.trim()) return;
-    setPromoChecking(true);
-    setPromoError(null);
-    setPromoResult(null);
-    try {
-      const res = await api.clientCheckPromoCode(token, promoInput.trim());
-      if (res.type === "DISCOUNT") {
-        setPromoResult(res);
-      } else {
-        const activateRes = await api.clientActivatePromoCode(token, promoInput.trim());
-        setPromoError(null);
-        setPromoResult(null);
-        setPromoInput("");
-        setPayModal(null);
-        toast.success("Промокод активирован 🎉", activateRes.message);
-        await refreshProfile();
-        return;
-      }
-    } catch (e) {
-      setPromoError(e instanceof Error ? e.message : t("cabinet.tariffs.error_promo"));
-      setPromoResult(null);
-    } finally {
-      setPromoChecking(false);
-    }
-  }
-
-  function getDiscountedPrice(price: number): number {
-    if (!promoResult) return price;
-    let final = price;
-    if (promoResult.discountPercent && promoResult.discountPercent > 0) {
-      final -= final * promoResult.discountPercent / 100;
-    }
-    if (promoResult.discountFixed && promoResult.discountFixed > 0) {
-      final -= promoResult.discountFixed;
-    }
-    return Math.max(0, Math.round(final * 100) / 100);
-  }
-
-  async function startPayment(tariff: TariffForPay, methodId: number) {
-    if (!token) return;
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await api.clientCreatePlategaPayment(token, {
-        amount: tariff.price,
-        currency: tariff.currency,
-        paymentMethod: methodId,
-        description: tariff.name,
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      if (res.paymentUrl) setReadyUrl({ url: res.paymentUrl, provider: "Platega", paymentId: res.paymentId });
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-
-  async function payByBalance(tariff: TariffForPay) {
-    if (!token) return;
-    if (!remnaAvailable) {
-      setPayError("Панель VPN временно недоступна. Повторите покупку позже.");
-      return;
-    }
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await api.clientPayByBalance(token, {
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      setPayModal(null);
-      setPromoInput("");
-      setPromoResult(null);
-      setBuyMode({ kind: "new" });
-      toast.success("Оплата прошла ✨", res.message);
-      await refreshProfile();
-      loadUserSubs(); // T-unify-cabinet: подписок стало больше — обновляем список для след. покупки
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-
-  async function startYoomoneyPayment(tariff: TariffForPay) {
-    if (!token) return;
-    if (tariff.currency.toUpperCase() !== "RUB") {
-      setPayError(t("cabinet.tariffs.error_yoomoney_rub"));
-      return;
-    }
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await api.yoomoneyCreateFormPayment(token, {
-        amount: tariff.price,
-        paymentType: "AC",
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      if (res.paymentUrl) setReadyUrl({ url: res.paymentUrl, provider: "ЮMoney", paymentId: res.paymentId });
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-
-  async function startYookassaPayment(tariff: TariffForPay) {
-    if (!token) return;
-    if (tariff.currency.toUpperCase() !== "RUB") {
-      setPayError(t("cabinet.tariffs.error_yookassa_rub"));
-      return;
-    }
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await api.yookassaCreatePayment(token, {
-        amount: tariff.price,
-        currency: "RUB",
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      if (res.confirmationUrl) setReadyUrl({ url: res.confirmationUrl, provider: "ЮKassa", paymentId: res.paymentId });
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-
-  async function startCryptopayPayment(tariff: TariffForPay, stars = false) {
-    if (!token) return;
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await (stars ? api.starsCreatePayment : api.cryptopayCreatePayment)(token, {
-        amount: tariff.price,
-        currency: tariff.currency,
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: stars ? "Telegram Stars" : "Crypto Bot", paymentId: res.paymentId });
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-
-  async function startHeleketPayment(tariff: TariffForPay) {
-    if (!token) return;
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await api.heleketCreatePayment(token, {
-        amount: tariff.price,
-        currency: tariff.currency,
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "Heleket", paymentId: res.paymentId });
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-
-  async function startRollypayPayment(tariff: TariffForPay) {
-    if (!token) return;
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await api.rollypayCreatePayment(token, {
-        amount: tariff.price,
-        currency: tariff.currency,
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "RollyPay", paymentId: res.paymentId });
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-  async function startCispayPayment(tariff: TariffForPay) {
-    if (!token) return;
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await api.cispayCreatePayment(token, {
-        amount: tariff.price,
-        currency: tariff.currency,
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "CisPay", paymentId: res.paymentId });
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-async function startParitypayPayment(tariff: TariffForPay) {
-    if (!token) return;
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await api.paritypayCreatePayment(token, {
-        amount: tariff.price,
-        currency: tariff.currency,
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "ParityPay", paymentId: res.paymentId });
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-async function startCloudpaymentsPayment(tariff: TariffForPay) {
-    if (!token) return;
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await api.cloudpaymentsCreatePayment(token, {
-        amount: tariff.price,
-        currency: tariff.currency,
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "CloudPayments", paymentId: res.paymentId });
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-
-  async function startLavaPayment(tariff: TariffForPay) {
-    if (!token) return;
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await api.lavaCreatePayment(token, {
-        amount: tariff.price,
-        currency: tariff.currency,
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "LAVA", paymentId: res.paymentId });
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-
-  async function startLavatopPayment(tariff: TariffForPay) {
-    if (!token) return;
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await api.lavatopCreatePayment(token, {
-        amount: tariff.price,
-        currency: tariff.currency,
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "Lava.top", paymentId: res.paymentId });
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-
-  async function startOverpayPayment(tariff: TariffForPay) {
-    if (!token) return;
-    setPayError(null);
-    setPayLoading(true);
-    try {
-      const res = await api.overpayCreatePayment(token, {
-        amount: tariff.price,
-        currency: tariff.currency,
-        tariffId: tariff.id,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        deviceCount: selectedExtraDevices,
-        promoCode: promoResult ? promoInput.trim() : undefined,
-        ...purchaseExtra(),
-      });
-      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "Overpay", paymentId: res.paymentId });
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("cabinet.tariffs.error_payment"));
-    } finally {
-      setPayLoading(false);
-    }
-  }
-
   const closePayment = () => {
     setPayModal(null);
-    setPromoInput("");
-    setPromoResult(null);
-    setPromoError(null);
+    clearPromo();
     setPayError(null);
     setReadyUrl(null);
-    // выбор заменяемого триала не должен переживать закрытие
-    // модалки — иначе устаревший id уедет в следующий платёж.
     setReplaceTrialChoice(null);
+  };
+
+  const startPayment = (method: PayMethod) => {
+    void doPay({
+      method,
+      onReadyUrl: ({ url, paymentId, kind }) => setReadyUrl({
+        url,
+        provider: READY_PROVIDER_NAMES[kind] ?? method.label,
+        paymentId,
+      }),
+    });
   };
 
   // === КОНТЕНТ ОПЛАТЫ (ОБЩИЙ ДЛЯ MOBILE VIEW И DESKTOP DIALOG) ===
   const PaymentContent = () => {
     if (!payModal) return null;
     const tariff = payModal.tariff;
-    const price = promoResult ? getDiscountedPrice(tariff.price) : tariff.price;
-    const hasBalance = client ? client.balance >= price : false;
+    const price = finalPrice;
+    const hasBalance = canPayWithBalance;
+    const balanceMethod: PayMethod = { kind: "balance", label: t("cabinet.tariffs.pay_balance"), icon: Wallet };
 
     if (readyUrl) {
       return (
@@ -816,10 +336,10 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
                   {promoResult ? (
                     <>
                       <span className="text-3xl font-black text-primary">{formatMoney(price, tariff.currency)}</span>
-                      <span className="text-lg line-through text-muted-foreground decoration-2">{formatMoney(tariff.price, tariff.currency)}</span>
+                      <span className="text-lg line-through text-muted-foreground decoration-2">{formatMoney(totalPrice, tariff.currency)}</span>
                     </>
                   ) : (
-                    <span className="text-3xl font-black text-primary">{formatMoney(tariff.price, tariff.currency)}</span>
+                    <span className="text-3xl font-black text-primary">{formatMoney(totalPrice, tariff.currency)}</span>
                   )}
                 </div>
               )}
@@ -829,11 +349,11 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
               <div className="text-right">
                 {promoResult ? (
                   <div className="flex flex-col items-end">
-                    <span className="line-through text-muted-foreground/70 text-sm decoration-2">{formatMoney(tariff.price, tariff.currency)}</span>
+                    <span className="line-through text-muted-foreground/70 text-sm decoration-2">{formatMoney(totalPrice, tariff.currency)}</span>
                     <span className="font-bold text-xl text-primary">{formatMoney(price, tariff.currency)}</span>
                   </div>
                 ) : (
-                  <span className="font-bold text-xl text-primary">{formatMoney(tariff.price, tariff.currency)}</span>
+                  <span className="font-bold text-xl text-primary">{formatMoney(totalPrice, tariff.currency)}</span>
                 )}
               </div>
             )}
@@ -860,7 +380,7 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
         </div>
 
         {/* переход с триала на другой тариф: сквады/трафик заменятся. */}
-        {buyMode.kind === "extend" && extendTarget?.isTrial && extendTarget.tariffId && tariff.id !== extendTarget.tariffId && (
+        {extendTarget?.isTrial && extendTarget.tariffId && tariff.id !== extendTarget.tariffId && (
           <div className={cn(
             "relative overflow-hidden border rounded-2xl p-4",
             "bg-violet-500/[0.06] border-violet-500/20",
@@ -883,8 +403,8 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
 
         {/* покупка заменяет активный триал (с удалением).
             Несколько триалов — выбор, какой заменить. */}
-        {buyMode.kind === "new" && !convPreview?.willConvert && (() => {
-          const trialsOwned = userSubs.filter((s) => s.isTrial);
+        {!extendTarget && !convPreview?.willConvert && (() => {
+          const trialsOwned = ownedTrials;
           if (trialsOwned.length === 0) return null;
           const chosen = replaceTrialChoice ?? trialsOwned[0].id;
           return (
@@ -928,14 +448,11 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
 
         {/* без single-режима: подписка с этим тарифом уже есть —
             предлагаем продлить её вместо покупки второй (но не блокируем покупку). */}
-        {buyMode.kind === "new" && !convPreview?.willConvert && (() => {
+        {!extendTarget && !convPreview?.willConvert && (() => {
           // среди ВСЕХ подписок с этим тарифом предлагаем «самую живую»
           // (max expireAt) — а не первую по индексу. Триалы исключены:
           // их «продление» — это конвертация, а покупка их заменяет.
-          const matches = userSubs.filter((s) => s.tariffId === tariff.id && !s.isTrial);
-          const dupSub = matches.length > 0
-            ? [...matches].sort((a, b) => (b.expireAt ? Date.parse(b.expireAt) : 0) - (a.expireAt ? Date.parse(a.expireAt) : 0))[0]
-            : null;
+          const dupSub = duplicateSubscription;
           if (!dupSub) return null;
           return (
             <div className="relative overflow-hidden border rounded-2xl p-4 bg-indigo-500/[0.06] border-indigo-500/20">
@@ -1023,7 +540,7 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
 
                     {/* same-tariff продление: выбор судьбы ПРЕЖНИХ доп. устройств.
                         учитываем и НОВЫЕ устройства, выбранные в этой
-                        покупке (selectedExtraDevices) — они уже включены в tariff.price,
+                        покупке (selectedExtraDevices) — они уже включены в totalPrice,
                         поэтому итоги и количества показываем честно с ними. */}
                     {convPreview.mode === "extend" && convPreview.extras && convPreview.extras.extraDevices > 0 && (
                       <div className="space-y-2 pt-1.5">
@@ -1050,7 +567,7 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
                           <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
                             Всего будет <b>{convPreview.extras.keep.totalDevices + selectedExtraDevices} устройств</b>
                             {selectedExtraDevices > 0 && <> ({convPreview.extras.keep.totalDevices} прежних + {selectedExtraDevices} новых)</>}.
-                            Доплата за прежние на новый период — итого спишется {formatMoney(tariff.price + (convPreview.extras.keep.extraCost ?? 0), tariff.currency)}.
+                            Доплата за прежние на новый период — итого спишется {formatMoney(totalPrice + (convPreview.extras.keep.extraCost ?? 0), tariff.currency)}.
                           </p>
                         </button>
                         <button
@@ -1070,7 +587,7 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
                             {selectedExtraDevices > 0
                               ? <> ({convPreview.extras.drop.totalDevices} из тарифа + {selectedExtraDevices} новых)</>
                               : <> (только из тарифа)</>}.
-                            Спишется ровно {formatMoney(tariff.price, tariff.currency)}.
+                            Спишется ровно {formatMoney(totalPrice, tariff.currency)}.
                           </p>
                         </button>
                         {selectedExtraDevices > 0 && !convKeepExtras && selectedExtraDevices >= convPreview.extras.extraDevices && (
@@ -1156,15 +673,15 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
               onChange={(e) => setPromoInput(e.target.value)}
               placeholder={t("cabinet.tariffs.promo_placeholder")}
               className={cn("font-mono font-medium focus-visible:ring-primary/50", isMobileOrMiniapp ? "text-base bg-card/40 border-white/5 h-14 rounded-2xl" : "text-sm bg-background border-border/50 h-12 rounded-xl shadow-sm")}
-              disabled={payLoading || promoChecking}
+              disabled={payLoading || promoBusy}
             />
             <Button
               variant={isMobileOrMiniapp ? "default" : "secondary"}
-              onClick={checkPromo}
-              disabled={!promoInput.trim() || payLoading || promoChecking}
+              onClick={applyPromo}
+              disabled={!promoInput.trim() || payLoading || promoBusy}
               className={cn("shrink-0 font-bold bg-primary text-primary-foreground shadow-md transition-all hover:scale-105 active:scale-95", isMobileOrMiniapp ? "h-14 px-6 rounded-2xl text-base" : "h-12 px-5 rounded-xl text-sm border-0 hover:bg-primary/90")}
             >
-              {promoChecking ? <Loader2 className="h-5 w-5 animate-spin" /> : t("cabinet.tariffs.promo_apply")}
+              {promoBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : t("cabinet.tariffs.promo_apply")}
             </Button>
           </div>
           <AnimatePresence>
@@ -1209,7 +726,7 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
             {client && (
               <Button
                 size="lg"
-                onClick={() => payByBalance(tariff)}
+                onClick={() => void doPay({ method: balanceMethod })}
                 disabled={payLoading || !hasBalance}
                 className={cn("w-full shadow-lg border-0 group relative overflow-hidden", isMobileOrMiniapp ? "justify-between px-6 h-16 rounded-2xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400" : "classic-payment-balance gap-2 rounded-xl bg-gradient-to-r from-primary to-primary/80 hover:shadow-xl transition-all duration-300")}
               >
@@ -1238,8 +755,6 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
             )}
 
             {(() => {
-              const providerLabel = (id: string, fallback: string) => paymentProviders.find((p) => p.id === id)?.label || fallback;
-              const isRub = tariff.currency.toUpperCase() === "RUB";
               const btnCls = cn("w-full", isMobileOrMiniapp ? "justify-start gap-4 px-6 h-16 rounded-2xl border-white/5 bg-card/40 hover:bg-card/60" : "classic-payment-method gap-3 hover:bg-background/80 hover:shadow-md transition-all duration-300 rounded-xl border-border/50 group justify-start relative");
 
               const colorMap: Record<string, { bg10: string; bg20: string; text: string }> = {
@@ -1255,55 +770,31 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
                 overpay: { bg10: "bg-indigo-500/10", bg20: "group-hover:bg-indigo-500/20", text: "text-indigo-500" },
               };
 
-              type ProviderEntry = { id: string; enabled: boolean; onClick: () => void; label: string; icon: "crypto" | "card" };
-              const providers: ProviderEntry[] = [
-                { id: "telegram_stars", enabled: Boolean(telegramStarsEnabled) && tariff.currency.toUpperCase() === "RUB", onClick: () => startCryptopayPayment(tariff, true), label: "⭐ Telegram Stars", icon: "crypto" },
-                { id: "cryptopay", enabled: cryptopayEnabled, onClick: () => startCryptopayPayment(tariff), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
-                { id: "heleket", enabled: heleketEnabled, onClick: () => startHeleketPayment(tariff), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
-                { id: "rollypay", enabled: rollypayEnabled, onClick: () => startRollypayPayment(tariff), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
-                { id: "cispay", enabled: cispayEnabled, onClick: () => startCispayPayment(tariff), label: providerLabel("cispay", "CisPay"), icon: "card" },
-                { id: "paritypay", enabled: paritypayEnabled, onClick: () => startParitypayPayment(tariff), label: providerLabel("paritypay", "ParityPay"), icon: "card" },
-                { id: "cloudpayments", enabled: cloudpaymentsEnabled, onClick: () => startCloudpaymentsPayment(tariff), label: providerLabel("cloudpayments", "CloudPayments"), icon: "card" },
-                { id: "yookassa", enabled: yookassaEnabled && isRub, onClick: () => startYookassaPayment(tariff), label: providerLabel("yookassa", t("cabinet.tariffs.sbp_cards_ru")), icon: "card" },
-                { id: "yoomoney", enabled: yoomoneyEnabled && isRub, onClick: () => startYoomoneyPayment(tariff), label: providerLabel("yoomoney", t("cabinet.tariffs.yoomoney_cards")), icon: "card" },
-                { id: "lava", enabled: lavaEnabled && isRub, onClick: () => startLavaPayment(tariff), label: providerLabel("lava", "LAVA"), icon: "card" },
-                { id: "lavatop", enabled: lavatopEnabled, onClick: () => startLavatopPayment(tariff), label: providerLabel("lavatop", "Lava.top"), icon: "card" },
-                { id: "overpay", enabled: overpayEnabled, onClick: () => startOverpayPayment(tariff), label: providerLabel("overpay", "Overpay"), icon: "card" },
-                              ...(plategaMethods.map((m) => ({
-                  id: `platega_${m.id}`,
-                  enabled: true,
-                  onClick: () => startPayment(tariff, m.id),
-                  label: providerLabel(`platega_${m.id}`, m.label),
-                  icon: "card" as const,
-                }))),
-];
-
-              const sortedProviders = paymentProviders.length > 0
-                ? [...paymentProviders.map((pp) => providers.find((p) => p.id === pp.id)).filter((p): p is ProviderEntry => !!p), ...providers.filter((p) => !paymentProviders.some((pp) => pp.id === p.id))]
-                : providers;
-
               return (
                 <>
-                  {sortedProviders.filter((p) => p.enabled).map((p) => {
-                    const c = colorMap[p.id] ?? colorMap.yookassa;
+                  {availableMethods.map((method) => {
+                    const id = method.kind === "platega" ? `platega_${method.id}` : method.kind;
+                    const c = colorMap[id] ?? colorMap.yookassa;
+                    const label = method.kind === "telegram_stars" ? "⭐ Telegram Stars" : method.label;
+                    const crypto = method.kind === "cryptopay" || method.kind === "heleket" || method.kind === "telegram_stars";
                     return (
-                    <Button key={p.id} size="lg" variant="outline" onClick={p.onClick} disabled={payLoading} className={btnCls}>
-                      {isMobileOrMiniapp ? (
-                        <>
-                          <div className={cn("p-2 rounded-xl", c.bg10)}>
-                            {payLoading ? <Loader2 className={cn("h-6 w-6 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-6 w-6", c.text)} /> : <CreditCard className={cn("h-6 w-6", c.text)} />}
-                          </div>
-                          <span className="text-base font-bold">{p.label}</span>
-                        </>
-                      ) : (
-                        <>
-                          <div className={cn("shrink-0 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20)}>
-                            {payLoading ? <Loader2 className={cn("h-5 w-5 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-5 w-5", c.text)} /> : <CreditCard className={cn("h-5 w-5", c.text)} />}
-                          </div>
-                          <span className="text-sm font-medium">{p.label}</span>
-                        </>
-                      )}
-                    </Button>
+                      <Button key={id} size="lg" variant="outline" onClick={() => startPayment(method)} disabled={payLoading} className={btnCls}>
+                        {isMobileOrMiniapp ? (
+                          <>
+                            <div className={cn("p-2 rounded-xl", c.bg10)}>
+                              {payLoading ? <Loader2 className={cn("h-6 w-6 animate-spin", c.text)} /> : crypto ? <Zap className={cn("h-6 w-6", c.text)} /> : <CreditCard className={cn("h-6 w-6", c.text)} />}
+                            </div>
+                            <span className="text-base font-bold">{label}</span>
+                          </>
+                        ) : (
+                          <>
+                            <div className={cn("shrink-0 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20)}>
+                              {payLoading ? <Loader2 className={cn("h-5 w-5 animate-spin", c.text)} /> : crypto ? <Zap className={cn("h-5 w-5", c.text)} /> : <CreditCard className={cn("h-5 w-5", c.text)} />}
+                            </div>
+                            <span className="text-sm font-medium">{label}</span>
+                          </>
+                        )}
+                      </Button>
                     );
                   })}
                 </>
@@ -1399,16 +890,16 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <button
                           type="button"
-                          onClick={() => setRemoveExtrasOnExtend(false)}
-                          className={`rounded-xl border px-3 py-2.5 text-left transition-all ${!removeExtrasOnExtend ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border/50 hover:bg-muted/30"}`}
+                          onClick={() => setExtKeepExtras(true)}
+                          className={`rounded-xl border px-3 py-2.5 text-left transition-all ${extKeepExtras ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border/50 hover:bg-muted/30"}`}
                         >
                           <p className="text-sm font-semibold text-foreground">✓ Сохранить устройства</p>
                           <p className="text-[11px] text-muted-foreground mt-0.5">Цена выше — с учётом {extendTarget.extraDevices} доп. устройств</p>
                         </button>
                         <button
                           type="button"
-                          onClick={() => setRemoveExtrasOnExtend(true)}
-                          className={`rounded-xl border px-3 py-2.5 text-left transition-all ${removeExtrasOnExtend ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border/50 hover:bg-muted/30"}`}
+                          onClick={() => setExtKeepExtras(false)}
+                          className={`rounded-xl border px-3 py-2.5 text-left transition-all ${!extKeepExtras ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border/50 hover:bg-muted/30"}`}
                         >
                           <p className="text-sm font-semibold text-foreground">Удалить устройства</p>
                           <p className="text-[11px] text-muted-foreground mt-0.5">Стандартная цена тарифа</p>
@@ -1458,7 +949,7 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
                     <div className="text-xs text-amber-900/90 dark:text-amber-200/90 mt-1">
                       Покупка и продление тарифов Remnawave временно недоступны. Попробуйте позже.
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={loadCatalog} disabled={loading} className="mt-2">Проверить снова</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={refetchCatalog} disabled={loading} className="mt-2">Проверить снова</Button>
                   </div>
                 </div>
               )}
@@ -1470,7 +961,7 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
               ) : catalogError ? (
                 <Card className="p-8 text-center" role="alert">
                   <p className="mb-4 text-muted-foreground">{t("cabinet.tariffs.catalog.load_error")}</p>
-                  <Button variant="outline" onClick={loadCatalog}><RefreshCw className="h-4 w-4" />{t("cabinet.tariffs.catalog.retry")}</Button>
+                  <Button variant="outline" onClick={refetchCatalog}><RefreshCw className="h-4 w-4" />{t("cabinet.tariffs.catalog.retry")}</Button>
                 </Card>
               ) : !displayTariffs.some((category) => category.tariffs.length > 0) ? (
                 <Card className="p-12 text-center">
@@ -1478,7 +969,7 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
                   <p className="whitespace-pre-line text-muted-foreground">{t("cabinet.tariffs.empty")}</p>
                 </Card>
               ) : (
-                <ClassicTariffCatalog categories={displayTariffs} canBuy={!!token} onChoose={requestBuy} getExtraCost={extendExtraCost} />
+                <ClassicTariffCatalog categories={displayTariffs} canBuy={!!token} onChoose={requestBuy} getExtraCost={extendExtrasFor} />
               )}
             </div>
           </motion.div>
@@ -1521,8 +1012,8 @@ async function startCloudpaymentsPayment(tariff: TariffForPay) {
         setSelectedExtraDevices={setSelectedExtraDevices}
         onClose={() => setPurchaseModal(null)}
         onConfirm={confirmPurchase}
-        extendKeepDevices={(extendTarget && !removeExtrasOnExtend) ? (extendTarget.extraDevices ?? 0) : 0}
-        extendDeviceMonthlyPrice={extendTarget?.extraDevicesMonthlyPrice ?? 0}
+        extendKeepDevices={(extendTarget && extKeepExtras) ? (extendTarget.extraDevices ?? 0) : 0}
+        extendDevicesCost={extKeepExtras ? keepExtrasCost : 0}
       />
 
       {/* модалка продления существующей подписки — открывается
@@ -1550,7 +1041,7 @@ function UnifiedPurchaseModal({
   onClose,
   onConfirm,
   extendKeepDevices,
-  extendDeviceMonthlyPrice,
+  extendDevicesCost,
 }: {
   modal: { tariff: TariffForPay } | null;
   selectedPriceOptionId: string | null;
@@ -1561,7 +1052,7 @@ function UnifiedPurchaseModal({
   onConfirm: () => void;
   /** T-extend-devices: сохраняемые доп.устройства при продлении (0 если удаляем/не продление). */
   extendKeepDevices?: number;
-  extendDeviceMonthlyPrice?: number;
+  extendDevicesCost?: number;
 }) {
   const [agree, setAgree] = useState(false);
   const tariff = modal?.tariff;
@@ -1610,9 +1101,7 @@ function UnifiedPurchaseModal({
   }, null as { extras: number; perDev: number } | null);
 
   const { extrasTotal: appliedExtras, pct: appliedPct } = applyExtrasPrice(pricePerExtra, selectedExtraDevices, tiers, selectedDays);
-  // T-extend-devices: стоимость СОХРАНЯЕМЫХ доп.устройств при продлении (масштаб от 30 дней к длительности опции).
-  const extendDevicesCost = (extendKeepDevices ?? 0) > 0 ? Math.round((extendDeviceMonthlyPrice ?? 0) * (selectedDays / EXTRA_DEVICE_BASE_DAYS)) : 0;
-  const finalTotal = unitPrice + appliedExtras + extendDevicesCost;
+  const finalTotal = unitPrice + appliedExtras + (extendDevicesCost ?? 0);
   // Базовая сумма без скидки = pricePerExtra × extras × коэффициент длительности (для отображения «сэкономлено»).
   const baseExtrasNoDiscount = pricePerExtra * selectedExtraDevices * (selectedDays / EXTRA_DEVICE_BASE_DAYS);
   const savedAmount = baseExtrasNoDiscount - appliedExtras;
@@ -1785,10 +1274,10 @@ function UnifiedPurchaseModal({
                 </span>
               </div>
             )}
-            {extendDevicesCost > 0 && (
+            {(extendDevicesCost ?? 0) > 0 && (
               <div className="flex items-baseline justify-between mb-1">
                 <span className="text-xs text-muted-foreground">Сохранение {extendKeepDevices} доп. устр</span>
-                <span className="text-xs font-medium tabular-nums">+{formatMoney(extendDevicesCost, tariff.currency)}</span>
+                <span className="text-xs font-medium tabular-nums">+{formatMoney(extendDevicesCost ?? 0, tariff.currency)}</span>
               </div>
             )}
             {savedAmount > 0 && (
