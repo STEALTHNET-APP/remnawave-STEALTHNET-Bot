@@ -494,34 +494,51 @@ adminRouter.post("/settings/groq-models", asyncRoute(async (req, res) => {
     return res.status(400).json({ message: "API-ключ Groq не указан" });
   }
 
-  const { proxyFetch } = await import("../proxy-util/proxy-fetch.js");
-  const { getProxyUrl } = await import("../proxy-util/get-proxy-url.js");
-  const aiProxy = await getProxyUrl("ai");
-
+  const signal = AbortSignal.timeout(10_000);
   try {
+    const { proxyFetch } = await import("../proxy-util/proxy-fetch.js");
+    const { getProxyUrl } = await import("../proxy-util/get-proxy-url.js");
+    const aiProxy = await getProxyUrl("ai");
     const groqRes = await proxyFetch("https://api.groq.com/openai/v1/models", {
       method: "GET",
       headers: { Authorization: `Bearer ${apiKey}` },
+      signal,
     }, aiProxy);
-    const text = await groqRes.text();
     if (!groqRes.ok) {
-      return res.status(groqRes.status).json({ message: `Groq API ${groqRes.status}: ${text.slice(0, 500)}` });
+      const message = groqRes.status === 401 || groqRes.status === 403
+        ? "Groq отклонил API-ключ. Проверьте ключ в настройках."
+        : groqRes.status === 429
+          ? "Groq ограничил число запросов. Повторите попытку позже."
+          : "Groq временно недоступен. Повторите попытку позже.";
+      return res.status(502).json({ message });
     }
-    let payload: { data?: Array<{ id?: unknown; active?: unknown }> };
+    let payload: unknown;
     try {
-      payload = JSON.parse(text) as { data?: Array<{ id?: unknown; active?: unknown }> };
-    } catch {
-      return res.status(502).json({ message: "Groq вернул невалидный JSON" });
+      payload = await groqRes.json();
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return res.status(502).json({ message: "Groq вернул некорректный список моделей" });
+    }
+    if (!payload || typeof payload !== "object" || !Array.isArray((payload as { data?: unknown }).data)) {
+      return res.status(502).json({ message: "Groq вернул некорректный список моделей" });
     }
     const models = Array.from(new Set(
-      (payload.data ?? [])
-        .filter((model) => typeof model.id === "string" && model.id.length > 0 && !model.id.startsWith("whisper-") && model.active !== false)
-        .map((model) => model.id as string)
+      ((payload as { data: unknown[] }).data)
+        .filter((model): model is { id: string; active?: unknown } => {
+          if (!model || typeof model !== "object" || Array.isArray(model)) return false;
+          const entry = model as { id?: unknown; active?: unknown };
+          return typeof entry.id === "string" && entry.id.trim().length > 0 && entry.id.length <= 200
+            && !entry.id.startsWith("whisper-") && entry.active !== false;
+        })
+        .map((model) => model.id)
     )).sort();
     return res.json({ models });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return res.status(502).json({ message: `Не удалось получить модели Groq: ${message}` });
+  } catch {
+    return res.status(signal.aborted ? 504 : 502).json({
+      message: signal.aborted
+        ? "Groq не ответил за 10 секунд. Повторите попытку позже."
+        : "Не удалось связаться с Groq. Проверьте настройки подключения и повторите попытку.",
+    });
   }
 }));
 

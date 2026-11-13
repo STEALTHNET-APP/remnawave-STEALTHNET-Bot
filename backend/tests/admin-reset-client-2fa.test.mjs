@@ -73,10 +73,10 @@ test("requireAction allows ADMIN and checks action:reset_client_2fa for MANAGER"
 });
 
 test("POST /clients/:id/reset-2fa route definition and selects are present", () => {
-  const adminRoutes = fs.readFileSync(path.join(__dirname, "../src/modules/admin/admin.routes.ts"), "utf8");
+  const adminRoutes = fs.readFileSync(path.join(__dirname, "../src/modules/admin/clients.routes.ts"), "utf8");
 
   // Route registration
-  assert.match(adminRoutes, /adminRouter\.post\(\s*\"\/clients\/:id\/reset-2fa\"/);
+  assert.match(adminRoutes, /adminClientsRouter\.post\(\s*\"\/:id\/reset-2fa\"/);
   assert.match(adminRoutes, /requireAction\(\"reset_client_2fa\"\)/);
 
   // Sudo-mode password verification
@@ -93,8 +93,8 @@ test("POST /clients/:id/reset-2fa route definition and selects are present", () 
   assert.match(adminRoutes, /notifyClientAbout2FAReset\(client\)/);
 
   // totpEnabled in clients list and client detail selects
-  assert.match(adminRoutes, /adminRouter\.get\(\"\/clients\"[\s\S]*?totpEnabled:\s*true/);
-  assert.match(adminRoutes, /adminRouter\.get\(\"\/clients\/:id\"[\s\S]*?totpEnabled:\s*true/);
+  assert.match(adminRoutes, /adminClientsRouter\.get\(\"\/\"[\s\S]*?totpEnabled:\s*true/);
+  assert.match(adminRoutes, /adminClientsRouter\.get\(\"\/:id\"[\s\S]*?totpEnabled:\s*true/);
 });
 
 test("client-security-notify service exports notifyClientAbout2FAReset", () => {

@@ -10,7 +10,8 @@ mock.module('../dist/modules/notification/telegram-notify.service.js', {
   namedExports: Object.fromEntries(Object.keys(notifications).map(key => [key, async () => {}])),
 });
 const { prisma } = await import('../dist/db.js');
-const { clientAuthRouter, clientRouter } = await import('../dist/modules/client/client.routes.js');
+const { clientRouter } = await import('../dist/modules/client/client.routes.js');
+const { clientAuthRouter } = await import('../dist/modules/client/client-auth.routes.js');
 const { signClientToken } = await import('../dist/modules/client/client.service.js');
 const app = express();
 app.use(express.json());

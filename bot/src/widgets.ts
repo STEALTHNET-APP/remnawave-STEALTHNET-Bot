@@ -30,6 +30,22 @@ function widgetReplyData(text: string): string {
   return data;
 }
 
+function widgetTransportDiagnostic(error: unknown): { name: string; code?: string } {
+  const seen = new Set<unknown>();
+  const pending: unknown[] = [error];
+  let code: string | undefined;
+  while (pending.length && seen.size < 8) {
+    const item = pending.shift();
+    if (!item || typeof item !== "object" || seen.has(item)) continue;
+    seen.add(item);
+    const candidate = item as { code?: unknown; cause?: unknown; error?: unknown };
+    if (typeof candidate.code === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(candidate.code)) { code = candidate.code; break; }
+    pending.push(candidate.error, candidate.cause);
+  }
+  const name = error instanceof Error && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(error.name) ? error.name : "UnknownError";
+  return { name, ...(code ? { code } : {}) };
+}
+
 export function buildWidget(text: string, keyboard: Button[][], brand: string, summary?: WidgetSummary) {
   const actions = new Map<string, string>();
   const buttons: Action[] = [];
@@ -127,6 +143,7 @@ export function createWidgetMiddleware(config: () => Promise<{ botHtmlBubblesTes
       }
     }
     let recoverySent = false;
+    let widgetDeliveryFailed = false;
     let queryScreen: Screen | undefined;
     let queryAction: string | undefined;
     let queryAnswer: Promise<unknown> | undefined;
@@ -174,7 +191,7 @@ export function createWidgetMiddleware(config: () => Promise<{ botHtmlBubblesTes
         }
         return { ok: true, result: true } as any;
       }
-      if (Number(p.chat_id) !== owner) return prev(method, payload, signal);
+      if (Number(p.chat_id) !== owner || widgetDeliveryFailed) return prev(method, payload, signal);
       if (query && method === "deleteMessage" && p.message_id === query.message_id) await answerQuery("");
       const prior = p.message_id ? screens.get(key(owner, p.message_id)) : undefined;
       const edit = method === "editMessageText" || method === "editMessageCaption" || (method === "editMessageReplyMarkup" && prior);
@@ -198,28 +215,15 @@ export function createWidgetMiddleware(config: () => Promise<{ botHtmlBubblesTes
         return result;
       };
       if (!widget) return ordinaryMessage();
-      const response = await prev("sendWidget" as any, {
-        chat_id: owner, html: widget.html, allow_queries: true,
-        ...(p.message_thread_id ? { message_thread_id: p.message_thread_id } : {}),
-        ...(p.disable_notification ? { disable_notification: true } : {}),
-        reply_markup: { inline_keyboard: [...keyboard.map((row: Button[]) => row.filter(button => button.web_app)).filter((row: Button[]) => row.length), [{ text: "Обычное меню", callback_data: "widgets:classic" }]] },
-      } as any, signal);
-      if (!response.ok) {
-        if ([400, 404].includes(response.error_code)) return ordinaryMessage();
-        return response as any;
-      }
-      const sent = response.result as unknown as { message_id: number };
-      screens.set(key(owner, sent.message_id), { owner, messageId: sent.message_id, text, keyboard, summary, expires: Date.now() + TTL, consumed: false, actions: widget.actions });
-      if (edit && p.message_id) {
-        screens.delete(key(owner, p.message_id));
-        await prev("deleteMessage", { chat_id: owner, message_id: p.message_id }, signal).catch(() => {});
-      }
-      if (!recoverySent && keyboard.length > 0 && (modernAction || (send && !query && !callback))) {
+      const sendRecoveryHint = async (transportFailure = false) => {
+        if (recoverySent) return;
         recoverySent = true;
         try {
           const hint = await prev("sendMessage", {
             chat_id: owner,
-            text: "Новое меню не отображается? Возможно, ваша версия Telegram ещё не поддерживает виджеты. Включите обычное меню — это изменит его только для вас.",
+            text: transportFailure
+              ? "Новое меню не появилось? Включите обычное меню — это изменит его только для вас."
+              : "Новое меню не отображается? Возможно, ваша версия Telegram ещё не поддерживает виджеты. Включите обычное меню — это изменит его только для вас.",
             disable_notification: true,
             reply_markup: { inline_keyboard: [[{ text: "Включить обычное меню", callback_data: "widgets:classic" }]] },
           }, signal);
@@ -230,10 +234,38 @@ export function createWidgetMiddleware(config: () => Promise<{ botHtmlBubblesTes
             if (previous) await prev("deleteMessage", { chat_id: owner, message_id: previous }, signal).catch(() => {});
             while (recoveryMessages.size > 5000) recoveryMessages.delete(recoveryMessages.keys().next().value!);
           }
-        } catch {
-          console.warn("[Widgets] Could not send menu recovery hint");
+        } catch (error) {
+          console.warn("[Widgets] Could not send menu recovery hint", widgetTransportDiagnostic(error));
         }
+      };
+      let response;
+      try {
+        response = await prev("sendWidget" as any, {
+          chat_id: owner, html: widget.html, allow_queries: true,
+          ...(p.message_thread_id ? { message_thread_id: p.message_thread_id } : {}),
+          ...(p.disable_notification ? { disable_notification: true } : {}),
+          reply_markup: { inline_keyboard: [...keyboard.map((row: Button[]) => row.filter(button => button.web_app)).filter((row: Button[]) => row.length), [{ text: "Обычное меню", callback_data: "widgets:classic" }]] },
+        } as any, signal);
+      } catch (error) {
+        widgetDeliveryFailed = true;
+        console.warn("[Widgets] Widget delivery was not confirmed", widgetTransportDiagnostic(error));
+        await sendRecoveryHint(true);
+        throw error;
       }
+      if (!response.ok) {
+        if ([400, 404].includes(response.error_code)) return ordinaryMessage();
+        widgetDeliveryFailed = true;
+        console.warn("[Widgets] Widget delivery was rejected", { status: response.error_code });
+        await sendRecoveryHint(true);
+        return response as any;
+      }
+      const sent = response.result as unknown as { message_id: number };
+      screens.set(key(owner, sent.message_id), { owner, messageId: sent.message_id, text, keyboard, summary, expires: Date.now() + TTL, consumed: false, actions: widget.actions });
+      if (edit && p.message_id) {
+        screens.delete(key(owner, p.message_id));
+        await prev("deleteMessage", { chat_id: owner, message_id: p.message_id }, signal).catch(() => {});
+      }
+      if (keyboard.length > 0 && (modernAction || (send && !query && !callback))) await sendRecoveryHint();
       return response as any;
     });
     if (!query) return next();

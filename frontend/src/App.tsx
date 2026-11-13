@@ -180,7 +180,7 @@ function RequireAnonymousClient({ children }: { children: React.ReactNode }) {
   }
   if (state.token) {
     const searchParams = new URLSearchParams(location.search);
-    const returnTo = location.state?.returnTo || searchParams.get("returnTo") || "/cabinet/dashboard";
+    const returnTo = clientMenuReturnTo(location.state?.returnTo || searchParams.get("returnTo"));
     return <Navigate to={returnTo} replace />;
   }
   return <>{children}</>;

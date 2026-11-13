@@ -465,7 +465,9 @@ export async function handleStart(ctx: Context, payload: string) {
       }
     }
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Ошибка входа";
+    const msg = e instanceof Error && e.name === "HttpError"
+      ? "Не удалось загрузить меню из-за сбоя соединения с Telegram. Попробуйте /start ещё раз или включите обычное меню."
+      : e instanceof Error ? e.message : "Ошибка входа";
     await ctx.reply(`❌ ${msg}`);
   }
 }
@@ -895,7 +897,9 @@ composer.command("link", async (ctx) => {
 
       return next();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Ошибка";
+      const msg = e instanceof Error && e.name === "HttpError"
+        ? "Не удалось показать меню из-за сбоя соединения с Telegram. Попробуйте /start ещё раз или включите обычное меню."
+        : e instanceof Error ? e.message : "Ошибка";
       await ctx.reply(`❌ ${msg}`).catch(() => {});
     }
   });

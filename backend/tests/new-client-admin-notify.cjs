@@ -19,7 +19,7 @@ function successfulPathSource(src,file){
  }
  return src;
 }
-const files=['src/modules/client/client.routes.ts','src/modules/api-keys/external-api.routes.ts'];
+const files=['src/modules/client/client-auth.routes.ts','src/modules/api-keys/external-api.routes.ts'];
 let creates=0;
 for(const f of files){
  const src=successfulPathSource(fs.readFileSync(f,'utf8'),f);

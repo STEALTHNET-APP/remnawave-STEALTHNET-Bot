@@ -45,7 +45,7 @@ type SubscriptionPageApp = NonNullable<
 
 export type EditorApp = { id: string; enabled: boolean; app: SubscriptionPageApp };
 
-function parseConfigJson(json: string | null): Record<string, { apps: EditorApp[] }> {
+export function parseConfigJson(json: string | null): Record<string, { apps: EditorApp[] }> {
   if (!json?.trim()) return {};
   try {
     const data = JSON.parse(json) as SubscriptionPageConfig;
@@ -98,7 +98,7 @@ function configToJson(editorState: Record<string, { apps: EditorApp[] }>, baseMe
  * @param onlyMissing — true: добавляем только новые (не пересоздаём существующие);
  *                     false: первичная загрузка с нуля.
  */
-function mergeWithDefault(
+export function mergeWithDefault(
   current: Record<string, { apps: EditorApp[] }>,
   defaultConfig: SubscriptionPageConfig | null,
   onlyMissing = false
@@ -679,20 +679,15 @@ export function SubscriptionPageEditor({
     if (defaultConfig) setLatestDefault(defaultConfig);
   }, [defaultConfig]);
 
-  // Первичная инициализация state'а редактора при изменении входных props.
-  // Логика merge: всегда складываем БД и дефолт — кастомные не теряются, новые показываются как enabled.
+  const initializedConfig = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    const parsed = parseConfigJson(currentConfigJson);
-    const hasAny = Object.keys(parsed).some((k) => (parsed[k]?.apps?.length ?? 0) > 0);
-    if (hasAny && latestDefault) {
-      // В БД что-то есть + есть дефолт  mergeFirstLoad: порядок из дефолта, кастомные добавлены в конец
-      setEditorState(mergeWithDefault(parsed, latestDefault, false));
-    } else if (hasAny) {
-      // В БД что-то есть, но дефолта нет (ещё не подгружен)  используем то что в БД
-      setEditorState(parsed);
+    if (initializedConfig.current === currentConfigJson) return;
+    if (currentConfigJson?.trim()) {
+      setEditorState(parseConfigJson(currentConfigJson));
+      initializedConfig.current = currentConfigJson;
     } else if (latestDefault) {
-      // В БД пусто + есть дефолт  берём дефолт целиком
       setEditorState(mergeWithDefault({}, latestDefault, false));
+      initializedConfig.current = currentConfigJson;
     }
   }, [currentConfigJson, latestDefault]);
 
@@ -812,8 +807,15 @@ export function SubscriptionPageEditor({
   );
 
   const handleSubmit = useCallback(() => {
-    onSave(configToJson(editorState, defaultConfig ?? undefined));
-  }, [editorState, defaultConfig, onSave]);
+    let metadata = defaultConfig ?? undefined;
+    if (currentConfigJson?.trim()) {
+      try {
+        const saved = JSON.parse(currentConfigJson);
+        if (saved && typeof saved === "object" && !Array.isArray(saved)) metadata = saved;
+      } catch {}
+    }
+    onSave(configToJson(editorState, metadata));
+  }, [editorState, defaultConfig, currentConfigJson, onSave]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 

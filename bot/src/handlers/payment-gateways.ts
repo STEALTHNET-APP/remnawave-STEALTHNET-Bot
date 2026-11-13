@@ -196,7 +196,7 @@ export const TARIFF_GATEWAYS: TariffGateway[] = [
   },
   {
     prefix: "pay_tariff_cispay:",
-    errorText: "Ошибка создания платежа RollyPay",
+    errorText: "Ошибка создания платежа CisPay",
     errorMarkup: "back",
     create: async (token, body) => ({ url: (await api.createCispayPayment(token, body)).payUrl }),
   },
@@ -231,7 +231,7 @@ export const TOPUP_GATEWAYS: TopupGateway[] = [
   },
   {
     prefix: "topup_stars:",
-    errorText: "Ошибка создания платежа Crypto Bot",
+    errorText: "Ошибка создания платежа Telegram Stars",
     create: async (token, amount, currency) => ({
       url: (await api.createStarsPayment(token, { amount, currency })).payUrl,
     }),
@@ -266,7 +266,7 @@ export const TOPUP_GATEWAYS: TopupGateway[] = [
   },
   {
     prefix: "topup_cispay:",
-    errorText: "Ошибка создания платежа RollyPay",
+    errorText: "Ошибка создания платежа CisPay",
     create: async (token, amount, currency) => ({
       url: (await api.createCispayPayment(token, { amount, currency })).payUrl,
     }),

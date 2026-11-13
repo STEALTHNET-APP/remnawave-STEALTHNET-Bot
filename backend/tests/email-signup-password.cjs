@@ -37,7 +37,7 @@ assert.equal(h.passwordResetFingerprint('abcdefghijklmnopqrstuvwxyz'),'opqrstuvw
 assert.notEqual(h.passwordResetFingerprint(null),h.passwordResetFingerprint('$2b$10$newhashvalue1234'));
 
 // 5. wiring
-const routes=fs.readFileSync('src/modules/client/client.routes.ts','utf8');
+const routes=fs.readFileSync('src/modules/client/client-auth.routes.ts','utf8');
 const verify=routes.slice(routes.indexOf('clientAuthRouter.post("/verify-email"'),routes.indexOf('const loginSchema'));
 assert.ok(verify.includes('decideVerifyEmail('),'verify-email uses decideVerifyEmail');
 assert.ok(!verify.includes('buildAuthResponse('),'verify-email must not issue a session for an existing client');
@@ -69,7 +69,8 @@ assert.equal(h.isEmailUniqueViolation({code:'P2002',meta:{target:['referral_code
 assert.equal(h.isEmailUniqueViolation({code:'P2002'}),false);
 assert.equal(h.isEmailUniqueViolation({code:'P2025',meta:{target:['email']}}),false);
 assert.equal(h.isEmailUniqueViolation(null),false);
-const setPwd=routes.slice(routes.indexOf('clientRouter.post("/set-password"'),routes.indexOf('clientRouter.post("/complete-onboarding"'));
+const profileRoutes=fs.readFileSync('src/modules/client/client-profile.routes.ts','utf8');
+const setPwd=profileRoutes.slice(profileRoutes.indexOf('clientProfileRouter.post("/set-password"'),profileRoutes.indexOf('clientProfileRouter.post("/complete-onboarding"'));
 assert.ok(setPwd.includes('canSetPasswordWithoutCurrent(')&&!setPwd.includes('onboardingCompleted'),'set-password must not overwrite an existing password');
 assert.ok((reset.match(/canResetPassword\(/g)||[]).length===2,'forgot+reset enforce canResetPassword');
 assert.ok(verify.includes('isEmailUniqueViolation(e)'),'verify-email checks P2002 target');

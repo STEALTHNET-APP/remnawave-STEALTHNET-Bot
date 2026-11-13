@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { asyncHandler } from '../dist/lib/async-handler.js';
-const source = fs.readFileSync(new URL('../dist/modules/client/client.routes.js', import.meta.url), 'utf8');
+const source = fs.readFileSync(new URL('../dist/modules/client/client-payments-crypto.routes.js', import.meta.url), 'utf8');
 const routes = new Map();
 const noop = () => {};
 const router = new Proxy({}, { get: (_, method) => (route, ...handlers) => { if (method === 'post') for (const key of Array.isArray(route) ? route : [route]) routes.set(key, handlers.at(-1)); } });
@@ -25,20 +25,27 @@ const overrides = {
   starsApi: async (method, body) => { assert.equal(method, 'createInvoiceLink'); invoice = body; return 'https://t.me/$qa'; },
 };
 const context = vm.createContext({ console, Date, Math, Number, JSON, Map, Set, URL, process: { env: { BOT_TOKEN: '123:test' } } });
+const checkoutSource = fs.readFileSync(new URL('../dist/modules/client/client-checkout.util.js', import.meta.url), 'utf8');
 const definitions = new Map();
-for (const match of source.matchAll(/import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/g)) {
+for (const match of (source + '\n' + checkoutSource).matchAll(/import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/g)) {
   const names = definitions.get(match[2]) || new Set();
   for (const part of match[1].split(',')) if (part.trim()) names.add(part.trim().split(/\s+as\s+/)[0]);
   definitions.set(match[2], names);
 }
 const loaded = new Map();
 const module = new vm.SourceTextModule(source, { context });
-await module.link(async spec => {
+async function link(spec) {
+  if (spec === './client-checkout.util.js') {
+    if (loaded.has(spec)) return loaded.get(spec);
+    const child = new vm.SourceTextModule(checkoutSource, { context });
+    loaded.set(spec, child); await child.link(link); return child;
+  }
   if (loaded.has(spec)) return loaded.get(spec);
   const names = [...definitions.get(spec)];
   const child = new vm.SyntheticModule(names, function () { for (const name of names) this.setExport(name, overrides[name] ?? noop); }, { context });
   loaded.set(spec, child); await child.link(() => {}); await child.evaluate(); return child;
-});
+}
+await module.link(link);
 await module.evaluate();
 const handler = routes.get('/telegram-stars/create-payment'); assert(handler);
 async function request(body) {

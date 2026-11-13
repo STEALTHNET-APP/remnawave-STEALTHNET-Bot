@@ -224,7 +224,7 @@ test("unsupported Telegram methods fall back once; network uncertainty never sen
     const ctx = new Context(message() as any, api, info as any);
     const run = async () => createWidgetMiddleware(async () => ({ botHtmlBubblesTest: true }))(ctx, async () => { await ctx.reply("Menu"); });
     if (uncertain) await assert.rejects(run, /Connection lost/); else await run();
-    assert.deepEqual(calls, uncertain ? ["sendWidget"] : ["sendWidget", "sendMessage"]);
+    assert.deepEqual(calls, ["sendWidget", "sendMessage"]);
   }
 });
 
@@ -336,4 +336,32 @@ test("failure to deliver the recovery hint never retries or loses the delivered 
   const ctx = new Context(ownMessage(507) as any, api, info as any);
   await createWidgetMiddleware(async () => ({ botHtmlBubblesTest: true }))(ctx, async () => { await menuReply(ctx); });
   assert.deepEqual(calls, ["sendWidget", "sendMessage"]);
+});
+
+test("uncertain widget delivery leaves an ordinary recovery action and never renders catch text as another widget", async (t) => {
+  const calls: { method: string; payload: any }[] = [];
+  const warnings: unknown[][] = [];
+  t.mock.method(console, "warn", (...args: unknown[]) => { warnings.push(args); });
+  const api = new Api("999:fixture");
+  const failure = Object.assign(new Error("Network request for sendWidget failed! https://api.telegram.org/botSECRET/sendWidget"), {
+    name: "HttpError", error: { cause: { code: "ECONNRESET", url: "https://api.telegram.org/botSECRET/sendWidget" } },
+  });
+  api.config.use(async (_prev, method, payload) => {
+    calls.push({ method, payload });
+    if (method === ("sendWidget" as any)) throw failure;
+    return { ok: true, result: { message_id: 900, chat: { id: 508, type: "private" } } } as any;
+  });
+  const ctx = new Context(ownMessage(508) as any, api, info as any);
+  await createWidgetMiddleware(async () => ({ botHtmlBubblesTest: true }))(ctx, async () => {
+    try { await menuReply(ctx); }
+    catch (error) {
+      assert.equal(error, failure);
+      await ctx.reply("Не удалось открыть меню. Попробуйте позже.");
+    }
+  });
+  assert.deepEqual(calls.map(c => c.method), ["sendWidget", "sendMessage", "sendMessage"]);
+  assert.equal(calls[1]!.payload.reply_markup.inline_keyboard[0][0].callback_data, "widgets:classic");
+  assert.match(calls[1]!.payload.text, /только для вас/);
+  assert.deepEqual(warnings, [["[Widgets] Widget delivery was not confirmed", { name: "HttpError", code: "ECONNRESET" }]]);
+  assert.equal(JSON.stringify(warnings).includes("SECRET"), false);
 });

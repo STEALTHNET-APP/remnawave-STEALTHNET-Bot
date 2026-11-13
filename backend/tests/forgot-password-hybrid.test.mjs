@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // 1. Проверка структуры исходных файлов и регистрации обработчиков
 test("forgot-password and reset-password routes have hybrid notification and logging wiring", () => {
-  const routesFile = fs.readFileSync(path.join(__dirname, "../src/modules/client/client.routes.ts"), "utf8");
+  const routesFile = fs.readFileSync(path.join(__dirname, "../src/modules/client/client-auth.routes.ts"), "utf8");
 
   // Проверка импорта функции нотификации
   assert.match(routesFile, /notifyClientPasswordReset/);

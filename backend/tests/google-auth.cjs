@@ -1,5 +1,5 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),ts=require('typescript'),{z}=require('zod');
-const source=fs.readFileSync('src/modules/client/client.routes.ts','utf8');
+const source=fs.readFileSync('src/modules/client/client-auth.routes.ts','utf8');
 const code=source.slice(source.indexOf('const googleAuthSchema ='),source.indexOf('// ——— Apple Sign In:'));
 let handler,enabled,payload,existing,byEmail,created,linked,notifications,invalid;
 const reset=()=>{enabled=true;payload={sub:'google-user',email:'test@example.invalid',email_verified:true};existing=null;byEmail=null;created=null;linked=null;notifications=0;invalid=false;};

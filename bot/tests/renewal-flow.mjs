@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { test } from 'node:test';
 import ts from 'typescript';
+import { posix } from 'node:path';
 
 process.env.API_URL = 'https://api.example.invalid';
 const root = new URL('../', import.meta.url);
@@ -56,7 +57,7 @@ function createLoader(fixtureApi) {
       if (name === '../state-store.js') return evaluate('state-store');
       if (name === '../html.js') return evaluate('html');
       if (distModules.has(name)) return distModules.get(name);
-      if (name.startsWith('./') || name.startsWith('../')) return evaluate(name.replace(/^\.\.?\//, '').replace(/\.js$/, ''));
+      if (name.startsWith('./') || name.startsWith('../')) return evaluate(posix.normalize(posix.join(posix.dirname(relative), name)).replace(/\.js$/, ''));
       throw new Error(`Unexpected import ${name}`);
     };
     const fn = vm.runInNewContext(

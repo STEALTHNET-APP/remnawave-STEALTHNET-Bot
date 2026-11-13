@@ -295,6 +295,10 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
   const [previewRetry, setPreviewRetry] = useState(0);
   const [previewEnabled, setPreviewEnabled] = useState(options.preview !== "manual");
 
+  useEffect(() => {
+    setExtKeepExtras(true);
+  }, [extendTarget?.id]);
+
   const displayCategories = useMemo(() => {
     if (!extendTarget) return categories;
     if (extendTarget.isTrial && extendTarget.trialConvertAllTariffs) return categories;
@@ -330,7 +334,10 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
     const mode = options.autoSelectExtended ?? false;
     if (!extendTarget || !mode || categories.length === 0) return;
     const preferredId = extendTarget.tariffId
-      ?? (mode === "withTrialConversion" && extendTarget.isTrial ? extendTarget.convertTariffIds[0] : null);
+      ?? (extendTarget.isTrial && extendTarget.trialConvertEnabled
+        ? displayCategories.flatMap((category) => category.tariffs).find((tariff) =>
+          extendTarget.trialConvertAllTariffs || extendTarget.convertTariffIds.includes(tariff.id))?.id
+        : null);
     if (!preferredId) return;
     const category = categories.find((item) => item.tariffs.some((tariff) => tariff.id === preferredId));
     const tariff = category?.tariffs.find((item) => item.id === preferredId);
@@ -341,7 +348,7 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
     if (priceOptions.length > 0) {
       setSelectedPriceOptionId((priceOptions.find((option) => option.durationDays === 30) ?? priceOptions[0]).id);
     }
-  }, [extendTarget, categories, options.autoSelectExtended]);
+  }, [extendTarget, categories, displayCategories, options.autoSelectExtended]);
 
   useEffect(() => {
     if (!options.resetExtrasOnSelection) return;

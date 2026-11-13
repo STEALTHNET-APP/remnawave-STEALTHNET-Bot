@@ -107,7 +107,9 @@ export async function syncFromRemna(): Promise<{
         emails.length ? prisma.client.findMany({ where: { email: { in: emails } } }) : [],
       ]);
 
-      const subscriptionByUuid = new Map<string, (typeof subscriptions)[number]>();
+      type SyncClient = (typeof clientsByUuid)[number];
+      const clientById = new Map<string, SyncClient>();
+      const subscriptionByUuid = new Map<string, { subscriptionIndex: number; owner: SyncClient }>();
       for (const subscription of subscriptions) {
         if (subscription.remnawaveUuid && !subscriptionByUuid.has(subscription.remnawaveUuid)) {
           subscriptionByUuid.set(subscription.remnawaveUuid, subscription);
@@ -116,6 +118,22 @@ export async function syncFromRemna(): Promise<{
       const clientByUuid = new Map(clientsByUuid.map((c) => [c.remnawaveUuid as string, c]));
       const clientByTg = new Map(clientsByTg.map((c) => [c.telegramId as string, c]));
       const clientByEmail = new Map(clientsByEmail.map((c) => [c.email as string, c]));
+      for (const client of [...clientsByUuid, ...clientsByTg, ...clientsByEmail, ...subscriptions.map(s => s.owner)]) {
+        clientById.set(client.id, client);
+      }
+      function rememberClient(client: SyncClient) {
+        const previous = clientById.get(client.id);
+        for (const [index, oldKey, nextKey] of [
+          [clientByUuid, previous?.remnawaveUuid, client.remnawaveUuid],
+          [clientByTg, previous?.telegramId, client.telegramId],
+          [clientByEmail, previous?.email, client.email],
+        ] as const) {
+          if (oldKey && oldKey !== nextKey && index.get(oldKey)?.id === client.id) index.delete(oldKey);
+          if (nextKey) index.set(nextKey, client);
+        }
+        clientById.set(client.id, client);
+      }
+
 
       for (const { uuid, telegramId, email, username } of pageUsers) {
         if (!uuid) {
@@ -129,7 +147,8 @@ export async function syncFromRemna(): Promise<{
           const existingByTg = telegramId ? clientByTg.get(telegramId) ?? null : null;
           const existingByEmail = email ? clientByEmail.get(email) ?? null : null;
 
-          const existing = linkedSubscription?.owner || existingByUuid || existingByTg || existingByEmail;
+          const candidate = linkedSubscription?.owner || existingByUuid || existingByTg || existingByEmail;
+          const existing = candidate ? clientById.get(candidate.id) ?? candidate : null;
 
           let clientTargetId: string;
           if (existing) {
@@ -146,10 +165,11 @@ export async function syncFromRemna(): Promise<{
               if (!otherWithEmail || otherWithEmail.id === existing.id) data.email = email;
             }
             if (username && !existing.telegramUsername) data.telegramUsername = username;
-            await prisma.client.update({
+            const updated = await prisma.client.update({
               where: { id: existing.id },
               data,
             });
+            rememberClient(updated);
             clientTargetId = existing.id;
             result.updated++;
           } else {
@@ -167,10 +187,12 @@ export async function syncFromRemna(): Promise<{
                 trialUsed: true,
               },
             });
+            rememberClient(created);
             clientTargetId = created.id;
             result.created++;
           }
-          await upsertSubscriptionByRemnaUuid(clientTargetId, { remnawaveUuid: uuid });
+          const linked = await upsertSubscriptionByRemnaUuid(clientTargetId, { remnawaveUuid: uuid });
+          subscriptionByUuid.set(uuid, { subscriptionIndex: linked.subscriptionIndex, owner: clientById.get(clientTargetId)! });
         } catch (e) {
           result.errors.push(`${uuid}: ${e instanceof Error ? e.message : String(e)}`);
         }

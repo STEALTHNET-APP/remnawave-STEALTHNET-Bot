@@ -6,11 +6,16 @@ import { test } from 'node:test';
 
 const source = path => ts.createSourceFile(path, readFileSync(new URL(path, import.meta.url), 'utf8'), ts.ScriptTarget.Latest, true);
 const evaluate = (code, globals) => vm.runInNewContext(ts.transpileModule('(' + code + ')', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, globals);
-const routes = source('../src/modules/admin/admin.routes.ts');
+const mainRoutes = source('../src/modules/admin/admin.routes.ts');
+const remnaRoutes = source('../src/modules/admin/remna.routes.ts');
 function callback(path) {
+  const remna = path.startsWith('/remna/');
+  const routes = remna ? remnaRoutes : mainRoutes;
+  const router = remna ? 'adminRemnaRouter' : 'adminRouter';
+  const routePath = remna ? path.slice('/remna'.length) : path;
   let result;
   function visit(node) {
-    if (ts.isCallExpression(node) && node.arguments[0]?.text === path && node.expression.getText(routes) === 'adminRouter.post') result = node.arguments[1].arguments[0].getText(routes);
+    if (ts.isCallExpression(node) && node.arguments[0]?.text === routePath && node.expression.getText(routes) === `${router}.post`) result = node.arguments[1].arguments[0].getText(routes);
     ts.forEachChild(node, visit);
   }
   visit(routes);
@@ -30,6 +35,7 @@ test('reset endpoints return no credentials and never change subscription mappin
     assert.equal(JSON.stringify(result), '{"ok":true}');
   }
   assert.equal(callback('/remna/reset-uuids-and-sync'), undefined);
+  assert.match(mainRoutes.text, /adminRouter\.use\(\"\/remna\",\s*adminRemnaRouter\)/);
 });
 
 test('API credential endpoints use settings permissions, not dashboard permissions', () => {

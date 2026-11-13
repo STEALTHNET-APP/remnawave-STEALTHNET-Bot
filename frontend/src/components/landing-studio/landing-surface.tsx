@@ -14,6 +14,19 @@ const strings = (v: unknown): string[] => Array.isArray(v) ? v.filter(x => typeo
 const tariffDeviceLimit = (t: { deviceLimit?: number | null; includedDevices?: number | null }) => Math.max(t.deviceLimit ?? 0, t.includedDevices ?? 0);
 export function safeUrl(v: unknown, fallback = "#") { const s = S(v).trim(); return /^(https?:\/\/|mailto:|tel:|\/(?!\/)|#)/i.test(s) ? s : fallback; }
 export function safeImageUrl(v: unknown) { const s = S(v).trim(); return /^data:image\/(?:png|jpe?g|gif|webp|avif|x-icon);base64,[a-z0-9+/=\s]+$/i.test(s) ? s : safeUrl(s, ""); }
+export function isCabinetAuthLink(href: string): boolean {
+  if (!href.startsWith("/") || href.startsWith("//")) return false;
+  try {
+    const url = new URL(href, "https://cabinet.invalid");
+    return url.origin === "https://cabinet.invalid" && ["/cabinet/login", "/cabinet/register"].includes(url.pathname);
+  } catch {
+    return false;
+  }
+}
+function LandingAction({ href, children, authenticated, className }: { href: string; children: ReactNode; authenticated: boolean; className?: string }) {
+  const useCabinet = authenticated && isCabinetAuthLink(href);
+  return <LandingLink href={useCabinet ? "/cabinet" : href} className={className}>{useCabinet ? "Личный кабинет" : children}<ArrowUpRight size={18}/></LandingLink>;
+}
 function BrandLogo({src}:{src:string}) { const [failed,setFailed]=useState(false); const url=safeImageUrl(src);useEffect(()=>setFailed(false),[src]);return url&&!failed?<img src={url} alt="" onError={()=>setFailed(true)}/>:<span className="sn-brand-mark"><Shield size={21} strokeWidth={2.5}/></span>; }
 export function inkOn(color: string) { const h = /^#([0-9a-f]{6})$/i.exec(color); if (!h) return "#ffffff"; const n = parseInt(h[1], 16); return ((n >> 16) * .299 + ((n >> 8) & 255) * .587 + (n & 255) * .114) > 155 ? "#15202b" : "#ffffff"; }
 export function LandingSurface({ data, config, editing = false, onPick }: { data: LandingApiResponse; config: PublicConfig; editing?: boolean; onPick?: (id: string) => void }) {
@@ -75,7 +88,11 @@ export function LandingSurface({ data, config, editing = false, onPick }: { data
     {hp.showHeader !== false && <header className={`sn-header ${hp.stickyHeader === false ? "sn-header-static" : ""}`}>
       <a className="sn-brand" href="#home">{<BrandLogo src={logo}/>}<span>{name}</span>{S(ht.headerBadge) && <small>{S(ht.headerBadge)}</small>}</a>
       <nav className={menu ? "sn-nav sn-nav-open" : "sn-nav"} aria-label="Навигация по странице">{nav.map((n,i) => <a key={i} href={safeUrl(n.href)} onClick={() => setMenu(false)}>{S(n.label)}</a>)}</nav>
-      <div className="sn-header-actions">{isAuthenticated ? <LandingLink href="/cabinet" className="sn-button sn-small">Личный кабинет<ArrowUpRight size={17}/></LandingLink> : <><LandingLink href={S(hp.secondaryCtaUrl, "/cabinet/login")} className="sn-login">{S(ht.secondaryCtaText, "Войти")}</LandingLink><LandingLink href={S(hp.ctaUrl, "/cabinet/register")} className="sn-button sn-small">{S(ht.ctaText, "Подключиться")}<ArrowUpRight size={17}/></LandingLink></>}<button className="sn-menu" onClick={() => setMenu(!menu)} aria-expanded={menu} aria-label={menu ? "Закрыть меню" : "Открыть меню"}>{menu ? <X/> : <Menu/>}</button></div>
+      <div className="sn-header-actions">
+        {!(isAuthenticated && isCabinetAuthLink(S(hp.ctaUrl, "/cabinet/register")) && isCabinetAuthLink(S(hp.secondaryCtaUrl, "/cabinet/login"))) && <LandingAction href={S(hp.secondaryCtaUrl, "/cabinet/login")} authenticated={isAuthenticated} className="sn-login">{S(ht.secondaryCtaText, "Войти")}</LandingAction>}
+        <LandingAction href={S(hp.ctaUrl, "/cabinet/register")} authenticated={isAuthenticated} className="sn-button sn-small">{S(ht.ctaText, "Подключиться")}</LandingAction>
+        <button className="sn-menu" onClick={() => setMenu(!menu)} aria-expanded={menu} aria-label={menu ? "Закрыть меню" : "Открыть меню"}>{menu ? <X/> : <Menu/>}</button>
+      </div>
     </header>}
     <main>{blocks.map((block,i) => {
       const previous = blocks.slice(0,i).some(b => b.type === block.type);
@@ -114,7 +131,7 @@ function Section({ block, name, duplicate, editing, authenticated }: { block: La
     content = <div className={`sn-hero sn-hero-${S(p.layout, variant === "centered" ? "centered" : "split")}`}>
       <div className="sn-hero-copy"><h1>{S(t.headline1, "Интернет.")}<span>{S(t.headline2, "На вашей стороне.")}</span></h1>
       <p className="sn-hero-description">{S(t.subtitle, "Любимые сервисы, работа и общение. Подключите VPN и оставайтесь на связи на всех своих устройствах.")}</p>
-      <div className="sn-hero-buttons"><LandingLink className="sn-button" href={authenticated ? "/cabinet" : S(p.ctaUrl, "/cabinet/register")}>{authenticated ? "В личный кабинет" : S(t.ctaText, "Подключиться")}<ArrowUpRight size={21}/></LandingLink>{!authenticated && p.showSecondary !== false && <LandingLink className="sn-text-link" href={S(p.secondaryCtaUrl, "/cabinet/login")}>{S(t.secondaryCtaText, "Войти в кабинет")}<ArrowRight size={18}/></LandingLink>}</div>
+      <div className="sn-hero-buttons"><LandingAction className="sn-button" href={S(p.ctaUrl, "/cabinet/register")} authenticated={authenticated}>{S(t.ctaText, "Подключиться")}</LandingAction>{p.showSecondary !== false && !(authenticated && isCabinetAuthLink(S(p.ctaUrl, "/cabinet/register")) && isCabinetAuthLink(S(p.secondaryCtaUrl, "/cabinet/login"))) && <LandingAction className="sn-text-link" href={S(p.secondaryCtaUrl, "/cabinet/login")} authenticated={authenticated}>{S(t.secondaryCtaText, "Войти в кабинет")}</LandingAction>}</div>
       {S(t.hint) && <p className="sn-hint">{S(t.hint)}</p>}
       {strings(t.tags).length > 0 && <div className="sn-tags">{strings(t.tags).map((tag,i) => <span key={i}><Check size={14}/>{tag}</span>)}</div>}</div>
       {scene !== "none" && <div className="sn-hero-art"><SpatialStage name={name} color={S(p.sceneColor, "#a0a3ff")} caption={S(t.rightCardTitle)} image={scene === "image" && image ? safeUrl(image) : undefined} material={S(p.sceneMaterial, "glass")}/>
@@ -131,7 +148,7 @@ function Section({ block, name, duplicate, editing, authenticated }: { block: La
   else if (type === "custom" && variant === "journey") content = <>{heading}<ol className="sn-steps">{list(p.steps).map((item,i) => <li key={i}><span>{i+1}</span><div><h3>{S(item.title)}</h3><p>{S(item.desc)}</p></div><ArrowRight/></li>)}</ol></>;
   else if (type === "custom" && variant === "footer") content = <footer className="sn-footer"><a className="sn-brand" href="#home"><Shield size={23}/>{name}</a><p>{S(t.footerText, `© ${new Date().getFullYear()} ${name}`)}</p><nav aria-label="Документы и контакты">{S(p.offerLink) && <a href={safeUrl(p.offerLink)}>{S(t.offerLabel, "Оферта")}</a>}{S(p.privacyLink) && <a href={safeUrl(p.privacyLink)}>{S(t.privacyLabel, "Конфиденциальность")}</a>}{S(t.contacts) && <span>{S(t.contacts)}</span>}{list(p.links).map((link,i) => <a key={i} href={safeUrl(link.href)}>{S(link.label)}</a>)}</nav></footer>;
   else if (type === "custom" && variant === "content") content = <div className={`sn-content sn-content-${S(p.layout,"split")}`}><div>{heading}{S(t.body) && <p className="sn-body">{S(t.body)}</p>}{S(t.ctaText) && <LandingLink href={S(p.ctaUrl)} className="sn-button">{S(t.ctaText)}<ArrowUpRight size={18}/></LandingLink>}</div>{image && <img src={safeUrl(image)} alt={S(p.imageAlt)} loading="lazy"/>}</div>;
-  else if (type === "cta") content = <div className="sn-cta"><div><h2>{S(t.title)}</h2><p>{S(t.desc)}</p></div><LandingLink href={authenticated ? "/cabinet" : S(p.ctaUrl,"/cabinet/register")} className="sn-button">{authenticated ? "В кабинет" : S(t.ctaText,"Подключиться")}<ArrowUpRight size={22}/></LandingLink></div>;
+  else if (type === "cta") content = <div className="sn-cta"><div><h2>{S(t.title)}</h2><p>{S(t.desc)}</p></div><LandingAction href={S(p.ctaUrl,"/cabinet/register")} authenticated={authenticated} className="sn-button">{S(t.ctaText,"Подключиться")}</LandingAction></div>;
   else if (type === "logos") content = <>{heading}<div className="sn-logos">{list(p.items).map((item,i) => <a key={i} href={safeUrl(item.href)}><img src={safeUrl(item.imageUrl)} alt={S(item.alt)} loading="lazy"/></a>)}</div></>;
   else if (type === "testimonials") content = <>{heading}<div className="sn-testimonials">{items.map((item,i) => <figure key={i}><blockquote>{S(item.text)}</blockquote><figcaption>{S(item.avatar) && <img src={safeUrl(item.avatar)} alt="" loading="lazy"/>}<div><strong>{S(item.author)}</strong><span>{S(item.role)}</span></div></figcaption></figure>)}</div></>;
   else if (type === "video") content = <>{heading}<Video url={S(p.url)} poster={S(p.poster)} title={title} editing={editing}/>{S(t.caption) && <p className="sn-hint">{S(t.caption)}</p>}</>;

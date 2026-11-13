@@ -1,3 +1,4 @@
+import { NalogTab } from "@/components/admin/settings/tabs/nalog-tab";
 import { isBotButtonUrl } from "@/lib/bot-button-url";
 import { SettingsNavigation, SETTINGS_TABS } from "@/components/admin/settings-navigation";
 import { BotButtonItem, BotTab, DEFAULT_BOT_BUTTONS, DEFAULT_BOT_INNER_STYLES, DEFAULT_BOT_MENU_LINE_VISIBILITY, DEFAULT_BOT_MENU_TEXTS, DEFAULT_BOT_PAYMENT_TEXT, DEFAULT_BOT_TARIFF_FIELDS, DEFAULT_BOT_TARIFFS_TEXT } from "@/components/admin/settings/tabs/bot-tab";
@@ -901,6 +902,11 @@ export function SettingsPage() {
         proxyTelegram: settings.proxyTelegram ?? false,
         proxyPayments: settings.proxyPayments ?? false,
         proxyAi: settings.proxyAi ?? false,
+        nalogEnabled: settings.nalogEnabled ?? false,
+        nalogInn: settings.nalogInn ?? null,
+        nalogPassword: settings.nalogPassword ?? null,
+        nalogDeviceId: settings.nalogDeviceId ?? null,
+        nalogServiceName: settings.nalogServiceName ?? null,
     };
     saveSettingsMut.mutate(payloadBase);
   }
@@ -1930,6 +1936,7 @@ export function SettingsPage() {
           </Card>
         </TabsContent>
 
+        <NalogTab settings={settings} setSettings={setSettings} saving={saving} token={token} setMessage={setMessage} handleSubmit={handleSubmit} />
         <GiftsTab
           settings={settings}
           setSettings={setSettings}
