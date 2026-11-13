@@ -4,7 +4,7 @@ import { menuWebAppUrl } from "./menu-web-app.js";
 export function renewableSubscriptions(items: SubscriptionListItem[], tariffId?: string): SubscriptionListItem[] {
   return items.filter(item => (!tariffId || item.tariffId === tariffId)
     && !(item.trialId && item.trialConvertEnabled === false)
-    && Boolean(item.tariffId || (item.trialId && (item.trialConvertAllTariffs || item.convertTariffIds?.length))));
+    && Boolean(item.tariffId || (!item.trialId && item.remnawaveUuid) || (item.trialId && (item.trialConvertAllTariffs || item.convertTariffIds?.length))));
 }
 
 function subscriptionUser(payload: unknown): Record<string, unknown> | null {

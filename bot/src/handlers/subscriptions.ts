@@ -9,6 +9,7 @@ import { resolveCallbackDomain } from "./routing.js";
 
 export async function startSubscriptionRenewal(ctx: Context, token: string, userId: number, config: ConfigSnapshot | null, innerStyles: InnerButtonStyles | undefined, innerEmojiIds: InnerEmojiIds | undefined, sid: string): Promise<void> {
   try {
+    await api.verifyTelegramSubscriptions(userId, ctx.from?.username);
     const subs = await api.getAllSubscriptions(token);
     // Раньше: фильтр type === "secondary". Теперь — любая подписка с этим id (root тоже).
     const sec = subs.items?.find((it) => it.id === sid);
@@ -69,6 +70,22 @@ export async function startSubscriptionRenewal(ctx: Context, token: string, user
         );
         return;
       }
+    }
+
+    if (!sec.tariffId && !sec.trialId && sec.remnawaveUuid) {
+      const { items } = await api.getPublicTariffs();
+      const options = (items ?? []).flatMap(category => category.tariffs).map(tariff => ({ id: tariff.id, name: tariff.name }));
+      if (!options.length) {
+        await editMessageContent(ctx, "Тарифы для продления пока не настроены. Обратитесь в поддержку.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      trialConvertPickCache.set(userId, { sid, options });
+      addsubPending.delete(userId);
+      await editMessageContent(ctx, "Найдена существующая подписка. Выберите тариф для её продления — ссылка для подключения сохранится.", {
+        inline_keyboard: [...options.map((option, i) => [{ text: option.name, callback_data: `pay_ext_pickt:${i}` }]),
+          [{ text: "Назад", callback_data: "menu:tariffs" }]],
+      });
+      return;
     }
 
     const { items } = await api.getPublicTariffs();
@@ -156,6 +173,7 @@ export async function startSubscriptionRenewal(ctx: Context, token: string, user
 
 export async function showRenewalChoice(ctx: Context, token: string, userId: number, config: ConfigSnapshot | null, innerStyles: InnerButtonStyles | undefined, innerEmojiIds: InnerEmojiIds | undefined, tariffId?: string): Promise<void> {
   try {
+    await api.verifyTelegramSubscriptions(userId, ctx.from?.username);
     const all = await api.getAllSubscriptions(token);
     const matching = renewableSubscriptions(all.items ?? [], tariffId);
     if (matching.length === 0) {

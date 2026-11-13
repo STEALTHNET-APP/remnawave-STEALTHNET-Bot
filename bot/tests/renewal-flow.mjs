@@ -62,7 +62,7 @@ function createLoader(fixtureApi) {
     };
     const fn = vm.runInNewContext(
       `(function (exports, require, module) {\n${readTranspiled(relative)}\n})`,
-      { process: { env: { BOT_TOKEN: 'fixture-only' } }, console: { log() {}, warn() {}, error(...args) { throw new Error(args.join(' ')); } }, setInterval() { return { unref() {} }; }, clearInterval() {}, setTimeout, clearTimeout, URL, Buffer },
+      { process: { env: { BOT_TOKEN: 'fixture-only' } }, console: { log() {}, warn() {}, error(...args) { throw new Error(args.join(' ')); } }, setInterval() { return { unref() {} }; }, clearInterval() {}, setTimeout, clearTimeout, URL, Buffer, Error },
       { filename: `${relative}.cjs` },
     );
     fn.call(module.exports, module.exports, requireFn, module);
@@ -98,10 +98,10 @@ function createLoader(fixtureApi) {
   };
 }
 
-function setup({ count = 1, periods = 1, multi = false, blocked = false, extras = 0, expired = false, failRead = false, standaloneTrial = false, cloudpayments = false } = {}) {
+function setup({ count = 1, periods = 1, multi = false, blocked = false, extras = 0, expired = false, failRead = false, standaloneTrial = false, cloudpayments = false, imported = false, otherTariff = false, failDiscovery = false } = {}) {
   const payments = [], messages = [], cooldownIds = [];
   const subscriptions = Array.from({ length: count }, (_, i) => ({
-    id: `subscription-${i}`, tariffId: standaloneTrial ? null : 'standard', type: i ? 'secondary' : 'root', subscriptionIndex: i,
+    id: `subscription-${i}`, tariffId: standaloneTrial || imported ? null : otherTariff ? 'other' : 'standard', type: i ? 'secondary' : 'root', subscriptionIndex: i,
     trialId: standaloneTrial ? 'trial' : null, trialConvertEnabled: true, trialConvertAllTariffs: standaloneTrial, tariffDisplayName: 'Standard', remnawaveUuid: `uuid-${i}`,
     extraDevices: extras, extraDevicesMonthlyPrice: extras * 50,
     subscription: { status: expired ? 'EXPIRED' : 'ACTIVE', expireAt: expired ? '2020-01-01' : '2099-01-01' },
@@ -109,6 +109,7 @@ function setup({ count = 1, periods = 1, multi = false, blocked = false, extras 
   const tariff = { id: 'standard', name: 'Standard', currency: 'RUB', price: 100, durationDays: 30, includedDevices: 1,
     priceOptions: Array.from({ length: periods }, (_, i) => ({ id: `period-${i}`, price: 100 * (i + 1), durationDays: 30 * (i + 1), sortOrder: i })) };
   const api = {
+    verifyTelegramSubscriptions: async () => { if (failDiscovery) throw new Error('Не удалось проверить существующие подписки'); },
     getPublicConfig: async () => ({ cloudpaymentsEnabled: cloudpayments, cloudpaymentsTrialTariffId: cloudpayments ? "standard" : null, cloudpaymentsTrialDays: 3, cloudpaymentsTrialAmount: 1, multiSubscriptionsEnabled: multi, defaultCurrency: 'RUB', defaultLanguage: 'ru', publicAppUrl: 'https://panel.example' }),
     registerByTelegram: async () => ({ token: 'fixture-token', client: { preferredLang: 'ru' } }),
     getAllSubscriptions: async () => { if (failRead) throw new Error('unavailable'); return { items: subscriptions }; },
@@ -229,4 +230,58 @@ test('CloudPayments paid trial opens consent checkout with explicit paidTrial in
   assert.equal(t.payments.length, 1);
   assert.equal(t.payments[0].paidTrial, true);
   assert.equal(t.payments[0].tariffId, 'standard');
+});
+
+for (const multi of [false, true]) {
+  test(`tariff menu offers existing subscription before a new purchase (multi=${multi})`, async () => {
+    const t = setup({ multi });
+    const screen = await t.click('menu:tariffs');
+    assert(screen.buttons.some(b => b.callback_data === 'menu:renew'));
+    assert.equal(screen.buttons.some(b => b.callback_data === 'menu:tariffs:new'), multi);
+    assert.equal(t.payments.length, 0);
+  });
+  test(`imported subscription without a tariff keeps its ID at payment (multi=${multi})`, async () => {
+    const t = setup({ multi, imported: true });
+    const screen = await t.click('menu:renew');
+    assert.match(screen.text, /ссылка.*сохранится/);
+    await t.click(screen.buttons.find(b => b.callback_data?.startsWith('pay_ext_pickt:')).callback_data);
+    await t.click('pay_tariff_balance:standard');
+    assert.equal(t.payments.length, 1);
+    assert.equal(t.payments[0].extendsSecondarySubId, 'subscription-0');
+    assert.equal(t.payments[0].asAdditional, undefined);
+  });
+}
+
+test('a different tariff requires explicit choice before creating a separate subscription', async () => {
+  const t = setup({ multi: true, otherTariff: true });
+  const screen = await t.click('pay_tariff:standard');
+  assert(screen.buttons.some(b => b.callback_data === 'menu:renew'));
+  assert(screen.buttons.some(b => b.callback_data === 'pay_tariff:standard:add'));
+  assert.equal(t.payments.length, 0);
+  await t.click('pay_tariff:standard:add');
+  await t.click('pay_tariff_balance:standard');
+  assert.equal(t.payments[0].asAdditional, true);
+});
+
+test('empty Telegram account offers website linking before the tariff catalogue', async () => {
+  const t = setup({ count: 0 });
+  const screen = await t.click('menu:tariffs');
+  assert.match(screen.text, /привяжите Telegram/);
+  assert(screen.buttons.some(b => b.url === 'https://panel.example/cabinet/login'));
+  const catalogue = await t.click('menu:tariffs:new');
+  assert(catalogue.buttons.some(b => b.callback_data?.startsWith('pay_tariff:')));
+});
+
+test('failed subscription lookup does not open the tariff catalogue', async () => {
+  const t = setup({ failRead: true });
+  const screen = await t.click('menu:tariffs');
+  assert.match(screen.text, /Не удалось проверить/);
+  assert(!screen.buttons.some(b => b.callback_data?.startsWith('pay_tariff:')));
+});
+
+test('unavailable remote discovery blocks old payment buttons before a payment is created', async () => {
+  const t = setup({ failDiscovery: true });
+  const screen = await t.click('pay_tariff_balance:standard');
+  assert.match(screen.text, /Не удалось проверить/);
+  assert.equal(t.payments.length, 0);
 });

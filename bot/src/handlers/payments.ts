@@ -81,6 +81,9 @@ export function createPaymentHandlers(): Composer<Context> {
       return;
     }
     try {
+      if (data.startsWith("pay_tariff") || data === "menu:trial" || data === "menu:cloudtrial" || data.startsWith("trial:")) {
+        await api.verifyTelegramSubscriptions(userId, ctx.from?.username);
+      }
       const config = await api.getPublicConfig();
       if (config?.translations) setTranslations(config.translations);
       if (await blockUnsubscribedCallback(ctx, userId, config)) return;
@@ -765,27 +768,33 @@ export function createPaymentHandlers(): Composer<Context> {
             await showRenewalChoice(ctx, token, userId, config, innerStyles, innerEmojiIds, tariff.id);
             return;
           }
+          if ((all.items ?? []).some(sub => !sub.tariffId && !sub.trialId && sub.remnawaveUuid)) {
+            await showRenewalChoice(ctx, token, userId, config, innerStyles, innerEmojiIds);
+            return;
+          }
         } catch {
           await editMessageContent(ctx, "Не удалось проверить подписки. Повторите попытку.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
           return;
         }
       }
 
-      // диалог «Покупка тарифа из другой категории» УБРАН.
-      // Раньше при клике на тариф другой категории показывался диалог-промежуток. Юзер не хотел
-      // лишнего шага → теперь сразу автоматически идём на «купить как новую подписку» (addsubPending),
-      // флоу длительности/устройств/оплаты не меняется, на webhook'е создастся параллельная sub.
-      if (methodIdFromBtn == null && !isBypass && config?.multiSubscriptionsEnabled === true) {
+      if (methodIdFromBtn == null && !isBypass && canOfferNewSubscription) {
         try {
-          const me = await api.getMe(token);
-          const newCategory = items?.find((c) => c.tariffs.some((t) => t.id === tariffId));
-          if (me.currentTariff && me.currentTariff.categoryId && newCategory && newCategory.id !== me.currentTariff.categoryId) {
-            // Автоматически помечаем как additional — backend пометит metadata.isAdditionalSubscription
-            // → активация через createAdditionalSubscription (новая параллельная sub).
-            addsubPending.set(userId, tariff.id);
+          const { items: subscriptions } = await api.getAllSubscriptions(token);
+          if (renewableSubscriptions(subscriptions ?? []).length && !subscriptions.some(sub => sub.tariffId === tariff.id)) {
+            await editMessageContent(ctx,
+              "У вас уже есть подписка. Продлите её, чтобы сохранить подключение. Покупка отдельной подписки создаст новую ссылку.", {
+                inline_keyboard: [
+                  [{ text: "Продлить существующую", callback_data: "menu:renew" }],
+                  [{ text: "Купить отдельную подписку", callback_data: `pay_tariff:${tariff.id}:add` }],
+                  [{ text: "Назад", callback_data: "menu:tariffs" }],
+                ],
+              });
+            return;
           }
         } catch {
-          // Если /me не ответил — не блокируем покупку, fallback в обычный flow.
+          await editMessageContent(ctx, "Не удалось проверить подписки. Повторите попытку — покупка не создана.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+          return;
         }
       }
 

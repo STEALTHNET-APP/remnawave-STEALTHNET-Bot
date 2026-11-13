@@ -22,7 +22,7 @@ export function resolveCallbackDomain(data: string): CallbackDomain | null {
   if (data.startsWith("vinstr:")) return "start";
   if (data === "menu:video_instructions_fresh") return "start";
   if (data === "menu:roulette") return "start";
-  if (data === "menu:tariffs") return "tariffs";
+  if (data === "menu:tariffs" || data === "menu:tariffs:new") return "tariffs";
   if (data.startsWith("cat_tariffs:")) return "tariffs";
   if (data === "menu:proxy") return "tariffs";
   if (data.startsWith("cat_proxy:")) return "tariffs";

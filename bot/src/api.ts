@@ -289,8 +289,13 @@ export async function registerByTelegram(body: {
   utm_campaign?: string;
   utm_content?: string;
   utm_term?: string;
-}): Promise<{ token: string; client: { id: string; telegramUsername?: string | null; preferredLang?: string; preferredCurrency: string; balance: number; trialUsed?: boolean; referralCode?: string | null; onboardingCompleted?: boolean }; isNewClient?: boolean }> {
+}): Promise<{ token: string; client: { id: string; telegramUsername?: string | null; preferredLang?: string; preferredCurrency: string; balance: number; trialUsed?: boolean; referralCode?: string | null; onboardingCompleted?: boolean }; isNewClient?: boolean; subscriptionCheckPending?: boolean }> {
   return fetchJson("/api/client/auth/register", { method: "POST", body });
+}
+
+export async function verifyTelegramSubscriptions(telegramId: number, telegramUsername?: string): Promise<void> {
+  const auth = await registerByTelegram({ telegramId: String(telegramId), telegramUsername });
+  if (auth.subscriptionCheckPending) throw new Error("Не удалось проверить существующие подписки. Попробуйте позже — покупка не создана. Баланс и другие разделы доступны.");
 }
 
 /** запустить event-driven welcome (after_registration) */

@@ -3,7 +3,7 @@ import { InputFile } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
 import { addsubPending, convDropExtras, extendingSecondaryPending, extraOptionPending, extraOptionTargetSub, pendingDropExtras, selectedTariffOption, tariffOptionsCache, trialConvertPickCache, trialReplaceChoice } from "../state-store.js";
-import { DEFAULT_EMOJI_UNICODE, DEFAULT_TARIFFS_TEXT, DEFAULT_TARIFF_LINE_FIELDS, _t, applyExtraDevicesPriceBot, backToMenu, bestPricePerDayOptionId, blockUnsubscribedCallback, callbackUi, checkoutExtraDeviceCap, currencySymbol, editMessageContent, extraOptionsButtons, formatRuDays, formatTariffLine, getMenuEmojiKey, getOrRestoreToken, getUserLang, hasExtraDevices, markHasOptions, proxyTariffPayButtons, proxyTariffsOfCategoryButtons, renderTariffsText, setTranslations, showPaymentMethodsForTariff, singboxTariffPayButtons, singboxTariffsOfCategoryButtons, sortedPriceOptions, t, tariffCategoryButtons, tariffDevicePickerButtons, tariffErrMarkup, tariffOptionPickerButtons, tariffPayButtons, tariffsOfCategoryButtons, titleWithEmoji, titleWithOptionalEmoji } from "./shared.js";
+import { DEFAULT_EMOJI_UNICODE, DEFAULT_TARIFFS_TEXT, DEFAULT_TARIFF_LINE_FIELDS, _t, applyExtraDevicesPriceBot, backToMenu, bestPricePerDayOptionId, blockUnsubscribedCallback, callbackUi, checkoutExtraDeviceCap, currencySymbol, editMessageContent, extraOptionsButtons, formatRuDays, formatTariffLine, getMenuEmojiKey, getOrRestoreToken, getUserLang, hasExtraDevices, markHasOptions, proxyTariffPayButtons, proxyTariffsOfCategoryButtons, renderTariffsText, renewableSubscriptions, setTranslations, showPaymentMethodsForTariff, singboxTariffPayButtons, singboxTariffsOfCategoryButtons, sortedPriceOptions, t, tariffCategoryButtons, tariffDevicePickerButtons, tariffErrMarkup, tariffOptionPickerButtons, tariffPayButtons, tariffsOfCategoryButtons, titleWithEmoji, titleWithOptionalEmoji } from "./shared.js";
 import type { TariffCategory, TariffItem } from "./shared.js";
 import { resolveCallbackDomain } from "./routing.js";
 
@@ -26,7 +26,38 @@ export function createTariffHandlers(): Composer<Context> {
       if (await blockUnsubscribedCallback(ctx, userId, config)) return;
       const { appUrl, innerStyles, botEmojis, innerEmojiIds } = callbackUi(config);
 
-    if (data === "menu:tariffs") {
+    if (data === "menu:tariffs" || data === "menu:tariffs:new") {
+      await api.verifyTelegramSubscriptions(userId, ctx.from?.username);
+      if (data === "menu:tariffs") {
+        try {
+          const { items: subscriptions } = await api.getAllSubscriptions(token);
+          if (renewableSubscriptions(subscriptions ?? []).length) {
+            const rows = [
+              [{ text: "Продлить существующую подписку", callback_data: "menu:renew" }],
+              [{ text: "Мои подписки", callback_data: "menu:my_subs" }],
+            ];
+            if (config?.multiSubscriptionsEnabled === true) rows.push([{ text: "Купить отдельную подписку", callback_data: "menu:tariffs:new" }]);
+            rows.push([{ text: "Главное меню", callback_data: "menu:main" }]);
+            await editMessageContent(ctx,
+              "У вас уже есть подписка. Чтобы сохранить подключение в приложении, продлите её. Отдельная подписка создаёт новую ссылку для подключения.",
+              { inline_keyboard: rows });
+            return;
+          }
+          const rows: ({ text: string; callback_data: string } | { text: string; url: string })[][] = [
+            [{ text: "Выбрать тариф", callback_data: "menu:tariffs:new" }],
+          ];
+          if (appUrl) rows.unshift([{ text: "Войти в аккаунт на сайте", url: `${appUrl}/cabinet/login` }]);
+          rows.push([{ text: "Главное меню", callback_data: "menu:main" }]);
+          await editMessageContent(ctx,
+            "Не найдена подписка, доступная для продления. Уже покупали на сайте? Войдите в тот аккаунт и привяжите Telegram в профиле, затем отправьте /start. Если подписки ещё нет, выберите тариф.",
+            { inline_keyboard: rows });
+          return;
+        } catch {
+          await editMessageContent(ctx, "Не удалось проверить подписки. Повторите попытку — покупка не создана.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+          return;
+        }
+      }
+
       // defensive cleanup — возврат в список тарифов сбрасывает addsub-флаг.
       addsubPending.delete(userId);
       const tariffsRes = await api.getPublicTariffs();

@@ -75,6 +75,7 @@ export async function handleStart(ctx: Context, payload: string) {
   const last = startThrottle.get(from.id) ?? 0;
   if (now - last < 2000) return; // повтор < 2 сек — тихо дропаем
   clearUserState(from.id);
+  tokenStore.delete(from.id);
   startThrottle.set(from.id, now);
   const telegramId = String(from.id);
   const telegramUsername = from.username ?? undefined;
@@ -287,6 +288,7 @@ export async function handleStart(ctx: Context, payload: string) {
     __lap("registerByTelegram");
 
     setToken(from.id, auth.token);
+    if (auth.subscriptionCheckPending) await ctx.reply("Проверка VPN-подписок временно недоступна. Покупка и продление будут доступны после восстановления связи; баланс и остальные разделы можно использовать.");
     const client = auth.client;
     if (client?.preferredLang) setUserLang(from.id, client.preferredLang);
 
