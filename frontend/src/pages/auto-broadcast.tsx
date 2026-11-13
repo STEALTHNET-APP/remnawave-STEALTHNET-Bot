@@ -312,6 +312,11 @@ export function AutoBroadcastPage() {
     }
   }
 
+  const isDaysSoon = form.triggerType === "subscription_ending_soon";
+  const isMinutesSoon = form.triggerType === "subscription_ending_minutes";
+  const min = isDaysSoon || isMinutesSoon ? 1 : 0;
+  const max = isDaysSoon ? 30 : isMinutesSoon ? 10080 : 365;
+
   return (
     <div className="flex flex-col gap-3.5 relative">
 
@@ -433,9 +438,11 @@ export function AutoBroadcastPage() {
                       ? " ·  event-driven"
                       : rule.triggerType === "subscription_ending_soon"
                         ? ` · за ${rule.delayDays} дн. до окончания`
-                        : rule.triggerType === "trial_used_never_paid"
-                          ? ` · через ${rule.delayDays} дн. после окончания триала`
-                          : ` · через ${rule.delayDays} дн.`}{" "}
+                        : rule.triggerType === "subscription_ending_minutes"
+                          ? ` · за ${rule.delayDays} мин. до окончания`
+                          : rule.triggerType === "trial_used_never_paid"
+                            ? ` · через ${rule.delayDays} дн. после окончания триала`
+                            : ` · через ${rule.delayDays} дн.`}{" "}
                     · <span className="text-cyan-500 dark:text-cyan-400">{CHANNEL_LABELS[rule.channel]}</span>
                   </p>
                   <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
@@ -528,7 +535,9 @@ export function AutoBroadcastPage() {
                       delayDays:
                         t === "subscription_ending_soon"
                           ? Math.max(1, Math.min(30, f.delayDays))
-                          : f.delayDays,
+                          : t === "subscription_ending_minutes"
+                            ? Math.max(1, Math.min(10080, f.delayDays || 15))
+                            : f.delayDays,
                       // T-event-driven: если новый триггер не поддерживает event-mode — сбрасываем флаг.
                       eventDriven: TRIGGERS_SUPPORTING_EVENT_MODE.has(t) ? f.eventDriven : false,
                     }));
@@ -581,19 +590,19 @@ export function AutoBroadcastPage() {
                   <Label className="text-xs text-muted-foreground">
                     {form.triggerType === "subscription_ending_soon"
                       ? "За сколько дней до окончания (1–30)"
-                      : form.triggerType === "trial_used_never_paid"
-                        ? "Через сколько дней после окончания триала (0–365)"
-                        : "Через сколько дней (0–365)"}
+                      : form.triggerType === "subscription_ending_minutes"
+                        ? "За сколько минут до окончания (1–10080)"
+                        : form.triggerType === "trial_used_never_paid"
+                          ? "Через сколько дней после окончания триала (0–365)"
+                          : "Через сколько дней (0–365)"}
                   </Label>
                   <Input
                     type="number"
-                    min={form.triggerType === "subscription_ending_soon" ? 1 : 0}
-                    max={form.triggerType === "subscription_ending_soon" ? 30 : 365}
+                    min={min}
+                    max={max}
                     value={form.delayDays}
                     onChange={(e) => {
                       const v = Number(e.target.value) || 0;
-                      const min = form.triggerType === "subscription_ending_soon" ? 1 : 0;
-                      const max = form.triggerType === "subscription_ending_soon" ? 30 : 365;
                       setForm((f) => ({ ...f, delayDays: Math.max(min, Math.min(max, v)) }));
                     }}
                     className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
@@ -601,6 +610,11 @@ export function AutoBroadcastPage() {
                   {form.triggerType === "subscription_ending_soon" && (
                     <p className="text-[11px] text-muted-foreground">
                       Создайте несколько правил (например, за 7, за 3, за 1 день) — рассылка будет с нужным текстом.
+                    </p>
+                  )}
+                  {form.triggerType === "subscription_ending_minutes" && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Создайте несколько правил (например, за 60, за 15 минут) — рассылка сработает точно за указанное время до окончания подписки.
                     </p>
                   )}
                   {form.triggerType === "trial_used_never_paid" && (
