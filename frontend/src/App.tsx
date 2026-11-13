@@ -1,3 +1,6 @@
+import { MaintenanceGate } from "@/components/maintenance-gate";
+import { clientMenuReturnTo } from "@/lib/client-menu-return";
+import { ClientBotMenuPage } from "@/pages/cabinet/client-bot-menu";
 import { needsClientOnboarding } from "@/lib/client-onboarding";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
@@ -53,6 +56,7 @@ import { ReferralNetworkPage } from "@/pages/referral-network";
 import { AdminReferralsPage } from "@/pages/admin-referrals";
 import { GramadsPromoPage } from "@/pages/gramads-promo";
 import { TrafficAbusePage } from "@/pages/traffic-abuse";
+import { AntiAbusePage } from "@/pages/anti-abuse";
 import { ApiKeysPage } from "@/pages/api-keys";
 import { AntibotPage } from "@/pages/antibot";
 import { ApiDocsPage } from "@/pages/api-docs";
@@ -91,6 +95,7 @@ import { ClientSingboxPage } from "@/pages/cabinet/client-singbox";
 import { ClientTicketsPage } from "@/pages/cabinet/client-tickets";
 import { ClientCustomBuildPage } from "@/pages/cabinet/client-custom-build";
 import { ClientGiftsPage } from "@/pages/cabinet/client-gifts";
+import { ClientRoulettePage } from "@/pages/cabinet/client-roulette";
 import { ClientLegalDocsPage } from "@/pages/cabinet/client-legal-docs";
 import { GiftActivatePage } from "@/pages/gift-activate";
 import { LandingPage } from "@/pages/landing";
@@ -137,16 +142,17 @@ function RequireClientAuth({ children }: { children: React.ReactNode }) {
   // Проверяем серверный флаг onboardingCompleted ИЛИ эфемерный isNewTelegramUser
   const needsOnboarding = needsClientOnboarding(state.client, state.isNewTelegramUser);
   if (needsOnboarding && location.pathname !== "/cabinet/onboarding") {
-    return <Navigate to="/cabinet/onboarding" replace />;
+    return <Navigate to="/cabinet/onboarding" replace state={{ returnTo: location.pathname + location.search + location.hash }} />;
   }
   return <>{children}</>;
 }
 
 function RequireOnboarding({ children }: { children: React.ReactNode }) {
   const { state } = useClientAuth();
+  const location = useLocation();
   const needsOnboarding = needsClientOnboarding(state.client, state.isNewTelegramUser);
   if (!needsOnboarding) {
-    return <Navigate to="/cabinet/dashboard" replace />;
+    return <Navigate to={clientMenuReturnTo(location.state?.returnTo)} replace />;
   }
   return <>{children}</>;
 }
@@ -210,7 +216,7 @@ function AppRoutes() {
   }, []);
 
   return (
-    <Routes>
+    <MaintenanceGate><Routes>
       {/* Главная: лендинг (если включён в настройках) или редирект в кабинет */}
       <Route path="/" element={<RootRoute />} />
 
@@ -287,6 +293,7 @@ function AppRoutes() {
         <Route path="referral-network" element={<ForceChangePassword><ReferralNetworkPage /></ForceChangePassword>} />
         <Route path="referrals" element={<ForceChangePassword><AdminReferralsPage /></ForceChangePassword>} />
         <Route path="traffic-abuse" element={<ForceChangePassword><TrafficAbusePage /></ForceChangePassword>} />
+        <Route path="anti-abuse" element={<ForceChangePassword><AntiAbusePage /></ForceChangePassword>} />
         <Route path="api-keys" element={<ForceChangePassword><ApiKeysPage /></ForceChangePassword>} />
         <Route path="antibot" element={<ForceChangePassword><AntibotPage /></ForceChangePassword>} />
         <Route path="languages" element={<ForceChangePassword><LanguagesPage /></ForceChangePassword>} />
@@ -348,6 +355,7 @@ function AppRoutes() {
         <Route path="documents/offer" element={<ClientLegalDocsPage kind="offer" />} />
         <Route path="documents/refund" element={<ClientLegalDocsPage kind="refund" />} />
         <Route path="verify-link-email" element={<ClientVerifyLinkEmailPage />} />
+        <Route path="menu/:section" element={<RequireClientAuth><ClientBotMenuPage /></RequireClientAuth>} />
         <Route
           path="dashboard"
           element={
@@ -453,10 +461,18 @@ function AppRoutes() {
             </RequireClientAuth>
           }
         />
+        <Route
+          path="roulette"
+          element={
+            <RequireClientAuth>
+              <ClientRoulettePage />
+            </RequireClientAuth>
+          }
+        />
       </Route>
       {/* Всё неизвестное тоже ведём в кабинет */}
       <Route path="*" element={<Navigate to="/cabinet" replace />} />
-    </Routes>
+    </Routes></MaintenanceGate>
   );
 }
 

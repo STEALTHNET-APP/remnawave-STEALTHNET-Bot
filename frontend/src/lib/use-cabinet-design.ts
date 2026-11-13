@@ -83,6 +83,7 @@ export function useCabinetDesign(): CabinetDesign {
     getPublicConfigCached()
       .then((cfg) => {
         if (!alive) return;
+        if (cfg.liteMode) { setDesign("classic"); return; }
         // ⚠️ Здесь раньше проверялось только "stealth" — любой новый дизайн
         // (например aurora) молча схлопывался в classic, и переключатель
         // в админке «не работал». Список должен расширяться вместе с CabinetDesign.

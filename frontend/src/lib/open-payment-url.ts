@@ -20,6 +20,7 @@
 
 type TelegramWebAppMinimal = {
   initData?: string;
+  openInvoice?: (url: string) => void;
   openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
 };
 
@@ -69,7 +70,8 @@ export function preparePaymentRedirect(): PaymentRedirect {
     return {
       open: (url) => {
         try {
-          webApp.openLink!(url);
+          if (/^https:\/\/t\.me\/\$[A-Za-z0-9_-]+$/.test(url) && webApp.openInvoice) webApp.openInvoice(url);
+          else webApp.openLink!(url);
         } catch {
           window.location.assign(url);
         }

@@ -1,3 +1,5 @@
+import { LiteLayout } from "./lite-layout";
+import { getPublicConfigCached } from "@/lib/public-config";
 import "./classic-cabinet.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
@@ -10,7 +12,7 @@ import { useLanguageSync } from "@/i18n/use-language-sync";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { GlassSelect } from "@/components/ui/glass-select";
-import { LayoutDashboard, Package, User, LogOut, Shield, Users, Sun, Moon, PlusCircle, Globe, KeyRound, MessageSquare, Palette, Monitor, Check, Loader2, Settings, Layers, MoreHorizontal, ChevronDown, Wallet, Gift } from "lucide-react";
+import { LayoutDashboard, Package, User, LogOut, Shield, Users, Sun, Moon, PlusCircle, Globe, KeyRound, MessageSquare, Palette, Monitor, Check, Loader2, Settings, Layers, MoreHorizontal, ChevronDown, Wallet, Gift, Sparkles } from "lucide-react";
 import { useTheme, ACCENT_PALETTES, type ThemeMode, type ThemeAccent } from "@/contexts/theme";
 import { cn } from "@/lib/utils";
 import { FloatingChat } from "@/components/floating-chat";
@@ -161,6 +163,7 @@ function useNavItems() {
     { to: "/cabinet/referral", label: t("cabinet.nav.referrals"), icon: Users },
     { to: "/cabinet/tickets", label: t("cabinet.nav.tickets"), icon: MessageSquare },
     { to: "/cabinet/gifts", label: "Подарки", icon: Gift },
+    { to: "/cabinet/roulette", label: t("cabinet.nav.roulette", "Рулетка"), icon: Sparkles },
     { to: "/cabinet/profile", label: t("cabinet.nav.profile"), icon: User },
   ], [t]);
 }
@@ -350,7 +353,7 @@ function SettingsPopover() {
       </Button>
       <div id="cabinet-settings-panel"
         className={cn(
-          "absolute -right-2 sm:right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[260px] max-w-[260px] rounded-[2rem] border border-white/40 dark:border-white/10 bg-slate-200/60 dark:bg-slate-900/60 backdrop-blur-[32px] p-5 shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)] transition-all duration-300 origin-top-right",
+          "absolute -right-2 sm:right-0 top-full z-50 mt-3 w-[calc(100vw-2rem)] sm:w-[260px] max-w-[260px] rounded-[2rem] border border-border bg-card text-card-foreground p-5 shadow-[0_10px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_60px_rgba(0,0,0,0.5)] transition-all duration-300 origin-top-right",
           show ? "visible opacity-100 scale-100 pointer-events-auto translate-y-0" : "invisible opacity-0 scale-95 pointer-events-none -translate-y-2"
         )}
       >
@@ -360,13 +363,13 @@ function SettingsPopover() {
           </div>
           <div className="min-w-0 flex-1">
             <h4 className="text-base font-bold tracking-tight text-foreground truncate">{t("cabinet.layout.settings")}</h4>
-            <p className="text-[10px] text-muted-foreground mt-[1px] uppercase tracking-wider font-semibold truncate">{t("cabinet.layout.settings_subtitle")}</p>
+            <p className="text-xs text-muted-foreground mt-[1px] uppercase tracking-wider font-semibold truncate">{t("cabinet.layout.settings_subtitle")}</p>
           </div>
         </div>
 
         <div className="space-y-4 mb-5">
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground font-medium pl-1 flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> {t("cabinet.layout.language")}</label>
+            <label className="text-xs text-foreground font-medium pl-1 flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" /> {t("cabinet.layout.language")}</label>
             <GlassSelect
               value={preferredLang}
               onChange={(v) => setPreferredLang(v)}
@@ -374,7 +377,7 @@ function SettingsPopover() {
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground font-medium pl-1 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {t("cabinet.layout.currency")}</label>
+            <label className="text-xs text-foreground font-medium pl-1 flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {t("cabinet.layout.currency")}</label>
             <GlassSelect
               value={preferredCurrency}
               onChange={(v) => setPreferredCurrency(v)}
@@ -392,7 +395,7 @@ function SettingsPopover() {
   );
 }
 
-function resolveNavItems(allNavItems: { to: string; label: string; icon: typeof LayoutDashboard }[], config: { sellOptionsEnabled?: boolean; showProxyEnabled?: boolean; showSingboxEnabled?: boolean; ticketsEnabled?: boolean; customBuildConfig?: { enabled: true } | null; giftSubscriptionsEnabled?: boolean } | null) {
+function resolveNavItems(allNavItems: { to: string; label: string; icon: typeof LayoutDashboard }[], config: { sellOptionsEnabled?: boolean; showProxyEnabled?: boolean; showSingboxEnabled?: boolean; ticketsEnabled?: boolean; customBuildConfig?: { enabled: true } | null; giftSubscriptionsEnabled?: boolean; rouletteEnabled?: boolean } | null) {
   let items = allNavItems;
   // Убираем вкладку тикетов, так как теперь поддержка внутри виджета чата
   items = items.filter((i) => i.to !== "/cabinet/tickets");
@@ -402,6 +405,7 @@ function resolveNavItems(allNavItems: { to: string; label: string; icon: typeof 
   if (!config?.showProxyEnabled) items = items.filter((i) => i.to !== "/cabinet/proxy");
   if (!config?.showSingboxEnabled) items = items.filter((i) => i.to !== "/cabinet/singbox");
   if (!config?.giftSubscriptionsEnabled) items = items.filter((i) => i.to !== "/cabinet/gifts");
+  if (config?.rouletteEnabled === false) items = items.filter((i) => i.to !== "/cabinet/roulette");
 
   return items;
 }
@@ -420,6 +424,7 @@ const ROUTE_TOUR_MAP: Record<string, string> = {
   "/cabinet/referral": "referrals",
   "/cabinet/tickets": "support",
   "/cabinet/gifts": "gifts",
+  "/cabinet/roulette": "roulette",
   "/cabinet/profile": "profile",
 };
 
@@ -429,7 +434,7 @@ function MobileCabinetShell() {
   const { state, logout, refreshProfile } = useClientAuth();
   const config = useCabinetConfig();
   const allNavItems = useNavItems();
-  const navItems = useMemo(() => resolveNavItems(allNavItems, config), [allNavItems, config?.sellOptionsEnabled, config?.showProxyEnabled, config?.showSingboxEnabled, config?.ticketsEnabled, config?.customBuildConfig, config?.giftSubscriptionsEnabled]);
+  const navItems = useMemo(() => resolveNavItems(allNavItems, config), [allNavItems, config?.sellOptionsEnabled, config?.showProxyEnabled, config?.showSingboxEnabled, config?.ticketsEnabled, config?.customBuildConfig, config?.giftSubscriptionsEnabled, config?.rouletteEnabled]);
   const [logoError, setLogoError] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const visibleItems = navItems.slice(0, MAX_VISIBLE_NAV);
@@ -451,9 +456,9 @@ function MobileCabinetShell() {
   const logo = config?.logo && !logoError ? config.logo : null;
 
   return (
-    <div className="classic-cabinet tg-fs-pad min-h-svh flex flex-col bg-transparent min-w-0 overflow-x-hidden pb-36 relative">
+    <div className="classic-cabinet min-h-svh flex flex-col bg-transparent min-w-0 overflow-x-clip pb-36 relative">
       <FloatingChat />
-      <header className="sticky top-0 z-50 border-b border-border shrink-0 transition-all duration-300" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+      <header className="sticky top-0 z-50 border-b border-border shrink-0 transition-all duration-300" style={{ paddingTop: "var(--app-safe-top)", paddingLeft: "var(--app-safe-left)", paddingRight: "var(--app-safe-right)" }}>
         <div className="absolute inset-0 bg-card/40 backdrop-blur-xl -z-10 pointer-events-none" />
         <div className="relative flex h-14 items-center justify-between gap-3 px-4 min-w-0 w-full max-w-7xl mx-auto">
           <Link to="/cabinet/dashboard" className="flex items-center gap-2.5 font-semibold text-base tracking-tight min-w-0">
@@ -486,7 +491,7 @@ function MobileCabinetShell() {
         <Outlet />
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/60 backdrop-blur-xl pb-[env(safe-area-inset-bottom)] transition-all duration-300">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/60 backdrop-blur-xl pb-[var(--app-safe-bottom)] transition-all duration-300">
         <div className="flex items-center justify-around w-full h-[4.5rem] px-2 gap-0">
           {visibleItems.map(({ to, label, icon: Icon }) => {
             const active = location.pathname === to;
@@ -571,7 +576,7 @@ function CabinetShell() {
   const { state, logout, refreshProfile } = useClientAuth();
   const config = useCabinetConfig();
   const allNavItems = useNavItems();
-  const navItems = useMemo(() => resolveNavItems(allNavItems, config), [allNavItems, config?.sellOptionsEnabled, config?.showProxyEnabled, config?.showSingboxEnabled, config?.ticketsEnabled, config?.customBuildConfig, config?.giftSubscriptionsEnabled]);
+  const navItems = useMemo(() => resolveNavItems(allNavItems, config), [allNavItems, config?.sellOptionsEnabled, config?.showProxyEnabled, config?.showSingboxEnabled, config?.ticketsEnabled, config?.customBuildConfig, config?.giftSubscriptionsEnabled, config?.rouletteEnabled]);
   const isMiniapp = useIsMiniapp();
   const isMobile = useIsMobile();
   const isNarrowDesktop = useIsMobile(1280);
@@ -609,10 +614,10 @@ function CabinetShell() {
   }
 
   return (
-    <div className="classic-cabinet tg-fs-pad min-h-svh flex flex-col bg-transparent">
+    <div className="classic-cabinet min-h-svh flex flex-col bg-transparent">
       <FloatingChat />
       {/* Navigation and page content share the same width. Theme styling is preserved. */}
-      <header className="sticky top-2 sm:top-3 z-50 px-2 sm:px-4 transition-all duration-300">
+      <header className="sticky top-0 z-50 px-2 sm:px-4 transition-all duration-300" style={{ paddingTop: "calc(var(--app-safe-top) + 12px)" }}>
         <div className="cabinet-desktop-bar relative w-full max-w-7xl mx-auto flex h-16 items-center justify-between gap-4 px-3 sm:px-5 rounded-2xl border border-border/60 bg-card/55 backdrop-blur-xl shadow-lg shadow-black/5">
           <Link to="/cabinet/dashboard" className="flex items-center gap-2.5 font-semibold text-lg tracking-tight shrink-0 hover:opacity-80 transition-opacity">
             {logo ? (
@@ -729,6 +734,8 @@ function CabinetShell() {
 }
 
 export function CabinetLayout() {
+  const [liteMode, setLiteMode] = useState(false);
+  useEffect(() => { let active = true; getPublicConfigCached().then(config => { if (active) setLiteMode(config.liteMode === true); }).catch(() => {}); return () => { active = false; }; }, []);
   const location = useLocation();
   const { state } = useClientAuth();
   useLanguageSync(state.client?.preferredLang);
@@ -745,6 +752,8 @@ export function CabinetLayout() {
   // chrome (network фон + bottom-tabs + header) и Outlet.
   // ВАЖНО: для auth/2fa-страниц используем classic — их Stealth-дизайн пока
   // не оформлен (Phase 2/3).
+  if (liteMode && isLoggedIn && !needs2FA && !isAuthPage) return <CabinetConfigProvider><LiteLayout /></CabinetConfigProvider>;
+
   if (design === "stealth" && isLoggedIn && !needs2FA && !isAuthPage) {
     return <StealthLayout />;
   }

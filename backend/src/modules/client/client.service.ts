@@ -1,9 +1,11 @@
+import { parseConfiguredBotButtons } from "../bot/menu-buttons.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { randomBytes } from "crypto";
 import { prisma } from "../../db.js";
 import { env } from "../../config/index.js";
 import { applyMarkup } from "../bot/bot.service.js";
+import { parseMultiSubscriptionsEnabled, isMultiSubscriptionsEnabled } from "./multi-subscriptions.js";
 
 const SALT_ROUNDS = 12;
 
@@ -94,8 +96,12 @@ export function generateReferralCode(): string {
 }
 
 const SYSTEM_CONFIG_KEYS = [
+  "lite_mode",
+  "remna_auto_sync_enabled", "remna_auto_sync_interval_minutes",
+  "maintenance_enabled", "maintenance_message",
   "active_languages", "active_currencies", "default_language", "default_currency",
   "default_referral_percent", "referral_percent_level_2", "referral_percent_level_3",
+  "referral_reward_mode", "referral_reward_amount", "referral_reward_days", "referral_reward_enabled_at",
   "trial_days", "trial_squad_uuid", "trial_device_limit", "trial_traffic_limit",
   "service_name", "service_description", "logo", "logo_bot", "favicon", "remna_client_url",
   // UI design selector for client cabinet/mini app: "classic" (default) | "stealth" | "aurora"
@@ -125,6 +131,7 @@ const SYSTEM_CONFIG_KEYS = [
   // Basic-auth credentials для webhook YooKassa (security fix против форджинга платежей).
   "yookassa_webhook_basic_user", "yookassa_webhook_basic_password",
   "cryptopay_api_token", "cryptopay_testnet",
+  "telegram_stars_enabled", "telegram_stars_rub_per_star",
   "heleket_merchant_id", "heleket_api_key",
   "paritypay_shop_id", "paritypay_api_key", "paritypay_signing_secret", "paritypay_enabled",
   "rollypay_api_key", "rollypay_signing_secret", "rollypay_test_mode",
@@ -132,7 +139,7 @@ const SYSTEM_CONFIG_KEYS = [
   "lavatop_api_key", "lavatop_default_offer_id",
   "overpay_api_url", "overpay_project_id", "overpay_login", "overpay_password",
   "groq_api_key", "groq_model", "groq_fallback_1", "groq_fallback_2", "groq_fallback_3", "ai_system_prompt",
-  "bot_buttons", "bot_buttons_per_row", "bot_back_label", "bot_menu_texts", "bot_menu_line_visibility", "bot_inner_button_styles",
+  "payment_description", "bot_buttons", "bot_menu_mode", "bot_group_cabinet", "bot_buttons_per_row", "bot_back_label", "bot_menu_texts", "bot_menu_line_visibility", "bot_inner_button_styles",
   "bot_tariffs_text", "bot_tariffs_fields", "bot_payment_text",
   "bot_emojis", // JSON: { "TRIAL": { "unicode": "🎁", "tgEmojiId": "..." }, "PACKAGE": ... } — эмодзи кнопок/текста, TG ID для премиум
   "category_emojis", // JSON: { "ordinary": "📦", "premium": "⭐" } — эмодзи категорий по коду
@@ -272,7 +279,7 @@ export type SellOptionDeviceProduct = { id: string; name: string; deviceCount: n
 /** Продукт «Доп. сервер»: сквад Remna, опционально трафик (ГБ), цена */
 export type SellOptionServerProduct = { id: string; name: string; squadUuid: string; trafficGb?: number; price: number; currency: string };
 
-export type BotButtonConfig = { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean };
+export type BotButtonConfig = { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean; url?: string };
 export type BotEmojiEntry = { unicode?: string; tgEmojiId?: string };
 export type BotEmojisConfig = Record<string, BotEmojiEntry>;
 const DEFAULT_BOT_BUTTONS: BotButtonConfig[] = [
@@ -292,6 +299,7 @@ const DEFAULT_BOT_BUTTONS: BotButtonConfig[] = [
   { id: "support", visible: true, label: "🆘 Поддержка", order: 7, style: "primary", emojiKey: "NOTE" },
   { id: "promocode", visible: true, label: "🎟️ Промокод", order: 8, style: "primary", emojiKey: "STAR" },
   { id: "extra_options", visible: true, label: "➕ Доп. опции", order: 9, style: "primary", emojiKey: "PACKAGE" },
+  { id: "roulette", visible: true, label: "🎰 Рулетка", order: 8.7, style: "primary", emojiKey: "STAR" },
   // Кастомные кнопки. Раньше добавлялись автоматом в keyboard.ts —
   // теперь явно в DEFAULT, чтобы они отображались в UI настроек админки.
   { id: "my_subs", visible: true, label: "📋 Мои подписки", order: 3, style: "", onePerRow: true },
@@ -303,6 +311,7 @@ export type BotMenuTexts = {
   welcomeTitlePrefix?: string;
   welcomeGreeting?: string;
   balancePrefix?: string;
+  telegramIdPrefix?: string;
   tariffPrefix?: string;
   subscriptionPrefix?: string;
   statusInactive?: string;
@@ -325,6 +334,7 @@ const DEFAULT_BOT_MENU_TEXTS: Required<BotMenuTexts> = {
   welcomeTitlePrefix: "🛡 ",
   welcomeGreeting: "👋 Добро пожаловать в ",
   balancePrefix: "💰 Ваш Баланс: ",
+  telegramIdPrefix: "🆔 Telegram ID: ",
   tariffPrefix: "💎 Ваш тариф : ",
   subscriptionPrefix: "{{CHART}} Статус подписки — ",
   statusInactive: "{{STATUS_INACTIVE}} Истекла",
@@ -368,6 +378,7 @@ export type BotMenuLineVisibility = {
   welcomeTitlePrefix?: boolean;
   welcomeGreeting?: boolean;
   balancePrefix?: boolean;
+  telegramIdPrefix?: boolean;
   tariffPrefix?: boolean;
   subscriptionPrefix?: boolean;
   expirePrefix?: boolean;
@@ -382,6 +393,7 @@ const DEFAULT_BOT_MENU_LINE_VISIBILITY: Required<BotMenuLineVisibility> = {
   welcomeTitlePrefix: true,
   welcomeGreeting: true,
   balancePrefix: true,
+  telegramIdPrefix: true,
   tariffPrefix: true,
   subscriptionPrefix: true,
   expirePrefix: true,
@@ -485,37 +497,8 @@ function parseBotMenuLineVisibility(raw: string | undefined): Required<BotMenuLi
 }
 
 function parseBotButtons(raw: string | undefined): BotButtonConfig[] {
-  if (!raw || !raw.trim()) return DEFAULT_BOT_BUTTONS;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return DEFAULT_BOT_BUTTONS;
-    const result = parsed.map((x: unknown, i: number) => {
-      const o = x as Record<string, unknown>;
-      const id = typeof o.id === "string" ? o.id : String(o.id ?? "button");
-      const def = DEFAULT_BOT_BUTTONS.find((d) => d.id === id) ?? { label: id, order: i, style: "" as string };
-      return {
-        id,
-        visible: typeof o.visible === "boolean" ? o.visible : true,
-        label: typeof o.label === "string" && o.label.trim() ? o.label.trim() : def.label,
-        order: typeof o.order === "number" ? o.order : (typeof o.order === "string" ? parseFloat(o.order) : i),
-        style: typeof o.style === "string" ? o.style : (def as BotButtonConfig).style ?? "",
-        emojiKey: typeof o.emojiKey === "string" ? o.emojiKey.trim() : undefined,
-        onePerRow: typeof o.onePerRow === "boolean" ? o.onePerRow : (def as BotButtonConfig).onePerRow,
-      };
-    });
-    // Дополняем кнопками из дефолтов, которых нет в сохранённом списке
-    const savedIds = new Set(result.map((b) => b.id));
-    for (const def of DEFAULT_BOT_BUTTONS) {
-      if (!savedIds.has(def.id)) {
-        result.push({ id: def.id, visible: def.visible, label: def.label, order: def.order, style: def.style ?? "", emojiKey: undefined, onePerRow: def.onePerRow });
-      }
-    }
-    return result;
-  } catch {
-    return DEFAULT_BOT_BUTTONS;
-  }
+  return parseConfiguredBotButtons(raw, DEFAULT_BOT_BUTTONS);
 }
-
 function parseBotEmojis(raw: string | undefined): BotEmojisConfig {
   if (!raw || !raw.trim()) return {};
   try {
@@ -598,10 +581,19 @@ async function loadSystemConfigFromDb() {
   const activeLangs = (map.active_languages || "ru,en").split(",").map((s: string) => s.trim());
   const activeCurrs = (map.active_currencies || "usd,rub").split(",").map((s: string) => s.trim());
   return {
+    liteMode: map.lite_mode === "true",
+    remnaAutoSyncEnabled: map.remna_auto_sync_enabled === "true",
+    remnaAutoSyncIntervalMinutes: Math.min(1440, Math.max(5, parseInt(map.remna_auto_sync_interval_minutes || "60", 10) || 60)),
+    maintenanceEnabled: map.maintenance_enabled === "true",
+    maintenanceMessage: map.maintenance_message?.trim() || "Обновляем сервис. Пожалуйста, зайдите немного позже.",
     activeLanguages: activeLangs,
     activeCurrencies: activeCurrs,
     defaultLanguage: map.default_language && activeLangs.includes(map.default_language) ? map.default_language : activeLangs[0] ?? "ru",
     defaultCurrency: map.default_currency && activeCurrs.includes(map.default_currency) ? map.default_currency : activeCurrs[0] ?? "usd",
+    referralRewardMode: (map.referral_reward_mode === "balance" || map.referral_reward_mode === "days" ? map.referral_reward_mode : "percent") as "percent" | "balance" | "days",
+    referralRewardEnabledAt: map.referral_reward_enabled_at || null,
+    referralRewardAmount: Number(map.referral_reward_amount || "50"),
+    referralRewardDays: Number(map.referral_reward_days || "3"),
     defaultReferralPercent: parseFloat(map.default_referral_percent || "30"),
     referralPercentLevel2: parseFloat(map.referral_percent_level_2 || "10"),
     referralPercentLevel3: parseFloat(map.referral_percent_level_3 || "10"),
@@ -669,6 +661,8 @@ async function loadSystemConfigFromDb() {
     yookassaSecretKey: map.yookassa_secret_key || null,
     yookassaWebhookBasicUser: map.yookassa_webhook_basic_user || null,
     yookassaWebhookBasicPassword: map.yookassa_webhook_basic_password || null,
+    telegramStarsEnabled: map.telegram_stars_enabled === "true",
+    telegramStarsRubPerStar: Number(map.telegram_stars_rub_per_star || 0),
     cryptopayApiToken: (map.cryptopay_api_token ?? "").trim() || null,
     cryptopayTestnet: map.cryptopay_testnet === "true" || map.cryptopay_testnet === "1",
     heleketMerchantId: (map.heleket_merchant_id ?? "").trim() || null,
@@ -710,7 +704,7 @@ async function loadSystemConfigFromDb() {
     stealthAccent: (map.stealth_accent ?? "").trim() || null,
     stealthHeroImage: map.stealth_hero_image || null,
     // Default FALSE: по умолчанию одна подписка (hard-replace); мульти — только если явно "true".
-    multiSubscriptionsEnabled: (map.multi_subscriptions_enabled ?? "false").trim() !== "false",
+    multiSubscriptionsEnabled: parseMultiSubscriptionsEnabled(map.multi_subscriptions_enabled),
     passwordResetEnabled: map.password_reset_enabled === "true" || map.password_reset_enabled === "1",
     /** Master switch для антибот-фильтра. По умолчанию включён. */
     signupProtectionEnabled: (map.signup_protection_enabled ?? "true").trim() !== "false",
@@ -746,6 +740,9 @@ async function loadSystemConfigFromDb() {
     appleKeyId: (map.apple_key_id ?? "").trim() || null,
     applePrivateKey: (map.apple_private_key ?? "").trim() || null,
     botButtons: parseBotButtons(map.bot_buttons),
+    paymentDescription: map.payment_description ?? "",
+    botGroupCabinet: map.bot_group_cabinet === "true",
+    botMenuMode: map.bot_menu_mode === "web" ? "web" as const : "classic" as const,
     botButtonsPerRow: map.bot_buttons_per_row === "2" ? 2 : 1,
     botEmojis: parseBotEmojis(map.bot_emojis),
     botBackLabel: (map.bot_back_label || "◀️ В меню").trim() || "◀️ В меню",
@@ -1011,6 +1008,7 @@ const DEFAULT_PLATEGA_METHODS: PlategaMethodConfig[] = [
 
 export type PaymentProviderConfig = { id: string; label: string; sortOrder: number };
 const DEFAULT_PAYMENT_PROVIDERS: PaymentProviderConfig[] = [
+  { id: "telegram_stars", label: "Telegram Stars", sortOrder: 0 },
   { id: "cryptopay", label: "Crypto Bot", sortOrder: 0 },
   { id: "heleket", label: "Heleket", sortOrder: 1 },
   { id: "paritypay", label: "ParityPay", sortOrder: 10 },
@@ -1130,7 +1128,7 @@ function parseSellOptionServerProducts(raw: string | undefined): SellOptionServe
 }
 
 /** Кнопка для бота: label уже с эмодзи (Unicode) и опционально TG custom emoji ID для премиум-эмодзи. onePerRow = всегда в одну кнопку в ряд. */
-export type PublicBotButton = { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; emojiKey?: string };
+export type PublicBotButton = { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; emojiKey?: string; url?: string };
 
 function stripLeadingEmoji(label: string): string {
   return label.replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "");
@@ -1205,7 +1203,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
         label = (entry.unicode + " " + base).trim();
       }
     }
-    return { id: b.id, visible: b.visible, label, order: b.order, style: b.style, iconCustomEmojiId, onePerRow: b.onePerRow, emojiKey: emojiKey ?? undefined };
+    return { id: b.id, visible: b.visible, label, order: b.order, style: b.style, iconCustomEmojiId, onePerRow: b.onePerRow, emojiKey: emojiKey ?? undefined, ...(b.url ? { url: b.url } : {}) };
   });
 
   const menuTexts = full.botMenuTexts ?? DEFAULT_BOT_MENU_TEXTS;
@@ -1290,6 +1288,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     logo: full.logo,
     logoBot: full.logoBot ?? null,
     favicon: full.favicon,
+    liteMode: full.liteMode,
     cabinetDesign: full.cabinetDesign,
     cabinetDesignApplyInBrowser: (full as { cabinetDesignApplyInBrowser?: boolean }).cabinetDesignApplyInBrowser ?? false,
     remnaClientUrl: full.remnaClientUrl,
@@ -1301,6 +1300,8 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     yoomoneyEnabled: Boolean(full.yoomoneyReceiverWallet?.trim()),
     yookassaEnabled: Boolean(full.yookassaShopId?.trim() && full.yookassaSecretKey?.trim()),
     yookassaRecurringEnabled: full.yookassaRecurringEnabled ?? false,
+    telegramStarsEnabled: full.telegramStarsEnabled && full.telegramStarsRubPerStar > 0 && Boolean(process.env.BOT_TOKEN?.trim()),
+    telegramStarsRubPerStar: full.telegramStarsRubPerStar,
     cryptopayEnabled: Boolean((full as { cryptopayApiToken?: string | null }).cryptopayApiToken?.trim()),
     heleketEnabled: Boolean((full as { heleketMerchantId?: string | null }).heleketMerchantId?.trim() && (full as { heleketApiKey?: string | null }).heleketApiKey?.trim()),
     // RollyPay считаем настроенным, когда есть и ключ кассы, и секрет подписи:
@@ -1320,7 +1321,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     onboardingEmailRequired: full.onboardingEmailRequired ?? false,
     stealthAccent: full.stealthAccent ?? null,
     stealthHeroImage: full.stealthHeroImage ?? null,
-    multiSubscriptionsEnabled: full.multiSubscriptionsEnabled ?? false,
+    multiSubscriptionsEnabled: isMultiSubscriptionsEnabled(full),
     passwordResetEnabled: full.passwordResetEnabled ?? false,
     // фронту нужен флаг — настроен ли SMTP.
     // Если SMTP не настроен или skipEmailVerification=true → email привязывается
@@ -1328,9 +1329,12 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     smtpConfigured: isSystemSmtpConfigured(full),
     useRemnaSubscriptionPage: full.useRemnaSubscriptionPage ?? false,
     aiChatEnabled: full.aiChatEnabled ?? true,
+    rouletteEnabled: (full as any).rouletteEnabled !== "false" && (full as any).rouletteEnabled !== false,
     trialEnabled,
     trialDays,
     botButtons: resolvedButtons,
+    botMenuMode: full.botMenuMode,
+    botGroupCabinet: full.botGroupCabinet,
     botButtonsPerRow: full.botButtonsPerRow ?? 1,
     botBackLabel: full.botBackLabel,
     botMenuTexts: menuTexts,
@@ -1343,6 +1347,11 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     botTariffsFields: full.botTariffsFields ?? DEFAULT_BOT_TARIFF_LINE_FIELDS,
     botPaymentText: full.botPaymentText ?? DEFAULT_BOT_PAYMENT_TEXT,
     categoryEmojis: full.categoryEmojis,
+    maintenanceEnabled: full.maintenanceEnabled,
+    maintenanceMessage: full.maintenanceMessage,
+    referralRewardMode: full.referralRewardMode,
+    referralRewardAmount: full.referralRewardAmount,
+    referralRewardDays: full.referralRewardDays,
     defaultReferralPercent: full.defaultReferralPercent ?? 0,
     referralPercentLevel2: full.referralPercentLevel2 ?? 0,
     referralPercentLevel3: full.referralPercentLevel3 ?? 0,

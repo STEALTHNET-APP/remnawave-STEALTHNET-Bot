@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth";
 import {
+  api,
   type SingboxNodeListItem,
   type CreateSingboxNodeResponse,
   type SingboxNodeDetail,
@@ -74,13 +75,17 @@ function statusBadge(status: string) {
   );
 }
 
-const PROTOCOLS = ["VLESS", "SHADOWSOCKS", "TROJAN", "HYSTERIA2"] as const;
+const PROTOCOLS = ["VLESS", "SHADOWSOCKS", "TROJAN", "HYSTERIA2", "AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD", "AWP_XRAY"] as const;
 
 export function SingboxPage() {
+  const [webApiToken, setWebApiToken] = useState("");
+  const [webSlotBusy, setWebSlotBusy] = useState(false);
+  const [webPanelForm, setWebPanelForm] = useState({ url: "", apiToken: "", serverId: "0", protocol: "awg2" });
   const { state } = useAuth();
   const token = state.accessToken ?? null;
 
   const [addOpen, setAddOpen] = useState(false);
+  const [newNodeHost, setNewNodeHost] = useState("");
   const [newNodeName, setNewNodeName] = useState("");
   const [newNodeProtocol, setNewNodeProtocol] = useState<string>("VLESS");
   const [newNodePort, setNewNodePort] = useState("443");
@@ -101,7 +106,7 @@ export function SingboxPage() {
   const [categoryForm, setCategoryForm] = useState({ name: "", sortOrder: "0" });
   const [tariffModal, setTariffModal] = useState<{ kind: "add"; categoryId: string } | { kind: "edit"; tariff: SingboxTariffListItem } | null>(null);
   const [tariffForm, setTariffForm] = useState({
-    name: "", categoryId: "", slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true,
+    protocol: "SINGBOX", name: "", categoryId: "", slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true,
   });
 
   const nodesQuery = useSingboxNodes(token);
@@ -115,6 +120,7 @@ export function SingboxPage() {
 
   const detailQuery = useSingboxNodeDetail(token, detailId);
   const detailNode: SingboxNodeDetail | null = detailQuery.data ?? null;
+  const webStats = (() => { try { return detailNode?.webPanel && detailNode.metadata ? JSON.parse(detailNode.metadata) as { cpu?: number; ram_percent?: number; disk_percent?: number } : null; } catch { return null; } })();
   const detailLoading = detailQuery.isFetching;
 
   const createNode = useCreateSingboxNodeMutation(token);
@@ -184,10 +190,11 @@ export function SingboxPage() {
       currency: tariffForm.currency.toUpperCase(),
       sortOrder: parseInt(tariffForm.sortOrder, 10) || 0,
       enabled: tariffForm.enabled,
+      protocol: tariffForm.protocol,
     };
     const resetForm = () => {
       setTariffModal(null);
-      setTariffForm({ name: "", categoryId: "", slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true });
+      setTariffForm({ protocol: "SINGBOX", name: "", categoryId: "", slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true });
     };
     if (tariffModal?.kind === "add") {
       if (!payload.categoryId) return;
@@ -216,9 +223,9 @@ export function SingboxPage() {
     setAddResult(null);
     const port = parseInt(newNodePort, 10) || 443;
     createNode.mutate(
-      { name: newNodeName.trim() || "Sing-box node", protocol: newNodeProtocol, port, tlsEnabled: true },
+      { name: newNodeName.trim() || "Sing-box node", protocol: newNodeProtocol, port, tlsEnabled: newNodeProtocol !== "AMNEZIAWG", ...(newNodeProtocol === "AMNEZIAWG" && { publicHost: newNodeHost.trim() }), ...(newNodeProtocol.startsWith("AWP_") && { webPanel: { ...webPanelForm, serverId: Number(webPanelForm.serverId) } }) },
       {
-        onSuccess: (res) => setAddResult(res),
+        onSuccess: (res) => { setAddResult(res); setWebPanelForm(f => ({ ...f, apiToken: "" })); },
         onError: (e) => alert(e instanceof Error ? e.message : "Ошибка создания"),
       },
     );
@@ -232,6 +239,7 @@ export function SingboxPage() {
   }
 
   function openEdit(node: SingboxNodeListItem) {
+    setWebApiToken("");
     setEditingNode(node);
     setEditName(node.name);
     setEditPort(String(node.port));
@@ -239,11 +247,19 @@ export function SingboxPage() {
     setEditOpen(true);
   }
 
+  async function changeWebSlot(slotId: string, data: { expiresAt?: string; status?: string }) {
+    if (!token || !detailId) return;
+    setWebSlotBusy(true);
+    try { await api.updateWebPanelSlot(token, detailId, slotId, data); await detailQuery.refetch(); }
+    catch (error) { alert(error instanceof Error ? error.message : "Не удалось изменить доступ"); }
+    finally { setWebSlotBusy(false); }
+  }
+
   function handleSaveEdit() {
     if (!token || !editingNode) return;
     const port = parseInt(editPort, 10) || 443;
     updateNode.mutate(
-      { id: editingNode.id, data: { name: editName.trim(), port, protocol: editProtocol } },
+      { id: editingNode.id, data: { name: editName.trim(), port, protocol: editProtocol, ...(webApiToken ? { webApiToken } : {}) } },
       {
         onSuccess: () => {
           setEditOpen(false);
@@ -339,10 +355,10 @@ export function SingboxPage() {
         <div className="flex items-start gap-3">
           <div>
             <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
-              Sing-box
+              Sing-box / AmneziaWG
             </h1>
             <p className="text-[12.5px] text-muted-foreground mt-[3px]">
-              Ноды VLESS / Shadowsocks / Trojan / Hysteria2. Категории и тарифы для продажи доступов.
+              Ноды VLESS / Shadowsocks / Trojan / Hysteria2 / AmneziaWG. Категории и тарифы для продажи доступов.
             </p>
           </div>
         </div>
@@ -355,17 +371,17 @@ export function SingboxPage() {
       </motion.div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex flex-wrap w-full max-w-md bg-foreground/[0.03] dark:bg-white/[0.02] border border-border rounded-xl p-1">
-          <TabsTrigger value="nodes" className="flex items-center gap-1.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
-            <Server className="h-4 w-4" />
+        <TabsList className="grid grid-cols-3 h-auto w-full max-w-md bg-foreground/[0.03] dark:bg-white/[0.02] border border-border rounded-xl p-1">
+          <TabsTrigger value="nodes" className="flex min-w-0 items-center gap-1.5 px-2 sm:px-4 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <Server className="hidden h-4 w-4 shrink-0 sm:block" />
             Ноды
           </TabsTrigger>
-          <TabsTrigger value="categories" className="flex items-center gap-1.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
-            <Layers className="h-4 w-4" />
+          <TabsTrigger value="categories" className="flex min-w-0 items-center gap-1.5 px-2 sm:px-4 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <Layers className="hidden h-4 w-4 shrink-0 sm:block" />
             Категории
           </TabsTrigger>
-          <TabsTrigger value="tariffs" className="flex items-center gap-1.5 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
-            <Tag className="h-4 w-4" />
+          <TabsTrigger value="tariffs" className="flex min-w-0 items-center gap-1.5 px-2 sm:px-4 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <Tag className="hidden h-4 w-4 shrink-0 sm:block" />
             Тарифы
           </TabsTrigger>
         </TabsList>
@@ -453,10 +469,12 @@ export function SingboxPage() {
                   <div className="flex justify-between"><span className="text-muted-foreground">Порт / протокол</span><span className="font-mono text-xs">{detailNode.port} / {detailNode.protocol}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Heartbeat</span><span className="text-xs">{formatDate(detailNode.lastSeenAt)}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Трафик</span><span className="text-xs tabular-nums"> {formatBytes(detailNode.trafficInBytes)}  {formatBytes(detailNode.trafficOutBytes)}</span></div>
+                  {detailNode.webPanel && <><div className="flex justify-between gap-2"><span className="text-muted-foreground">Web Panel</span><span className="text-xs break-all">{detailNode.webPanel.url}</span></div><div className="flex justify-between"><span className="text-muted-foreground">Протокол в панели</span><span>{detailNode.webPanel.protocol}</span></div></>}
+                  {webStats && <div className="text-xs text-muted-foreground">CPU: {webStats.cpu ?? "—"}% · RAM: {webStats.ram_percent ?? "—"}% · Диск: {webStats.disk_percent ?? "—"}%</div>}
                   <div className="flex justify-between"><span className="text-muted-foreground">Слотов</span><span className="font-semibold">{detailNode.slots.length}</span></div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={openConfigEditor} className="gap-1.5 rounded-xl">
+                  <Button variant="outline" size="sm" disabled={detailNode.protocol === "AMNEZIAWG" || detailNode.protocol.startsWith("AWP_")} onClick={openConfigEditor} className="gap-1.5 rounded-xl">
                     <FileJson className="h-4 w-4" />
                     Конфиг JSON
                   </Button>
@@ -477,6 +495,10 @@ export function SingboxPage() {
                         <li key={s.id} className="px-3 py-2 flex justify-between items-center">
                           <span className="font-mono text-xs">{s.userIdentifier}</span>
                           <span className="text-muted-foreground text-xs">{formatDate(s.expiresAt)}</span>
+                          {detailNode.protocol.startsWith("AWP_") && <div className="flex gap-1">
+                            <Button size="sm" variant="outline" disabled={webSlotBusy} onClick={() => { const days = prompt("На сколько дней продлить?", "30"); const count = Number(days); if (days && Number.isInteger(count) && count > 0 && count <= 3650) void changeWebSlot(s.id, { expiresAt: new Date(Math.max(Date.now(), Date.parse(s.expiresAt)) + count * 86400000).toISOString(), status: "ACTIVE" }); }}>Продлить</Button>
+                            <Button size="sm" variant="outline" disabled={webSlotBusy || s.status === "REVOKED"} onClick={() => { if (confirm("Отозвать доступ во внешней панели?")) void changeWebSlot(s.id, { status: "REVOKED" }); }}>Отозвать</Button>
+                          </div>}
                         </li>
                       ))}
                     </ul>
@@ -556,7 +578,7 @@ export function SingboxPage() {
                 onClick={() => {
                   if (categories.length === 0) { alert("Сначала добавьте категорию"); return; }
                   setTariffModal({ kind: "add", categoryId: categories[0]!.id });
-                  setTariffForm({ name: "", categoryId: categories[0]!.id, slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true });
+                  setTariffForm({ protocol: "SINGBOX", name: "", categoryId: categories[0]!.id, slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true });
                 }}
               >
                 <Plus className="h-4 w-4" />
@@ -591,7 +613,7 @@ export function SingboxPage() {
                               <div className="min-w-0">
                                 <p className="font-medium truncate">{t.name}</p>
                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                  {t.slotCount} сл. · {t.durationDays} дн. · <span className="font-semibold text-emerald-500 dark:text-emerald-400">{formatPrice(t.price, t.currency)}</span>
+                                  {t.protocol === "AMNEZIAWG" ? "AmneziaWG · " : ""}{t.slotCount} сл. · {t.durationDays} дн. · <span className="font-semibold text-emerald-500 dark:text-emerald-400">{formatPrice(t.price, t.currency)}</span>
                                   {t.trafficLimitBytes ? ` · ${formatBytes(t.trafficLimitBytes)}` : ""}
                                 </p>
                               </div>
@@ -605,7 +627,7 @@ export function SingboxPage() {
                               <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => {
                                 setTariffModal({ kind: "edit", tariff: { ...t, categoryId: cat.id, categoryName: cat.name, sortOrder: 0 } as SingboxTariffListItem });
                                 setTariffForm({
-                                  name: t.name, categoryId: cat.id, slotCount: String(t.slotCount), durationDays: String(t.durationDays),
+                                  protocol: t.protocol ?? "SINGBOX", name: t.name, categoryId: cat.id, slotCount: String(t.slotCount), durationDays: String(t.durationDays),
                                   trafficLimitBytes: t.trafficLimitBytes ? String(Math.round(Number(t.trafficLimitBytes) / (1024 ** 3))) : "", price: String(t.price), currency: t.currency.toLowerCase(), sortOrder: "0", enabled: t.enabled,
                                 });
                               }}>
@@ -631,8 +653,8 @@ export function SingboxPage() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Добавить sing-box ноду</DialogTitle>
-            <DialogDescription>Заполните параметры. После создания скопируйте docker-compose на сервер.</DialogDescription>
+            <DialogTitle>Добавить ноду или подключить Web Panel</DialogTitle>
+            <DialogDescription>Для своей ноды получите Docker Compose. Для Amnezia Web Panel укажите адрес и API-токен.</DialogDescription>
           </DialogHeader>
           {!addResult ? (
             <div className="space-y-4 py-4">
@@ -649,14 +671,14 @@ export function SingboxPage() {
                 <select
                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
                   value={newNodeProtocol}
-                  onChange={(e) => setNewNodeProtocol(e.target.value)}
+                  onChange={(e) => { setNewNodeProtocol(e.target.value); setWebPanelForm(f => ({ ...f, protocol: e.target.value === "AWP_WIREGUARD" ? "wireguard" : e.target.value === "AWP_XRAY" ? "xray" : "awg2" })); setNewNodePort(e.target.value === "AMNEZIAWG" ? "51820" : "443"); }}
                 >
                   {PROTOCOLS.map((p) => (
-                    <option key={p} value={p}>{p}</option>
+                    <option key={p} value={p}>{p.startsWith("AWP_") ? `Amnezia Web Panel · ${p.slice(4)}` : p}</option>
                   ))}
                 </select>
               </div>
-              <div className="grid gap-2">
+              {!newNodeProtocol.startsWith("AWP_") && <div className="grid gap-2">
                 <Label>Порт</Label>
                 <Input
                   type="number"
@@ -665,7 +687,16 @@ export function SingboxPage() {
                   value={newNodePort}
                   onChange={(e) => setNewNodePort(e.target.value)}
                 />
-              </div>
+              </div>}
+              {newNodeProtocol.startsWith("AWP_") && <div className="space-y-3">
+                <Label>Адрес Amnezia Web Panel</Label><Input value={webPanelForm.url} onChange={e => setWebPanelForm(f => ({ ...f, url: e.target.value }))} placeholder="https://amnezia.example.com" />
+                <Label>API-токен</Label><Input type="password" autoComplete="new-password" value={webPanelForm.apiToken} onChange={e => setWebPanelForm(f => ({ ...f, apiToken: e.target.value }))} />
+                <Label>Номер сервера</Label><Input type="number" min="0" value={webPanelForm.serverId} onChange={e => setWebPanelForm(f => ({ ...f, serverId: e.target.value }))} />
+                <Label>Протокол во внешней панели</Label><Input value={webPanelForm.protocol} onChange={e => setWebPanelForm(f => ({ ...f, protocol: e.target.value }))} placeholder="awg2" />
+                <p className="text-xs text-muted-foreground">Поддерживается PRVTPRO/Amnezia-Web-Panel с API-токенами. Токен создаётся в её настройках, номер сервера указан в адресе /server/0. Например: awg2, awg3, wireguard, xray; для отдельного экземпляра — awg2__2. Часовой пояс внешней панели должен быть UTC.</p>
+                <a className="text-sm text-primary underline" href="https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot/blob/main/docs/amnezia-web-panel.md" target="_blank" rel="noreferrer">Установка патча совместимости и подключение</a>
+              </div>}
+              {newNodeProtocol === "AMNEZIAWG" && <div className="grid gap-2"><Label>Публичный IP или домен ноды</Label><Input value={newNodeHost} onChange={e => setNewNodeHost(e.target.value)} placeholder="vpn.example.com" /><p className="text-xs text-muted-foreground">UDP-порт должен быть открыт. Клиенты получают .conf для AmneziaVPN. Нода работает отдельно от Remnawave.</p></div>}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setAddOpen(false)}>Отмена</Button>
                 <Button onClick={handleAddNode} disabled={creating}>
@@ -676,7 +707,7 @@ export function SingboxPage() {
             </div>
           ) : (
             <div className="space-y-4 py-4">
-              <p className="text-sm text-green-600 dark:text-green-400">Нода создана. Скопируйте docker-compose на сервер и выполните <code className="rounded bg-muted px-1">docker compose up -d --build</code>.</p>
+              {addResult.dockerCompose && <><p className="text-sm text-green-600 dark:text-green-400">Нода создана. Скопируйте docker-compose на сервер и выполните <code className="rounded bg-muted px-1">docker compose up -d --build</code>.</p>
               <div className="grid gap-2">
                 <Label>Docker Compose</Label>
                 <pre className="rounded-md bg-muted p-3 text-xs overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all">{addResult.dockerCompose}</pre>
@@ -685,7 +716,7 @@ export function SingboxPage() {
                   Копировать
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">{addResult.instructions}</p>
+              </>}<p className="text-xs text-muted-foreground">{addResult.instructions}</p>
               <DialogFooter>
                 <Button onClick={() => { setAddOpen(false); setAddResult(null); }}>Закрыть</Button>
               </DialogFooter>
@@ -702,6 +733,7 @@ export function SingboxPage() {
           </DialogHeader>
           {editingNode && (
             <div className="space-y-4 py-4">
+              {editingNode.protocol.startsWith("AWP_") && <div className="grid gap-2"><Label>Новый API-токен (необязательно)</Label><Input type="password" autoComplete="new-password" value={webApiToken} onChange={e => setWebApiToken(e.target.value)} /></div>}
               <div className="grid gap-2">
                 <Label>Название</Label>
                 <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
@@ -710,17 +742,17 @@ export function SingboxPage() {
                 <Label>Протокол</Label>
                 <select
                   className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
-                  value={editProtocol}
+                  disabled={editingNode?.protocol === "AMNEZIAWG" || editingNode?.protocol.startsWith("AWP_")} value={editProtocol}
                   onChange={(e) => setEditProtocol(e.target.value)}
                 >
                   {PROTOCOLS.map((p) => (
-                    <option key={p} value={p}>{p}</option>
+                    <option key={p} value={p}>{p.startsWith("AWP_") ? `Amnezia Web Panel · ${p.slice(4)}` : p}</option>
                   ))}
                 </select>
               </div>
               <div className="grid gap-2">
                 <Label>Порт</Label>
-                <Input type="number" min={1} max={65535} value={editPort} onChange={(e) => setEditPort(e.target.value)} />
+                <Input type="number" min={1} max={65535} disabled={editingNode?.protocol === "AMNEZIAWG" || editingNode?.protocol.startsWith("AWP_")} value={editPort} onChange={(e) => setEditPort(e.target.value)} />
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setEditOpen(false)}>Отмена</Button>
@@ -789,6 +821,7 @@ export function SingboxPage() {
               <Label>Название</Label>
               <Input value={tariffForm.name} onChange={(e) => setTariffForm((f) => ({ ...f, name: e.target.value }))} placeholder="Тариф 1" />
             </div>
+            <div className="grid gap-2"><Label>Протокол тарифа</Label><select aria-label="Протокол тарифа" className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={tariffForm.protocol} onChange={e => setTariffForm(f => ({ ...f, protocol: e.target.value }))}><option value="SINGBOX">Sing-box — любой доступный протокол</option>{PROTOCOLS.map(p => <option key={p} value={p}>{p === "AMNEZIAWG" ? "AmneziaWG" : p}</option>)}</select></div>
             <div className="grid grid-cols-2 gap-2">
               <div className="grid gap-2">
                 <Label>Слотов</Label>

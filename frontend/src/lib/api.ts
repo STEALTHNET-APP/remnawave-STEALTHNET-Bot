@@ -79,8 +79,9 @@ export const MANAGER_SECTIONS: { key: string; label: string; category: ManagerSe
   { key: "geo-map", label: "Карта нод", category: "overview" },
   // Управление
   { key: "clients", label: "Клиенты", category: "management" },
+  { key: "anti-abuse", label: "Анти-абьюз трафика", category: "management" },
   { key: "proxy", label: "Прокси", category: "management" },
-  { key: "singbox", label: "Sing-box", category: "management" },
+  { key: "singbox", label: "Sing-box / AmneziaWG", category: "management" },
   { key: "backup", label: "Бэкапы", category: "management" },
   { key: "tickets", label: "Тикеты", category: "management" },
   { key: "withdrawals", label: "Заявки на вывод", category: "management" },
@@ -280,6 +281,13 @@ export interface GramadsBotShowedMyPostDto {
 }
 
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit & { token?: string; _retry?: boolean } = {}
@@ -299,7 +307,7 @@ async function request<T>(
   try {
     data = text ? JSON.parse(text) : undefined;
   } catch {
-    throw new Error(res.statusText || "Request failed");
+    throw new ApiError(res.statusText || "Request failed", res.status);
   }
 
   // выбор refresh-функции по типу пути: /client/* (кроме /client/auth/* —
@@ -317,7 +325,7 @@ async function request<T>(
 
   if (!res.ok) {
     const message = (data as { message?: string })?.message ?? res.statusText;
-    throw new Error(message);
+    throw new ApiError(message, res.status);
   }
   return data as T;
 }
@@ -333,7 +341,18 @@ export interface RemnaCapabilities {
   realtimeBandwidth: boolean;
 }
 
+export type PanelUpdateState = {
+  connected: boolean;
+  installed: { version: string; commit: string | null; builtAt: string | null };
+  settings?: { enabled: boolean; channel: "stable" | "main"; hourUtc: number; backupRetentionDays: number };
+  backups?: { name: string; createdAt: string; expiresAt: string; protected: boolean; complete: boolean }[];
+  status?: { phase: string; message?: string; available?: boolean; version?: string; target?: string; changes?: string; backup?: string; rolledBack?: boolean; checkedAt?: string; recoveryRequired?: boolean; blockedReason?: string | null };
+};
+
 export const api = {
+  getPanelUpdate: (token: string) => request<PanelUpdateState>("/admin/updates", { token }),
+  panelUpdateAction: (token: string, action: "check" | "install" | "settings", body: unknown = {}) =>
+    request<PanelUpdateState>(`/admin/updates/${action}`, { token, method: "POST", body: JSON.stringify(body) }),
   /** Возможности подключённой Remnawave (бэкенд кэширует на 10 минут). */
   async getRemnaCapabilities(token: string): Promise<RemnaCapabilities> {
     return request("/admin/remna/capabilities", { token });
@@ -751,8 +770,12 @@ export const api = {
     return request("/admin/singbox/nodes", { token });
   },
 
-  async createSingboxNode(token: string, data?: { name?: string; protocol?: string; port?: number; tlsEnabled?: boolean }): Promise<CreateSingboxNodeResponse> {
+  async createSingboxNode(token: string, data?: { name?: string; protocol?: string; port?: number; tlsEnabled?: boolean; publicHost?: string; webPanel?: { url: string; apiToken: string; serverId: number; protocol: string } }): Promise<CreateSingboxNodeResponse> {
     return request("/admin/singbox/nodes", { method: "POST", body: JSON.stringify(data ?? {}), token });
+  },
+
+  async updateWebPanelSlot(token: string, nodeId: string, slotId: string, data: { expiresAt?: string; status?: string }): Promise<{ ok: boolean }> {
+    return request(`/admin/singbox/nodes/${nodeId}/web-slots/${slotId}`, { method: "PATCH", body: JSON.stringify(data), token });
   },
 
   async getSingboxNode(token: string, id: string): Promise<SingboxNodeDetail> {
@@ -763,6 +786,7 @@ export const api = {
     token: string,
     id: string,
     data: {
+      webApiToken?: string;
       name?: string;
       status?: string;
       capacity?: number | null;
@@ -802,7 +826,7 @@ export const api = {
 
   async createSingboxTariff(
     token: string,
-    data: { categoryId: string; name: string; slotCount: number; durationDays: number; trafficLimitBytes?: string | number | null; price: number; currency: string; sortOrder?: number; enabled?: boolean }
+    data: { protocol?: string; categoryId: string; name: string; slotCount: number; durationDays: number; trafficLimitBytes?: string | number | null; price: number; currency: string; sortOrder?: number; enabled?: boolean }
   ): Promise<unknown> {
     return request("/admin/singbox/tariffs", { method: "POST", body: JSON.stringify(data), token });
   },
@@ -810,7 +834,7 @@ export const api = {
   async updateSingboxTariff(
     token: string,
     id: string,
-    data: { categoryId?: string; name?: string; slotCount?: number; durationDays?: number; trafficLimitBytes?: string | number | null; price?: number; currency?: string; sortOrder?: number; enabled?: boolean }
+    data: { protocol?: string; categoryId?: string; name?: string; slotCount?: number; durationDays?: number; trafficLimitBytes?: string | number | null; price?: number; currency?: string; sortOrder?: number; enabled?: boolean }
   ): Promise<unknown> {
     return request(`/admin/singbox/tariffs/${id}`, { method: "PATCH", body: JSON.stringify(data), token });
   },
@@ -1015,7 +1039,7 @@ export const api = {
     token: string,
     subscriptionId: string,
     payload: { tariffId?: string; tariffPriceOptionId?: string; customDurationDays?: number; note?: string; createPaymentRecord?: boolean },
-  ): Promise<{ ok: boolean; paymentId: string | null; subscriptionId: string; tariff: { id: string; name: string; durationDays: number }; message?: string }> {
+  ): Promise<{ ok: boolean; paymentId: string | null; subscriptionId: string; mode?: "days_only"; expireAt?: string; tariff: { id: string; name: string; durationDays: number } | null; message?: string }> {
     return request(`/admin/subscriptions/${encodeURIComponent(subscriptionId)}/grant-extend`, {
       method: "POST",
       body: JSON.stringify(payload),
@@ -1092,6 +1116,10 @@ export const api = {
   },
   async deleteSubscriptionRemnaDevice(token: string, subId: string, hwid: string): Promise<unknown> {
     return request(`/admin/subscriptions/${subId}/remna/devices/delete`, { method: "POST", body: JSON.stringify({ hwid }), token });
+  },
+
+  async testMail(token: string, toEmail: string): Promise<{ ok: boolean }> {
+    return request("/admin/settings/mail-test", { method: "POST", body: JSON.stringify({ toEmail }), token });
   },
 
   async getSettings(token: string): Promise<AdminSettings> {
@@ -1179,7 +1207,7 @@ export const api = {
         amount: number;
         status: string;
         clientId: string;
-        client: { id: string; telegramId: string | null; telegramUsername: string | null } | null;
+        client: { id: string; telegramId: string | null; telegramUsername: string | null; email: string | null } | null;
       } | null;
     }>;
   }> {
@@ -1199,6 +1227,13 @@ export const api = {
     });
   },
 
+  async getTrafficExclusions(token: string): Promise<{ items: { uuid: string; username: string }[] }> {
+    return request("/admin/traffic-abuse/exclusions", { token });
+  },
+  async setTrafficExclusion(token: string, uuid: string, excluded: boolean): Promise<{ ok: boolean }> {
+    return request(`/admin/traffic-abuse/exclusions/${encodeURIComponent(uuid)}`, { method: excluded ? "PUT" : "DELETE", token });
+  },
+
   async getTrafficAbuseAnalytics(
     token: string,
     params?: { days?: number; threshold?: number; minBytes?: number }
@@ -1209,6 +1244,51 @@ export const api = {
     if (params?.minBytes) qs.set("minBytes", String(params.minBytes));
     const q = qs.toString();
     return request(`/admin/traffic-abuse/analytics${q ? `?${q}` : ""}`, { token });
+  },
+
+  async getAntiAbuseRules(token: string): Promise<{ items: AntiAbuseRule[] }> {
+    return request("/admin/anti-abuse/rules", { token });
+  },
+  async createAntiAbuseRule(token: string, body: AntiAbuseRuleInput): Promise<AntiAbuseRule> {
+    return request("/admin/anti-abuse/rules", { token, method: "POST", body: JSON.stringify(body) });
+  },
+  async updateAntiAbuseRule(token: string, id: string, body: Partial<AntiAbuseRuleInput>): Promise<AntiAbuseRule> {
+    return request(`/admin/anti-abuse/rules/${id}`, { token, method: "PATCH", body: JSON.stringify(body) });
+  },
+  async deleteAntiAbuseRule(token: string, id: string): Promise<{ ok: boolean }> {
+    return request(`/admin/anti-abuse/rules/${id}`, { token, method: "DELETE" });
+  },
+  async runAntiAbuseRule(token: string, id: string): Promise<{ ok: boolean; message?: string }> {
+    return request(`/admin/anti-abuse/rules/${id}/run`, { token, method: "POST" });
+  },
+  async getAntiAbuseState(token: string): Promise<{ banned: AntiAbuseBannedItem[]; warned: AntiAbuseWarnedItem[] }> {
+    return request("/admin/anti-abuse/state", { token });
+  },
+  async getAntiAbuseEvents(
+    token: string,
+    params?: { limit?: number; eventType?: string; ruleId?: string; cursor?: string; dateFrom?: string; dateTo?: string },
+  ): Promise<{ items: AntiAbuseEvent[]; nextCursor: string | null }> {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.eventType) qs.set("eventType", params.eventType);
+    if (params?.ruleId) qs.set("ruleId", params.ruleId);
+    if (params?.cursor) qs.set("cursor", params.cursor);
+    if (params?.dateFrom) qs.set("dateFrom", params.dateFrom);
+    if (params?.dateTo) qs.set("dateTo", params.dateTo);
+    const q = qs.toString();
+    return request(`/admin/anti-abuse/events${q ? `?${q}` : ""}`, { token });
+  },
+  async getAntiAbuseSettings(token: string): Promise<{ enabled: boolean; topN: number }> {
+    return request("/admin/anti-abuse/settings", { token });
+  },
+  async updateAntiAbuseSettings(token: string, body: { enabled?: boolean; topN?: number }): Promise<{ ok: boolean }> {
+    return request("/admin/anti-abuse/settings", { token, method: "PATCH", body: JSON.stringify(body) });
+  },
+  async unbanAntiAbuse(token: string, subscriptionId: string, immuneDays?: number): Promise<{ ok: boolean; immuneDays?: number }> {
+    return request(`/admin/anti-abuse/unban/${subscriptionId}`, { token, method: "POST", body: JSON.stringify({ immuneDays: immuneDays ?? 7 }) });
+  },
+  async banAntiAbuse(token: string, subscriptionId: string, body: { reason: string; durationHours: number | null }): Promise<{ ok: boolean; bannedUntil: string; indefinite: boolean }> {
+    return request(`/admin/anti-abuse/ban/${subscriptionId}`, { token, method: "POST", body: JSON.stringify(body) });
   },
 
   async getApiKeys(token: string): Promise<ApiKeyListItem[]> {
@@ -1401,6 +1481,10 @@ export const api = {
   /** Админ: закрыть/открыть тикет */
   async patchAdminTicket(token: string, id: string, data: { status: "open" | "closed" }): Promise<{ id: string; status: string }> {
     return request(`/admin/tickets/${id}`, { method: "PATCH", body: JSON.stringify(data), token });
+  },
+  /** Админ: удалить тикет */
+  async deleteAdminTicket(token: string, id: string): Promise<{ success: boolean; id: string }> {
+    return request(`/admin/tickets/${id}`, { method: "DELETE", token });
   },
   /** Админ: ответ в тикет (поддержка). Можно приложить до 5 фото — тогда уходит multipart/form-data. */
   async postAdminTicketMessage(
@@ -1937,7 +2021,7 @@ export const api = {
     });
   },
 
-  async clientVerifyEmail(token: string): Promise<ClientAuthResponse | ClientAuthRequires2FA> {
+  async clientVerifyEmail(token: string): Promise<ClientAuthResponse | ClientAuthRequires2FA | { alreadyVerified: true; message: string }> {
     return request("/client/auth/verify-email", {
       method: "POST",
       body: JSON.stringify({ token }),
@@ -2000,6 +2084,9 @@ export const api = {
     isTrial?: boolean;
     trialName?: string | null;
     trialConvertEnabled?: boolean;
+    isBanned?: boolean;
+    banReason?: string | null;
+    bannedUntil?: string | null;
     message?: string;
   }> {
     return request("/client/subscription", { token });
@@ -2033,6 +2120,9 @@ export const api = {
       trialConvertEnabled?: boolean;
       /** конвертация триала разрешена в любой тариф. */
       trialConvertAllTariffs?: boolean;
+      isBanned?: boolean;
+      banReason?: string | null;
+      bannedUntil?: string | null;
     }>;
   }> {
     return request("/client/subscription/all", { token });
@@ -2122,7 +2212,7 @@ export const api = {
 
   /** Публичный список тарифов Sing-box по категориям */
   async getPublicSingboxTariffs(): Promise<{
-    items: { id: string; name: string; sortOrder: number; tariffs: { id: string; name: string; slotCount: number; durationDays: number; trafficLimitBytes: string | null; price: number; currency: string }[] }[];
+    items: { id: string; name: string; sortOrder: number; tariffs: { protocol?: string; id: string; name: string; slotCount: number; durationDays: number; trafficLimitBytes: string | null; price: number; currency: string }[] }[];
   }> {
     return request("/public/singbox-tariffs");
   },
@@ -2135,10 +2225,18 @@ export const api = {
   },
 
   /** Активные Sing-box слоты клиента (с ссылкой подписки) */
-  async getSingboxSlots(token: string): Promise<{
-    slots: { id: string; subscriptionLink: string; expiresAt: string; trafficLimitBytes: string | null; trafficUsedBytes: string; protocol: string }[];
+  async getSingboxSlots(token: string, includeInactive = false): Promise<{
+    slots: { id: string; subscriptionLink: string; expiresAt: string; trafficLimitBytes: string | null; trafficUsedBytes: string; protocol: string; status?: string; canRenew?: boolean; nodeOnline?: boolean }[];
   }> {
-    return request("/client/singbox-slots", { token });
+    return request(`/client/singbox-slots${includeInactive ? "?includeInactive=true" : ""}`, { token });
+  },
+
+  async quoteWebRenewal(token: string, slotId: string): Promise<{ slotId: string; name: string; amount: number; currency: string; durationDays: number; trafficBytes: string | null; quoteHash: string; balance: number }> {
+    return request(`/client/singbox-slots/${slotId}/renewal`, { token });
+  },
+
+  async buyWebRenewal(token: string, slotId: string, data: { requestId: string; quoteHash: string }): Promise<{ message: string; paymentId: string; newBalance: number }> {
+    return request(`/client/singbox-slots/${slotId}/renewal`, { method: "POST", body: JSON.stringify(data), token });
   },
 
   async getPublicConfig(): Promise<PublicConfig> {
@@ -2266,6 +2364,10 @@ export const api = {
   },
 
   /** Crypto Pay (Crypto Bot) — создание инвойса, возвращает ссылку на оплату */
+  async starsCreatePayment(token: string, data: Record<string, unknown>): Promise<{ paymentId: string; payUrl: string; starsAmount: number }> {
+    return request("/client/telegram-stars/create-payment", { method: "POST", body: JSON.stringify(data), token });
+  },
+
   async cryptopayCreatePayment(
     token: string,
     data: {
@@ -2467,8 +2569,8 @@ export const api = {
   async getClientAvailableTrials(token: string): Promise<{ items: ClientTrialOption[]; hasAnyEnabled: boolean }> {
     return request("/client/trials/available", { token });
   },
-  async clientActivateTrialById(token: string, trialId: string): Promise<ClientTrialActivateResponse> {
-    return request(`/client/trials/${trialId}/activate`, { method: "POST", token });
+  async clientActivateTrialById(token: string, trialId: string, expectedPrice?: number): Promise<ClientTrialActivateResponse> {
+    return request(`/client/trials/${trialId}/activate`, { method: "POST", token, body: JSON.stringify({ expectedPrice }) });
   },
 
   async clientUpdateProfile(token: string, data: { preferredLang?: string; preferredCurrency?: string }): Promise<ClientProfile> {
@@ -2666,6 +2768,10 @@ export const api = {
       body: JSON.stringify({ content: data.content }),
       token,
     });
+  },
+  /** Клиент: удалить свой тикет */
+  async deleteTicket(token: string, id: string): Promise<{ success: boolean; id: string }> {
+    return request(`/client/tickets/${id}`, { method: "DELETE", token });
   },
 
   /** AI Чат (Groq) */
@@ -2895,6 +3001,54 @@ export const api = {
   async marketplaceHubDeleteCategory(token: string, id: string): Promise<{ ok: boolean }> {
     return request(`/admin/marketplace/hub/categories/${encodeURIComponent(id)}`, { method: "DELETE", token });
   },
+
+  // ─── Рулетка (Колесо Фортуны) ───
+  async clientGetRoulette(token: string): Promise<{
+    enabled: boolean;
+    cooldownHours: number;
+    canSpin: boolean;
+    pendingReward: boolean;
+    nextSpinAt: string | null;
+    secondsLeft: number;
+    sectors: { id: string; type: string; value: number; label: string; color: string; icon: string }[];
+    recentSpins: { id: string; rewardType: string; rewardValue: number; rewardLabel: string; sectorId: string; createdAt: string }[];
+    subscriptions?: {
+      id: string;
+      index: number;
+      name: string;
+      expireAt: string | null;
+      isExpired: boolean;
+      remnaStatus: string | null;
+    }[];
+  }> {
+    return request("/client/roulette", { token });
+  },
+
+  async clientSpinRoulette(token: string, subscriptionId?: string): Promise<{
+    spinId: string;
+    sectorId: string;
+    reward: { id: string; type: string; value: number; label: string; color: string; icon: string };
+    nextSpinAt: string;
+  }> {
+    return request("/client/roulette/spin", {
+      method: "POST",
+      token,
+      body: subscriptionId ? JSON.stringify({ subscriptionId }) : undefined,
+    });
+  },
+
+  async getAdminRoulette(token: string): Promise<{
+    settings: { enabled: boolean; cooldownHours: number; sectors: any[] };
+    totalSpins: number;
+    spinsByType: any[];
+    recentSpins: any[];
+  }> {
+    return request("/admin/roulette", { token });
+  },
+
+  async updateAdminRoulette(token: string, data: any): Promise<any> {
+    return request("/admin/roulette", { method: "PUT", body: JSON.stringify(data), token });
+  },
 };
 
 export type MarketplaceCurrency = "USD" | "RUB" | "EUR" | "USDT";
@@ -3045,6 +3199,13 @@ export interface MarketplaceReportDto {
 }
 
 export interface ClientReferralStats {
+  referralRewardMode?: "percent" | "balance" | "days";
+  referralRewardAmount?: number;
+  referralRewardDays?: number;
+  referralRewardCurrency?: string;
+  referralDaysEarned?: number;
+  referralDaysPending?: number;
+
   referralCode: string | null;
   referralPercent: number;
   referralPercentLevel2: number;
@@ -3202,11 +3363,15 @@ export interface RunRuleResult {
 }
 
 export type UpdateSettingsPayload = {
+  liteMode?: boolean;
   allowUserThemeChange?: boolean;
   activeLanguages?: string;
   activeCurrencies?: string;
   defaultLanguage?: string;
   defaultCurrency?: string;
+  referralRewardMode?: "percent" | "balance" | "days";
+  referralRewardAmount?: number;
+  referralRewardDays?: number;
   defaultReferralPercent?: number;
   referralPercentLevel2?: number;
   referralPercentLevel3?: number;
@@ -3217,12 +3382,15 @@ export type UpdateSettingsPayload = {
   trialSquadUuid?: string | null;
   trialDeviceLimit?: number | null;
   trialTrafficLimitBytes?: number | null;
+  maintenanceEnabled?: boolean;
+  maintenanceMessage?: string;
   serviceName?: string;
   serviceDescription?: string | null;
   logo?: string | null;
   logoBot?: string | null;
   favicon?: string | null;
   cabinetDesign?: "classic" | "stealth" | "aurora";
+  rouletteEnabled?: boolean;
   remnaClientUrl?: string | null;
   smtpHost?: string | null;
   smtpPort?: number;
@@ -3266,6 +3434,8 @@ export type UpdateSettingsPayload = {
   yookassaSecretKey?: string | null;
   yookassaWebhookBasicUser?: string | null;
   yookassaWebhookBasicPassword?: string | null;
+  telegramStarsEnabled?: boolean;
+  telegramStarsRubPerStar?: number;
   cryptopayApiToken?: string | null;
   cryptopayTestnet?: boolean;
   heleketMerchantId?: string | null;
@@ -3299,6 +3469,9 @@ export type UpdateSettingsPayload = {
   groqFallback3?: string | null;
   aiSystemPrompt?: string | null;
   botButtons?: string | null;
+  paymentDescription?: string;
+  botGroupCabinet?: boolean;
+  botMenuMode?: "classic" | "web";
   botButtonsPerRow?: 1 | 2;
   botEmojis?: Record<string, { unicode?: string; tgEmojiId?: string }> | string | null;
   botBackLabel?: string | null;
@@ -3375,6 +3548,8 @@ export type UpdateSettingsPayload = {
   customBuildCurrency?: string;
   customBuildMaxDays?: number;
   customBuildMaxDevices?: number;
+  remnaAutoSyncEnabled?: boolean;
+  remnaAutoSyncIntervalMinutes?: number;
   defaultAutoRenewEnabled?: boolean;
   autoRenewDaysBeforeExpiry?: number;
   autoRenewNotifyDaysBefore?: number;
@@ -3559,6 +3734,8 @@ export interface ClientRecord {
 
 export type UpdateClientPayload = {
   email?: string | null;
+  telegramId?: string | null;
+  expectedTelegramId?: string | null;
   preferredLang?: string;
   preferredCurrency?: string;
   balance?: number;
@@ -3700,11 +3877,15 @@ export interface RemnaUserUsageResponse {
 }
 
 export interface AdminSettings {
+  liteMode?: boolean;
   allowUserThemeChange?: boolean;
   activeLanguages: string[];
   activeCurrencies: string[];
   defaultLanguage?: string;
   defaultCurrency?: string;
+  referralRewardMode?: "percent" | "balance" | "days";
+  referralRewardAmount?: number;
+  referralRewardDays?: number;
   defaultReferralPercent: number;
   referralPercentLevel2: number;
   referralPercentLevel3: number;
@@ -3712,6 +3893,8 @@ export interface AdminSettings {
   trialSquadUuid?: string | null;
   trialDeviceLimit?: number | null;
   trialTrafficLimitBytes?: number | null;
+  maintenanceEnabled?: boolean;
+  maintenanceMessage?: string;
   serviceName: string;
   serviceDescription?: string | null;
   logo?: string | null;
@@ -3732,6 +3915,8 @@ export interface AdminSettings {
   passwordResetEnabled?: boolean;
   publicAppUrl?: string | null;
   telegramBotToken?: string | null;
+  remnaAutoSyncEnabled?: boolean;
+  remnaAutoSyncIntervalMinutes?: number;
   defaultAutoRenewEnabled?: boolean;
   autoRenewDaysBeforeExpiry?: number;
   autoRenewNotifyDaysBefore?: number;
@@ -3766,6 +3951,8 @@ export interface AdminSettings {
   yoomoneyNotificationSecret?: string | null;
   yookassaShopId?: string | null;
   yookassaSecretKey?: string | null;
+  telegramStarsEnabled?: boolean;
+  telegramStarsRubPerStar?: number;
   cryptopayApiToken?: string | null;
   cryptopayTestnet?: boolean;
   heleketMerchantId?: string | null;
@@ -3799,7 +3986,10 @@ export interface AdminSettings {
   groqFallback3?: string | null;
   aiSystemPrompt?: string | null;
   /** Кнопки главного меню бота: порядок, видимость, текст, стиль, ключ эмодзи, в один ряд */
-  botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean }[];
+  botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean; url?: string }[];
+  paymentDescription?: string;
+  botGroupCabinet?: boolean;
+  botMenuMode?: "classic" | "web";
   /** Кнопок в ряд в главном меню: 1 или 2 (по умолчанию 1) */
   botButtonsPerRow?: 1 | 2;
   /** Эмодзи по ключам: Unicode и/или TG custom emoji ID (премиум). Ключи: TRIAL, PACKAGE, CARD, LINK, SERVERS, … */
@@ -4199,6 +4389,80 @@ export interface TrafficAbuseResponse {
   stats: TrafficAbuseStats;
 }
 
+export interface AntiAbuseChannels { telegram?: boolean; email?: boolean; site?: boolean; }
+export interface AntiAbuseRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  schedules: string[];
+  windowKind: "hour" | "day" | "week" | "custom" | "rolling";
+  windowValueHours: number | null;
+  limitBytes: string;
+  action: "WARN" | "BAN";
+  banDurationKind: "until_window_end" | "fixed" | null;
+  banDurationHours: number | null;
+  channels: AntiAbuseChannels;
+  messageText: string;
+  emailSubject: string | null;
+  scopeKind: "all" | "tariff" | "squad";
+  scopeValues: string[] | null;
+  excludeSubscriptionIds: string[] | null;
+  priority: number;
+  resendAfterHours: number | null;
+  lastRunAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AntiAbuseRuleInput {
+  name: string;
+  enabled?: boolean;
+  schedules: string[];
+  windowKind: "hour" | "day" | "week" | "custom" | "rolling";
+  windowValueHours?: number | null;
+  limitBytes: string | number;
+  action: "WARN" | "BAN";
+  banDurationKind?: "until_window_end" | "fixed" | null;
+  banDurationHours?: number | null;
+  channels: AntiAbuseChannels;
+  messageText: string;
+  emailSubject?: string | null;
+  scopeKind?: "all" | "tariff" | "squad";
+  scopeValues?: string[] | null;
+  excludeSubscriptionIds?: string[] | null;
+  priority?: number;
+  resendAfterHours?: number | null;
+}
+export interface AntiAbuseOwnerLite { id: string; telegramId: string | null; telegramUsername: string | null; email: string | null; }
+export interface AntiAbuseBannedItem {
+  id: string;
+  subscriptionIndex: number;
+  remnawaveUuid: string | null;
+  bannedUntil: string | null;
+  banReason: string | null;
+  banRuleId: string | null;
+  tariff: { name: string } | null;
+  owner: AntiAbuseOwnerLite;
+}
+export interface AntiAbuseWarnedItem {
+  id: string;
+  windowKey: string;
+  warnedAt: string | null;
+  lastPeriodBytes: string | null;
+  subscription: { id: string; subscriptionIndex: number; tariff: { name: string } | null; owner: AntiAbuseOwnerLite } | null;
+  rule: { id: string; name: string; action: string } | null;
+}
+export interface AntiAbuseEvent {
+  id: string;
+  eventType: string;
+  periodBytes: string | null;
+  windowKey: string | null;
+  channelsSent: AntiAbuseChannels | null;
+  detail: string | null;
+  createdAt: string;
+  ruleId: string | null;
+  subscription: { id: string; subscriptionIndex: number; owner: AntiAbuseOwnerLite } | null;
+}
+
 // ────── Admin Secondary Subscriptions ──────
 
 export interface AdminSecondarySubscriptionOwner {
@@ -4567,6 +4831,7 @@ export interface CreateSingboxNodeResponse {
 }
 
 export interface SingboxNodeDetail {
+  webPanel?: { url: string; protocol: string; serverUid: string } | null;
   id: string;
   name: string;
   status: string;
@@ -4600,10 +4865,11 @@ export interface SingboxCategoryItem {
   id: string;
   name: string;
   sortOrder: number;
-  tariffs: { id: string; name: string; slotCount: number; durationDays: number; trafficLimitBytes: string | null; price: number; currency: string; enabled: boolean }[];
+  tariffs: { protocol?: string; id: string; name: string; slotCount: number; durationDays: number; trafficLimitBytes: string | null; price: number; currency: string; enabled: boolean }[];
 }
 
 export interface SingboxTariffListItem {
+  protocol?: string;
   id: string;
   categoryId: string;
   categoryName: string;
@@ -4684,6 +4950,7 @@ export interface TariffRecord {
 
 // ─── Trial-пресеты ───
 export interface TrialRecord {
+  price?: number;
   id: string;
   name: string;
   /** null = standalone-триал из сквада (без тарифа). */
@@ -4710,6 +4977,7 @@ export interface TrialRecord {
 }
 
 export type CreateTrialPayload = {
+  price?: number;
   name: string;
   tariffId?: string | null;
   squadUuids?: string[] | null;
@@ -4744,6 +5012,7 @@ export interface ClientDeviceItem {
 }
 
 export interface ClientTrialOption {
+  price?: number;
   id: string;
   name: string;
   tariffId: string;
@@ -5042,6 +5311,8 @@ export interface PromoCodeRecord {
   type: "DISCOUNT" | "FREE_DAYS";
   discountPercent: number | null;
   discountFixed: number | null;
+  tariffId: string | null;
+  tariffPriceOptionId: string | null;
   squadUuid: string | null;
   trafficLimitBytes: string | null;
   deviceLimit: number | null;
@@ -5080,6 +5351,8 @@ export type CreatePromoCodePayload = {
   type: "DISCOUNT" | "FREE_DAYS";
   discountPercent?: number | null;
   discountFixed?: number | null;
+  tariffId?: string | null;
+  tariffPriceOptionId?: string | null;
   squadUuid?: string | null;
   trafficLimitBytes?: string | number | null;
   deviceLimit?: number | null;
@@ -5210,10 +5483,22 @@ export type PublicSellOption =
   | { kind: "servers"; id: string; name: string; squadUuid: string; trafficGb?: number; price: number; currency: string };
 
 export interface PublicConfig {
+  liteMode?: boolean;
+  paymentDescription?: string;
+  botGroupCabinet?: boolean;
+  botMenuMode?: "classic" | "web";
+  supportLink?: string | null;
+  instructionsLink?: string | null;
+  tgProxyText?: string | null;
+  tgProxyUrlPrimary?: string | null;
+  tgProxyUrlBackup?: string | null;
+  tgProxyServers?: { flag: string; name: string; url: string }[] | null;
   activeLanguages: string[];
   activeCurrencies: string[];
   defaultLanguage?: string;
   defaultCurrency?: string;
+  maintenanceEnabled?: boolean;
+  maintenanceMessage?: string;
   serviceName: string;
   serviceDescription?: string | null;
   logo?: string | null;
@@ -5226,6 +5511,8 @@ export interface PublicConfig {
   plategaMethods?: { id: number; label: string }[];
   yoomoneyEnabled?: boolean;
   yookassaEnabled?: boolean;
+  telegramStarsEnabled?: boolean;
+  telegramStarsRubPerStar?: number;
   cryptopayEnabled?: boolean;
   heleketEnabled?: boolean;
   rollypayEnabled?: boolean;
@@ -5258,6 +5545,7 @@ export interface PublicConfig {
   smtpConfigured?: boolean;
   useRemnaSubscriptionPage?: boolean;
   aiChatEnabled?: boolean;
+  rouletteEnabled?: boolean;
   customBuildConfig?: {
     enabled: true;
     pricePerDay: number;

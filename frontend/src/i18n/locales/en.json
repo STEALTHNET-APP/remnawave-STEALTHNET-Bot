@@ -1,4 +1,33 @@
 {
+  "mailTest": {
+    "title": "Test email delivery",
+    "hint": "Uses saved SMTP or Resend settings. Save any changes above before sending a test.",
+    "send": "Send test email",
+    "success": "The mail service accepted the message. Check your inbox and spam folder; delivery may take a few minutes.",
+    "failed": "Could not send email"
+  },
+  "homePromo": {
+    "title": "Promo code",
+    "placeholder": "Enter promo code",
+    "activate": "Activate",
+    "failed": "Could not apply promo code",
+    "discount": "This discount code is valid. Choose a plan and apply the prefilled code before paying.",
+    "tariffs": "Choose a plan"
+  },
+  "passwordHint": "At least {{count}} characters. We recommend combining letters, numbers and special characters.",
+  "referralQr": {
+    "open": "QR code",
+    "title": "Referral link QR code",
+    "printHint": "For printing: 1024×1024 PNG or scalable SVG.",
+    "destination": "QR code destination",
+    "site": "Website",
+    "bot": "Bot",
+    "download": "Download {{format}}",
+    "failed": "Could not download the file. Try again or choose SVG.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Could not copy the link."
+  },
   "admin": {
     "nav": {
       "category_overview": "OVERVIEW",
@@ -13,7 +42,7 @@
       "geo_map": "Node Map",
       "clients": "Clients",
       "proxy": "Proxy",
-      "singbox": "Sing-box",
+      "singbox": "Sing-box / AmneziaWG",
       "backups": "Backups",
       "tickets": "Tickets",
       "tariffs": "Tariffs",
@@ -1540,7 +1569,7 @@
       "disabled_short": "Off"
     },
     "singbox": {
-      "title": "Sing-box",
+      "title": "Sing-box / AmneziaWG",
       "subtitle": "VLESS / Shadowsocks / Trojan / Hysteria2 nodes. Categories and tariffs for selling access.",
       "add_node": "Add node",
       "tab_nodes": "Nodes",
@@ -1684,7 +1713,8 @@
       "profile": "Profile",
       "more": "More",
       "menu": "Menu",
-      "logout": "Log Out"
+      "logout": "Log Out",
+      "roulette": "Lucky Wheel"
     },
     "layout": {
       "theme_heading": "Theme",

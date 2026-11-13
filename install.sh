@@ -411,6 +411,8 @@ obtain_ssl() {
 
 # ── Сборка и запуск ──────────────────────────────────────────────
 build_and_start() {
+  export STEALTHNET_BUILD_COMMIT="$(git -C "$SCRIPT_DIR" rev-parse HEAD)"
+  export STEALTHNET_BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo ""
   echo -e "${BOLD}${CYAN}═══ Сборка проекта ═══${NC}"
   echo ""

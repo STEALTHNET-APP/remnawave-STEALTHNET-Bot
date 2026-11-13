@@ -1,3 +1,8 @@
+import { ClientProfileError, updateClientSchema, updateAdminClientProfile } from "./client-profile.service.js";
+import { botButtonsJsonSchema } from "../bot/menu-buttons.js";
+import { mailTestRouter } from "../mail/mail-test.routes.js";
+import { updateRouter } from "../update/update.routes.js";
+import { freeDaysSettings, PromoCodeError } from "../promo-code/free-days.service.js";
 /**
  * Админские эндпоинты — прокси к Remna API + клиенты панели + настройки
  */
@@ -8,7 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express, { Router } from "express";
 import multer from "multer";
-import { APP_VERSION } from "../../config/app-version.js";
+import { APP_BUILD } from "../../config/app-version.js";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma, createPayment } from "../../db.js";
@@ -111,6 +116,7 @@ import { markPaymentPaid } from "../payment/mark-paid.service.js";
 // подписки (grant-extend): тот же механизм, что и оплаченное продление.
 import { extendSecondarySubscription } from "../tariff/tariff-activation.service.js";
 import { logAdmin } from "../audit/audit.service.js";
+import { chooseGrantExtendMode, extendSubscriptionDaysOnly } from "./grant-extend-days.service.js";
 import { registerBackupRoutes } from "../backup/backup.routes.js";
 import { invalidateBrandCache } from "../branding/spa-html.js";
 import { getBroadcastRecipientsCount, startBroadcastJob, getBroadcastJob, cancelBroadcastJob, listBroadcastHistory, getBroadcastHistoryItem, sendDirectTelegramMessage, sendDirectEmail, startListSendJob, getListSendJob } from "../broadcast/broadcast.service.js";
@@ -121,6 +127,7 @@ import {
   serializeAttachments,
   parseAttachments,
   pickField as pickTicketField,
+  deleteTicketAttachments,
 } from "../ticket/attachments.js";
 import {
   notifyAdminsAboutSupportReply,
@@ -137,6 +144,8 @@ adminRouter.use(requireAuth);
 // 🔒 SECURITY: секционный RBAC ДОЛЖЕН стоять ДО регистрации под-роутеров — иначе backup
 // (pg_dump/restore БД) и /languages обходят requireAdminSection (менеджер дампит/перезаписывает БД).
 adminRouter.use(requireAdminSection);
+adminRouter.use("/updates", updateRouter);
+adminRouter.use("/settings/mail-test", mailTestRouter);
 
 /** Обёртка для async-роутов: ошибки передаются в next() и возвращают 500. */
 function asyncRoute(
@@ -1098,6 +1107,7 @@ const createTrialSchema = z.object({
   squadUuids: z.array(z.string().min(1)).max(20).nullable().optional(),
   /** лимит устройств standalone-триала. */
   deviceLimit: z.number().int().min(1).max(100).nullable().optional(),
+  price: z.number().finite().min(0).max(1000000).multipleOf(0.01).optional(),
   durationDays: z.number().int().min(1).max(365),
   /** опциональный лимит трафика триала в байтах (null = из тарифа). */
   trafficLimitBytes: z.number().int().nonnegative().nullable().optional(),
@@ -1120,6 +1130,7 @@ const updateTrialSchema = z.object({
   tariffId: z.string().min(1).nullable().optional(),
   squadUuids: z.array(z.string().min(1)).max(20).nullable().optional(),
   deviceLimit: z.number().int().min(1).max(100).nullable().optional(),
+  price: z.number().finite().min(0).max(1000000).multipleOf(0.01).optional(),
   durationDays: z.number().int().min(1).max(365).optional(),
   /** опциональный лимит трафика триала в байтах (null = из тарифа). */
   trafficLimitBytes: z.number().int().nonnegative().nullable().optional(),
@@ -1138,6 +1149,7 @@ function trialToJson(t: {
   tariffId: string | null;
   squadUuids?: string | null;
   deviceLimit?: number | null;
+  price: number;
   durationDays: number;
   trafficLimitBytes?: bigint | null;
   enabled: boolean;
@@ -1163,6 +1175,7 @@ function trialToJson(t: {
     tariffId: t.tariffId,
     squadUuids: parseArr(t.squadUuids),
     deviceLimit: t.deviceLimit ?? null,
+    price: t.price,
     durationDays: t.durationDays,
     // T16 (12.05.2026) — BigInt → number для JSON; null = используется лимит тарифа.
     trafficLimitBytes: t.trafficLimitBytes != null ? Number(t.trafficLimitBytes) : null,
@@ -1313,6 +1326,7 @@ adminRouter.post("/trials", async (req, res) => {
       tariffId: body.data.tariffId ?? null,
       squadUuids: body.data.squadUuids?.length ? JSON.stringify(body.data.squadUuids) : null,
       deviceLimit: body.data.deviceLimit ?? null,
+      price: body.data.price ?? 0,
       durationDays: body.data.durationDays,
       // T16 (12.05.2026) — отдельный лимит трафика триала (null = из тарифа).
       trafficLimitBytes: body.data.trafficLimitBytes != null ? BigInt(body.data.trafficLimitBytes) : null,
@@ -1343,6 +1357,7 @@ adminRouter.patch("/trials/:id", async (req, res) => {
     tariffId?: string | null;
     squadUuids?: string | null;
     deviceLimit?: number | null;
+    price?: number;
     durationDays?: number;
     trafficLimitBytes?: bigint | null;
     enabled?: boolean;
@@ -1358,6 +1373,7 @@ adminRouter.patch("/trials/:id", async (req, res) => {
     updateData.squadUuids = body.data.squadUuids?.length ? JSON.stringify(body.data.squadUuids) : null;
   }
   if (body.data.deviceLimit !== undefined) updateData.deviceLimit = body.data.deviceLimit ?? null;
+  if (body.data.price !== undefined) updateData.price = body.data.price;
   if (body.data.durationDays !== undefined) updateData.durationDays = body.data.durationDays;
   if (body.data.trafficLimitBytes !== undefined) {
     updateData.trafficLimitBytes = body.data.trafficLimitBytes != null ? BigInt(body.data.trafficLimitBytes) : null;
@@ -1592,64 +1608,18 @@ adminRouter.get("/clients/:id", async (req, res) => {
   return res.json(client);
 });
 
-const updateClientSchema = z.object({
-  email: z.string().email().nullable().optional(),
-  preferredLang: z.string().max(5).optional(),
-  preferredCurrency: z.string().max(5).optional(),
-  balance: z.number().optional(),
-  isBlocked: z.boolean().optional(),
-  blockReason: z.string().nullable().optional(),
-  referralPercent: z.number().min(0).max(100).nullable().optional(),
-  personalDiscountPercent: z.number().min(0).max(100).nullable().optional(),
-  // флаг одноразовости персональной скидки.
-  // true → скидка сгорит после первой продуктовой покупки (mark-paid). false → бессрочно.
-  personalDiscountIsOneTime: z.boolean().optional(),
-});
-
-adminRouter.patch("/clients/:id", async (req, res) => {
+adminRouter.patch("/clients/:id", asyncRoute(async (req, res) => {
   const parsed = clientIdParam.safeParse(req.params);
   if (!parsed.success) return res.status(400).json({ message: "Invalid client id" });
   const body = updateClientSchema.safeParse(req.body);
-  if (!body.success) return res.status(400).json({ message: "Invalid input", errors: body.error.flatten() });
-  const client = await prisma.client.findUnique({ where: { id: parsed.data.id } });
-  if (!client) return res.status(404).json({ message: "Клиент не найден" });
-  const updates: Record<string, unknown> = {};
-  if (body.data.email !== undefined) updates.email = body.data.email;
-  if (body.data.preferredLang !== undefined) updates.preferredLang = body.data.preferredLang;
-  if (body.data.preferredCurrency !== undefined) updates.preferredCurrency = body.data.preferredCurrency;
-  if (body.data.balance !== undefined) updates.balance = body.data.balance;
-  if (body.data.isBlocked !== undefined) updates.isBlocked = body.data.isBlocked;
-  if (body.data.blockReason !== undefined) updates.blockReason = body.data.blockReason;
-  if (body.data.referralPercent !== undefined) updates.referralPercent = body.data.referralPercent;
-  if (body.data.personalDiscountPercent !== undefined) updates.personalDiscountPercent = body.data.personalDiscountPercent;
-  if (body.data.personalDiscountIsOneTime !== undefined) updates.personalDiscountIsOneTime = body.data.personalDiscountIsOneTime;
-  const updated = await prisma.client.update({
-    where: { id: parsed.data.id },
-    data: updates,
-    select: {
-      id: true,
-      email: true,
-      telegramId: true,
-      telegramUsername: true,
-      preferredLang: true,
-      preferredCurrency: true,
-      balance: true,
-      referralCode: true,
-      remnawaveUuid: true,
-      trialUsed: true,
-      isBlocked: true,
-      blockReason: true,
-      referralPercent: true,
-      personalDiscountPercent: true,
-      personalDiscountIsOneTime: true,
-      restrictedTariffIds: true,
-      tariffRestrictionReason: true,
-      createdAt: true,
-      _count: { select: { referrals: true } },
-    },
-  });
-  return res.json(updated);
-});
+  if (!body.success) return res.status(400).json({ message: body.error.issues[0]?.message ?? "Проверьте данные клиента", errors: body.error.flatten() });
+  try {
+    return res.json(await updateAdminClientProfile(parsed.data.id, body.data));
+  } catch (error) {
+    if (error instanceof ClientProfileError) return res.status(error.status).json({ message: error.message });
+    throw error;
+  }
+}));
 
 // T-admin-services (портировано из WolfVPN): вкладка «Услуги» — выдать/забрать доп. устройства подписке (action manage_services).
 adminRouter.get("/clients/:id/services", requireAction("manage_services"), asyncRoute(async (req, res) => {
@@ -2413,10 +2383,45 @@ adminRouter.post("/subscriptions/:subId/grant-extend", asyncRoute(async (req, re
 
   const sub = await prisma.subscription.findUnique({
     where: { id: subId },
-    select: { id: true, ownerId: true, subscriptionIndex: true, tariffId: true, remnawaveUuid: true },
+    select: { id: true, ownerId: true, subscriptionIndex: true, tariffId: true, trialId: true, remnawaveUuid: true },
   });
   if (!sub) return res.status(404).json({ message: "Подписка не найдена" });
   if (!sub.remnawaveUuid) return res.status(400).json({ message: "Подписка не привязана к Remnawave" });
+
+  // Триал / подписка без тарифа и тариф явно не выбран → продлеваем только дату
+  // (лимиты, сквады, trialId не трогаем). Явный tariffId = конвертация в тариф (ниже).
+  if (chooseGrantExtendMode(sub, body.data.tariffId) === "days_only") {
+    const days = body.data.customDurationDays;
+    if (!days) return res.status(400).json({ message: "Укажите срок продления (дней)" });
+    const daysResult = await extendSubscriptionDaysOnly({ id: sub.id, remnawaveUuid: sub.remnawaveUuid }, days);
+    if (!daysResult.ok) {
+      return res.status(daysResult.status >= 400 ? daysResult.status : 500).json({ ok: false, message: daysResult.error });
+    }
+    await logAdmin(req, "subscription.grant_extend", { type: "subscription", id: sub.id }, {
+      tariffId: null,
+      trialId: sub.trialId,
+      mode: "days_only",
+      days,
+      expireAt: daysResult.expireAt.toISOString(),
+      reactivated: daysResult.reactivated,
+      note: body.data.note ?? null,
+    });
+    try {
+      const { notifySubscriptionExtendedByAdmin } = await import("../notification/telegram-notify.service.js");
+      await notifySubscriptionExtendedByAdmin(sub.ownerId, daysResult.expireAt);
+    } catch (e) {
+      console.error("[admin/grant-extend] notify client failed:", e);
+    }
+    return res.json({
+      ok: true,
+      paymentId: null,
+      subscriptionId: sub.id,
+      subscriptionIndex: sub.subscriptionIndex,
+      mode: "days_only",
+      expireAt: daysResult.expireAt.toISOString(),
+      tariff: null,
+    });
+  }
 
   const effectiveTariffId = body.data.tariffId ?? sub.tariffId;
   if (!effectiveTariffId) {
@@ -2721,7 +2726,7 @@ adminRouter.get("/settings", asyncRoute(async (_req, res) => {
 
 /** Версия панели — для мониторинга. Под auth, чтобы не светить наружу. */
 adminRouter.get("/version", asyncRoute(async (_req, res) => {
-  return res.json({ version: APP_VERSION });
+  return res.json(APP_BUILD);
 }));
 
 /**
@@ -2863,11 +2868,18 @@ adminRouter.get("/default-subscription-page-config", asyncRoute(async (req, res)
 }));
 
 const updateSettingsSchema = z.object({
+  maintenanceEnabled: z.boolean().optional(),
+  maintenanceMessage: z.string().trim().max(1000).optional(),
+  remnaAutoSyncEnabled: z.boolean().optional(),
+  remnaAutoSyncIntervalMinutes: z.number().int().min(5).max(1440).optional(),
   activeLanguages: z.string().optional(),
   activeCurrencies: z.string().optional(),
   defaultLanguage: z.string().max(10).optional(),
   defaultCurrency: z.string().max(10).optional(),
-  defaultReferralPercent: z.number().optional(),
+  referralRewardMode: z.enum(["percent", "balance", "days"]).optional(),
+  referralRewardAmount: z.number().finite().min(0.01).max(1000000).multipleOf(0.01).optional(),
+  referralRewardDays: z.number().int().min(1).max(365).optional(),
+  defaultReferralPercent: z.number().min(0).max(100).optional(),
   referralPercentLevel2: z.number().min(0).max(100).optional(),
   referralPercentLevel3: z.number().min(0).max(100).optional(),
   trialDays: z.number().int().min(0).optional(),
@@ -2928,6 +2940,8 @@ const updateSettingsSchema = z.object({
   yookassaWebhookBasicUser: z.string().max(200).nullable().optional(),
   /** Basic-auth password для webhook ЮKassa — security fix против форджинга платежей. */
   yookassaWebhookBasicPassword: z.string().max(500).nullable().optional(),
+  telegramStarsEnabled: z.boolean().optional(),
+  telegramStarsRubPerStar: z.number().finite().min(0).max(1000000).optional(),
   cryptopayApiToken: z.string().max(500).nullable().optional(),
   cryptopayTestnet: z.boolean().optional(),
   heleketMerchantId: z.string().max(500).nullable().optional(),
@@ -2959,7 +2973,10 @@ const updateSettingsSchema = z.object({
   groqFallback2: z.string().max(100).nullable().optional(),
   groqFallback3: z.string().max(100).nullable().optional(),
   aiSystemPrompt: z.string().max(5000).nullable().optional(),
-  botButtons: z.string().max(10000).nullable().optional(),
+  botButtons: botButtonsJsonSchema.nullable().optional(),
+  paymentDescription: z.string().trim().max(128).optional(),
+  botGroupCabinet: z.boolean().optional(),
+  botMenuMode: z.enum(["classic", "web"]).optional(),
   botButtonsPerRow: z.union([z.literal(1), z.literal(2), z.number().int().min(1).max(2)]).optional(),
   botEmojis: z.union([z.string().max(15000), z.record(z.object({ unicode: z.string().max(20).optional(), tgEmojiId: z.string().max(50).optional() }))]).nullable().optional(),
   botBackLabel: z.string().max(200).nullable().optional(),
@@ -3164,6 +3181,7 @@ const updateSettingsSchema = z.object({
   geoMapEnabled: z.boolean().optional(),
   geoCacheTtl: z.number().min(10).max(3600).optional(),
   maxmindDbPath: z.string().max(500).nullable().optional(),
+  liteMode: z.boolean().optional(),
   giftSubscriptionsEnabled: z.boolean().optional(),
   giftCodeExpiryHours: z.number().int().min(1).max(8760).optional(),
   maxAdditionalSubscriptions: z.number().int().min(1).max(100).optional(),
@@ -3232,6 +3250,27 @@ adminRouter.patch("/settings", async (req, res) => {
       update: { value: updates.defaultCurrency },
     });
   }
+  for (const [key, value] of [["remna_auto_sync_enabled", updates.remnaAutoSyncEnabled], ["remna_auto_sync_interval_minutes", updates.remnaAutoSyncIntervalMinutes]] as const) {
+    if (value !== undefined) await prisma.systemSetting.upsert({ where: { key }, create: { key, value: String(value) }, update: { value: String(value) } });
+  }
+  for (const [key, value] of [["maintenance_enabled", updates.maintenanceEnabled], ["maintenance_message", updates.maintenanceMessage]] as const) {
+    if (value !== undefined) await prisma.systemSetting.upsert({ where: { key }, create: { key, value: String(value) }, update: { value: String(value) } });
+  }
+  const referralSettings = [
+    ["referral_reward_mode", updates.referralRewardMode],
+    ["referral_reward_amount", updates.referralRewardAmount],
+    ["referral_reward_days", updates.referralRewardDays],
+  ] as const;
+  await prisma.$transaction(async tx => {
+    const previous = await tx.systemSetting.findUnique({ where: { key: "referral_reward_mode" } });
+    if (updates.referralRewardMode && updates.referralRewardMode !== "percent" && (!previous || previous.value === "percent")) {
+      const now = new Date().toISOString();
+      await tx.systemSetting.upsert({ where: { key: "referral_reward_enabled_at" }, create: { key: "referral_reward_enabled_at", value: now }, update: { value: now } });
+    }
+    for (const [key, value] of referralSettings) {
+      if (value !== undefined) await tx.systemSetting.upsert({ where: { key }, create: { key, value: String(value) }, update: { value: String(value) } });
+    }
+  });
   if (updates.defaultReferralPercent != null) {
     await prisma.systemSetting.upsert({
       where: { key: "default_referral_percent" },
@@ -3510,6 +3549,12 @@ adminRouter.patch("/settings", async (req, res) => {
     const val = updates.yookassaWebhookBasicPassword ?? "";
     await prisma.systemSetting.upsert({ where: { key: "yookassa_webhook_basic_password" }, create: { key: "yookassa_webhook_basic_password", value: val }, update: { value: val } });
   }
+  for (const [field, key] of [["telegramStarsEnabled", "telegram_stars_enabled"], ["telegramStarsRubPerStar", "telegram_stars_rub_per_star"]] as const) {
+    if (updates[field] !== undefined) {
+      const value = String(updates[field]);
+      await prisma.systemSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
+    }
+  }
   if (updates.cryptopayApiToken !== undefined) {
     const val = updates.cryptopayApiToken ?? "";
     await prisma.systemSetting.upsert({ where: { key: "cryptopay_api_token" }, create: { key: "cryptopay_api_token", value: val }, update: { value: val } });
@@ -3633,6 +3678,18 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.botButtons !== undefined) {
     const val = updates.botButtons ?? "";
     await prisma.systemSetting.upsert({ where: { key: "bot_buttons" }, create: { key: "bot_buttons", value: val }, update: { value: val } });
+  }
+  if (updates.paymentDescription !== undefined) {
+    const value = updates.paymentDescription;
+    await prisma.systemSetting.upsert({ where: { key: "payment_description" }, create: { key: "payment_description", value }, update: { value } });
+  }
+  if (updates.botGroupCabinet !== undefined) {
+    const value = String(updates.botGroupCabinet);
+    await prisma.systemSetting.upsert({ where: { key: "bot_group_cabinet" }, create: { key: "bot_group_cabinet", value }, update: { value } });
+  }
+  if (updates.botMenuMode !== undefined) {
+    const value = updates.botMenuMode;
+    await prisma.systemSetting.upsert({ where: { key: "bot_menu_mode" }, create: { key: "bot_menu_mode", value }, update: { value } });
   }
   if (updates.botButtonsPerRow !== undefined) {
     const val = updates.botButtonsPerRow === 2 ? "2" : "1";
@@ -4195,6 +4252,7 @@ adminRouter.patch("/settings", async (req, res) => {
     });
   }
   const giftKeys: [keyof typeof updates, string][] = [
+    ["liteMode", "lite_mode"],
     ["giftSubscriptionsEnabled", "gift_subscriptions_enabled"],
     ["giftCodeExpiryHours", "gift_code_expiry_hours"],
     ["maxAdditionalSubscriptions", "max_additional_subscriptions"],
@@ -4371,6 +4429,20 @@ adminRouter.post("/tickets/:id/messages", uploadTicketAttachment.array("files", 
     attachments: parseAttachments(msg.attachments),
     createdAt: msg.createdAt.toISOString(),
   });
+}));
+
+// Удаление тикета админом (каскадное удаление сообщений в БД + удаление файлов с диска)
+adminRouter.delete("/tickets/:id", asyncRoute(async (req, res) => {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: req.params.id },
+    include: { messages: { select: { attachments: true } } },
+  });
+  if (!ticket) return res.status(404).json({ message: "Тикет не найден" });
+
+  await prisma.ticket.delete({ where: { id: ticket.id } });
+  await deleteTicketAttachments(ticket.messages.map((m) => m.attachments));
+
+  return res.json({ success: true, id: ticket.id });
 }));
 
 // Синхронизация с Remna
@@ -5045,6 +5117,8 @@ const createPromoCodeSchema = z.object({
   type: z.enum(["DISCOUNT", "FREE_DAYS"]),
   discountPercent: z.number().min(0).max(100).nullable().optional(),
   discountFixed: z.number().min(0).nullable().optional(),
+  tariffId: z.string().min(1).nullable().optional(),
+  tariffPriceOptionId: z.string().min(1).nullable().optional(),
   squadUuid: z.string().nullable().optional(),
   trafficLimitBytes: z.union([z.string(), z.number()]).transform((v) => (v != null ? BigInt(v) : null)).nullable().optional(),
   deviceLimit: z.number().int().min(0).nullable().optional(),
@@ -5065,6 +5139,11 @@ adminRouter.post("/promo-codes", async (req, res) => {
   const exists = await prisma.promoCode.findUnique({ where: { code: d.code } });
   if (exists) return res.status(400).json({ message: "Промокод с таким кодом уже существует" });
 
+  let freeDays = {};
+  if (d.type === "FREE_DAYS") {
+    try { freeDays = await freeDaysSettings(d); }
+    catch (e) { if (e instanceof PromoCodeError) return res.status(e.status).json({ message: e.message }); throw e; }
+  }
   const code = await prisma.promoCode.create({
     data: {
       code: d.code,
@@ -5076,6 +5155,7 @@ adminRouter.post("/promo-codes", async (req, res) => {
       trafficLimitBytes: d.type === "FREE_DAYS" ? (d.trafficLimitBytes ?? BigInt(0)) : null,
       deviceLimit: d.type === "FREE_DAYS" ? (d.deviceLimit ?? null) : null,
       durationDays: d.type === "FREE_DAYS" ? (d.durationDays ?? null) : null,
+      ...freeDays,
       maxUses: d.maxUses,
       maxUsesPerClient: d.maxUsesPerClient,
       isActive: d.isActive ?? true,
@@ -5090,6 +5170,8 @@ const updatePromoCodeSchema = z.object({
   type: z.enum(["DISCOUNT", "FREE_DAYS"]).optional(),
   discountPercent: z.number().min(0).max(100).nullable().optional(),
   discountFixed: z.number().min(0).nullable().optional(),
+  tariffId: z.string().min(1).nullable().optional(),
+  tariffPriceOptionId: z.string().min(1).nullable().optional(),
   squadUuid: z.string().nullable().optional(),
   trafficLimitBytes: z.union([z.string(), z.number()]).transform((v) => (v != null ? BigInt(v) : null)).nullable().optional(),
   deviceLimit: z.number().int().min(0).nullable().optional(),
@@ -5109,6 +5191,15 @@ adminRouter.patch("/promo-codes/:id", async (req, res) => {
   if (!existing) return res.status(404).json({ message: "Not found" });
 
   const data: Record<string, unknown> = { ...parsed.data };
+  const merged = { ...existing, ...parsed.data };
+  const configChanged = ["type", "tariffId", "tariffPriceOptionId", "durationDays", "squadUuid", "trafficLimitBytes", "deviceLimit"]
+    .some((key) => key in parsed.data);
+  if (merged.type === "FREE_DAYS" && configChanged) {
+    try { Object.assign(data, await freeDaysSettings(merged)); }
+    catch (e) { if (e instanceof PromoCodeError) return res.status(e.status).json({ message: e.message }); throw e; }
+  } else if (merged.type === "DISCOUNT") {
+    Object.assign(data, { tariffId: null, tariffPriceOptionId: null, squadUuid: null, durationDays: null, trafficLimitBytes: null, deviceLimit: null });
+  }
   if (data.expiresAt !== undefined) {
     data.expiresAt = data.expiresAt ? new Date(data.expiresAt as string) : null;
   }
@@ -7423,7 +7514,7 @@ adminRouter.get("/referrals/:id", asyncRoute(async (req, res) => {
           amount: true,
           status: true,
           clientId: true,
-          client: { select: { id: true, telegramId: true, telegramUsername: true } },
+          client: { select: { id: true, telegramId: true, telegramUsername: true, email: true } },
         },
       },
     },

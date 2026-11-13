@@ -179,8 +179,8 @@ export function BackupPage() {
     setError(null);
     setSuccess(null);
     if (file) {
-      if (!file.name.toLowerCase().endsWith(".sql")) {
-        setError("Выберите файл бэкапа с расширением .sql");
+      if (!/\.sql(?:\.gz)?$/i.test(file.name)) {
+        setError("Выберите файл бэкапа с расширением .sql или .sql.gz");
         setRestoreFile(null);
         return;
       }
@@ -288,7 +288,7 @@ export function BackupPage() {
               <div className="min-w-0">
                 <h3 className="text-base font-bold tracking-tight">Восстановить из файла</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Загрузите .sql — текущие данные будут заменены.
+                  Загрузите .sql или .sql.gz — текущие данные будут заменены.
                 </p>
               </div>
             </div>
@@ -299,11 +299,11 @@ export function BackupPage() {
                 className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-amber-500/30 bg-amber-500/5 px-4 py-6 text-center transition-colors ${restoring ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-amber-500/50 hover:bg-amber-500/10"}`}
               >
                 <Upload className="h-6 w-6 text-amber-500 dark:text-amber-400" />
-                <span className="text-sm font-medium">Перетащи .sql сюда или нажми для выбора</span>
+                <span className="text-sm font-medium">Перетащи .sql или .sql.gz сюда или нажми для выбора</span>
                 <span className="text-[11px] text-muted-foreground">Текущие данные будут заменены — подтверждение спросим отдельно</span>
                 <input
                   type="file"
-                  accept=".sql"
+                  accept=".sql,.sql.gz,application/gzip,application/x-gzip"
                   onChange={handleRestoreSelect}
                   className="hidden"
                   disabled={restoring}

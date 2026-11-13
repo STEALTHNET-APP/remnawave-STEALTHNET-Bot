@@ -1,4 +1,6 @@
 import type { Request } from "express";
+import fs from "fs/promises";
+import path from "path";
 import { ticketAttachmentUrl } from "../../lib/upload.js";
 
 /**
@@ -61,4 +63,24 @@ export function pickField(req: Request, key: string): string {
   if (typeof v === "string") return v;
   if (Array.isArray(v) && typeof v[0] === "string") return v[0];
   return "";
+}
+
+/** Безопасно удалить с диска файлы вложений тикета */
+export async function deleteTicketAttachments(attachmentsList: (string | null | undefined)[]): Promise<void> {
+  const uploadsDir = "/app/uploads/tickets";
+  for (const raw of attachmentsList) {
+    const list = parseAttachments(raw);
+    for (const att of list) {
+      if (!att.url) continue;
+      const filename = path.basename(att.url);
+      if (filename) {
+        const filePath = path.join(uploadsDir, filename);
+        try {
+          await fs.unlink(filePath);
+        } catch {
+          // ignore error if file not found
+        }
+      }
+    }
+  }
 }

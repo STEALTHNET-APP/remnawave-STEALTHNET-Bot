@@ -1,3 +1,5 @@
+import { PromoCodeForm } from "@/components/cabinet/promo-code-form";
+import { ReferralQrButton } from "@/components/referral-qr";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -136,6 +138,7 @@ export function ClientDashboardPage() {
     <>
       <LinkTelegramPrompt />
       {design === "stealth" ? <StealthDashboard /> : <ClassicDashboardPage compact={design === "aurora"} />}
+      {design !== "stealth" && <section className="mt-4 rounded-2xl border border-border bg-card p-4"><PromoCodeForm /></section>}
     </>
   );
 }
@@ -254,6 +257,11 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   const subscription = subQuery.data?.subscription ?? null;
   const subscriptionError = (subQuery.data?.message as string | undefined) ?? (subQuery.error instanceof Error ? subQuery.error.message : null);
   const tariffDisplayName = subQuery.data?.tariffDisplayName ?? null;
+  const mainBan = {
+    isBanned: subQuery.data?.isBanned === true,
+    banReason: subQuery.data?.banReason ?? null,
+    bannedUntil: subQuery.data?.bannedUntil ?? null,
+  };
   const autoRenewNext = {
     amount: subQuery.data?.autoRenewNextChargeAmount ?? null,
     at: subQuery.data?.autoRenewNextChargeAt ?? null,
@@ -578,11 +586,31 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
     />
   );
 
+  const BanNotice = ({ until }: { until: string | null }) => {
+    let untilStr = "";
+    if (until) {
+      const date = new Date(until);
+      if (!isNaN(date.getTime())) {
+        untilStr = date.toLocaleString("ru-RU", {
+          day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+        });
+      }
+    }
+    return (
+      <div className="rounded-2xl bg-red-500/10 border border-red-500/30 px-4 py-3">
+        <p className="text-sm font-semibold text-red-600 dark:text-red-400 leading-relaxed">
+          🚫 Подписка заблокирована за превышение трафика{untilStr ? ` до ${untilStr}` : ""}.
+          <br />Подключение отключено, действия недоступны до разблокировки.
+        </p>
+      </div>
+    );
+  };
+
   // единая кнопка действия root-подписки (для всех 3 мест рендера):
   // обычная → «Продлить» (модалка); триал → «Конвертировать» (выбор тарифа в каталоге);
   // триал с запрещённой конвертацией → кнопки нет вовсе.
   const rootActionNode = (cls: string, iconCls: string, txtCls: string, label = "Продлить") => {
-    if (!rootSubId) return null;
+    if (!rootSubId || mainBan.isBanned) return null;
     if (rootTrial.isTrial) {
       if (!rootTrial.convertEnabled) return null;
       return (
@@ -603,7 +631,8 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   };
 
   // то же для ЛЮБОЙ secondary-подписки (унифицировано с root).
-  const secActionNode = (sec: { id: string; trialId?: string | null; trialConvertEnabled?: boolean }, cls: string, iconCls: string, txtCls: string) => {
+  const secActionNode = (sec: { id: string; trialId?: string | null; trialConvertEnabled?: boolean; isBanned?: boolean }, cls: string, iconCls: string, txtCls: string) => {
+    if (sec.isBanned) return null;
     if (sec.trialId) {
       if (sec.trialConvertEnabled === false) return null;
       return (
@@ -690,6 +719,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
             {giftRedeemMessage.type === "success" ? "🎁 " : "❌ "}{giftRedeemMessage.text}
           </div>
         )}
+        {mainBan.isBanned && <BanNotice until={mainBan.bannedUntil} />}
 
         {config?.botInfoBlock?.trim() && (
           <div className="rounded-2xl border border-primary/30 bg-primary/5 backdrop-blur-md px-4 py-3 text-sm whitespace-pre-line shadow-sm">
@@ -796,7 +826,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                 </div>
               </div>
               {/* T-main-connect (WolfVPN): ссылка подписки + кнопка «Подключиться» прямо в карточке основной подписки (как у доп.подписок) */}
-              {vpnUrl && (
+              {vpnUrl && !mainBan.isBanned && (
                 <>
                   <div className="flex gap-2 min-w-0 pt-1">
                     <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={vpnUrl}>
@@ -852,6 +882,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
               </h2>
 
               <div className="space-y-4 min-w-0">
+                {sec.isBanned && <BanNotice until={sec.bannedUntil ?? null} />}
                 <div className="flex items-center gap-2 flex-wrap">
                   {secHasActive ? (
                     <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold bg-indigo-500/20 text-indigo-400 border border-indigo-500/20">
@@ -929,7 +960,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                 </div>
 
                 {/* T-sub-link (WolfVPN, 2026-06-03): ссылка подписки доп.подписки + копирование прямо на главной (без захода в «Подключиться»). */}
-                {secParsed.subscriptionUrl && (
+                {secParsed.subscriptionUrl && !sec.isBanned && (
                   <div className="flex gap-2 min-w-0 pt-1">
                     <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={secParsed.subscriptionUrl}>
                       {secParsed.subscriptionUrl}
@@ -939,7 +970,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                     </Button>
                   </div>
                 )}
-                <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                {!sec.isBanned && <div className="pt-2 flex flex-col sm:flex-row gap-2">
                   <Button className="flex-1 gap-2 shadow-lg h-12 rounded-xl text-md hover:scale-[1.02] transition-transform duration-300 [&_svg]:self-center [&_span]:leading-none bg-indigo-600 hover:bg-indigo-700 text-white" asChild>
                     {useRemnaPage && secParsed.subscriptionUrl ? (
                       <a href={secParsed.subscriptionUrl} target="_blank" rel="noopener noreferrer" className="inline-flex w-full items-center justify-center gap-2">
@@ -953,7 +984,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                       </Link>
                     )}
                   </Button>
-                </div>
+                </div>}
               </div>
             </section>
           );
@@ -1069,6 +1100,31 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
             </Link>
           </Button>
         </section>
+
+        {config?.rouletteEnabled !== false && (
+          <Link
+            to="/cabinet/roulette"
+            className="order-3 group relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 via-purple-500/10 to-pink-500/10 p-4 transition-all duration-300 hover:border-primary/50 flex items-center justify-between gap-3 shadow-sm"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-purple-600 text-xl text-white shadow-md shadow-primary/25">
+                🎰
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-foreground">Рулетка удачи</h3>
+                  <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-[9px] font-bold text-primary uppercase">
+                    Бесплатно
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Крутите и получайте ежедневные призы
+                </p>
+              </div>
+            </div>
+            <ArrowRight className="h-4 w-4 text-primary shrink-0 transition-transform group-hover:translate-x-1" />
+          </Link>
+        )}
       </div>
       {trialsPickerNode}
       {paySuccessModalNode}
@@ -1081,6 +1137,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
   return (
     <>
     <div ref={pageRef} className="classic-dashboard flex flex-col gap-6 w-full min-w-0 mx-auto">
+      {mainBan.isBanned && <BanNotice until={mainBan.bannedUntil} />}
       {/* Hero + CTA */}
       <motion.section
         initial={{ opacity: 0, y: 12 }}
@@ -1154,6 +1211,40 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
         <div className="rounded-2xl border border-primary/30 bg-primary/5 backdrop-blur-md px-5 py-4 text-sm whitespace-pre-line shadow-sm">
           {config.botInfoBlock.trim()}
         </div>
+      )}
+
+      {config?.rouletteEnabled !== false && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.1 }}
+        >
+          <Link
+            to="/cabinet/roulette"
+            className="group relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 via-purple-500/10 to-pink-500/10 p-5 transition-all duration-300 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 flex items-center justify-between gap-4 backdrop-blur-xl"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-purple-600 text-2xl text-white shadow-md shadow-primary/25 group-hover:scale-105 transition-transform">
+                🎰
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-foreground">Рулетка удачи</h3>
+                  <span className="inline-flex items-center rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wide">
+                    Бесплатно
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Крутите колесо каждый день и получайте бонусы, дни подписки и скидки!
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-primary shrink-0">
+              <span className="hidden sm:inline">Испытать удачу</span>
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </div>
+          </Link>
+        </motion.div>
       )}
 
       {/* Cards grid */}
@@ -1255,7 +1346,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                   )}
                 </div>
                 {/* T-main-connect (WolfVPN): ссылка подписки + кнопка «Подключиться» в карточке основной подписки (desktop) */}
-                {vpnUrl && (
+                {vpnUrl && !mainBan.isBanned && (
                   <>
                     <div className="flex gap-2 min-w-0">
                       <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={vpnUrl}>
@@ -1397,12 +1488,13 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                 )}
                 <div className="rounded-2xl border border-border/40 bg-background/30 backdrop-blur-xl divide-y divide-border/40 overflow-hidden">
                   {referralLinkSite && (
+                    <div className="flex min-w-0 items-center gap-2 pr-3">
                     <button
                       type="button"
                       onClick={() => copyReferral("site")}
                       title={referralLinkSite}
                       aria-label={referralCopied === "site" ? "Ссылка на сайт скопирована" : "Скопировать реферальную ссылку на сайт"}
-                      className="group/row w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-primary/[0.06] transition-colors"
+                      className="group/row min-w-0 flex-1 flex items-center gap-3 px-3.5 py-3 text-left hover:bg-primary/[0.06] transition-colors"
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
                         <Globe className="h-4 w-4 text-primary" />
@@ -1415,14 +1507,17 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                         {referralCopied === "site" ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                       </span>
                     </button>
+                    <ReferralQrButton code={client.referralCode!} links={[{ kind: "site", url: referralLinkSite }]} />
+                    </div>
                   )}
                   {referralLinkBot && (
+                    <div className="flex min-w-0 items-center gap-2 pr-3">
                     <button
                       type="button"
                       onClick={() => copyReferral("bot")}
                       title={referralLinkBot}
                       aria-label={referralCopied === "bot" ? "Ссылка на бота скопирована" : "Скопировать реферальную ссылку на бота"}
-                      className="group/row w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-violet-500/[0.06] transition-colors"
+                      className="group/row min-w-0 flex-1 flex items-center gap-3 px-3.5 py-3 text-left hover:bg-violet-500/[0.06] transition-colors"
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
                         <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
@@ -1435,6 +1530,8 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                         {referralCopied === "bot" ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                       </span>
                     </button>
+                    <ReferralQrButton code={client.referralCode!} links={[{ kind: "bot", url: referralLinkBot }]} />
+                    </div>
                   )}
                 </div>
                 <div className="mt-auto pt-1">
@@ -1529,6 +1626,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                   </CardHeader>
                   <CardContent className="dashboard-subscription-body flex-1 flex flex-col">
                     <div className="dashboard-subscription-details space-y-4">
+                      {sec.isBanned && <BanNotice until={sec.bannedUntil ?? null} />}
                       <div className="flex items-center gap-2 flex-wrap mb-2">
                         {secDaysLeft != null && (
                           <span className="text-sm font-semibold text-foreground bg-foreground/5 px-3 py-1.5 rounded-full border border-border/50 shadow-sm">
@@ -1595,7 +1693,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                       </div>
 
                       {/* T-sub-link (WolfVPN, 2026-06-03): ссылка подписки доп.подписки + копирование прямо на главной (без захода в «Подключиться»). */}
-                      {secParsed.subscriptionUrl && (
+                      {secParsed.subscriptionUrl && !sec.isBanned && (
                         <div className="flex gap-2 min-w-0 pt-1 mb-2">
                           <code className="flex-1 min-w-0 truncate rounded-xl bg-background/50 border border-border/50 px-3 py-2.5 text-xs font-mono flex items-center text-foreground/80" title={secParsed.subscriptionUrl}>
                             {secParsed.subscriptionUrl}
@@ -1605,7 +1703,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                           </Button>
                         </div>
                       )}
-                      <div className="pt-2 flex flex-col gap-2">
+                      {!sec.isBanned && <div className="pt-2 flex flex-col gap-2">
                         <Button variant="default" size="lg" className="w-full gap-2 rounded-xl shadow-lg h-14 text-[16px] hover:scale-105 transition-transform [&_svg]:self-center [&_span]:leading-none bg-indigo-600 hover:bg-indigo-700 text-white" asChild>
                           {useRemnaPage && secParsed.subscriptionUrl ? (
                             <a href={secParsed.subscriptionUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 leading-none">
@@ -1619,7 +1717,7 @@ function ClassicDashboardPage({ compact = false }: { compact?: boolean }) {
                             </Link>
                           )}
                         </Button>
-                      </div>
+                      </div>}
 
                     </div>
                   </CardContent>

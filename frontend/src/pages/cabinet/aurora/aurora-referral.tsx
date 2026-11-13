@@ -1,3 +1,6 @@
+import { ReferralRewardSummary, referralRewardDescription } from "@/components/referral-reward-summary";
+import { ReferralQrLinks } from "@/components/referral-qr";
+import { buildReferralLinks } from "@/lib/referral-links";
 /**
  * AuroraReferral — вкладка «Друзья» третьего дизайна мини-аппа.
  *
@@ -12,7 +15,7 @@
  * `getPublicConfig` (из конфига берём юзернейм бота для t.me-ссылки).
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Copy, Check, Send, Users } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
 import { api, type ClientReferralStats, type PublicConfig } from "@/lib/api";
@@ -58,16 +61,8 @@ export function AuroraReferral() {
   }, [state.token]);
 
   // Ссылка на бота предпочтительнее сайтовой: друг попадает сразу в мини-апп.
-  const link = useMemo(() => {
-    if (!stats?.referralCode) return null;
-    if (config?.telegramBotUsername) {
-      return `https://t.me/${config.telegramBotUsername.replace(/^@/, "")}?start=ref_${stats.referralCode}`;
-    }
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/cabinet/register?ref=${encodeURIComponent(stats.referralCode)}`;
-    }
-    return null;
-  }, [stats, config]);
+  const links = buildReferralLinks(stats?.referralCode, config?.publicAppUrl || window.location.origin, config?.telegramBotUsername);
+  const link = links.find((item) => item.kind === "bot")?.url ?? links[0]?.url ?? null;
 
   const currency = state.client?.preferredCurrency ?? "rub";
   const friends = stats?.referralCount ?? 0;
@@ -123,8 +118,10 @@ export function AuroraReferral() {
     <div className="space-y-3">
       <header className="px-1 pb-1">
         <h1 className="text-[26px] font-extrabold leading-tight tracking-tight">Друзья</h1>
-        <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">Приглашайте — получайте процент с их оплат</p>
+        <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">{stats ? referralRewardDescription(stats) : "Приглашайте друзей — получайте бонусы"}</p>
       </header>
+
+      {stats && <ReferralRewardSummary stats={stats} />}
 
       {/* ── Накоплено и друзья ── */}
       <section className="relative overflow-hidden rounded-[26px] bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] p-5 text-white">
@@ -150,12 +147,9 @@ export function AuroraReferral() {
 
       {/* ── Ссылка ── */}
       <section className="rounded-[22px] bg-[var(--au-surface)] p-4">
-        <p className="text-[13px] font-semibold text-[var(--au-muted)]">Ваша ссылка</p>
-        <div className="mt-2.5 rounded-[16px] bg-[var(--au-bg)] p-3.5">
-          <p className="break-all font-mono text-[13px] leading-relaxed">
-            {link ?? "Ссылка появится после привязки аккаунта"}
-          </p>
-        </div>
+        {stats?.referralCode && links.length > 0
+          ? <ReferralQrLinks code={stats.referralCode} links={links} />
+          : <p className="text-sm">Ссылки пока недоступны</p>}
         <div className="mt-3 grid grid-cols-2 gap-2.5">
           <button
             type="button"
@@ -188,7 +182,7 @@ export function AuroraReferral() {
           {[
             "Отправьте ссылку другу — в чат, сторис или куда удобно.",
             "Друг переходит по ней и оформляет подписку.",
-            "Процент с его оплаты падает вам на баланс — им можно платить за свою подписку.",
+            stats ? referralRewardDescription(stats) : "Получайте бонусы за приглашения.",
           ].map((step, i) => (
             <li key={i} className="flex gap-3">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-[13px] font-bold text-white">

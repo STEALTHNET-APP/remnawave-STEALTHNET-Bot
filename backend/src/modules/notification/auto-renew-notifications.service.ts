@@ -10,7 +10,8 @@
  *
  * Дедуп: cron бежит ЕЖЕМИНУТНО, поэтому каждое событие без дедупа = спам раз в минуту.
  * Храним в `subscriptions.last_notified_key` (и `clients.last_arn_notified_key`) JSON-карту
- * `{ "<маркер>": "<bucket>" }`, где bucket = floor(now / ttl). Раньше хранился ОДИН ключ
+ * `{ "<маркер>": "<bucket>" }`, где bucket = floor(now / ttl); для UPCOMING bucket = `exp<expireAt ms>` —
+ * шаблон уходит один раз за цикл подписки, продление (новый expireAt) сбрасывает дедуп. Раньше хранился ОДИН ключ
  * последнего шаблона — два разных шаблона (например UPCOMING и FAILED) затирали друг друга
  * и оба слались каждую минуту. Карта делает дедуп независимым per-шаблон.
  *
@@ -30,6 +31,7 @@
 import { prisma } from "../../db.js";
 import { sendTelegramToUser } from "./telegram-notify.service.js";
 import { getSystemConfig } from "../client/client.service.js";
+import { pickDueUpcomingTemplates, upcomingDedupBucket } from "./auto-renew-schedule.js";
 
 export type AutoRenewTriggerType = "UPCOMING" | "SUCCESS" | "FAILED" | "RETRY" | "EXPIRED";
 
@@ -103,20 +105,74 @@ function capDedupMap(map: Record<string, string>): Record<string, string> {
  * Возвращает true если маркер ещё не ставился в текущем bucket (действие разрешено),
  * false — если уже было (пропустить). Маркер записывается сразу же (mark-then-act).
  */
-export async function tryMarkSubDedup(subscriptionId: string, marker: string, ttlMs: number): Promise<boolean> {
-  const bucket = String(Math.floor(Date.now() / ttlMs));
-  const sec = await prisma.subscription.findUnique({
-    where: { id: subscriptionId },
-    select: { lastNotifiedKey: true },
-  }).catch(() => null);
-  const map = parseDedupMap(sec?.lastNotifiedKey);
-  if (map[marker] === bucket) return false;
-  map[marker] = bucket;
-  await prisma.subscription.update({
-    where: { id: subscriptionId },
-    data: { lastNotifiedKey: JSON.stringify(capDedupMap(map)) },
-  }).catch(() => {});
-  return true;
+export async function tryMarkSubDedup(
+  subscriptionId: string,
+  marker: string,
+  ttlMs: number,
+  bucketOverride?: string,
+): Promise<boolean> {
+  return claimDedupMarker(
+    async () => (await prisma.subscription.findUnique({ where: { id: subscriptionId }, select: { lastNotifiedKey: true } }))?.lastNotifiedKey,
+    async (previous, next) => (await prisma.subscription.updateMany({
+      where: { id: subscriptionId, lastNotifiedKey: previous },
+      data: { lastNotifiedKey: next },
+    })).count === 1,
+    marker, ttlMs, bucketOverride,
+  );
+}
+
+export async function tryMarkClientDedup(
+  clientId: string,
+  marker: string,
+  ttlMs: number,
+  bucketOverride?: string,
+): Promise<boolean> {
+  return claimDedupMarker(
+    async () => (await prisma.client.findUnique({ where: { id: clientId }, select: { lastArnNotifiedKey: true } }))?.lastArnNotifiedKey,
+    async (previous, next) => (await prisma.client.updateMany({
+      where: { id: clientId, lastArnNotifiedKey: previous },
+      data: { lastArnNotifiedKey: next },
+    })).count === 1,
+    marker, ttlMs, bucketOverride,
+  );
+}
+
+async function claimDedupMarker(
+  read: () => Promise<string | null | undefined>,
+  write: (previous: string | null, next: string) => Promise<boolean>,
+  marker: string,
+  ttlMs: number,
+  bucketOverride?: string,
+): Promise<boolean> {
+  const bucket = bucketOverride ?? String(Math.floor(Date.now() / ttlMs));
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const previous = await read();
+    if (previous === undefined) return false;
+    const map = parseDedupMap(previous);
+    if (map[marker] === bucket) return false;
+    map[marker] = bucket;
+    if (await write(previous, JSON.stringify(capDedupMap(map)))) return true;
+  }
+  return false;
+}
+
+async function releaseNotificationClaim(context: AutoRenewNotifContext, marker: string, bucketFor: (ttl: number) => string) {
+  const sec = context.dedupKeyForSec;
+  const root = context.dedupKeyForRoot;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const previous = sec
+      ? (await prisma.subscription.findUnique({ where: { id: sec.secondarySubscriptionId }, select: { lastNotifiedKey: true } }))?.lastNotifiedKey
+      : root ? (await prisma.client.findUnique({ where: { id: root.clientId }, select: { lastArnNotifiedKey: true } }))?.lastArnNotifiedKey : undefined;
+    if (previous == null) return;
+    const map = parseDedupMap(previous);
+    if (map[marker] !== bucketFor((sec ?? root)?.ttlMs ?? 3600000)) return;
+    delete map[marker];
+    const next = JSON.stringify(map);
+    const result = sec
+      ? await prisma.subscription.updateMany({ where: { id: sec.secondarySubscriptionId, lastNotifiedKey: previous }, data: { lastNotifiedKey: next } })
+      : await prisma.client.updateMany({ where: { id: root!.clientId, lastArnNotifiedKey: previous }, data: { lastArnNotifiedKey: next } });
+    if (result.count) return;
+  }
 }
 
 function renderTemplate(template: string, ctx: AutoRenewNotifContext): string {
@@ -160,17 +216,12 @@ export async function dispatchAutoRenewNotification(
   });
   if (templates.length === 0) return 0;
 
-  // Для UPCOMING — фильтруем по offsetMinutes (с допуском ± половина interval cron).
+  // Для UPCOMING — шаблон наступает, когда осталось <= offsetMinutes; уходит только ближайший.
+  // Однократность на цикл подписки — дедуп по expireAt (см. upcomingDedupBucket).
   let matched = templates;
   if (triggerType === "UPCOMING") {
     if (context.minutesLeft == null) return 0;
-    const ml = context.minutesLeft;
-    matched = templates.filter((t) => {
-      // |timeLeft - offset| < window → ровно «за N минут до».
-      // Окно = max(30 мин, offset * 0.1) — для дальних дат больше допуск.
-      const window = Math.max(30, Math.min(60, t.offsetMinutes * 0.1));
-      return Math.abs(ml - t.offsetMinutes) < window;
-    });
+    matched = pickDueUpcomingTemplates(templates, context.minutesLeft);
   }
   if (matched.length === 0) return 0;
 
@@ -184,29 +235,32 @@ export async function dispatchAutoRenewNotification(
   const cfg = await getSystemConfig();
   const backLabel = (cfg.botBackLabel ?? "🏠 Главное меню").trim() || "🏠 Главное меню";
 
+  const notificationTime = Date.now();
+  const dedupBucketFor = (ttlMs: number): string =>
+    triggerType === "UPCOMING"
+      ? upcomingDedupBucket(context.expireAt, notificationTime, ttlMs)
+      : String(Math.floor(notificationTime / ttlMs));
+
   let sentCount = 0;
   for (const t of matched) {
     // Дедуп per-шаблон (JSON-карта). Ключ карты = id шаблона, значение = текущий bucket.
     if (context.dedupKeyForSec?.secondarySubscriptionId) {
       const ttl = context.dedupKeyForSec.ttlMs ?? 60 * 60 * 1000;
-      const allowed = await tryMarkSubDedup(context.dedupKeyForSec.secondarySubscriptionId, t.id, ttl);
+      const allowed = await tryMarkSubDedup(
+        context.dedupKeyForSec.secondarySubscriptionId,
+        t.id,
+        ttl,
+        dedupBucketFor(ttl),
+      );
       if (!allowed) continue;
     }
     // Дедуп для root — та же карта, но в clients.lastArnNotifiedKey.
     if (context.dedupKeyForRoot?.clientId) {
       const ttl = context.dedupKeyForRoot.ttlMs ?? 60 * 60 * 1000;
-      const bucket = String(Math.floor(Date.now() / ttl));
-      const cli = await prisma.client.findUnique({
-        where: { id: context.dedupKeyForRoot.clientId },
-        select: { lastArnNotifiedKey: true },
-      }).catch(() => null);
-      const map = parseDedupMap(cli?.lastArnNotifiedKey);
-      if (map[t.id] === bucket) continue;
-      map[t.id] = bucket;
-      await prisma.client.update({
-        where: { id: context.dedupKeyForRoot.clientId },
-        data: { lastArnNotifiedKey: JSON.stringify(capDedupMap(map)) },
-      }).catch(() => {});
+      const allowed = await tryMarkClientDedup(
+        context.dedupKeyForRoot.clientId, t.id, ttl, dedupBucketFor(ttl),
+      );
+      if (!allowed) continue;
     }
 
     const text = renderTemplate(t.messageText, context);
@@ -216,9 +270,13 @@ export async function dispatchAutoRenewNotification(
         [{ text: backLabel, callback_data: "menu:main" }],
       ],
     };
-    await sendTelegramToUser(client.telegramId, text, null, replyMarkup, { clientIdForBotToken: client.id })
-      .catch((e) => console.error(`[arn-notif] sendTelegramToUser failed for client ${clientId}, template ${t.id}:`, e));
-    sentCount += 1;
+    try {
+      await sendTelegramToUser(client.telegramId, text, null, replyMarkup, { clientIdForBotToken: client.id, throwOnError: true });
+      sentCount += 1;
+    } catch (error) {
+      await releaseNotificationClaim(context, t.id, dedupBucketFor);
+      console.error(`[arn-notif] sendTelegramToUser failed for client ${clientId}, template ${t.id}:`, error);
+    }
   }
   return sentCount;
 }

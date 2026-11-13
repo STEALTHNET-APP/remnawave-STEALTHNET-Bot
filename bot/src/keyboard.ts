@@ -1,8 +1,11 @@
+import { menuWebAppUrl } from "./menu-web-app.js";
+import { isBotButtonUrl } from "./button-url.js";
 /**
  * Inline-клавиатуры с цветными кнопками (Telegram Bot API: style — primary, success, danger).
  * Эмодзи в тексте кнопок (Unicode).
  */
 import { t as _t } from "./i18n.js";
+import type { DeviceScreen } from "./device-flow.js";
 
 type ButtonStyle = "primary" | "success" | "danger";
 
@@ -17,7 +20,49 @@ type WebAppButton = { text: string; web_app: { url: string }; icon_custom_emoji_
 type UrlButton = { text: string; url: string; icon_custom_emoji_id?: string; style?: ButtonStyle };
 export type InlineMarkup = { inline_keyboard: (InlineButton | WebAppButton | UrlButton)[][] };
 
-export type BotButtonConfig = { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean };
+export type BotButtonConfig = { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; url?: string };
+
+type DeviceButtonTheme = {
+  botButtons?: (BotButtonConfig & { emojiKey?: string })[] | null;
+  botEmojis?: Record<string, { unicode?: string; tgEmojiId?: string }> | null;
+  botBackLabel?: string | null;
+  botInnerButtonStyles?: InnerButtonStyles | null;
+};
+
+/** Reuse the public menu binding, including a deliberately disabled emoji or neutral style. */
+function deviceButton(data: string, theme?: DeviceButtonTheme | null, label?: string): InlineButton {
+  const configured = theme?.botButtons?.find(b => b.id === "devices");
+  // Public config already resolves the binding; an absent key on an existing
+  // button can mean the admin disabled replacement or supplied a Unicode label.
+  const key = configured ? configured.emojiKey : "DEVICES";
+  const entry = key ? theme?.botEmojis?.[key] : undefined;
+  const icon = configured ? configured.iconCustomEmojiId : entry?.tgEmojiId;
+  const text = label ?? configured?.label ?? "Устройства";
+  const unicode = entry?.unicode?.trim() || (configured ? configured.label.match(LEADING_EMOJI_RE)?.[0].trim() || "" : "📱");
+  const styledText = icon || !unicode || /^\p{Extended_Pictographic}/u.test(text) ? text : `${unicode} ${text}`;
+  return btn(styledText, data, resolveStyle(toStyle(configured?.style), "primary"), icon);
+}
+
+/** Render internal appearance hints here; only Telegram fields leave this boundary. */
+export function deviceFlowButtons(screen: DeviceScreen, theme?: DeviceButtonTheme | null): InlineMarkup {
+  const emojis = theme?.botEmojis;
+  const backStyle = theme?.botInnerButtonStyles?.back;
+  return { inline_keyboard: screen.markup.inline_keyboard.map(row => row.map(button => {
+    const { text, callback_data: data, appearance } = button;
+    if (appearance === "menu") {
+      return backToMenu(theme?.botBackLabel, backStyle, { back: emojis?.BACK?.tgEmojiId }).inline_keyboard[0][0];
+    }
+    if (appearance === "device") return deviceButton(data, theme, text);
+    if (appearance === "back" || appearance === "subscription" || appearance === "subscriptions") {
+      const key = appearance === "subscription" ? "BACK_TO_SUB" : appearance === "subscriptions" ? "BACK_TO_SUBS_LIST" : "BACK";
+      const specific = emojis?.[key];
+      const entry = specific?.unicode?.trim() || specific?.tgEmojiId?.trim() ? specific : emojis?.BACK;
+      const icon = entry?.tgEmojiId?.trim();
+      return btn(icon ? text : `${entry?.unicode?.trim() || "◀️"} ${text}`, data, resolveStyle(toStyle(backStyle), "danger"), icon);
+    }
+    return btn(text, data, appearance === "choice" ? "primary" : undefined);
+  })) };
+}
 
 // ─── кастомные названия платёжных провайдеров ────────
 // Админ настраивает в /admin/settings → «Порядок и названия платёжных методов».
@@ -113,6 +158,7 @@ const MENU_IDS: Record<string, string> = {
   promocode: "menu:promocode",
   extra_options: "menu:extra_options",
   gift: "menu:gift",
+  roulette: "menu:roulette",
   // Унифицированный список подписок (root + secondary). См. handler menu:my_subs в index.ts.
   my_subs: "menu:my_subs",
   // T14 (11.05.2026): бесплатный MTProto-прокси для Telegram. См. handler menu:tg_proxy в index.ts.
@@ -140,6 +186,7 @@ const DEFAULT_BUTTONS: BotButtonConfig[] = [
   { id: "support", visible: true, label: "⭕ Помощь", order: 7, style: "primary" },
   { id: "promocode", visible: true, label: "🎟️ Промокод", order: 8, style: "primary" },
   { id: "gift", visible: true, label: "🎁 Подарки", order: 8.5, style: "primary" },
+  { id: "roulette", visible: true, label: "🎰 Рулетка", order: 8.7, style: "primary" },
   { id: "extra_options", visible: true, label: "➕ Доп. опции", order: 9, style: "primary" },
   // T14 (11.05.2026): бесплатный MTProto-прокси для Telegram (по эталону скрина 1).
   { id: "tg_proxy", visible: true, label: "🛡 Бесплатный Прокси для Telegram", order: 6.8, style: "primary", onePerRow: true },
@@ -173,6 +220,7 @@ export type InnerEmojiIds = {
 
 /** Главное меню: кнопки из конфига. Эмодзи в label (Unicode) и/или icon_custom_emoji_id (премиум). Поддержка показывается только если задана хотя бы одна ссылка. Тикеты — Web App при включённой тикет-системе. buttonsPerRow: 1 или 2. */
 export function mainMenu(opts: {
+  liteMode?: boolean;
   showTrial: boolean;
   showVpn: boolean;
   showProxy?: boolean;
@@ -184,6 +232,9 @@ export function mainMenu(opts: {
   showTickets?: boolean;
   showExtraOptions?: boolean;
   showGift?: boolean;
+  menuMode?: "classic" | "web";
+  groupCabinet?: boolean;
+  section?: "main" | "profile";
   /** Кнопок в ряд: 1 или 2 (по умолчанию 1) */
   buttonsPerRow?: 1 | 2;
   /** URL страницы подписки Remna (если задан — кнопка VPN ведёт туда) */
@@ -191,7 +242,7 @@ export function mainMenu(opts: {
 }): InlineMarkup {
   const configButtons = opts.botButtons ?? [];
   const fromConfig = configButtons.length > 0;
-  let list = fromConfig ? [...configButtons] : [...DEFAULT_BUTTONS];
+  let list = (fromConfig ? configButtons : DEFAULT_BUTTONS).map(b => ({ ...b }));
   if (fromConfig && !list.some((b) => b.id === "devices")) {
     list.push({ id: "devices", visible: true, label: "📱 Устройства", order: 1.5, style: "primary" });
   }
@@ -208,12 +259,22 @@ export function mainMenu(opts: {
   if (fromConfig && opts.showGift === true && !list.some((b) => b.id === "gift")) {
     list.push({ id: "gift", visible: true, label: "🎁 Подарки", order: 8.5, style: "primary" });
   }
+  if (fromConfig && !list.some((b) => b.id === "roulette")) {
+    list.push({ id: "roulette", visible: true, label: "🎰 Рулетка", order: 8.7, style: "primary" });
+  }
   // auto-add «🌐 Сайт» если её ещё нет в админ-конфиге.
   // URL берётся из publicAppUrl. Если URL не задан — кнопка скрывается обработчиком ниже.
   if (fromConfig && !!opts.appUrl?.trim() && !list.some((b) => b.id === "site")) {
     list.push({ id: "site", visible: true, label: "🌐 Сайт", order: 10, style: "primary", onePerRow: true });
   }
+  const cabinetIds = new Set(["tariffs", "my_subs", "proxy", "my_proxy", "singbox", "my_singbox", "devices", "topup", "referral", "trial", "vpn", "promocode", "extra_options", "gift", "roulette", "tg_proxy"]);
+  if (!opts.liteMode && opts.groupCabinet && opts.section !== "profile") {
+    const profile = list.find(b => b.id === "profile");
+    if (profile) profile.visible = true;
+    else list.push({ ...DEFAULT_BUTTONS.find(b => b.id === "profile")! });
+  }
   list = list
+    .filter(b => opts.liteMode || (opts.section === "profile" ? cabinetIds.has(b.id) : !opts.groupCabinet || !cabinetIds.has(b.id)))
     .filter((b) => b.visible)
     .filter((b) => {
       if (b.id === "trial") return opts.showTrial;
@@ -222,12 +283,13 @@ export function mainMenu(opts: {
       if (b.id === "singbox" || b.id === "my_singbox") return opts.showSingbox === true;
       if (b.id === "cabinet") return !!opts.appUrl?.trim();
       if (b.id === "tickets") return opts.showTickets === true && !!opts.appUrl?.trim();
-      if (b.id === "support") return !!opts.hasSupportLinks;
+      if (b.id === "support") return !!opts.hasSupportLinks || (opts.showTickets === true && !!opts.appUrl?.trim());
       if (b.id === "extra_options") return opts.showExtraOptions === true;
       if (b.id === "gift") return opts.showGift === true;
       return true;
     })
     .sort((a, b) => a.order - b.order);
+  if (opts.liteMode) list = list.filter(b => ["tariffs", "my_subs", "vpn", "cabinet", "topup", "trial", "support"].includes(b.id));
   const base = opts.appUrl?.replace(/\/$/, "") ?? "";
   const perRow = opts.buttonsPerRow === 2 ? 2 : 1;
   const items: { node: InlineButton | WebAppButton | UrlButton; onePerRow: boolean }[] = [];
@@ -239,7 +301,19 @@ export function mainMenu(opts: {
     // Telegram Bot API игнорирует поле для не-callback кнопок, но мы передаём
     // его на случай поддержки в будущих версиях клиента.
     const styleForBtn = toStyle(b.style);
-    if (b.id === "cabinet") {
+    if (b.id.startsWith("custom_")) {
+      const url = b.url?.trim() ?? "";
+      if (!isBotButtonUrl(url) || !labelForIcon.trim()) continue;
+      const node: UrlButton = { text: labelForIcon, url };
+      if (iconId) node.icon_custom_emoji_id = iconId;
+      if (styleForBtn) node.style = styleForBtn;
+      items.push({ node, onePerRow });
+    } else if (opts.menuMode === "web" && !(!opts.liteMode && opts.groupCabinet && b.id === "profile") && menuWebAppUrl(base, b.id)) {
+      const node: WebAppButton = { text: labelForIcon, web_app: { url: menuWebAppUrl(base, b.id)! } };
+      if (iconId) node.icon_custom_emoji_id = iconId;
+      if (styleForBtn) node.style = styleForBtn;
+      items.push({ node, onePerRow });
+    } else if (b.id === "cabinet") {
       if (base) {
         const w: WebAppButton = { text: labelForIcon, web_app: { url: `${base}/cabinet` } };
         if (iconId) w.icon_custom_emoji_id = iconId;
@@ -264,6 +338,11 @@ export function mainMenu(opts: {
       items.push({ node: btn(b.label, MENU_IDS[b.id], styleForBtn, iconId), onePerRow });
     } else if (b.id === "tickets" && base) {
       const w: WebAppButton = { text: labelForIcon, web_app: { url: `${base}/cabinet/tickets` } };
+      if (iconId) w.icon_custom_emoji_id = iconId;
+      if (styleForBtn) w.style = styleForBtn;
+      items.push({ node: w, onePerRow });
+    } else if (b.id === "roulette" && base) {
+      const w: WebAppButton = { text: labelForIcon, web_app: { url: `${base}/cabinet/roulette` } };
       if (iconId) w.icon_custom_emoji_id = iconId;
       if (styleForBtn) w.style = styleForBtn;
       items.push({ node: w, onePerRow });
@@ -303,7 +382,7 @@ const DEFAULT_BACK_LABEL = "🏠 Главное меню";
  *   - 🏠 Главное меню
  */
 export function helpMainMenu(
-  links: { support?: string | null },
+  links: { support?: string | null; appUrl?: string | null; ticketsEnabled?: boolean },
   backLabel?: string | null,
   backStyle?: string,
   emojiIds?: InnerEmojiIds,
@@ -311,10 +390,14 @@ export function helpMainMenu(
 ): InlineMarkup {
   const back = (backLabel && backLabel.trim()) || _t("back_to_menu", lang);
   const backSty = resolveStyle(toStyle(backStyle), "danger");
-  const rows: (InlineButton | UrlButton)[][] = [];
+  const rows: (InlineButton | WebAppButton | UrlButton)[][] = [];
   const support = (links.support ?? "").trim();
   if (support) rows.push([{ text: "🧑‍💼 Написать в поддержку", url: support }]);
   rows.push([btn("📄 Документы", "menu:docs", undefined, undefined)]);
+  const base = links.appUrl?.trim().replace(/\/+$/, "");
+  if (links.ticketsEnabled === true && base) {
+    rows.push([{ text: _t("menu.btn_tickets", lang), web_app: { url: `${base}/cabinet/tickets` } }]);
+  }
   rows.push([btn(back, "menu:main", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }
@@ -650,6 +733,7 @@ export function tariffPaymentMethodButtons(
   const backSty = undefined;
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
+  if (starsPaymentsEnabled && tariffCurrency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_tariff_stars:${tariffId}`)]);
   // Кнопка оплаты балансом (первая)
   if (balanceLabel) {
     rows.push([btn(balanceLabel, `pay_tariff_balance:${tariffId}`, undefined, cardId)]);
@@ -802,6 +886,7 @@ export function proxyPaymentMethodButtons(
   const backSty = undefined;
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
+  if (starsPaymentsEnabled && currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_proxy_stars:${proxyTariffId}`)]);
   if (balanceLabel) rows.push([btn(balanceLabel, `pay_proxy_balance:${proxyTariffId}`, undefined, cardId)]);
   if (yoomoneyEnabled && (!currency || currency.toUpperCase() === "RUB")) {
     rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_proxy_yoomoney:${proxyTariffId}`, undefined, cardId)]);
@@ -889,6 +974,7 @@ export function singboxPaymentMethodButtons(
   const backSty = undefined;
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
+  if (starsPaymentsEnabled && currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_singbox_stars:${singboxTariffId}`)]);
   if (balanceLabel) rows.push([btn(balanceLabel, `pay_singbox_balance:${singboxTariffId}`, undefined, cardId)]);
   if (yoomoneyEnabled && (!currency || currency.toUpperCase() === "RUB")) {
     rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_singbox_yoomoney:${singboxTariffId}`, undefined, cardId)]);
@@ -912,6 +998,7 @@ export function topupPaymentMethodButtons(
   backStyle?: string,
   emojiIds?: InnerEmojiIds,
   providers: {
+    currency?: string;
     yoomoneyEnabled?: boolean;
     yookassaEnabled?: boolean;
     cryptopayEnabled?: boolean;
@@ -926,6 +1013,7 @@ export function topupPaymentMethodButtons(
   const backSty = resolveStyle(toStyle(backStyle), "danger");
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
+  if (starsPaymentsEnabled && providers.currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `topup_stars:${amount}`)]);
   if (yoomoneyEnabled) {
     rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — оплата картой"), `topup_yoomoney:${amount}`, "primary", cardId)]);
   }
@@ -1006,6 +1094,7 @@ export function optionPaymentMethodButtons(
   const backSty = undefined;
   const cardId = emojiIds?.card;
   const rows: InlineButton[][] = [];
+  if (starsPaymentsEnabled && option.currency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `pay_option_stars:${option.kind}:${option.id}`)]);
   if (balance >= option.price) {
     rows.push([btn(`💰 Оплатить балансом (${option.price} ₽)`, `pay_option_balance:${option.kind}:${option.id}`, undefined, cardId)]);
   }
@@ -1028,7 +1117,7 @@ export function optionPaymentMethodButtons(
   return { inline_keyboard: rows };
 }
 
-export function profileButtons(backLabel?: string | null, innerStyles?: InnerButtonStyles, emojiIds?: InnerEmojiIds, autoRenewEnabled?: boolean, lang = "ru"): InlineMarkup {
+export function profileButtons(backLabel?: string | null, innerStyles?: InnerButtonStyles, emojiIds?: InnerEmojiIds, autoRenewEnabled?: boolean, lang = "ru", cabinet?: InlineMarkup): InlineMarkup {
   const back = (backLabel && backLabel.trim()) || _t("back_to_menu", lang);
   const profile = resolveStyle(toStyle(innerStyles?.profile), "primary");
   const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
@@ -1037,6 +1126,7 @@ export function profileButtons(backLabel?: string | null, innerStyles?: InnerBut
   const autoRenewData = autoRenewEnabled ? "profile:autorenew:off" : "profile:autorenew:on";
   return {
     inline_keyboard: [
+      ...(cabinet?.inline_keyboard ?? []),
       [btn(autoRenewText, autoRenewData, profile, profileId)],
       [btn(_t("profile.btn_lang", lang), "profile:lang", profile, profileId), btn(_t("profile.btn_currency", lang), "profile:currency", profile, profileId)],
       [btn(back, "menu:main", backSty, emojiIds?.back)],
@@ -1119,12 +1209,17 @@ export function subDetailButtons(
   subscriptionUrl?: string | null, // прямой URL подписки — кнопка «Инструкции» открывает его без промежуточного экрана
   extraDevicesCount?: number, // для кнопки «Убрать дополнительные устройства»
   trialConvertEnabled?: boolean, // false → у триала вообще нет кнопки продления/конвертации
+  isBanned?: boolean, // антиабуз: во время блокировки доступны только навигационные действия
+  deviceTheme?: DeviceButtonTheme | null,
 ): InlineMarkup {
   const connectId = emojiIds?.connect;
   const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
   const tariffEmoji = emojiIds?.tariff;
   const back = (backLabel && backLabel.trim()) || "⬅️ К списку подписок";
   const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
+  if (isBanned) {
+    return { inline_keyboard: [[btn(back, "menu:my_subs", undefined, emojiIds?.back)]] };
+  }
   // УНИФИЦИРОВАННОЕ продление любой подписки.
   // После унификации primary и secondary живут в одной таблице Subscription и обе имеют
   // одинаковый id. `pay_tariff_ext:<subscriptionId>` идёт прямо в продление, без диалога
@@ -1148,6 +1243,7 @@ export function subDetailButtons(
     subscriptionUrl && subscriptionUrl.trim()
       ? [{ text: "📲 Инструкции по установке", url: subscriptionUrl.trim(), icon_custom_emoji_id: connectId } as UrlButton]
       : [btn("📲 Инструкции по установке", `sub:connect:${type}:${id}`, undefined, connectId)],
+    [deviceButton(`dev:open:${id}`, deviceTheme)],
   ];
   if (hasLocations && tariffId) {
     // пробрасываем subType:subId в callback
@@ -1386,6 +1482,7 @@ export function giftPaymentButtons(
   const cardId = emojiIds?.card;
   const isRub = !tariffCurrency || tariffCurrency.toUpperCase() === "RUB";
   const rows: InlineButton[][] = [];
+  if (starsPaymentsEnabled && tariffCurrency?.toUpperCase() === "RUB") rows.push([btn("⭐ Telegram Stars", `gift_pay_stars:${tariffId}`)]);
   if (balanceLabel) {
     rows.push([btn(balanceLabel, `gift_pay_balance:${tariffId}`, undefined, cardId)]);
   }
@@ -1410,3 +1507,6 @@ export function giftPaymentButtons(
   rows.push([btn(back, "gift:buy", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }
+
+let starsPaymentsEnabled = false;
+export function setStarsPaymentsEnabled(enabled: boolean) { starsPaymentsEnabled = enabled; }

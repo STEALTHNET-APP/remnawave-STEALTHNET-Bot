@@ -35,7 +35,7 @@ export function StealthModal({ open, onClose, title, children, maxWidth = "28rem
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center pb-24 sm:pb-0 px-4">
+    <div className="app-viewport-overlay fixed inset-0 z-[60] flex items-end sm:items-center justify-center pb-[calc(var(--app-safe-bottom)+12px)] px-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-md"
@@ -48,7 +48,7 @@ export function StealthModal({ open, onClose, title, children, maxWidth = "28rem
         className={cn(
           "relative w-full rounded-3xl border border-white/10 bg-zinc-900/80 backdrop-blur-2xl",
           "shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7),0_0_60px_-24px_rgb(var(--stealth-accent)_/_0.35),inset_0_1px_0_rgba(255,255,255,0.08)]",
-          "p-5 max-h-[80vh] overflow-y-auto",
+          "p-5 max-h-full overflow-y-auto",
           "animate-in fade-in slide-in-from-bottom-4 zoom-in-95 duration-300",
         )}
         style={{ maxWidth }}

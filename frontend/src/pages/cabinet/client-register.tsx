@@ -467,8 +467,8 @@ export function ClientRegisterPage() {
     setLoading(true);
     try {
       const result = await register({
+        // #200: пароль не отправляем — клиент задаст его на шаге онбординга «Пароль»
         email,
-        password: Math.random().toString(36).slice(-8) + "A1!", // dummy password
         preferredLang: defaults.lang,
         preferredCurrency: defaults.currency,
         referralCode: refCode,

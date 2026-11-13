@@ -5,10 +5,16 @@ COPY backend/package.json backend/package-lock.json* ./
 RUN npm ci
 COPY backend/. .
 COPY version.json ./version.json
+COPY scripts/build-version.cjs /tmp/build-version.cjs
+ARG BUILD_COMMIT=unknown
+ARG BUILD_DATE
+RUN BUILD_COMMIT="$BUILD_COMMIT" BUILD_DATE="$BUILD_DATE" node /tmp/build-version.cjs ./version.json
 RUN npx prisma generate
 RUN npm run build
 
 FROM node:22-alpine
+ARG BUILD_COMMIT=unknown
+LABEL org.opencontainers.image.revision=$BUILD_COMMIT
 
 # Fallback-зеркала для apk: dl-cdn.alpinelinux.org иногда недоступен.
 # 25.05.2026, WolfVPN — добавили ffmpeg (нужен ffprobe для извлечения

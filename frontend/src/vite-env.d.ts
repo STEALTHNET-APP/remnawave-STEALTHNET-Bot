@@ -16,6 +16,7 @@ declare global {
         requestFullscreen?: () => void;
         exitFullscreen?: () => void;
         isFullscreen?: boolean;
+        viewportHeight?: number;
         /** Системная safe-area устройства (статус-бар и вырезы), Bot API 8.0+. */
         safeAreaInset?: { top: number; bottom: number; left: number; right: number };
         /** Область, занятая шапкой клиента Telegram поверх контента, Bot API 8.0+. */

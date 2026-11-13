@@ -39,6 +39,7 @@ export async function markPaymentPaid(paymentId: string): Promise<MarkPaymentPai
   if (!payment) {
     return { ok: false, payment: null, error: "Payment not found" };
   }
+  if (payment.provider === "telegram_stars") return { ok: false, payment, error: "Оплату Stars подтверждает только Telegram" };
   await auditPaymentClientBotAlignment({
     id: payment.id,
     clientId: payment.clientId,

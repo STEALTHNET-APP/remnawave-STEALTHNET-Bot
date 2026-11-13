@@ -102,6 +102,8 @@ export async function getActiveContest(): Promise<{
 
 /** Публичный конфиг (тарифы, кнопки, способы оплаты, trial и т.д.) */
 export async function getPublicConfig(): Promise<{
+  maintenanceEnabled?: boolean;
+  maintenanceMessage?: string;
   serviceName?: string | null;
   logo?: string | null;
   logoBot?: string | null;
@@ -109,11 +111,14 @@ export async function getPublicConfig(): Promise<{
   publicAppUrl?: string | null;
   defaultCurrency?: string;
   trialEnabled?: boolean;
+  multiSubscriptionsEnabled?: boolean;
   trialDays?: number;
   plategaMethods?: { id: number; label: string }[];
   paymentProviders?: { id: string; label: string; sortOrder: number }[];
   yoomoneyEnabled?: boolean;
   yookassaEnabled?: boolean;
+  telegramStarsEnabled?: boolean;
+  telegramStarsRubPerStar?: number;
   cryptopayEnabled?: boolean;
   heleketEnabled?: boolean;
   rollypayEnabled?: boolean;
@@ -124,7 +129,10 @@ export async function getPublicConfig(): Promise<{
   botWelcomeText?: string | null;
   botWelcomeImage?: string | null;
   botWelcomeShowOnce?: boolean;
-  botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; emojiKey?: string }[] | null;
+  botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; emojiKey?: string; url?: string }[] | null;
+  liteMode?: boolean;
+  botGroupCabinet?: boolean;
+  botMenuMode?: "classic" | "web";
   botButtonsPerRow?: 1 | 2;
   resolvedBotMenuTexts?: Record<string, string>;
   menuTextCustomEmojiIds?: Record<string, string>;
@@ -204,11 +212,13 @@ export async function getPublicConfig(): Promise<{
 
   const cfg = await fetchJson<{
     paymentProviders?: { id: string; label: string; sortOrder: number }[];
+    telegramStarsEnabled?: boolean;
   } | null>("/api/public/config");
 
   try {
-    const { setProviderLabels } = await import("./keyboard.js");
+    const { setProviderLabels, setStarsPaymentsEnabled } = await import("./keyboard.js");
     setProviderLabels(cfg?.paymentProviders ?? null);
+    setStarsPaymentsEnabled(cfg?.telegramStarsEnabled === true);
   } catch {}
 
   cachedConfig = cfg;
@@ -283,7 +293,7 @@ export async function getSubscriptionByUuid(
 
 /** доступные клиенту триалы */
 export async function getAvailableTrials(token: string): Promise<{
-  items: { id: string; name: string; tariffId: string; tariffName: string | null; durationDays: number; description: string | null; sortOrder: number }[];
+  items: { id: string; name: string; price?: number; tariffId: string; tariffName: string | null; durationDays: number; description: string | null; sortOrder: number }[];
   hasAnyEnabled: boolean;
 }> {
   return fetchJson("/api/client/trials/available", { token });
@@ -313,6 +323,13 @@ export async function createWithdrawal(
 
 /** расширенная статистика реферальной программы. */
 export async function getReferralStats(token: string): Promise<{
+  referralRewardMode?: "percent" | "balance" | "days";
+  referralRewardAmount?: number;
+  referralRewardDays?: number;
+  referralRewardCurrency?: string;
+  referralDaysEarned?: number;
+  referralDaysPending?: number;
+
   referralCode: string | null;
   referralPercent: number;
   referralPercentLevel2: number;
@@ -335,6 +352,7 @@ export async function getReferralStats(token: string): Promise<{
 export async function activateTrialById(
   token: string,
   trialId: string,
+  expectedPrice?: number,
 ): Promise<{
   message: string;
   subscriptionId: string;
@@ -377,6 +395,14 @@ export async function getAllDevices(token: string): Promise<{
   }[];
 }> {
   return fetchJson("/api/client/devices/all", { token });
+}
+
+/** Registered HWIDs for exactly one owned subscription. Failed reads throw. */
+export async function getSubscriptionDevices(token: string, subscriptionId: string): Promise<{
+  total: number;
+  devices: { hwid: string; platform?: string; deviceModel?: string; appName?: string; createdAt?: string }[];
+}> {
+  return fetchJson(`/api/client/devices/by-subscription/${encodeURIComponent(subscriptionId)}`, { token });
 }
 
 /** Удалить устройство по HWID */
@@ -1123,6 +1149,9 @@ export type SubscriptionListItem = {
   trialName?: string | null;
   trialConvertEnabled?: boolean;
   trialConvertAllTariffs?: boolean;
+  isBanned?: boolean;
+  banReason?: string | null;
+  bannedUntil?: string | null;
 };
 
 /** Убрать ВСЕ доп. устройства с подписки */
@@ -1157,4 +1186,43 @@ export async function checkSubscriptionsCooldownBatch(
   ids: string[],
 ): Promise<{ items: Array<{ subscriptionId: string; blocked: boolean; daysLeft?: number; message?: string; tariffName?: string; cooldownDays?: number }> }> {
   return fetchJson("/api/client/subscriptions/cooldown-check", { token, method: "POST", body: { ids } });
+}
+
+export type BotTermsStatus = {
+  required: boolean;
+  accepted: boolean;
+  documents: { kind: string; url: string }[];
+  version: string;
+  completed: boolean;
+  pendingStart: string | null;
+};
+
+export function getBotTerms(telegramId: number, pendingStart?: string): Promise<BotTermsStatus> {
+  return fetchJson("/api/bot/terms/status", { method: "POST", body: { telegramId: String(telegramId), pendingStart } });
+}
+
+export async function acceptBotTerms(telegramId: number, version: string): Promise<BotTermsStatus> {
+  const response = await fetch(`${API_URL}/api/bot/terms/accept`, {
+    method: "POST", headers: getHeaders(), body: JSON.stringify({ telegramId: String(telegramId), version }),
+  });
+  if (response.status === 409) return getBotTerms(telegramId);
+  if (!response.ok) throw new Error("Не удалось сохранить согласие");
+  return response.json() as Promise<BotTermsStatus>;
+}
+
+export function createStarsPayment(token: string, body: Parameters<typeof createCryptopayPayment>[1]): Promise<{ paymentId: string; payUrl: string; starsAmount: number }> {
+  return fetchJson("/api/client/telegram-stars/create-payment", { method: "POST", token, body });
+}
+export type StarsReceipt = { paymentId: string; telegramId: string; currency: string; totalAmount: number; chargeId?: string; checkoutId?: string };
+export async function starsCheckout(body: StarsReceipt): Promise<{ ok: boolean }> {
+  const response = await fetch(`${API_URL}/api/bot/stars/checkout`, { method: "POST", headers: getHeaders(), body: JSON.stringify(body), signal: AbortSignal.timeout(6500) });
+  if (!response.ok) throw new Error("Платёж не подтверждён");
+  return response.json();
+}
+export function starsPaid(body: StarsReceipt): Promise<{ ok: boolean; delivery: string }> {
+  return fetchJson("/api/bot/stars/paid", { method: "POST", body });
+}
+
+export function starsRefunded(body: StarsReceipt): Promise<{ ok: boolean }> {
+  return fetchJson("/api/bot/stars/refunded", { method: "POST", body });
 }

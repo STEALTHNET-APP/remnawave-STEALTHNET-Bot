@@ -1,3 +1,8 @@
+import { registerStarsPayments } from "./stars.js";
+import { referralRewardLines } from "./referral-rewards.js";
+import { createTermsGate } from "./terms.js";
+import { DeviceFlow, formatDeviceCount, subscriptionDeviceLimit } from "./device-flow.js";
+import { titleEmojiPrefix } from "./title-emoji.js";
 /**
  * STEALTHNET 4.2.0 — Telegram-бот
  * Полный функционал кабинета: главная, тарифы, профиль, пополнение, триал, реферальная ссылка, VPN.
@@ -7,12 +12,15 @@
 import "dotenv/config";
 import { Bot, Composer, Context, InputFile } from "grammy";
 import type { Api } from "grammy";
+import { ignoreNotModified } from "./ignore-not-modified.js";
 import { ProxyAgent as UndiciProxyAgent } from "undici";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import * as api from "./api.js";
+import { shouldShowPurchaseChoice } from "./purchase-choice.js";
 import {
   mainMenu,
   backToMenu,
+  deviceFlowButtons,
   backToSubLabel,
   backToSubsListLabel,
   backButton,
@@ -135,6 +143,19 @@ async function createBotWithProxy(token: string): Promise<Bot> {
 
 /** Общая логика для основного (единственного) бота. */
 const composer = new Composer<Context>();
+registerStarsPayments(composer);
+composer.use(async (ctx, next) => {
+  if (ctx.message?.successful_payment || ctx.preCheckoutQuery || (!ctx.message && !ctx.callbackQuery)) return next();
+  const config = await api.getPublicConfig();
+  if (!config?.maintenanceEnabled) return next();
+  const message = config.maintenanceMessage || "Обновляем сервис. Пожалуйста, зайдите немного позже.";
+  if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: message.slice(0, 200), show_alert: true });
+  else if (ctx.chat) await ctx.reply(message);
+});
+composer.use(createTermsGate(api, async (ctx, payload) => {
+  if (ctx.from) startThrottle.delete(ctx.from.id);
+  await handleStart(ctx, payload);
+}));
 
 // ——— Принудительная подписка на канал ———
 
@@ -492,19 +513,7 @@ const lastBroadcastMessage = new Map<number, string | BroadcastPayload>();
 // Админ: сквады — список для добавления/удаления (clientId + items с uuid/name)
 const lastSquadsForAdd = new Map<number, { clientId: string; items: { uuid: string; name: string }[] }>();
 const lastSquadsForRemove = new Map<number, { clientId: string; items: { uuid: string; name: string }[] }>();
-// Устройства (HWID): список для экрана «Удалить устройство» (индекс в callback)
-// храним subscriptionType + subscriptionId — нужны при удалении,
-// чтобы backend знал из какой подписки удалять (раньше удалял только root → secondary error).
-const lastDevicesList = new Map<number, { devices: { hwid: string; platform?: string; deviceModel?: string; subscriptionType?: "root" | "secondary"; subscriptionId?: string }[] }>();
-
-// Poco/Redmi и пр. шлют битые (непарные)
-// UTF-8 суррогаты в platform/deviceModel → Telegram отвергает "inline keyboard button
-// text must be encoded in UTF-8" и экран «Устройства» падает на editMessageText.
-// Buffer.from(utf8) заменяет непарные суррогаты на U+FFFD (валидный UTF-8) + срезаем
-// управляющие символы. Если после чистки пусто — вызывающий код даёт fallback на hwid.
-function sanitizeLabel(s: string): string {
-  return Array.from(Buffer.from(String(s ?? ""), "utf8").toString("utf8")).filter((c) => c >= " ").join("");
-}
+const deviceFlow = new DeviceFlow();
 
 /**
  * Если включён `botAutoDeleteUnknownMessages`, пробуем удалить сообщение пользователя.
@@ -576,6 +585,7 @@ const DEFAULT_MENU_TEXTS: Record<string, string> = {
     "👥 Выгодная реферальная программа",
   ].join("\n"),
   balancePrefix: "💰 Ваш Баланс: ",
+  telegramIdPrefix: "🆔 Telegram ID: ",
   tariffPrefix: "💎 Ваш тариф : ",
   subscriptionPrefix: "{{CHART}} Статус подписки — ",
   statusInactive: "{{STATUS_INACTIVE}} Истекла",
@@ -602,6 +612,7 @@ const DEFAULT_MENU_TEXTS: Record<string, string> = {
 const DEFAULT_MENU_LINE_VISIBILITY: Record<string, boolean> = {
   welcomeTitlePrefix: false,
   balancePrefix: false,
+  telegramIdPrefix: true,
   tariffPrefix: false,
   subscriptionPrefix: false,
   expirePrefix: false,
@@ -804,16 +815,9 @@ function titleWithEmoji(
   if (/^\p{Extended_Pictographic}/u.test(rest.trimStart())) {
     return { text: rest, entities: [] };
   }
-  const entry = botEmojis?.[emojiKey];
-  const unicode = entry?.unicode?.trim() || DEFAULT_EMOJI_UNICODE[emojiKey] || "•";
+  const prefix = titleEmojiPrefix(emojiKey, botEmojis, DEFAULT_EMOJI_UNICODE);
   const space = rest.startsWith("\n") ? "" : " ";
-  const text = unicode + space + rest;
-  const entities: CustomEmojiEntity[] = [];
-  if (entry?.tgEmojiId) {
-    const len = firstCharLengthUtf16(unicode);
-    if (len > 0) entities.push({ type: "custom_emoji", offset: 0, length: len, custom_emoji_id: entry.tgEmojiId });
-  }
-  return { text, entities };
+  return { text: prefix.text + space + rest, entities: prefix.entities };
 }
 
 /**
@@ -928,16 +932,11 @@ function titleWithEmojiAndCustomEmojis(
   rest: string,
   botEmojis?: Record<string, { unicode?: string; tgEmojiId?: string }> | null
 ): { text: string; entities: CustomEmojiEntity[] } {
-  const entry = botEmojis?.[emojiKey];
-  const unicode = entry?.unicode?.trim() || DEFAULT_EMOJI_UNICODE[emojiKey] || "•";
+  const prefix = titleEmojiPrefix(emojiKey, botEmojis, DEFAULT_EMOJI_UNICODE);
   const space = rest.startsWith("\n") ? "" : " ";
-  const leading = unicode + space;
+  const leading = prefix.text + space;
   const { text: restText, entities: restEntities } = applyCustomEmojiPlaceholders(rest, botEmojis);
-  const entities: CustomEmojiEntity[] = [];
-  if (entry?.tgEmojiId) {
-    const len = firstCharLengthUtf16(unicode);
-    if (len > 0) entities.push({ type: "custom_emoji", offset: 0, length: len, custom_emoji_id: entry.tgEmojiId });
-  }
+  const entities: CustomEmojiEntity[] = [...prefix.entities];
   for (const e of restEntities) {
     entities.push({ ...e, offset: e.offset + leading.length });
   }
@@ -1075,10 +1074,11 @@ function formatSubLine(item: {
   /** T16 (12.05.2026) — название тарифа и кастомный эмодзи для главного меню. */
   tariffDisplayName?: string | null;
   tariffMenuEmoji?: string | null;
-}, template?: string): string {
+}, template: string | undefined, showNumber: boolean): string {
   const { idx, typeEmoji, statusEmojiBig, daysStr, dateStr, trafficSuffix } = parseSubInfo(item);
   const tpl = (template && template.trim()) || "{{SUB_STATUS}} {{SUB_TYPE}} Подписка #{{SUB_NUM}} — **{{SUB_DAYS}}** до {{SUB_DATE}}{{SUB_TRAFFIC}}";
-  return tpl
+  const displayTemplate = showNumber ? tpl : tpl.replace(/[ \t]*[#№]?[ \t]*\{\{SUB_NUM\}\}/g, "");
+  return displayTemplate
     .split("{{SUB_STATUS}}").join(statusEmojiBig)
     .split("{{SUB_TYPE}}").join(typeEmoji)
     .split("{{SUB_NUM}}").join(String(idx))
@@ -1088,7 +1088,9 @@ function formatSubLine(item: {
 }
 
 function buildMainMenuText(opts: {
+  multiSubscriptionsEnabled?: boolean;
   serviceName: string;
+  telegramId: number;
   balance: number;
   currency: string;
   subscription: unknown;
@@ -1145,6 +1147,7 @@ function buildMainMenuText(opts: {
   pushLine("welcomeGreeting", `**${t(menuTexts, "welcomeGreeting")}${t(menuTexts, "welcomeTitlePrefix")}${name}**`);
   // Баланс — сразу под шапкой (выше списка подписок), жирным.
   pushLine("balancePrefix", `**${t(menuTexts, "balancePrefix")}${balanceStr}**`);
+  pushLine("telegramIdPrefix", t(menuTexts, "telegramIdPrefix") + "`" + opts.telegramId + "`");
 
   // Блок «список подписок» — все root + secondary активные/полученные в подарок
   // (как в «Мои подписки»), сразу после шапки.
@@ -1159,13 +1162,15 @@ function buildMainMenuText(opts: {
     };
     if (allSubs && allSubs.items.length > 0) {
       pushRaw("");
-      pushLine("subsCountLabel", t(menuTexts, "subsCountLabel") + `**${allSubs.items.length}**`);
+      if (opts.multiSubscriptionsEnabled === true) {
+        pushLine("subsCountLabel", t(menuTexts, "subsCountLabel") + `**${allSubs.items.length}**`);
+      }
       const sorted = [...allSubs.items].sort((a, b) => {
         if (a.type !== b.type) return a.type === "root" ? -1 : 1;
         return (a.subscriptionIndex ?? 0) - (b.subscriptionIndex ?? 0);
       });
       for (const item of sorted) {
-        pushRaw(formatSubLine(item, t(menuTexts, "subLineFormat")));
+        pushRaw(formatSubLine(item, t(menuTexts, "subLineFormat"), opts.multiSubscriptionsEnabled === true));
       }
     }
   }
@@ -1747,6 +1752,8 @@ async function editMessageContent(ctx: {
 function buildHelpScreen(opts: {
   helpIntroText?: string | null;
   supportLink?: string | null;
+  publicAppUrl?: string | null;
+  ticketsEnabled?: boolean;
   botBackLabel?: string | null;
   botEmojis?: Record<string, { unicode?: string; tgEmojiId?: string }> | null;
   tgId: string;
@@ -1765,7 +1772,7 @@ function buildHelpScreen(opts: {
   lines.push(`🗒 Активных подписок: ${opts.subsCount}`);
   const { text, entities } = applyMarkdownAndEmoji(lines.join("\n"), opts.botEmojis ?? null);
   const markup = helpMainMenu(
-    { support: opts.supportLink },
+    { support: opts.supportLink, appUrl: opts.publicAppUrl, ticketsEnabled: opts.ticketsEnabled },
     opts.botBackLabel ?? null,
     opts.backStyle,
     opts.emojiIds,
@@ -1898,7 +1905,7 @@ setInterval(() => {
   for (const [k, v] of startThrottle) if (v < cutoff) startThrottle.delete(k);
 }, 60 * 1000).unref?.();
 
-composer.command("start", async (ctx) => {
+async function handleStart(ctx: Context, payload: string) {
   const from = ctx.from;
   if (!from) return;
   const now = Date.now();
@@ -1907,7 +1914,6 @@ composer.command("start", async (ctx) => {
   startThrottle.set(from.id, now);
   const telegramId = String(from.id);
   const telegramUsername = from.username ?? undefined;
-  const payload = ctx.match?.trim() || "";
 
   // Сбрасываем состояние рассылки, чтобы баннер/фото не «залипало»
   lastBroadcastMessage.delete(from.id);
@@ -2207,6 +2213,7 @@ composer.command("start", async (ctx) => {
 
     const { text, entities } = buildMainMenuText({
       serviceName: name,
+      telegramId: from.id,
       balance: client?.balance ?? 0,
       currency: client?.preferredCurrency ?? config?.defaultCurrency ?? "usd",
       subscription: subRes.subscription,
@@ -2216,6 +2223,7 @@ composer.command("start", async (ctx) => {
       menuTextCustomEmojiIds: config?.menuTextCustomEmojiIds ?? null,
       botEmojis: config?.botEmojis ?? null,
       infoBlock: config?.botInfoBlock ?? null,
+      multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
       allSubs: allSubsRes,
     });
     const caption = text.length > TELEGRAM_CAPTION_MAX ? text.slice(0, TELEGRAM_CAPTION_MAX - 3) + "..." : text;
@@ -2223,6 +2231,7 @@ composer.command("start", async (ctx) => {
     const hasVideoInstructions = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
     const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructions);
     const markup = mainMenu({
+      liteMode: config?.liteMode === true,
       showTrial,
       // кнопка «🔌 Подключиться автоматически» показывается
       // если есть ХОТЯ БЫ ОДНА подписка (root ИЛИ secondary, включая триал). Раньше зависела
@@ -2237,6 +2246,8 @@ composer.command("start", async (ctx) => {
       hasSupportLinks,
       showTickets: config?.ticketsEnabled === true,
       showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
+      menuMode: config?.botMenuMode ?? "classic",
+      groupCabinet: config?.botGroupCabinet === true,
       buttonsPerRow: config?.botButtonsPerRow ?? 1,
       remnaSubscriptionUrl: config?.useRemnaSubscriptionPage ? vpnUrl : null,
     });
@@ -2301,7 +2312,9 @@ composer.command("start", async (ctx) => {
     const msg = e instanceof Error ? e.message : "Ошибка входа";
     await ctx.reply(`❌ ${msg}`);
   }
-});
+}
+
+composer.command("start", (ctx) => handleStart(ctx, ctx.match?.trim() || ""));
 
 // ——— /link КОД — привязка Telegram к аккаунту (код из кабинета на сайте)
 composer.command("link", async (ctx) => {
@@ -2435,10 +2448,12 @@ composer.command("referral", async (ctx) => {
       "Telegram Бот:",
       linkBot,
     ];
+    const rewardLines = referralRewardLines(stats);
+    if (rewardLines) lines.splice(2, lines.indexOf("🔗 Ваша реферальная ссылка:") - 2, ...rewardLines);
     if (linkSite) {
       lines.push("", "Сайт:", linkSite);
     }
-    lines.push("", "💡 С реферального баланса можно оплатить подписку или вывести эти средства на свой кошелёк.");
+    lines.push("", stats?.referralRewardMode === "days" ? "💡 Дни продлевают основную подписку автоматически." : "💡 С реферального баланса можно оплатить подписку или вывести эти средства на свой кошелёк.");
     // формат как в gift — `url=` + `text=`.
     // Ссылку В САМ ТЕКСТ НЕ кладём — она уже идёт через параметр `url=` и
     // выводится TG-клиентом ПЕРВОЙ строкой автоматически. Если продублировать
@@ -2483,6 +2498,8 @@ composer.command("support", async (ctx) => {
     const { text, entities, markup } = buildHelpScreen({
       helpIntroText: cfg?.helpIntroText,
       supportLink: cfg?.supportLink,
+      publicAppUrl: cfg?.publicAppUrl,
+      ticketsEnabled: cfg?.ticketsEnabled,
       botBackLabel: cfg?.botBackLabel,
       botEmojis: cfg?.botEmojis,
       tgId,
@@ -2802,6 +2819,7 @@ composer.on("callback_query:data", async (ctx) => {
       const appUrl = config?.publicAppUrl?.replace(/\/$/, "") ?? null;
       const { text, entities } = buildMainMenuText({
         serviceName: config?.serviceName?.trim() || "Кабинет",
+        telegramId: userId,
         balance: me.balance ?? 0,
         currency: me.preferredCurrency ?? config?.defaultCurrency ?? "usd",
         subscription: subRes.subscription,
@@ -2811,11 +2829,13 @@ composer.on("callback_query:data", async (ctx) => {
         menuTextCustomEmojiIds: config?.menuTextCustomEmojiIds ?? null,
         botEmojis: config?.botEmojis ?? null,
         infoBlock: config?.botInfoBlock ?? null,
+        multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
         allSubs: allSubsRes,
       });
       const hasVideoInstructions = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
       const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructions);
       const markup = mainMenu({
+      liteMode: config?.liteMode === true,
         showTrial,
         // T-fix (11.05.2026): кнопка vpn доступна если есть ЛЮБАЯ подписка (включая secondary/триал).
         showVpn: Boolean(vpnUrl) || (allSubsRes.items?.length ?? 0) > 0,
@@ -2828,6 +2848,8 @@ composer.on("callback_query:data", async (ctx) => {
         hasSupportLinks,
         showTickets: config?.ticketsEnabled === true,
         showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
+        menuMode: config?.botMenuMode ?? "classic",
+      groupCabinet: config?.botGroupCabinet === true,
         buttonsPerRow: config?.botButtonsPerRow ?? 1,
         remnaSubscriptionUrl: config?.useRemnaSubscriptionPage ? vpnUrl : null,
       });
@@ -3443,6 +3465,7 @@ composer.on("callback_query:data", async (ctx) => {
       const name = config?.serviceName?.trim() || "Кабинет";
       const { text, entities } = buildMainMenuText({
         serviceName: name,
+        telegramId: userId,
         balance: client?.balance ?? 0,
         currency: client?.preferredCurrency ?? config?.defaultCurrency ?? "usd",
         subscription: subRes.subscription,
@@ -3452,11 +3475,13 @@ composer.on("callback_query:data", async (ctx) => {
         menuTextCustomEmojiIds: config?.menuTextCustomEmojiIds ?? null,
         botEmojis: config?.botEmojis ?? null,
         infoBlock: config?.botInfoBlock ?? null,
+        multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
         allSubs: allSubsRes,
       });
       const hasVideoInstructionsCb = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
       const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructionsCb);
       const backMarkup = mainMenu({
+      liteMode: config?.liteMode === true,
         showTrial,
         // T-fix (11.05.2026): кнопка vpn доступна если есть ЛЮБАЯ подписка (включая secondary/триал).
         showVpn: Boolean(vpnUrl) || (allSubsRes.items?.length ?? 0) > 0,
@@ -3469,6 +3494,8 @@ composer.on("callback_query:data", async (ctx) => {
         hasSupportLinks,
         showTickets: config?.ticketsEnabled === true,
         showExtraOptions: config?.sellOptionsEnabled === true && (config?.sellOptions?.length ?? 0) > 0,
+        menuMode: config?.botMenuMode ?? "classic",
+      groupCabinet: config?.botGroupCabinet === true,
         buttonsPerRow: config?.botButtonsPerRow ?? 1,
         remnaSubscriptionUrl: config?.useRemnaSubscriptionPage ? vpnUrl : null,
       });
@@ -3521,6 +3548,8 @@ composer.on("callback_query:data", async (ctx) => {
       const { text, entities, markup } = buildHelpScreen({
         helpIntroText: config?.helpIntroText,
         supportLink: config?.supportLink,
+        publicAppUrl: config?.publicAppUrl,
+        ticketsEnabled: config?.ticketsEnabled,
         botBackLabel: config?.botBackLabel,
         botEmojis: config?.botEmojis,
         tgId,
@@ -3850,19 +3879,38 @@ composer.on("callback_query:data", async (ctx) => {
       return;
     }
 
+    if (data.startsWith("singbox:conf:")) {
+      const slotId = data.slice("singbox:conf:".length);
+      const { slots } = await api.getSingboxSlots(token);
+      const slot = slots.find(s => s.id === slotId && ["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(s.protocol));
+      if (!slot) {
+        await ctx.reply("Доступ не найден или истёк.");
+        return;
+      }
+      await ctx.replyWithDocument(new InputFile(Buffer.from(slot.subscriptionLink), `amnezia-${slot.id.slice(-8)}.conf`), { caption: "Импортируйте файл в AmneziaVPN. Конфигурация содержит ваш приватный ключ — не передавайте её другим." });
+      return;
+    }
+
     if (data === "menu:my_singbox") {
       const slotsRes = await api.getSingboxSlots(token);
       const slots = slotsRes.slots ?? [];
       if (slots.length === 0) {
-        await editMessageContent(ctx, "У вас пока нет активных доступов. Купите тариф в разделе «Доступы».", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        const keyboard = backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
+        const renewUrl = config?.publicAppUrl?.replace(/\/$/, "");
+        if (renewUrl) keyboard.inline_keyboard.unshift([{ text: "Посмотреть и продлить доступы", web_app: { url: `${renewUrl}/cabinet/singbox?tab=my` } }]);
+        await editMessageContent(ctx, "Активных доступов нет. Истёкшие доступы можно продлить в кабинете.", keyboard);
         return;
       }
       const lines = slots.map((s: { subscriptionLink: string; expiresAt: string; protocol: string }) => {
         const exp = new Date(s.expiresAt).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
-        return `${s.protocol} — до ${exp}\n${s.subscriptionLink}`;
+        return `${s.protocol} — до ${exp}${["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(s.protocol) ? "" : `\n${s.subscriptionLink}`}`;
       }).join("\n\n");
-      const msg = `📋 Мои доступы (${slots.length})\n\nСкопируйте ссылку в приложение (v2rayN, Nekoray и др.):\n\n${lines}`;
-      await editMessageContent(ctx, msg.slice(0, 4096), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      const msg = `📋 Мои доступы (${slots.length})\n\nСкопируйте ссылку в приложение. Для AmneziaWG скачайте .conf кнопкой ниже или в кабинете:\n\n${lines}`;
+      const keyboard = backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
+      for (const slot of slots.filter(s => ["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(s.protocol)).slice(0, 20)) keyboard.inline_keyboard.unshift([{ text: `📄 AmneziaWG · ${slot.id.slice(-8)}`, callback_data: `singbox:conf:${slot.id}` }]);
+      const renewUrl = config?.publicAppUrl?.replace(/\/$/, "");
+      if (renewUrl) keyboard.inline_keyboard.unshift([{ text: "Продлить доступ / все доступы", web_app: { url: `${renewUrl}/cabinet/singbox?tab=my` } }]);
+      await editMessageContent(ctx, msg.slice(0, 4096), keyboard);
       return;
     }
 
@@ -3964,8 +4012,8 @@ composer.on("callback_query:data", async (ctx) => {
       return;
     }
 
-    if (data.startsWith("pay_proxy_cryptopay:")) {
-      const proxyTariffId = data.slice("pay_proxy_cryptopay:".length);
+    if (data.startsWith("pay_proxy_cryptopay:") || data.startsWith("pay_proxy_stars:")) {
+      const proxyTariffId = data.slice(data.indexOf(":") + 1);
       const { items } = await api.getPublicProxyTariffs();
       const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === proxyTariffId);
       if (!tariff) {
@@ -3973,7 +4021,7 @@ composer.on("callback_query:data", async (ctx) => {
         return;
       }
       try {
-        const payment = await api.createCryptopayPayment(token, { amount: tariff.price, currency: tariff.currency, proxyTariffId });
+        const payment = await (data.startsWith("pay_proxy_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, { amount: tariff.price, currency: tariff.currency, proxyTariffId });
         const msg = buildPaymentMessage(config, { name: tariff.name, price: formatMoney(tariff.price, tariff.currency), amount: String(tariff.price), currency: tariff.currency, action: "Нажмите для оплаты:" });
         await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
       } catch (e: unknown) {
@@ -4132,8 +4180,8 @@ composer.on("callback_query:data", async (ctx) => {
       return;
     }
 
-    if (data.startsWith("pay_singbox_cryptopay:")) {
-      const singboxTariffId = data.slice("pay_singbox_cryptopay:".length);
+    if (data.startsWith("pay_singbox_cryptopay:") || data.startsWith("pay_singbox_stars:")) {
+      const singboxTariffId = data.slice(data.indexOf(":") + 1);
       const { items } = await api.getPublicSingboxTariffs();
       const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === singboxTariffId);
       if (!tariff) {
@@ -4141,7 +4189,7 @@ composer.on("callback_query:data", async (ctx) => {
         return;
       }
       try {
-        const payment = await api.createCryptopayPayment(token, { amount: tariff.price, currency: tariff.currency, singboxTariffId });
+        const payment = await (data.startsWith("pay_singbox_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, { amount: tariff.price, currency: tariff.currency, singboxTariffId });
         const msg = buildPaymentMessage(config, { name: tariff.name, price: formatMoney(tariff.price, tariff.currency), amount: String(tariff.price), currency: tariff.currency, action: "Нажмите для оплаты:" });
         await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
       } catch (e: unknown) {
@@ -4507,8 +4555,8 @@ composer.on("callback_query:data", async (ctx) => {
       return;
     }
 
-    if (data.startsWith("pay_tariff_cryptopay:")) {
-      const tariffId = data.slice("pay_tariff_cryptopay:".length);
+    if (data.startsWith("pay_tariff_cryptopay:") || data.startsWith("pay_tariff_stars:")) {
+      const tariffId = data.slice(data.indexOf(":") + 1);
       const { items } = await api.getPublicTariffs();
       const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
       if (!tariff) {
@@ -4551,7 +4599,7 @@ composer.on("callback_query:data", async (ctx) => {
         const meCp = await api.getMe(token);
         const pdCp = meCp?.personalDiscountPercent ?? 0;
         const { discountArg: discountArgCp, finalPrice: priceWithDiscountCp } = buildTariffDiscountArg(totalPrice, pdCp, discountInfoCp, tariff.currency);
-        const payment = await api.createCryptopayPayment(token, {
+        const payment = await (data.startsWith("pay_tariff_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, {
           amount: totalPrice,
           currency: tariff.currency,
           tariffId: tariff.id,
@@ -4995,7 +5043,19 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
       try {
         const subs = await api.getAllSubscriptions(token);
-        const subItems = subs.items ?? [];
+        const subItems = (subs.items ?? []).filter((sub) => {
+          const raw = sub.subscription as Record<string, unknown> | null;
+          const payload = raw
+            ? ((raw.response ?? raw.data ?? raw) as Record<string, unknown>)
+            : null;
+          const status = typeof payload?.status === "string" ? payload.status.toUpperCase() : null;
+          const expireAtRaw = payload?.expireAt ?? payload?.expire_at;
+          const expireAt = typeof expireAtRaw === "string" || typeof expireAtRaw === "number"
+            ? new Date(typeof expireAtRaw === "number" && expireAtRaw < 1_000_000_000_000 ? expireAtRaw * 1000 : expireAtRaw)
+            : null;
+          if (status && status !== "ACTIVE") return false;
+          return !expireAt || Number.isNaN(expireAt.getTime()) || expireAt.getTime() > Date.now();
+        });
         if (subItems.length === 0) {
           await editMessageContent(ctx, "❌ Сначала оформите подписку — потом сможете покупать опции.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
           return;
@@ -5294,7 +5354,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       return;
     }
 
-    if (data.startsWith("pay_option_cryptopay:")) {
+    if (data.startsWith("pay_option_cryptopay:") || data.startsWith("pay_option_stars:")) {
       const parts = data.split(":");
       const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
       const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
@@ -5332,7 +5392,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       }
 
       try {
-        const payment = await api.createCryptopayPayment(token, { extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId } });
+        const payment = await (data.startsWith("pay_option_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, { extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId } });
         const optName = option.name || (option.kind === "traffic" ? `+${option.trafficGb} ГБ` : option.kind === "devices" ? `+${option.deviceCount} устр.` : "Сервер");
         const msg = buildPaymentMessage(config, { name: optName, price: formatMoney(displayPrice, option.currency), amount: String(displayPrice), currency: option.currency, action: "Нажмите кнопку ниже для оплаты:" });
         await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
@@ -6112,6 +6172,35 @@ if (data.startsWith("pay_tariff_paritypay:")) {
         // между названием и приглашением выбрать длительность.
         // Если description пустой — экран как раньше: только название + «Выберите длительность».
         if (opts.length > 1) {
+          // Сначала явно фиксируем намерение: продлить существующую подписку или
+          // оформить новую. Без этого много-срочный тариф сразу открывал длительности,
+          // и пользователь мог случайно создать параллельную подписку.
+          if (!isBypass && !isSingleCategory) {
+            try {
+              const all = await api.getAllSubscriptions(token);
+              if (shouldShowPurchaseChoice({
+                tariffId: tariff.id,
+                subscriptions: all.items ?? [],
+                isBypass,
+                isSingleCategory,
+              })) {
+                const desc = ((tariff as TariffItem & { description?: string | null }).description ?? "").trim();
+                await editMessageContent(ctx, `${desc || tariff.name}\n\nУ вас уже есть подписка с этим тарифом. Что хотите сделать?`, {
+                  inline_keyboard: [
+                    [{ text: "🔌 Продлить текущую", callback_data: `renew_pick:${tariff.id}` }],
+                    [{ text: "🛒 Купить новую", callback_data: `pay_tariff:${tariff.id}:add` }],
+                    [{ text: backButton(config?.botEmojis ?? null).text, callback_data: "menu:tariffs" }],
+                  ],
+                });
+                return;
+              }
+            } catch {
+              await editMessageContent(ctx, "❌ Не удалось проверить ваши подписки. Повторите попытку — покупка не создана.", {
+                inline_keyboard: [[{ text: "🔄 Повторить", callback_data: `pay_tariff:${tariff.id}` }], [{ text: "🏠 Главное меню", callback_data: "menu:main" }]],
+              });
+              return;
+            }
+          }
           tariffOptionsCache.set(userId, { tariffId: tariff.id, options: opts });
           const bestId = bestPricePerDayOptionId(opts);
           const desc = ((tariff as TariffItem & { description?: string | null }).description ?? "").trim();
@@ -6120,17 +6209,6 @@ if (data.startsWith("pay_tariff_paritypay:")) {
           const text = desc
             ? `${desc}\n\nВыберите тариф:`
             : `${tariff.name}\n\nВыберите длительность подписки:`;
-          // проверяем, есть ли у клиента подписки с ЭТИМ tariffId.
-          // Если есть → сверху picker'а длительностей появится кнопка «🔌 Продлить подписку».
-          // в single-режиме кнопку «🔌 Продлить» не показываем —
-          // выбор длительности и так ведёт к конвертации/продлению (см. isSingleCategory).
-          let hasOwnSubsWithThisTariff = false;
-          if (!isSingleCategory) {
-            try {
-              const all = await api.getAllSubscriptions(token);
-              hasOwnSubsWithThisTariff = (all.items ?? []).some((it) => it.tariffId === tariff.id);
-            } catch { /* ignore — не блокируем покупку */ }
-          }
           await editMessageContent(
             ctx,
             text,
@@ -6141,7 +6219,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
               null,
               innerStyles,
               innerEmojiIds,
-              hasOwnSubsWithThisTariff ? tariff.id : null,
+              null,
               config?.botEmojis ?? null,
             ),
           );
@@ -6173,7 +6251,12 @@ if (data.startsWith("pay_tariff_paritypay:")) {
                 });
                 return;
               }
-            } catch { /* ignore — fallback в обычный flow */ }
+            } catch {
+              await editMessageContent(ctx, "❌ Не удалось проверить ваши подписки. Повторите попытку — покупка не создана.", {
+                inline_keyboard: [[{ text: "🔄 Повторить", callback_data: `pay_tariff:${tariff.id}` }], [{ text: "🏠 Главное меню", callback_data: "menu:main" }]],
+              });
+              return;
+            }
           }
           if (hasExtraDevices(tariff)) {
             const tiers = tariff.deviceDiscountTiers;
@@ -6300,121 +6383,21 @@ if (data.startsWith("pay_tariff_paritypay:")) {
         `${_t("profile.title", lang)}\n\n${_t("profile.balance", lang)}${formatMoney(client?.balance ?? 0, client?.preferredCurrency ?? "usd")}\n${_t("profile.lang", lang)}${client?.preferredLang ?? "ru"}\n${_t("profile.currency", lang)}${client?.preferredCurrency ?? "usd"}\n${_t("profile.autorenew", lang)}${autoRenewStr}\n\n${_t("profile.change", lang)}`,
         config?.botEmojis
       );
-      await editMessageContent(ctx, text, profileButtons(config?.botBackLabel ?? null, innerStyles, innerEmojiIds, client?.autoRenewEnabled, lang), entities);
+      await editMessageContent(ctx, text, profileButtons(config?.botBackLabel ?? null, innerStyles, innerEmojiIds, client?.autoRenewEnabled, lang, await groupedProfileMenu(config, token, client?.trialUsed ?? false)), entities);
       return;
     }
 
-    // «📱 Мои Устройства» — единый список устройств всех подписок
-    // (root + secondary) с пометкой «Подписка #N — тариф». Используется новый endpoint
-    // `/devices/all` который собирает devices из всех Remna-юзеров клиента.
-    if (data === "menu:devices") {
-      const lang = getUserLang(userId);
-      try {
-        const all = await api.getAllDevices(token);
-        // Маппим в стандартный формат для совместимости с devices:delete handler.
-        // T-fix (12.05.2026): пробрасываем subscriptionType + subscriptionId — нужны при удалении.
-        const flat = all.items.map((it) => ({
-          hwid: it.hwid,
-          platform: it.platform,
-          deviceModel: it.deviceModel,
-          createdAt: it.createdAt,
-          subscriptionType: it.subscriptionType,
-          subscriptionId: it.subscriptionId,
-        }));
-        lastDevicesList.set(userId, { devices: flat });
-        if (all.items.length === 0) {
-          await editMessageContent(
-            ctx,
-            _t("devices.no_devices", lang),
-            { inline_keyboard: [[{ text: config?.botBackLabel ?? _t("back_to_menu", lang), callback_data: "menu:main" }]] }
-          );
-          return;
-        }
-        // текст шапки берётся из настроек админки
-        // (`config.botDevicesText`). Fallback — i18n (`devices.delete_hint`).
-        const devicesHeader = (config?.botDevicesText ?? "").trim() || _t("devices.delete_hint", lang);
-        // Группируем устройства по подпискам — для красивого вывода.
-        const lines: string[] = [devicesHeader + "\n"];
-        const rows: InlineMarkup["inline_keyboard"] = [];
-        // Сначала группируем для заголовков, потом перебираем последовательно.
-        const groups = new Map<string, { label: string; devices: { idx: number; d: typeof all.items[number] }[] }>();
-        all.items.slice(0, 30).forEach((d, i) => {
-          const groupKey = `${d.subscriptionType}:${d.subscriptionId}`;
-          // root показываем как «Подписка #0»,
-          // а не «🌟 Основная» — чтобы юзер видел единый формат «Подписка #N».
-          const groupLabel = `Подписка #${d.subscriptionIndex}${d.tariffName ? ` ${d.tariffName}` : ""}`;
-          if (!groups.has(groupKey)) groups.set(groupKey, { label: groupLabel, devices: [] });
-          groups.get(groupKey)!.devices.push({ idx: i, d });
-        });
-        for (const [, grp] of groups) {
-          lines.push(`\n${grp.label}:`);
-          for (const { idx, d } of grp.devices) {
-            // приложение рядом с устройством.
-            const appPart = d.appName ? ` · 📱 ${d.appName}` : "";
-            const label = sanitizeLabel([d.platform, d.deviceModel].filter(Boolean).join(" · ") + appPart) || d.hwid.slice(0, 12) + "…";
-            lines.push(`  ${idx + 1}. ${label}`);
-            rows.push([{ text: sanitizeLabel(`🗑 Удалить #${idx + 1}: ${label.slice(0, 22)}`), callback_data: `devices:delete:${idx}` }]);
-          }
-        }
-        rows.push([{ text: "🏠 Главное меню", callback_data: "menu:main" }]);
-        // починка разорванного ключа install_second_device_text:
-        // он редактировался в админке, но ботом нигде не читался. Показываем блок
-        // «Как подключить второе устройство» под списком устройств (если задан).
-        const secondDeviceNote = (config?.installSecondDeviceText ?? "").trim();
-        if (secondDeviceNote) lines.push("", secondDeviceNote);
-        await editMessageContent(ctx, lines.join("\n"), { inline_keyboard: rows });
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка";
-        await editMessageContent(ctx, `📱 Устройства\n\n❌ ${msg}`, {
-          inline_keyboard: [[{ text: "🏠 Главное меню", callback_data: "menu:main" }]],
-        });
-      }
-      return;
-    }
-
-    if (data.startsWith("devices:delete:")) {
-      const lang = getUserLang(userId);
-      const indexStr = data.slice("devices:delete:".length);
-      const index = parseInt(indexStr, 10);
-      const stored = lastDevicesList.get(userId);
-      if (!stored || index < 0 || index >= stored.devices.length) {
-        await editMessageContent(ctx, _t("devices.session_expired", lang), {
-          inline_keyboard: [[{ text: config?.botBackLabel ?? _t("back_to_menu", lang), callback_data: "menu:main" }]],
-        });
-        return;
-      }
-      const dev = stored.devices[index]!;
-      const hwid = dev.hwid;
-      // T-fix (12.05.2026): передаём subscriptionType + subscriptionId — backend удалит ровно из этой подписки.
-      const subInfo = dev.subscriptionType && dev.subscriptionId
-        ? { type: dev.subscriptionType, id: dev.subscriptionId }
-        : undefined;
-      try {
-        await api.postClientDeviceDelete(token, hwid, subInfo);
-        const nextDevices = stored.devices.filter((_, i) => i !== index);
-        lastDevicesList.set(userId, { devices: nextDevices });
-        if (nextDevices.length === 0) {
-          await editMessageContent(
-            ctx,
-            _t("devices.deleted", lang),
-            { inline_keyboard: [[{ text: config?.botBackLabel ?? _t("back_to_menu", lang), callback_data: "menu:main" }]] }
-          );
-        } else {
-          const lines = [_t("devices.deleted", lang) + "\n"];
-          const rows: InlineMarkup["inline_keyboard"] = [];
-          nextDevices.slice(0, 15).forEach((d, i) => {
-            const label = sanitizeLabel([d.platform, d.deviceModel].filter(Boolean).join(" · ")) || d.hwid.slice(0, 12) + "…";
-            lines.push(`${i + 1}. ${label}`);
-            rows.push([{ text: sanitizeLabel(`🗑 Удалить: ${label.slice(0, 25)}`), callback_data: `devices:delete:${i}` }]);
-          });
-          rows.push([{ text: "🏠 Главное меню", callback_data: "menu:main" }]);
-          await editMessageContent(ctx, lines.join("\n"), { inline_keyboard: rows });
-        }
-      } catch (e: unknown) {
-        await editMessageContent(ctx, `❌ ${e instanceof Error ? e.message : "Ошибка"}`, {
-          inline_keyboard: [[{ text: "🏠 Главное меню", callback_data: "menu:main" }]],
-        });
-      }
+    if (data === "menu:devices" || data.startsWith("dev:") || data.startsWith("devices:delete:")) {
+      const screen = await deviceFlow.handle(`${userId}:${ctx.chat?.id ?? userId}`, data, {
+        subscriptions: async () => (await api.getAllSubscriptions(token)).items,
+        devices: (id) => api.getSubscriptionDevices(token, id),
+        remove: (subscription, hwid) => api.postClientDeviceDelete(token, hwid, subscription),
+      });
+      const deviceConfig = config?.botButtons?.find(b => b.id === "devices");
+      const titleKey = deviceConfig ? deviceConfig.emojiKey : getMenuEmojiKey(config, "devices");
+      const title = titleWithOptionalEmoji(titleKey, screen.text.split("\n", 1)[0], botEmojis);
+      const text = title.text + screen.text.slice(screen.text.indexOf("\n"));
+      await editMessageContent(ctx, text, deviceFlowButtons(screen, config), title.entities);
       return;
     }
 
@@ -6461,7 +6444,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
           `${_t("profile.title", lang)}\n\n${_t("profile.balance", lang)}${formatMoney(client?.balance ?? 0, client?.preferredCurrency ?? "usd")}\n${_t("profile.lang", lang)}${client?.preferredLang ?? "ru"}\n${_t("profile.currency", lang)}${client?.preferredCurrency ?? "usd"}\n${_t("profile.autorenew", lang)}${autoRenewStr}\n\n${_t("profile.change", lang)}`,
           config?.botEmojis
         );
-        await editMessageContent(ctx, text, profileButtons(config?.botBackLabel ?? null, innerStyles, innerEmojiIds, client?.autoRenewEnabled, lang), entities);
+        await editMessageContent(ctx, text, profileButtons(config?.botBackLabel ?? null, innerStyles, innerEmojiIds, client?.autoRenewEnabled, lang, await groupedProfileMenu(config, token, client?.trialUsed ?? false)), entities);
       } catch (err: any) {
         await ctx.answerCallbackQuery({ text: err.message || "Ошибка", show_alert: true });
       }
@@ -6521,7 +6504,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       const methods = config?.plategaMethods ?? [];
       const yooEnabled = !!config?.yoomoneyEnabled;
       const yookassaEnabledTopup = !!config?.yookassaEnabled;
-      if (!methods.length && !yooEnabled && !yookassaEnabledTopup) {
+      if (!methods.length && !yooEnabled && !yookassaEnabledTopup && !config?.telegramStarsEnabled) {
         await editMessageContent(ctx, _t("topup.unavailable", lang), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
@@ -6587,8 +6570,8 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       return;
     }
 
-    if (data.startsWith("topup_cryptopay:")) {
-      const amountStr = data.slice("topup_cryptopay:".length);
+    if (data.startsWith("topup_cryptopay:") || data.startsWith("topup_stars:")) {
+      const amountStr = data.slice(data.indexOf(":") + 1);
       const amount = Number(amountStr);
       if (!Number.isFinite(amount) || amount <= 0) {
         await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
@@ -6596,7 +6579,7 @@ if (data.startsWith("pay_tariff_paritypay:")) {
       }
       const client = await api.getMe(token);
       try {
-        const payment = await api.createCryptopayPayment(token, { amount, currency: client.preferredCurrency ?? "RUB" });
+        const payment = await (data.startsWith("topup_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, { amount, currency: client.preferredCurrency ?? "RUB" });
         const cpTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
         await editMessageContent(ctx, cpTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), cpTopup.entities);
       } catch (e: unknown) {
@@ -6741,10 +6724,10 @@ if (data.startsWith("topup_paritypay:")) {
       const paritypayEnabled = !!config?.paritypayEnabled;
       const lavaEnabled = !!config?.lavaEnabled;
       // Если есть >1 способа любого типа — показываем выбор
-      const anyOnline = yooEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled;
+      const anyOnline = config?.telegramStarsEnabled || yooEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || paritypayEnabled || lavaEnabled;
       if (methods.length > 1 || anyOnline) {
         const topupPay2 = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency)}\n\nВыберите способ оплаты:`, config?.botEmojis);
-        await editMessageContent(ctx, topupPay2.text, topupPaymentMethodButtons(amountStr, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, { yoomoneyEnabled: yooEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, rollypayEnabled, paritypayEnabled, lavaEnabled }), topupPay2.entities);
+        await editMessageContent(ctx, topupPay2.text, topupPaymentMethodButtons(amountStr, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, { currency: client.preferredCurrency, yoomoneyEnabled: yooEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, rollypayEnabled, paritypayEnabled, lavaEnabled }), topupPay2.entities);
         return;
       }
       if (methods.length === 0 && !anyOnline) {
@@ -6846,6 +6829,8 @@ if (data.startsWith("topup_paritypay:")) {
         "Telegram Бот:",
         linkBot,
       ];
+      const rewardLines = referralRewardLines(stats);
+      if (rewardLines) lines.splice(2, lines.indexOf("🔗 Ваша реферальная ссылка:") - 2, ...rewardLines);
       if (linkSite) {
         lines.push("");
         lines.push("Сайт:");
@@ -6853,7 +6838,7 @@ if (data.startsWith("topup_paritypay:")) {
       }
       lines.push("");
       lines.push(
-        (config?.botReferralFooterText ?? "").trim()
+        stats?.referralRewardMode === "days" ? "💡 Дни продлевают основную подписку автоматически." : (config?.botReferralFooterText ?? "").trim()
           || "💡 С реферального баланса можно оплатить подписку или вывести эти средства на свой кошелёк.",
       );
 
@@ -7023,7 +7008,7 @@ if (data.startsWith("topup_paritypay:")) {
         }
         lines.push("Выберите тип подписки:");
         const rows: { text: string; callback_data: string }[][] = items.map((t) => [
-          { text: `${t.name} — ${t.durationDays} дн.`.slice(0, 64), callback_data: `trial:activate:${t.id}` },
+          { text: `${t.name} — ${(t.price ?? 0) > 0 ? `${t.price} ₽` : "бесплатно"}`.slice(0, 64), callback_data: `trial:activate:${t.id}` },
         ]);
         rows.push([{ text: "🏠 Главное меню", callback_data: "menu:main" }]);
         await editMessageContent(ctx, lines.join("\n"), { inline_keyboard: rows });
@@ -7035,10 +7020,23 @@ if (data.startsWith("topup_paritypay:")) {
     }
 
     // T15: активация конкретного триала по ID из списка.
-    if (data.startsWith("trial:activate:")) {
-      const trialId = data.slice("trial:activate:".length);
+    if (data.startsWith("trial:activate:") || data.startsWith("trial:buy:")) {
+      const buying = data.startsWith("trial:buy:");
+      const raw = data.slice(buying ? "trial:buy:".length : "trial:activate:".length);
+      const [trialId, amountRaw] = raw.split(":");
       try {
-        const result = await api.activateTrialById(token, trialId);
+        const available = await api.getAvailableTrials(token);
+        const trial = available.items.find(item => item.id === trialId);
+        if (!trial) throw new Error("Триал уже использован или недоступен");
+        if ((trial.price ?? 0) > 0 && !buying) {
+          await editMessageContent(ctx, `Пробная подписка «${trial.name}» на ${trial.durationDays} дн.\nЦена: ${trial.price} ₽. Сумма спишется с баланса.`, { inline_keyboard: [
+            [{ text: `Купить за ${trial.price} ₽`, callback_data: `trial:buy:${trialId}:${trial.price}` }],
+            [{ text: "Пополнить баланс", callback_data: "menu:topup" }],
+            [{ text: "Назад", callback_data: "menu:trial" }],
+          ] });
+          return;
+        }
+        const result = await api.activateTrialById(token, trialId, buying ? Number(amountRaw) : 0);
         // новый UX после активации триала по запросу клиента.
         // Кнопки: 📲 Инструкции по установке (URL) / 🌐 Локации / 📋 Мои подписки / 🏠 Главное меню.
         // Текст: «✅ Пробная подписка ... активирована.\n\n🔗 Ссылка подписки: ...\n\nДля подключения нажмите «📲 Подключиться»».
@@ -7313,14 +7311,15 @@ if (data.startsWith("topup_paritypay:")) {
           }
         }
 
-        // Устройства: «Устройств: N доступно» (доступно = limit - used).
-        const deviceLimit = inner?.hwidDeviceLimit ?? inner?.deviceLimit ?? inner?.device_limit;
-        const devicesUsed = inner?.devicesUsed ?? inner?.devices_used;
-        let devicesLine = "";
-        if (typeof deviceLimit === "number") {
-          const available = typeof devicesUsed === "number" ? Math.max(0, deviceLimit - devicesUsed) : deviceLimit;
-          devicesLine = `📱 Устройств: ${available} доступно`;
+        // Count registered HWIDs from the selected subscription, never a legacy client field.
+        const deviceLimit = subscriptionDeviceLimit(item.subscription);
+        let devicesUsed: number | null = null;
+        try {
+          devicesUsed = (await api.getSubscriptionDevices(token, item.id)).total;
+        } catch {
+          // Keep the subscription card available while honestly showing an unavailable count.
         }
+        const devicesLine = formatDeviceCount(devicesUsed, deviceLimit);
 
         // Трафик: используется/лимит. Если без лимита — «X.XX GB / ♾».
         const tlimit = inner?.trafficLimitBytes ?? inner?.traffic_limit_bytes;
@@ -7344,18 +7343,33 @@ if (data.startsWith("topup_paritypay:")) {
         // все подписки равные. Триал-метка остаётся (это отдельная семантика, не root/secondary).
         const isTrialSub = !!item.trialId;
         const trialMark = isTrialSub ? "🎁 Пробная" : "";
+        const isBanned = item.isBanned === true;
+        let banLine = "";
+        if (isBanned) {
+          let untilStr = "";
+          if (item.bannedUntil) {
+            const bannedUntil = new Date(item.bannedUntil);
+            if (!isNaN(bannedUntil.getTime())) {
+              untilStr = bannedUntil.toLocaleString("ru-RU", {
+                day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+              });
+            }
+          }
+          banLine = `🚫 Подписка заблокирована за превышение трафика${untilStr ? ` до ${untilStr}` : ""}.\nПодключение отключено, действия недоступны до разблокировки.`;
+        }
         const lines = [
           `📲 Подписка #${idx}`,
           "",
         ];
         if (trialMark) lines.push(trialMark);
         lines.push(`💎 Тариф: ${tariff}`);
-        lines.push(`📊 Статус подписки — ${statusLabel}`);
+        lines.push(`📊 Статус подписки — ${isBanned ? "🚫 Заблокирована" : statusLabel}`);
+        if (banLine) lines.push(banLine);
         if (expireDateTimeStr) lines.push(`📅 до ${expireDateTimeStr}`);
         if (daysLeftStr) lines.push(`⏰ осталось ${daysLeftStr}`);
         if (devicesLine) lines.push(devicesLine);
         lines.push(trafficLine);
-        if (subUrl) {
+        if (subUrl && !isBanned) {
           lines.push("");
           lines.push("🔗 Ссылка для подключения:");
           lines.push(subUrl);
@@ -7386,7 +7400,7 @@ if (data.startsWith("topup_paritypay:")) {
           // T15.4: пробрасываем isTrialSub → CTA «Конвертировать в платную» вместо «Продлить».
           // пробрасываем subUrl — кнопка «📲 Инструкции по установке»
           // открывает его напрямую (без промежуточного экрана со ссылкой).
-          subDetailButtons(subType, subId, backToSubsListLabel(config?.botEmojis ?? null), innerStyles, innerEmojiIds, item.tariffId, tariffHasLocations, isTrialSub, item.autoRenewEnabled === true, subUrl, item.extraDevices ?? 0, item.trialConvertEnabled),
+          subDetailButtons(subType, subId, backToSubsListLabel(config?.botEmojis ?? null), innerStyles, innerEmojiIds, item.tariffId, tariffHasLocations, isTrialSub, item.autoRenewEnabled === true, subUrl, item.extraDevices ?? 0, item.trialConvertEnabled, isBanned, config),
         );
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Ошибка";
@@ -7703,6 +7717,28 @@ if (data.startsWith("topup_paritypay:")) {
     // Текст — новый эталонный из system_settings.gift_intro_text (скрин 11),
     // кнопки — оригинальные `giftMenuButtons` (как в бэкапе): купить / активировать / мои подарки / назад.
     // Решение по UX (11.05.2026): «верни кнопки на те, которые были, текст оставь».
+    if (data === "menu:roulette") {
+      const appUrl = config?.publicAppUrl?.replace(/\/$/, "") ?? null;
+      const rouletteUrl = appUrl ? `${appUrl}/cabinet/roulette` : null;
+      if (!rouletteUrl) {
+        await editMessageContent(ctx, "Рулетка временно недоступна.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        return;
+      }
+      await editMessageContent(
+        ctx,
+        `🎰 Колесо Фортуны
+
+Испытайте свою удачу! Крутите рулетку каждый день и выигрывайте дни подписки, рубли на баланс или приятные скидки 🎁`,
+        {
+          inline_keyboard: [
+            [{ text: "🎰 Крутить рулетку", web_app: { url: rouletteUrl } }],
+            [{ text: backButton(config?.botEmojis ?? null).text, callback_data: "menu:main" }],
+          ],
+        }
+      );
+      return;
+    }
+
     if (data === "menu:gift") {
       if (!config?.giftSubscriptionsEnabled) {
         await editMessageContent(ctx, "Функция подарков недоступна.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
@@ -7843,8 +7879,8 @@ if (data.startsWith("topup_paritypay:")) {
     // покупка подарочной через внешние платёжки.
     // Создаём обычный pay_tariff* платёж с флагом asGift=true. Webhook при оплате
     // создаст Subscription с purchasedAsGift=true (попадёт в «🎁 Мои подарки» юзера).
-    if (data.startsWith("gift_pay_yookassa:") || data.startsWith("gift_pay_yoomoney:") || data.startsWith("gift_pay_cryptopay:") || data.startsWith("gift_pay_heleket:") || data.startsWith("gift_pay_lava:") || data.startsWith("gift_pay_paritypay:")) {
-      const provider = data.startsWith("gift_pay_yookassa:") ? "yookassa"
+    if (data.startsWith("gift_pay_stars:") || data.startsWith("gift_pay_yookassa:") || data.startsWith("gift_pay_yoomoney:") || data.startsWith("gift_pay_cryptopay:") || data.startsWith("gift_pay_heleket:") || data.startsWith("gift_pay_lava:") || data.startsWith("gift_pay_paritypay:")) {
+      const provider = data.startsWith("gift_pay_stars:") ? "telegram_stars" : data.startsWith("gift_pay_yookassa:") ? "yookassa"
         : data.startsWith("gift_pay_yoomoney:") ? "yoomoney"
         : data.startsWith("gift_pay_cryptopay:") ? "cryptopay"
         : data.startsWith("gift_pay_heleket:") ? "heleket"
@@ -7908,8 +7944,8 @@ if (data.startsWith("topup_paritypay:")) {
         if (provider === "yoomoney") {
           const p = await api.createYoomoneyPayment(token, { amount: effectivePrice, paymentType: "AC", tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
           payUrl = p.paymentUrl;
-        } else if (provider === "cryptopay") {
-          const p = await api.createCryptopayPayment(token, { amount: effectivePrice, currency: tariff.currency, tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
+        } else if (provider === "cryptopay" || provider === "telegram_stars") {
+          const p = await (provider === "telegram_stars" ? api.createStarsPayment : api.createCryptopayPayment)(token, { amount: effectivePrice, currency: tariff.currency, tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
           payUrl = p.payUrl;
         } else if (provider === "heleket") {
           const p = await api.createHeleketPayment(token, { amount: effectivePrice, currency: tariff.currency, tariffId: tariff.id, tariffPriceOptionId: eff?.id, deviceCount: extraDevices, asAdditional: true, asGift: true });
@@ -8480,6 +8516,7 @@ composer.on("message:text", async (ctx) => {
         undefined,
         undefined,
         {
+          currency: client.preferredCurrency,
           yoomoneyEnabled: !!cfgT?.yoomoneyEnabled,
           yookassaEnabled: !!cfgT?.yookassaEnabled,
           cryptopayEnabled: !!cfgT?.cryptopayEnabled,
@@ -8602,7 +8639,7 @@ composer.on("message:text", async (ctx) => {
     const rollypayEnabledMsg = !!config?.rollypayEnabled;
     const paritypayEnabledMsg = !!config?.paritypayEnabled;
     const lavaEnabledMsg = !!config?.lavaEnabled;
-    if (!methods.length && !yooEnabled && !yookassaEnabledMsg && !cryptopayEnabledMsg && !heleketEnabledMsg && !rollypayEnabledMsg && !paritypayEnabledMsg && !lavaEnabledMsg) {
+    if (!methods.length && !yooEnabled && !yookassaEnabledMsg && !cryptopayEnabledMsg && !heleketEnabledMsg && !rollypayEnabledMsg && !paritypayEnabledMsg && !lavaEnabledMsg && !config?.telegramStarsEnabled) {
       await ctx.reply("Пополнение временно недоступно.");
       return;
     }
@@ -8620,13 +8657,13 @@ composer.on("message:text", async (ctx) => {
           connect: botEmojis.SERVERS?.tgEmojiId || botEmojis.CONNECT?.tgEmojiId,
         }
       : undefined;
-    const enabledOnlineMsg = [yooEnabled, yookassaEnabledMsg, cryptopayEnabledMsg, heleketEnabledMsg, rollypayEnabledMsg, paritypayEnabledMsg, lavaEnabledMsg].filter(Boolean).length;
+    const enabledOnlineMsg = [config?.telegramStarsEnabled, yooEnabled, yookassaEnabledMsg, cryptopayEnabledMsg, heleketEnabledMsg, rollypayEnabledMsg, paritypayEnabledMsg, lavaEnabledMsg].filter(Boolean).length;
     const anyOnlineMsg = enabledOnlineMsg > 0;
     if (methods.length > 1 || anyOnlineMsg) {
       const topupMsg1 = titleWithEmoji("CARD", `Пополнение на ${formatMoney(num, client.preferredCurrency)}\n\nВыберите способ оплаты:`, config?.botEmojis);
       await ctx.reply(topupMsg1.text, {
         entities: topupMsg1.entities.length ? topupMsg1.entities : undefined,
-        reply_markup: topupPaymentMethodButtons(String(num), methods, config?.botBackLabel ?? null, backStyle, msgEmojiIds, { yoomoneyEnabled: yooEnabled, yookassaEnabled: yookassaEnabledMsg, cryptopayEnabled: cryptopayEnabledMsg, heleketEnabled: heleketEnabledMsg, rollypayEnabled: rollypayEnabledMsg, paritypayEnabled: paritypayEnabledMsg, lavaEnabled: lavaEnabledMsg }),
+        reply_markup: topupPaymentMethodButtons(String(num), methods, config?.botBackLabel ?? null, backStyle, msgEmojiIds, { currency: client.preferredCurrency, yoomoneyEnabled: yooEnabled, yookassaEnabled: yookassaEnabledMsg, cryptopayEnabled: cryptopayEnabledMsg, heleketEnabled: heleketEnabledMsg, rollypayEnabled: rollypayEnabledMsg, paritypayEnabled: paritypayEnabledMsg, lavaEnabled: lavaEnabledMsg }),
       });
       return;
     }
@@ -8692,6 +8729,7 @@ const botInstances: Bot[] = [];
     throw new Error("BOT_TOKEN не задан в env");
   }
   const b = await createBotWithProxy(token);
+  b.api.config.use(ignoreNotModified);
   b.use(composer);
   b.catch((err) => console.error(`[Bot ${token.slice(0, 6)}…] error:`, err));
   botInstances.push(b);
@@ -8716,10 +8754,35 @@ for (const b of botInstances) {
           { command: "subscriptions", description: "Моя подписка / инструкции" },
           { command: "referral", description: "Реферальная программа" },
           { command: "support", description: "Поддержка" },
+          { command: "paysupport", description: "Помощь с оплатой Stars" },
         ]);
       } catch (e) {
         console.error(`[Bot @${info.username}] setMyCommands failed:`, e);
       }
     },
+  });
+}
+
+async function groupedProfileMenu(config: Awaited<ReturnType<typeof api.getPublicConfig>>, token: string, trialUsed: boolean): Promise<InlineMarkup | undefined> {
+  if (!config?.botGroupCabinet) return undefined;
+  const [subscriptions, trials, proxy, singbox] = await Promise.all([
+    api.getAllSubscriptions(token).catch(() => ({ items: [] })),
+    api.getAvailableTrials(token).catch(() => ({ items: [], hasAnyEnabled: false })),
+    api.getPublicProxyTariffs().catch(() => ({ items: [] })),
+    api.getPublicSingboxTariffs().catch(() => ({ items: [] })),
+  ]);
+  return mainMenu({
+    liteMode: config.liteMode === true,
+    section: "profile", groupCabinet: true,
+    showTrial: trials.hasAnyEnabled ? trials.items.length > 0 : Boolean(config.trialEnabled && !trialUsed),
+    showVpn: subscriptions.items.length > 0,
+    showProxy: proxy.items.some(c => c.tariffs.length > 0),
+    showSingbox: singbox.items.some(c => c.tariffs.length > 0),
+    appUrl: config.publicAppUrl ?? null,
+    botButtons: config.botButtons,
+    menuMode: config.botMenuMode,
+    buttonsPerRow: config.botButtonsPerRow,
+    showExtraOptions: config.sellOptionsEnabled && (config.sellOptions?.length ?? 0) > 0,
+    showGift: config.giftSubscriptionsEnabled,
   });
 }

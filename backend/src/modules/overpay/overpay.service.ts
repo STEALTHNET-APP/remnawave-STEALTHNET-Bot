@@ -1,3 +1,4 @@
+import { paymentDescription } from "../payment/payment-description.js";
 /**
  * Overpay.io — создание платёжной формы и проверка статусов.
  *
@@ -100,7 +101,8 @@ export async function createOverpayPayformOrder(
     merchantTransactionId: orderId,
     livetimeMinutes: clampLivetime(livetimeMinutes ?? 300),
   };
-  if (description?.trim()) body.description = description.trim().slice(0, 500);
+  const invoiceDescription = await paymentDescription(description ?? "");
+  if (invoiceDescription.trim()) body.description = invoiceDescription.trim().slice(0, 500);
   if (returnUrl?.trim()) body.returnUrl = returnUrl.trim();
   if (paymentMethods && paymentMethods.length > 0) body.paymentMethods = Array.from(new Set(paymentMethods));
   const clientPayload = client ? cleanClientObject(client) : null;

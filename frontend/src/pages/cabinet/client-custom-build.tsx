@@ -154,17 +154,17 @@ export function ClientCustomBuildPage() {
     }
   }
 
-  async function payByCryptopay() {
+  async function payByCryptopay(stars = false) {
     if (!token || !cb) return;
     setPayError(null);
     setPayLoading(true);
     try {
-      const res = await api.cryptopayCreatePayment(token, {
+      const res = await (stars ? api.starsCreatePayment : api.cryptopayCreatePayment)(token, {
         customBuild: customBuildPayload,
         currency: cb.currency,
         promoCode: promoCode.trim() || undefined,
       });
-      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "Crypto Bot" });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: stars ? "Telegram Stars" : "Crypto Bot" });
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {
@@ -496,6 +496,7 @@ async function payByParitypay() {
 
                 type ProviderEntry = { id: string; enabled: boolean; onClick: () => void; label: string; icon: "crypto" | "card" };
                 const providers: ProviderEntry[] = [
+                  { id: "telegram_stars", enabled: Boolean(config?.telegramStarsEnabled) && cb.currency.toUpperCase() === "RUB", onClick: () => payByCryptopay(true), label: "⭐ Telegram Stars", icon: "crypto" },
                   { id: "cryptopay", enabled: !!config?.cryptopayEnabled, onClick: () => payByCryptopay(), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
                   { id: "heleket", enabled: !!config?.heleketEnabled, onClick: () => payByHeleket(), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
                   { id: "rollypay", enabled: !!config?.rollypayEnabled, onClick: () => payByRollypay(), label: providerLabel("rollypay", "RollyPay"), icon: "card" },

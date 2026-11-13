@@ -143,7 +143,7 @@ export function TrialsPage() {
               {trials.map((t) => (
                 <tr key={t.id} className="border-t border-border hover:bg-foreground/5 transition-colors">
                   <td className="px-5 py-3.5 text-muted-foreground">{t.sortOrder}</td>
-                  <td className="px-5 py-3.5 font-medium">{t.name}</td>
+                  <td className="px-5 py-3.5 font-medium">{t.name}<div className="text-xs text-muted-foreground">{(t.price ?? 0) > 0 ? `${t.price} ₽` : "Бесплатно"}</div></td>
                   <td className="px-5 py-3.5 text-muted-foreground">{t.tariffName ?? "—"}</td>
                   <td className="px-5 py-3.5">{t.durationDays}</td>
                   <td className="px-5 py-3.5">
@@ -238,6 +238,7 @@ function TrialFormDialog({
   // конвертация триала: тоггл + «в любой тариф».
   const [convertEnabled, setConvertEnabled] = useState<boolean>(trial?.convertEnabled ?? true);
   const [convertAllTariffs, setConvertAllTariffs] = useState<boolean>(trial?.convertAllTariffs ?? false);
+  const [price, setPrice] = useState<number>(trial?.price ?? 0);
   const [durationDays, setDurationDays] = useState<number>(trial?.durationDays ?? 3);
   // отдельный лимит трафика триала в ГБ (пусто = из тарифа).
   // BigInt в БД, в UI работаем в ГБ для удобства администратора.
@@ -286,6 +287,7 @@ function TrialFormDialog({
       tariffId: source === "tariff" ? tariffId : null,
       squadUuids: source === "squad" ? [squadUuid] : null,
       deviceLimit: source === "squad" ? Math.max(1, deviceLimit) : null,
+      price,
       durationDays,
       trafficLimitBytes,
       enabled,
@@ -399,6 +401,11 @@ function TrialFormDialog({
         </div>
         )}
 
+        <div className="grid gap-1">
+          <Label htmlFor="trial-price" className="text-xs">Цена триала, ₽</Label>
+          <Input id="trial-price" type="number" min={0} max={1000000} step="0.01" value={price} onChange={e => setPrice(Number(e.target.value))} />
+          <p className="text-xs text-muted-foreground">0 — бесплатно. Платный триал покупается с баланса один раз.</p>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="grid gap-1">
             <Label htmlFor="trial-days" className="text-xs">Длительность (дней)</Label>

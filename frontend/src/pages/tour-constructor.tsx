@@ -119,7 +119,7 @@ function SortableStepRow({
         ref={setNodeRef}
         style={style}
         onClick={onSelect}
-        className={`relative z-10 flex items-center gap-3.5 rounded-[1.25rem] border p-3.5 cursor-pointer transition-all duration-300 ${
+        className={`relative z-10 flex flex-wrap items-center gap-3.5 rounded-[1.25rem] border p-3.5 cursor-pointer transition-all duration-300 ${
           isDragging ? "opacity-90 z-50 scale-[1.02] border-border bg-card ring-2 ring-primary/20" : ""
         } ${
           isSelected 
@@ -212,7 +212,7 @@ function PaletteItem({
         left = rect.left - tooltipWidth - gap;
       }
       
-      setTooltipPos({ top: rect.top, left });
+      setTooltipPos({ top: Math.max(8, rect.top), left: Math.max(8, Math.min(left, window.innerWidth - tooltipWidth - 8)) });
     } else {
       setTooltipPos(null);
     }
@@ -592,13 +592,13 @@ export function TourConstructorPage() {
   const isUploadedVideo = editVideoUrl.startsWith("/api/uploads/");
 
   return (
-    <div className="space-y-6 h-[calc(100vh-140px)] flex flex-col relative z-0">
+    <div className="space-y-6 xl:h-[calc(100vh-140px)] flex flex-col relative z-0 min-w-0">
       {/* Ambient background glows */}
-      <div className="absolute -top-[20%] -left-[10%] w-[40%] h-[40%] rounded-full bg-primary/20 blur-[120px] pointer-events-none -z-10" />
-      <div className="absolute top-[30%] -right-[10%] w-[30%] h-[50%] rounded-full bg-purple-500/10 blur-[100px] pointer-events-none -z-10" />
+      <div className="absolute top-0 left-0 w-[40%] h-[40%] rounded-full bg-primary/20 blur-[120px] pointer-events-none -z-10" />
+      <div className="absolute top-[30%] right-0 w-[30%] h-[50%] rounded-full bg-purple-500/10 blur-[100px] pointer-events-none -z-10" />
       
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 shrink-0 relative p-4 rounded-2xl border border-border bg-card overflow-hidden">
+      <div className="flex flex-col 2xl:flex-row 2xl:items-center 2xl:justify-between gap-6 shrink-0 relative p-4 rounded-2xl border border-border bg-card overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 mix-blend-overlay pointer-events-none" />
         <div className="absolute inset-0 bg-transparent pointer-events-none" />
         
@@ -624,7 +624,7 @@ export function TourConstructorPage() {
           </div>
         </div>
         
-        <div className="relative z-10 flex items-center gap-3">
+        <div className="relative z-10 flex flex-wrap items-center gap-3">
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Button
               onClick={() => setView("library")}
@@ -673,13 +673,13 @@ export function TourConstructorPage() {
           exit={{ opacity: 0, y: -20 }}
           className="flex-1 flex flex-col bg-card border border-border rounded-2xl p-4 relative overflow-hidden"
         >
-          <div className="flex items-center justify-between mb-6 relative z-10 pb-4 border-b border-border shrink-0">
-            <div className="flex items-start gap-3">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6 relative z-10 pb-4 border-b border-border shrink-0 min-w-0">
+            <div className="flex flex-col sm:flex-row items-start gap-3 min-w-0">
               <Button variant="ghost" className="rounded-xl hover:bg-card" onClick={() => { setView("constructor"); setSelectedLibraryCharacterId(null); }}>
                 <ArrowLeft className="w-5 h-5 mr-2" />
                 Назад в конструктор
               </Button>
-              <h2 className="text-xl font-bold text-foreground flex items-center gap-3">
+              <h2 className="text-xl font-bold text-foreground flex flex-wrap items-center gap-3 min-w-0">
                 Библиотека персонажей
                 <span className="text-xs bg-primary/20 text-primary px-2.5 py-1 rounded-full border border-border font-bold">
                   {mascots.length}
@@ -692,7 +692,7 @@ export function TourConstructorPage() {
             </Button>
           </div>
 
-          <div className="flex flex-1 gap-6 overflow-hidden min-h-0">
+          <div className="flex flex-col xl:flex-row flex-1 gap-6 xl:overflow-hidden min-h-0 min-w-0">
             {/* Left Side: Grid */}
             <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-10">
@@ -732,7 +732,7 @@ export function TourConstructorPage() {
               <motion.div 
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="w-[380px] shrink-0 bg-card rounded-[1.5rem] border border-border p-4 flex flex-col overflow-y-auto custom-scrollbar"
+                className="w-full xl:w-[380px] shrink-0 bg-card rounded-[1.5rem] border border-border p-4 flex flex-col overflow-y-auto custom-scrollbar"
               >
                 {(() => {
                   const selectedChar = mascots.find(m => m.id === selectedLibraryCharacterId);
@@ -811,9 +811,9 @@ export function TourConstructorPage() {
           </div>
         </motion.div>
       ) : (
-      <div className="flex flex-1 gap-6 overflow-hidden min-h-0">
+      <div className="flex flex-col xl:flex-row flex-1 gap-6 xl:overflow-hidden min-h-0 min-w-0">
         {/* Left Panel - Palette */}
-        <div className="w-[340px] shrink-0 flex flex-col bg-card border border-border rounded-2xl p-4 overflow-y-auto relative group/panel">
+        <div className="w-full xl:w-[300px] shrink-0 flex flex-col bg-card border border-border rounded-2xl p-4 overflow-y-auto relative group/panel">
           <div className="absolute inset-0 bg-transparent pointer-events-none rounded-2xl opacity-50 group-hover/panel:opacity-100 transition-opacity duration-700" />
           <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-[50px] rounded-full pointer-events-none" />
           
@@ -838,7 +838,7 @@ export function TourConstructorPage() {
         </div>
 
         {/* Center Panel - Step Chain */}
-        <div className="flex-1 flex flex-col bg-card border border-border rounded-2xl p-4 overflow-y-auto relative group/center">
+        <div className="flex-1 min-w-0 min-h-[350px] xl:min-h-0 flex flex-col bg-card border border-border rounded-2xl p-4 overflow-y-auto relative group/center">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_var(--tw-gradient-stops))] bg-transparent pointer-events-none rounded-2xl" />
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-64 h-32 bg-purple-500/10 blur-[60px] pointer-events-none rounded-full" />
           
@@ -906,12 +906,12 @@ export function TourConstructorPage() {
         </div>
 
         {/* Settings Panel */}
-        <div className="flex-1 bg-card border border-border rounded-2xl overflow-y-auto flex flex-col relative group/editor">
+        <div className="flex-1 min-w-0 min-h-[350px] xl:min-h-0 bg-card border border-border rounded-2xl overflow-y-auto flex flex-col relative group/editor">
           <div className="absolute inset-0 bg-card pointer-events-none rounded-2xl opacity-50 group-hover/editor:opacity-100 transition-opacity duration-700" />
-          <div className="absolute top-[20%] right-[-10%] w-48 h-48 bg-purple-500/10 blur-[60px] pointer-events-none rounded-full" />
+          <div className="absolute top-[20%] right-0 w-48 h-48 bg-purple-500/10 blur-[60px] pointer-events-none rounded-full" />
 
           {selectedStep ? (
-            <div className="p-7 max-w-4xl mx-auto w-full flex flex-col gap-7 relative z-10">
+            <div className="p-4 sm:p-7 max-w-4xl mx-auto w-full flex flex-col gap-7 relative z-10">
               <div className="flex items-center justify-between pb-5 border-b border-border">
                 <div className="flex flex-col gap-1.5">
                   <h2 className="font-bold text-2xl tracking-tight text-foreground text-foreground drop-shadow-sm flex items-center gap-2.5">

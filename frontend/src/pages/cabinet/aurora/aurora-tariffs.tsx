@@ -1,3 +1,4 @@
+import { useLocation } from "react-router-dom";
 /** Aurora: categories contain complete tariff cards; each card opens the
  * existing checkout with its chosen duration. Subscription changes are
  * explained in checkout using the server conversion preview. */
@@ -23,6 +24,7 @@ type PayMethod =
   | { kind: "platega"; id: number; label: string; icon: typeof Wallet }
   | { kind: "yookassa"; label: string; icon: typeof Wallet }
   | { kind: "yoomoney"; label: string; icon: typeof Wallet }
+  | { kind: "telegram_stars"; label: string; icon: typeof Bitcoin }
   | { kind: "cryptopay"; label: string; icon: typeof Bitcoin }
   | { kind: "heleket"; label: string; icon: typeof Bitcoin }
   | { kind: "rollypay"; label: string; icon: typeof Wallet }
@@ -69,7 +71,8 @@ export function AuroraTariffs() {
   const [selectedTariffId, setSelectedTariffId] = useState<string | null>(null);
   const [selectedPriceOptionId, setSelectedPriceOptionId] = useState<string | null>(null);
 
-  const [promoInput, setPromoInput] = useState("");
+  const promoLocation = useLocation();
+  const [promoInput, setPromoInput] = useState(() => typeof promoLocation.state?.promoCode === "string" ? promoLocation.state.promoCode : "");
   const [promoApplied, setPromoApplied] = useState<string | null>(null);
   const [promoMsg, setPromoMsg] = useState<string | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
@@ -229,6 +232,7 @@ export function AuroraTariffs() {
     });
     if (config.yookassaEnabled) list.push({ kind: "yookassa", label: "YooKassa", icon: Wallet });
     if (config.yoomoneyEnabled) list.push({ kind: "yoomoney", label: "YooMoney", icon: Wallet });
+    if (config.telegramStarsEnabled && currency.toUpperCase() === "RUB") list.push({ kind: "telegram_stars", label: "⭐ Telegram Stars", icon: Wallet });
     if (config.cryptopayEnabled) list.push({ kind: "cryptopay", label: "Crypto Pay", icon: Bitcoin });
     if (config.heleketEnabled) list.push({ kind: "heleket", label: "Heleket", icon: Bitcoin });
     if ((config as { rollypayEnabled?: boolean }).rollypayEnabled) list.push({ kind: "rollypay", label: "RollyPay", icon: Wallet });
@@ -237,7 +241,7 @@ export function AuroraTariffs() {
     if (config.lavatopEnabled) list.push({ kind: "lavatop", label: "Lava.top", icon: Wallet });
     if (config.overpayEnabled) list.push({ kind: "overpay", label: "Overpay", icon: Wallet });
     return list;
-  }, [config]);
+  }, [config, currency]);
 
   // Auto-select first method when methods load
   useEffect(() => {
@@ -415,6 +419,9 @@ export function AuroraTariffs() {
       } else if (selectedMethod.kind === "yoomoney") {
         const r = await api.yoomoneyCreateFormPayment(state.token, { ...base, paymentType: "AC" });
         url = r.paymentUrl;
+      } else if (selectedMethod.kind === "telegram_stars") {
+        const r = await api.starsCreatePayment(state.token, base);
+        url = r.payUrl;
       } else if (selectedMethod.kind === "cryptopay") {
         const r = await api.cryptopayCreatePayment(state.token, base);
         // CryptoBot mini-app preferred when in Telegram, иначе fallback

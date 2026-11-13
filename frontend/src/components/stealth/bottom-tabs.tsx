@@ -104,7 +104,7 @@ export function BottomTabs() {
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-30 pointer-events-none px-4"
-      style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+      style={{ paddingBottom: "calc(var(--app-safe-bottom) + 12px)" }}
     >
       <div
         ref={navRef}

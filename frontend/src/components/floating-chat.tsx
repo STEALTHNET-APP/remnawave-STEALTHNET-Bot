@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import gsap from "gsap";
 import { EASE_OUT, EASE_SPRING, reducedMotion } from "@/lib/gsap-utils";
-import { MessageCircle, X, Send, User, Sparkles, Headset, ArrowLeft, MessageSquarePlus, CircleDot, CircleCheck, Inbox, Loader2, Maximize2, Minimize2, Paperclip, X as XIcon } from "lucide-react";
+import { MessageCircle, X, Send, User, Sparkles, Headset, ArrowLeft, MessageSquarePlus, CircleDot, CircleCheck, Inbox, Loader2, Maximize2, Minimize2, Paperclip, X as XIcon, Trash2 } from "lucide-react";
+import { askConfirm } from "@/lib/confirm";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useClientAuth } from "@/contexts/client-auth";
@@ -125,7 +126,7 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
 
 const ChatHeader = ({ activeChat, setActiveChat, isExpanded, setIsExpanded, setIsOpen, aiUnread, supportUnread, showAiTab = true }: any) => (
   <>
-    <div className="px-4 py-3 sm:py-4 border-b border-border bg-black/5 dark:bg-card shrink-0 relative overflow-hidden pt-[max(env(safe-area-inset-top),16px)] sm:pt-4">
+    <div className="px-4 py-3 sm:py-4 border-b border-border bg-black/5 dark:bg-card shrink-0 relative overflow-hidden pt-[max(var(--app-safe-top),16px)] sm:pt-4">
       <div className="absolute inset-0 bg-transparent pointer-events-none" />
       <div className="relative flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -267,6 +268,24 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
     }
   }, [detail?.messages?.length]);
 
+  const handleDeleteTicket = async (id: string, subject?: string) => {
+    if (!token) return;
+    const msg = subject ? `Удалить обращение «${subject}»? Все сообщения будут удалены.` : "Удалить обращение?";
+    const ok = await askConfirm(msg);
+    if (!ok) return;
+    try {
+      await api.deleteTicket(token, id);
+      setList((prev) => prev.filter((t) => t.id !== id));
+      if (detailId === id) {
+        setDetailId(null);
+        setDetail(null);
+      }
+      if (onRefreshUnread) onRefreshUnread();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Не удалось удалить обращение");
+    }
+  };
+
   const sendReply = () => {
     if (!token || !detailId) return;
     if (!replyText.trim() && replyFiles.length === 0) return;
@@ -324,18 +343,31 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
           <ChatHeader {...headerProps} />
           
           {/* Header */}
-          <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-black/5 dark:border-border bg-card shrink-0">
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full" onClick={() => setDetailId(null)}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-bold truncate">{detail?.subject || "Загрузка..."}</h3>
-              {detail && (
-                <span className={cn("text-[10px] uppercase font-bold tracking-wider", detail.status === "open" ? "text-emerald-500" : "text-muted-foreground")}>
-                  {detail.status === "open" ? "Открыт" : "Закрыт"}
-                </span>
-              )}
+          <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-black/5 dark:border-border bg-card shrink-0">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full" onClick={() => setDetailId(null)}>
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-bold truncate">{detail?.subject || "Загрузка..."}</h3>
+                {detail && (
+                  <span className={cn("text-[10px] uppercase font-bold tracking-wider", detail.status === "open" ? "text-emerald-500" : "text-muted-foreground")}>
+                    {detail.status === "open" ? "Открыт" : "Закрыт"}
+                  </span>
+                )}
+              </div>
             </div>
+            {detail && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleDeleteTicket(detail.id, detail.subject)}
+                className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                title="Удалить обращение"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
           
           {/* Messages */}
@@ -375,7 +407,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
 
         {/* Input area */}
         {detail?.status === "open" && (
-          <div className="p-3 sm:p-4 border-t border-black/5 dark:border-border bg-card sm:bg-card shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4">
+          <div className="p-3 sm:p-4 border-t border-black/5 dark:border-border bg-card sm:bg-card shrink-0 pb-[max(var(--app-safe-bottom),16px)] sm:pb-4">
             {replyFiles.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {replyFiles.map((f, i) => (
@@ -578,23 +610,37 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
               <div
                 key={t.id}
                 onClick={() => setDetailId(t.id)}
-                className="group relative flex flex-col gap-1.5 p-3.5 rounded-xl border border-black/5 dark:border-border bg-card/60 hover:bg-card/80 transition-all cursor-pointer shadow-sm hover:shadow-md"
+                className="group relative flex items-center justify-between gap-3 p-3.5 rounded-xl border border-black/5 dark:border-border bg-card/60 hover:bg-card/80 transition-all cursor-pointer shadow-sm hover:shadow-md"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <h4 className="font-semibold text-[13px] text-foreground line-clamp-2 leading-tight group-hover:text-primary transition-colors">{t.subject}</h4>
-                  {isOpen ? (
-                    <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
-                      <CircleDot className="h-2.5 w-2.5" /> Открыт
-                    </span>
-                  ) : (
-                    <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase text-muted-foreground">
-                      <CircleCheck className="h-2.5 w-2.5" /> Закрыт
-                    </span>
-                  )}
+                <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                  <div className="flex items-start gap-2">
+                    <h4 className="font-semibold text-[13px] text-foreground line-clamp-2 leading-tight group-hover:text-primary transition-colors">{t.subject}</h4>
+                    {isOpen ? (
+                      <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
+                        <CircleDot className="h-2.5 w-2.5" /> Открыт
+                      </span>
+                    ) : (
+                      <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase text-muted-foreground">
+                        <CircleCheck className="h-2.5 w-2.5" /> Закрыт
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] font-medium text-muted-foreground">
+                    {formatDate(t.updatedAt)}
+                  </span>
                 </div>
-                <span className="text-[10px] font-medium text-muted-foreground">
-                  {formatDate(t.updatedAt)}
-                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteTicket(t.id, t.subject);
+                  }}
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0 opacity-80 group-hover:opacity-100"
+                  title="Удалить обращение"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
             );
           })
@@ -932,7 +978,7 @@ export function FloatingChat() {
           ref={panelRef}
           data-tour="floating-chat"
           className={cn(
-            "fixed sm:absolute z-50",
+            "cabinet-floating-chat fixed sm:absolute z-50",
             "inset-0 sm:inset-auto sm:bottom-20 sm:right-0",
             "w-full h-[100dvh]",
             isExpanded
@@ -1007,7 +1053,7 @@ export function FloatingChat() {
                   </div>
 
                   {/* AI Input Area */}
-                  <div className="p-3 sm:p-4 border-t border-black/5 dark:border-border bg-card sm:bg-card shrink-0 pb-[max(env(safe-area-inset-bottom),16px)] sm:pb-4">
+                  <div className="p-3 sm:p-4 border-t border-black/5 dark:border-border bg-card sm:bg-card shrink-0 pb-[max(var(--app-safe-bottom),16px)] sm:pb-4">
                     <div className="relative flex items-end gap-2 bg-black/5 dark:bg-black/20 p-1.5 rounded-xl border border-black/5 dark:border-border focus-within:border-border focus-within:ring-1 focus-within:ring-primary/50 transition-all">
                       <textarea
                         className={cn(

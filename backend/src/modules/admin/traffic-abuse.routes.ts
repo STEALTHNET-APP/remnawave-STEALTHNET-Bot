@@ -1,8 +1,14 @@
+import { z } from "zod";
+import { getTrafficExclusions, filterExcludedTraffic, trafficExclusionKey } from "./traffic-exclusions.js";
+import { logAdmin } from "../audit/audit.service.js";
+import type { ReqAdmin } from "../auth/middleware.js";
 import { Router, Request, Response } from "express";
 import { requireAuth, requireAdminSection } from "../auth/middleware.js";
 import { prisma } from "../../db.js";
 import {
   remnaGetUsers,
+  remnaGetUser,
+  extractRemnaUuid,
   remnaGetNodes,
   remnaGetNodeUsersUsage,
   isRemnaConfigured,
@@ -11,6 +17,41 @@ import {
 export const trafficAbuseRouter = Router();
 trafficAbuseRouter.use(requireAuth);
 trafficAbuseRouter.use(requireAdminSection);
+
+trafficAbuseRouter.get("/exclusions", async (_req, res, next) => {
+  try { res.json({ items: await getTrafficExclusions() }); } catch (error) { next(error); }
+});
+
+trafficAbuseRouter.use("/exclusions", (req, res, next) => {
+  if ((req as typeof req & ReqAdmin).adminRole !== "ADMIN") return res.status(403).json({ message: "Изменять исключения может только администратор" });
+  next();
+});
+
+trafficAbuseRouter.put("/exclusions/:uuid", async (req, res, next) => {
+  const uuid = z.union([z.string().uuid(), z.string().regex(/^[1-9]\d{0,18}$/)]).transform(value => value.toLowerCase()).safeParse(req.params.uuid);
+  if (!uuid.success) return res.status(400).json({ message: "Укажите ID или UUID пользователя Remnawave" });
+  try {
+    const result = await remnaGetUser(uuid.data);
+    if (result.error || !result.data) return res.status(result.status === 404 ? 404 : 502).json({ message: "Не удалось найти пользователя в Remnawave" });
+    const payload = result.data as { response?: { uuid?: string; username?: string } };
+    const user = payload.response;
+    if (extractRemnaUuid(user) !== uuid.data || !user?.username) return res.status(502).json({ message: "Некорректный ответ Remnawave" });
+    await prisma.systemSetting.upsert({ where: { key: trafficExclusionKey(uuid.data) }, create: { key: trafficExclusionKey(uuid.data), value: user.username }, update: { value: user.username } });
+    await logAdmin(req, "traffic.exclude", { type: "remna_user", id: uuid.data });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
+trafficAbuseRouter.delete("/exclusions/:uuid", async (req, res, next) => {
+  const uuid = z.union([z.string().uuid(), z.string().regex(/^[1-9]\d{0,18}$/)]).transform(value => value.toLowerCase()).safeParse(req.params.uuid);
+  if (!uuid.success) return res.status(400).json({ message: "Некорректный ID пользователя" });
+  try {
+    await prisma.systemSetting.deleteMany({ where: { key: trafficExclusionKey(uuid.data) } });
+    await logAdmin(req, "traffic.include", { type: "remna_user", id: uuid.data });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
 
 interface RemnaUser {
   uuid: string;
@@ -187,7 +228,10 @@ trafficAbuseRouter.get("/analytics", async (req: Request, res: Response) => {
       }
     });
 
-    const { users, total: totalUsersCount } = await fetchAllUsers();
+    const fetched = await fetchAllUsers();
+    const users = fetched.users.map(user => ({ ...user, uuid: extractRemnaUuid(user) ?? "" }));
+    const totalUsersCount = fetched.total;
+    const excludedUsers = filterExcludedTraffic(usernameToNodeUsage, users, await getTrafficExclusions());
 
     const userMap = new Map<string, RemnaUser>();
     for (const u of users) {
@@ -293,7 +337,8 @@ trafficAbuseRouter.get("/analytics", async (req: Request, res: Response) => {
     res.json({
       abusers,
       stats: {
-        totalUsers: totalUsersCount || users.length,
+        totalUsers: Math.max(0, (totalUsersCount || users.length) - excludedUsers),
+        excludedUsers,
         activeNodes: activeNodes.length,
         nodesWithData,
         periodDays: days,

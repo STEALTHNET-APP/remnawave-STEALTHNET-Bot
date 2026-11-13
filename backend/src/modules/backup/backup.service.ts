@@ -4,10 +4,9 @@
  */
 
 import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
-import { mkdtemp, writeFile, readFile, rm, readdir, stat } from "node:fs/promises";
-import { createReadStream } from "node:fs";
-import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
+import { writeSqlArchive } from "./backup-archive.js";
+import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 const BACKUPS_DIR = process.env.BACKUPS_DIR || path.join(process.cwd(), "backups");
@@ -62,7 +61,7 @@ export async function saveBackupToFile(db: DbConnection): Promise<{ relativePath
   const m = String(now.getMonth() + 1).padStart(2, "0");
   const d = String(now.getDate()).padStart(2, "0");
   const time = now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const filename = `stealthnet-backup-${time}.sql`;
+  const filename = `stealthnet-backup-${time}-${randomUUID()}.sql`;
   const dirPath = path.join(BACKUPS_DIR, String(y), m, d);
   const fullPath = path.join(dirPath, filename);
   const relativePath = path.join(String(y), m, d, filename);
@@ -70,23 +69,12 @@ export async function saveBackupToFile(db: DbConnection): Promise<{ relativePath
   const { mkdir } = await import("node:fs/promises");
   await mkdir(dirPath, { recursive: true });
 
-  await new Promise<void>((resolve, reject) => {
-    const env = { ...process.env, PGPASSWORD: db.password };
-    const proc = spawn(
-      "pg_dump",
-      ["-h", db.host, "-p", String(db.port), "-U", db.user, "-d", db.database, "-F", "p", "--no-owner", "--no-acl", "--clean", "--if-exists"],
-      { env }
-    );
-    const out = createWriteStream(fullPath);
-    proc.stdout?.pipe(out);
-    proc.stderr?.on("data", (chunk) => console.error("[pg_dump]", chunk.toString()));
-    proc.on("error", reject);
-    out.on("finish", () => resolve());
-    out.on("error", reject);
-    proc.on("close", (code) => {
-      if (code !== 0) reject(new Error(`pg_dump exited with code ${code}`));
-    });
-  });
+  const proc = spawn(
+    "pg_dump",
+    ["-h", db.host, "-p", String(db.port), "-U", db.user, "-d", db.database, "-F", "p", "--no-owner", "--no-acl", "--clean", "--if-exists"],
+    { env: { ...process.env, PGPASSWORD: db.password }, stdio: ["ignore", "pipe", "pipe"] }
+  );
+  await writeSqlArchive(proc, fullPath);
 
   return { relativePath, filename, fullPath };
 }
@@ -115,12 +103,12 @@ export async function listBackups(): Promise<BackupItem[]> {
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
         await walkDir(full, rel);
-      } else if (e.isFile() && e.name.endsWith(".sql")) {
+      } else if (e.isFile() && (e.name.endsWith(".sql") || e.name.endsWith(".sql.gz"))) {
         const st = await stat(full);
         items.push({
           path: rel.replace(/\\/g, "/"),
           filename: e.name,
-          date: path.dirname(rel).replace(/\\/g, "/"),
+          date: e.name.endsWith(".sql.gz") ? st.mtime.toISOString().slice(0, 10).replace(/-/g, "/") : path.dirname(rel).replace(/\\/g, "/"),
           size: st.size,
         });
       }
@@ -130,22 +118,12 @@ export async function listBackups(): Promise<BackupItem[]> {
 
 /** Безопасно разрешает относительный путь к файлу бэкапа; возвращает полный путь или null */
 export function resolveBackupPath(relativePath: string): string | null {
-  const normalized = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, "");
-  const full = path.join(BACKUPS_DIR, normalized);
+  if (!relativePath || path.isAbsolute(relativePath) || relativePath.includes("\\") || relativePath.split("/").some((part) => part === "..") || !/\.sql(?:\.gz)?$/i.test(relativePath)) return null;
   const base = path.resolve(BACKUPS_DIR);
-  if (!full.startsWith(base) || path.relative(base, full).startsWith("..")) return null;
+  const full = path.resolve(base, relativePath);
+  const relative = path.relative(base, full);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return null;
   return full;
-}
-
-/** Стрим файла бэкапа для скачивания */
-export function createBackupReadStream(relativePath: string): NodeJS.ReadableStream | null {
-  const full = resolveBackupPath(relativePath);
-  if (!full) return null;
-  try {
-    return createReadStream(full);
-  } catch {
-    return null;
-  }
 }
 
 /** Читает файл бэкапа в буфер (для восстановления с сервера) */
@@ -159,92 +137,13 @@ export async function readBackupFile(relativePath: string): Promise<Buffer | nul
   }
 }
 
-/** Параметры SET из дампов PG17+, которые неизвестны в более старых версиях — убираем при восстановлении */
-const STRIP_SET_PARAMS = ["transaction_timeout"];
-
-function filterSqlForRestore(sqlBuffer: Buffer): string {
-  const sql = sqlBuffer.toString("utf8");
-  return sql
-    .split("\n")
-    .filter((line) => {
-      const t = line.trim();
-      if (!t.toUpperCase().startsWith("SET ")) return true;
-      const param = t.replace(/^\s*SET\s+/i, "").split(/\s+/)[0];
-      if (!param) return true;
-      const name = param.replace(/^["']|["']$/g, "");
-      return !STRIP_SET_PARAMS.some((p) => name.toLowerCase() === p.toLowerCase());
-    })
-    .join("\n");
-}
-
-function runPsql(db: DbConnection, sql: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const env = { ...process.env, PGPASSWORD: db.password };
-    const proc = spawn(
-      "psql",
-      ["-h", db.host, "-p", String(db.port), "-U", db.user, "-d", db.database, "-v", "ON_ERROR_STOP=1"],
-      { env, stdio: ["pipe", "pipe", "pipe"] }
-    );
-    let stderr = "";
-    let stdout = "";
-    proc.stdout?.on("data", (chunk) => { stdout += chunk.toString(); });
-    proc.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
-    proc.on("error", (err) => reject(new Error(`psql не запущен: ${err.message}. Установите postgresql-client.`)));
-    proc.on("close", (code, signal) => {
-      if (code !== 0) {
-        const out = [stderr, stdout].filter(Boolean).join("\n").trim() || "Нет вывода";
-        reject(new Error(`psql: ${out}`));
-      } else resolve();
-    });
-    proc.stdin?.end(sql, "utf8");
-  });
-}
-
-const CLEAN_SCHEMA_SQL = `
-DROP SCHEMA IF EXISTS public CASCADE;
-CREATE SCHEMA public;
-GRANT USAGE ON SCHEMA public TO public;
-GRANT CREATE ON SCHEMA public TO public;
-`;
-
-/** Восстанавливает БД из SQL (буфер). Сначала очищает схему public, затем применяет дамп */
-export async function runPgRestore(db: DbConnection, sqlBuffer: Buffer): Promise<void> {
-  await runPsql(db, CLEAN_SCHEMA_SQL);
-
-  const dir = await mkdtemp(path.join(tmpdir(), "stealthnet-restore-"));
-  const sqlPath = path.join(dir, "restore.sql");
-  try {
-    const sqlContent = filterSqlForRestore(sqlBuffer);
-    await writeFile(sqlPath, sqlContent, "utf8");
-    await new Promise<void>((resolve, reject) => {
-      const env = { ...process.env, PGPASSWORD: db.password };
-      const proc = spawn(
-        "psql",
-        ["-h", db.host, "-p", String(db.port), "-U", db.user, "-d", db.database, "-f", sqlPath, "-v", "ON_ERROR_STOP=1", "--set", "ON_ERROR_STOP=1"],
-        { env }
-      );
-      let stderr = "";
-      let stdout = "";
-      proc.stdout?.on("data", (chunk) => { stdout += chunk.toString(); });
-      proc.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
-      proc.on("error", (err) => reject(new Error(`psql не запущен: ${err.message}. Установите postgresql-client.`)));
-      proc.on("close", (code, signal) => {
-        if (code !== 0) {
-          const out = [stderr, stdout].filter(Boolean).join("\n").trim() || "Нет вывода";
-          reject(new Error(`psql завершился с кодом ${code}${signal ? ` (${signal})` : ""}. ${out}`));
-        } else resolve();
-      });
-    });
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-}
+export { runPgRestore } from "./backup-restore.js";
 
 /**
  * Удаляет бэкапы старше N дней (срок берётся из настройки backup_retention_days,
  * по умолчанию 30; 0 = хранить вечно). Раньше чистки не было вообще — папка росла
  * бесконечно, а на сервере с почти полным диском это приводило к отказу записи.
- * Вызывается после каждого созданного бэкапа (ручного и автоматического).
+ * Вызывается после ручного бэкапа; автоматические gzip-архивы имеют отдельную ротацию.
  */
 export async function cleanupOldBackups(retentionDays: number): Promise<{ deleted: number; freedBytes: number }> {
   const result = { deleted: 0, freedBytes: 0 };

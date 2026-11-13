@@ -12,7 +12,17 @@ function loadState(): AuthState {
   const access = localStorage.getItem(STORAGE_KEYS.access);
   const refresh = localStorage.getItem(STORAGE_KEYS.refresh);
   const adminRaw = localStorage.getItem(STORAGE_KEYS.admin);
-  const admin = adminRaw ? (JSON.parse(adminRaw) as Admin) : null;
+  let admin: Admin | null = null;
+  if (adminRaw) {
+    try {
+      const stored = JSON.parse(adminRaw);
+      if (!stored || typeof stored !== "object" || typeof stored.id !== "string" || typeof stored.email !== "string") throw new Error("Invalid saved admin");
+      admin = stored as Admin;
+    } catch {
+      clearState();
+      return { accessToken: null, refreshToken: null, admin: null, pending2FAToken: null };
+    }
+  }
   return { accessToken: access, refreshToken: refresh, admin, pending2FAToken: null };
 }
 

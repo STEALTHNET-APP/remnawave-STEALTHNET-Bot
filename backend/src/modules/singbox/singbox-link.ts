@@ -1,8 +1,12 @@
+import { isWebPanel } from "../amnezia-web/api.js";
 /**
  * Формирование ссылки подписки (vless://, trojan://, hy2://, ss://) по данным ноды и слота.
  */
 
+import { buildAwgClientConfig } from "./amneziawg.js";
+
 export type NodeLinkInfo = {
+  customConfigJson?: string | null;
   publicHost: string;
   port: number;
   protocol: string;
@@ -19,6 +23,8 @@ export function buildSingboxSlotSubscriptionLink(
   slot: SlotLinkInfo,
   name?: string
 ): string {
+  if (isWebPanel(node.protocol)) return JSON.parse(slot.secret || "{}").config || "";
+  if (node.protocol === "AMNEZIAWG") return buildAwgClientConfig(node, slot.secret);
   const host = node.publicHost?.trim() || "localhost";
   const port = Number(node.port) || 443;
   const protocol = (node.protocol || "VLESS").toUpperCase();

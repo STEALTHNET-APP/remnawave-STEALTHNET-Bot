@@ -106,6 +106,7 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
         reason: reason || undefined,
       });
       setActionResult(
+        data?.payment.provider === "telegram_stars" ? "Звёзды возвращены покупателю в Telegram." :
         `Возврат выполнен. На баланс: ${r.summary.creditedToBalance.toFixed(2)}; ` +
         `откатано referral-наград: ${r.summary.reversedReferralCount} (на сумму ${r.summary.reversedReferralAmount.toFixed(2)}).`
       );
@@ -284,7 +285,7 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
 
               <div className="space-y-2 pt-2 border-t border-border">
                 {/* Retry activation — для PAID */}
-                {isPaid && (
+                {isPaid && p?.provider !== "telegram_stars" && (
                   <Button
                     onClick={doRetry}
                     disabled={pendingAction !== null}
@@ -330,6 +331,9 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
                 {/* Refund — для PAID */}
                 {isPaid && (
                   <>
+                    {p?.provider === "telegram_stars" ? (
+                      <p className="text-xs text-muted-foreground">Звёзды вернутся на счёт Telegram покупателя. Пополнение баланса и денежные реферальные начисления будут отменены. Выданную подписку и бонусные дни при необходимости отключите отдельно.</p>
+                    ) : (
                     <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3 space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-foreground">Зачислить на баланс клиента</span>
@@ -340,6 +344,7 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
                         <Switch checked={reverseReferrals} onCheckedChange={setReverseReferrals} />
                       </div>
                     </div>
+                    )}
 
                     {confirmStep === "refund" ? (
                       <div className="flex gap-2">

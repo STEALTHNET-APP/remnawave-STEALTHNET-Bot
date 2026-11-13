@@ -15,6 +15,8 @@
 
 <h1 align="center">STEALTHNET</h1>
 
+[Автообновление: подключение и ограничения](../auto-update.md).
+
 <p align="center">
   <img src="https://img.shields.io/badge/STEALTHNET-3.0-blueviolet?style=for-the-badge&logoColor=white" alt="STEALTHNET 3.0" />
   <img src="https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
@@ -121,10 +123,10 @@ bash install.sh
 
 | Сервис       | Технологии                                             | Назначение                                                                  |
 | ------------ | ------------------------------------------------------ | --------------------------------------------------------------------------- |
-| **backend**  | Node.js, Express, Prisma, PostgreSQL                   | REST API: авторизация, клиенты, тарифы, платежи, рефералы, промо, аналитика |
-| **frontend** | React 18, Vite, Tailwind CSS, shadcn/ui, Framer Motion | Админ-панель + клиентский кабинет + Telegram Mini App                       |
-| **bot**      | Grammy (TypeScript)                                    | Полноценный Telegram-бот с кабинетом клиента                                |
-| **nginx**    | Nginx + Certbot                                        | Reverse proxy, SSL, статика, gzip                                           |
+| **backend**  | Node.js 22, Express 4.22.1, Prisma 6.19.2, PostgreSQL 16                   | REST API: авторизация, клиенты, тарифы, платежи, рефералы, промо, аналитика |
+| **frontend** | React 18.3.1, Vite 5.4.21, Tailwind CSS 4.2.2, shadcn/ui, Framer Motion 11.18.2 | Админ-панель + клиентский кабинет + Telegram Mini App                       |
+| **bot**      | grammY 1.40.0, TypeScript 5.9.3                                    | Полноценный Telegram-бот с кабинетом клиента                                |
+| **nginx**    | Nginx 1.28 + Certbot                                        | Reverse proxy, SSL, статика, gzip                                           |
 | **postgres** | PostgreSQL 16                                          | Хранение всех данных                                                        |
 
 ---
@@ -396,6 +398,8 @@ docker compose restart api bot
 ```
 
 ### 🔄 Обновление из Git (git pull)
+
+Для встроенного nginx см. [обновление и проверку автопродления SSL](../SSL-RENEWAL.md).
 
 - **`nginx/nginx.conf`** — в `.gitignore` (файл генерируется install.sh под домен). Если Git всё ещё его обновляет при pull, один раз выполните:  
   `git rm --cached nginx/nginx.conf && git commit -m "Stop tracking nginx.conf"`

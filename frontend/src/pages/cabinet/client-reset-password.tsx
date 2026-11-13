@@ -1,3 +1,4 @@
+import { PasswordHint } from "@/components/password-hint";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -84,9 +85,11 @@ export function ClientResetPasswordPage() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       minLength={8}
+                      aria-describedby="new-password-hint"
                       autoComplete="new-password"
                       className="h-12 rounded-xl bg-card border-muted-foreground/75 text-base shadow-sm dark:bg-background/50 dark:border-white/15 focus-visible:ring-primary/50"
                     />
+                    <PasswordHint id="new-password-hint" minLength={8} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="pwd2">Повторите пароль</Label>

@@ -1,5 +1,7 @@
-.PHONY: menu checkout update watch rebuild docker frontend logs start stop restart \
-        ps status clean alias switch branch
+export STEALTHNET_BUILD_COMMIT := $(shell git rev-parse HEAD)
+export STEALTHNET_BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+.PHONY: menu update watch rebuild docker frontend logs start stop restart \
+        ps status clean alias
 
 DOCKER_COMPOSE := docker compose
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
@@ -260,3 +262,6 @@ alias: ## ⚡ Add/remove 'st' command for 'make'
 		chmod +x "$$install_dir/st"; \
 		printf "Added\n"; \
 	'
+.PHONY: reset-admin-password
+reset-admin-password:
+	docker compose exec api node dist/scripts/reset-admin-password.js

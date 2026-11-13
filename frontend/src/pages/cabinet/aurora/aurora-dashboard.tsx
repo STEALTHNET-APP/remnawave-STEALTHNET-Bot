@@ -14,8 +14,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, ChevronRight } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
+import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -84,6 +85,7 @@ export function AuroraDashboard() {
   const { state } = useClientAuth();
   const token = state.token ?? "";
   const navigate = useNavigate();
+  const config = useCabinetConfig();
 
   const [items, setItems] = useState<Awaited<ReturnType<typeof api.clientAllSubscriptions>>["items"]>([]);
   const [devices, setDevices] = useState<{ total: number }>({ total: 0 });
@@ -245,6 +247,26 @@ export function AuroraDashboard() {
         {copied ? <Check className="h-[18px] w-[18px]" /> : <Copy className="h-[18px] w-[18px]" />}
         {copied ? "Ссылка скопирована" : "Скопировать ссылку"}
       </button>
+
+      {/* ── Рулетка удачи ── */}
+      {config?.rouletteEnabled !== false && (
+        <button
+          type="button"
+          onClick={() => navigate("/cabinet/roulette")}
+          className="flex w-full items-center justify-between gap-3 rounded-[20px] bg-[var(--au-surface)] px-4 py-3.5 text-left active:scale-[0.99] transition-transform border border-white/40 dark:border-white/5"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white shadow-md text-lg">
+              🎰
+            </span>
+            <div>
+              <div className="text-[15px] font-bold text-[var(--au-ink)]">Рулетка удачи</div>
+              <div className="text-[12px] text-[var(--au-muted)]">Крутите и получайте ежедневные призы</div>
+            </div>
+          </div>
+          <ChevronRight className="h-5 w-5 text-[var(--au-muted)] shrink-0" />
+        </button>
+      )}
 
       <p className="px-1 pt-1 text-[14px] leading-relaxed text-[var(--au-muted)]">
         Ссылку вставляют в приложение VPN. Кнопка «Подключиться» откроет страницу, где приложение

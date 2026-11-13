@@ -6,7 +6,7 @@ import {
   Shield, LayoutDashboard, Users, CreditCard, Settings, LogOut, KeyRound,
   Search, Megaphone, Tag, BarChart3, FileText, ExternalLink, Sun, Moon, Monitor,
   Palette, Menu, X, Database, Target, UserCog, Send, CalendarClock, Globe, Server, MessageSquare, Trophy,
-  Network, ShieldAlert, Key, Map, Video, Languages, Gift, Sparkles, Rocket, Bot,
+  Network, ShieldAlert, ShieldBan, Key, Map, Video, Languages, Gift, Sparkles, Rocket, Bot,
   ChevronRight, Check, ShoppingBag,
   Activity, Inbox, ClipboardList, TrendingUp, Mail,
   RefreshCw, Layers, FileCode2,
@@ -14,17 +14,22 @@ import {
 import { useTranslation } from "react-i18next";
 import { useRemnaCapabilities } from "@/lib/use-remna-capabilities";
 import { useAdminLanguageSync } from "@/i18n/use-language-sync";
-import { WhatsNew510 } from "@/components/admin/whats-new-510";
+import { ReleaseToast } from "@/components/admin/release-toast";
+import { ProjectLinks } from "@/components/admin/project-links";
+import { PROJECT_GITHUB_URL } from "@/lib/project-links";
 import { useAuth } from "@/contexts/auth";
 import { useTheme, ACCENT_PALETTES, type ThemeMode, type ThemeAccent } from "@/contexts/theme";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api, type AdminNotificationCounters } from "@/lib/api";
+import { UpdateNotice } from "@/components/admin/update-notice";
 import { InboxBell } from "@/components/inbox-bell";
 import appVersion from "../../../../version.json";
 
 const PANEL_VERSION = appVersion.version;
-const GITHUB_URL = "https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot";
+const PANEL_BUILD = appVersion as { commit?: string; builtAt?: string };
+const PANEL_COMMIT = PANEL_BUILD.commit && PANEL_BUILD.commit !== "unknown" ? PANEL_BUILD.commit.slice(0, 7) : null;
+const GITHUB_URL = PROJECT_GITHUB_URL;
 
 // пункт меню может быть защищён action'ом
 // вместо обычной секции — для гранулярных прав менеджеров (например, «Продажи через баланс»).
@@ -53,6 +58,7 @@ function useNavSections(): NavItem[] {
     // отчёт продаж только через баланс — для менеджеров с action'ом.
     { to: "/admin/balance-sales", label: "Продажи через баланс", icon: FileText, section: "balance-sales-virtual", category: "overview", requiredAction: "view_balance_sales" },
     { to: "/admin/traffic-abuse", label: t("admin.nav.traffic_abuse"), icon: ShieldAlert, section: "traffic-abuse", category: "overview" },
+    { to: "/admin/anti-abuse", label: "Анти-абьюз трафика", icon: ShieldBan, section: "anti-abuse", category: "management" },
     { to: "/admin/geo-map", label: t("admin.nav.geo_map"), icon: Map, section: "geo-map", category: "overview" },
     { to: "/admin/clients", label: t("admin.nav.clients"), icon: Users, section: "clients", category: "management" },
     { to: "/admin/proxy", label: t("admin.nav.proxy"), icon: Globe, section: "proxy", category: "management" },
@@ -316,8 +322,7 @@ export function DashboardLayout() {
 
   return (
     <div className="flex min-h-svh bg-background relative">
-      {/* What's New 5.1.0 — одноразовый онбординг админа (localStorage-флаг). */}
-      <WhatsNew510 />
+      <ReleaseToast />
 
       {/*  Global Ambient Lights  */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10" aria-hidden>
@@ -366,6 +371,7 @@ export function DashboardLayout() {
             <LogOut className="h-4 w-4" />
             {t("admin.header.logout")}
           </Button>
+          <ProjectLinks />
         </div>
       </aside>
 
@@ -413,6 +419,7 @@ export function DashboardLayout() {
                 <LogOut className="h-4 w-4" />
                 {t("admin.header.logout")}
               </Button>
+              <ProjectLinks />
             </div>
           </aside>
         </>
@@ -443,7 +450,7 @@ export function DashboardLayout() {
                       "remna-nodes": "Ноды", "remna-squads": "Сквады", "remna-hosts": "Хосты", "remna-profiles": "Config-профили",
                       "remna-sub-templates": "Шаблоны подписки",
                       "traffic-abuse": "Аномалии трафика", "geo-map": "Карта", clients: "Клиенты",
-                      proxy: "Прокси", singbox: "Sing-box", backup: "Бэкапы", tickets: "Тикеты",
+                      proxy: "Прокси", singbox: "Sing-box / AmneziaWG", backup: "Бэкапы", tickets: "Тикеты",
                       withdrawals: "Заявки на вывод", trials: "Триалы", "auto-renew": "Автосписание",
                       tariffs: "Тарифы", promo: "Промо-ссылки", "promo-codes": "Промокоды",
                       marketing: "Маркетинг", "referral-network": "Реф. сеть", referrals: "Рефералка",
@@ -563,12 +570,13 @@ export function DashboardLayout() {
                 
                 <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
               </span>
-              <span>v{PANEL_VERSION}</span>
+              <span title={PANEL_BUILD.builtAt}>v{PANEL_VERSION}{PANEL_COMMIT ? ` · ${PANEL_COMMIT}` : ""}</span>
               <ExternalLink className="h-3 w-3 opacity-50" />
             </a>
           </div>
         </header>
         <div className="flex-1 px-5 pt-4 pb-10 animate-in fade-in duration-200 relative z-10">
+          {state.admin?.role === "ADMIN" && state.accessToken && <UpdateNotice token={state.accessToken} />}
           <Outlet />
         </div>
       </main>

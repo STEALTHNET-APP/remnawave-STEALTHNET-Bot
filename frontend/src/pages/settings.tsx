@@ -1,3 +1,7 @@
+import { isBotButtonUrl } from "@/lib/bot-button-url";
+import { MailTest } from "@/components/admin/mail-test";
+import { useLocation } from "react-router-dom";
+import { PanelUpdates } from "@/components/admin/panel-updates";
 import { useEffect, useState } from "react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { qk } from "@/lib/query-client";
@@ -23,6 +27,7 @@ import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { MarketplaceSettingsCard } from "@/pages/marketplace/marketplace-settings-card";
 import { ConsoleAccessCard } from "@/components/console-access-card";
+import { RouletteAdminTab } from "@/components/roulette/roulette-admin-tab";
 // drag-n-drop кнопок главного меню.
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -60,7 +65,7 @@ const DEFAULT_PLATEGA_METHODS: { id: number; enabled: boolean; label: string }[]
   { id: 13, enabled: false, label: "Криптовалюта" },
 ];
 
-type BotButtonItem = { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean };
+type BotButtonItem = { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean; url?: string };
 const DEFAULT_BOT_BUTTONS: BotButtonItem[] = [
   { id: "tariffs", visible: true, label: " Купить доступ / Продлить", order: 2, style: "" },
   { id: "proxy", visible: true, label: " Прокси", order: 0.5, style: "primary", emojiKey: "SERVERS" },
@@ -78,6 +83,7 @@ const DEFAULT_BOT_BUTTONS: BotButtonItem[] = [
   { id: "support", visible: true, label: " Поддержка", order: 7, style: "primary", emojiKey: "NOTE" },
   { id: "promocode", visible: true, label: " Промокод", order: 8, style: "primary", emojiKey: "STAR" },
   { id: "gift", visible: true, label: " Подарки", order: 8.5, style: "primary", emojiKey: "TRIAL" },
+  { id: "roulette", visible: true, label: "🎰 Рулетка", order: 8.7, style: "primary", emojiKey: "STAR" },
   { id: "extra_options", visible: true, label: " Доп. опции", order: 9, style: "primary", emojiKey: "PACKAGE" },
   // Кастомные кнопки. Используются в главном меню.
   { id: "my_subs", visible: true, label: " Мои подписки", order: 3, style: "", onePerRow: true },
@@ -91,6 +97,7 @@ const DEFAULT_BOT_MENU_TEXTS: Record<string, string> = {
   welcomeTitlePrefix: " ",
   welcomeGreeting: " Добро пожаловать в ",
   balancePrefix: " Баланс: ",
+  telegramIdPrefix: "🆔 Telegram ID: ",
   tariffPrefix: " Ваш тариф : ",
   subscriptionPrefix: " Статус подписки — ",
   statusInactive: " Истекла",
@@ -125,6 +132,7 @@ const DEFAULT_BOT_MENU_LINE_VISIBILITY: Record<string, boolean> = {
   welcomeTitlePrefix: true,
   welcomeGreeting: true,
   balancePrefix: true,
+  telegramIdPrefix: true,
   tariffPrefix: true,
   subscriptionPrefix: true,
   expirePrefix: true,
@@ -148,6 +156,7 @@ const BOT_MENU_LINE_LABELS: Record<string, string> = {
   welcomeTitlePrefix: "Название бота",
   welcomeGreeting: "Приветствие",
   balancePrefix: "Баланс",
+  telegramIdPrefix: "Telegram ID",
   tariffPrefix: "Тариф",
   subscriptionPrefix: "Статус подписки",
   expirePrefix: "Дата окончания",
@@ -173,6 +182,7 @@ const BOT_MENU_TEXT_LABELS: Record<string, string> = {
   welcomeTitlePrefix: "Заголовок (префикс перед названием)",
   welcomeGreeting: "Приветствие",
   balancePrefix: "Подпись баланса",
+  telegramIdPrefix: "Подпись Telegram ID",
   tariffPrefix: "Подпись тарифа (Ваш тариф : …)",
   subscriptionPrefix: "Подпись статуса подписки",
   statusInactive: "Статус: не активна",
@@ -393,7 +403,9 @@ export function SettingsPage() {
   const [message, setMessage] = useState("");
   const [sshMessage, setSshMessage] = useState("");
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("general");
+  const updateLocation = useLocation();
+  useEffect(() => { if (new URLSearchParams(updateLocation.search).get("tab") === "updates") setActiveTab("updates"); }, [updateLocation.search]);
+  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get("tab") === "updates" ? "updates" : "general");
   const defaultJourneySteps = [
     { title: "Выбираешь сценарий", desc: "Доступны гибкие тарифы: выбери то, что подходит именно тебе, без переплат." },
     { title: "Оплачиваешь как удобно", desc: "Карта, СБП, крипта — выбирай любой удобный и безопасный метод оплаты." },
@@ -456,6 +468,9 @@ export function SettingsPage() {
       ...data,
       activeLanguages: (data.activeLanguages || []).filter((l: string) => allowed.includes(l)),
       activeCurrencies: (data.activeCurrencies || []).filter((c: string) => ALLOWED_CURRENCIES.includes(c)),
+      referralRewardMode: data.referralRewardMode ?? "percent",
+      referralRewardAmount: data.referralRewardAmount ?? 50,
+      referralRewardDays: data.referralRewardDays ?? 3,
       defaultReferralPercent: data.defaultReferralPercent ?? 30,
       referralPercentLevel2: (data as AdminSettings).referralPercentLevel2 ?? 10,
       referralPercentLevel3: (data as AdminSettings).referralPercentLevel3 ?? 10,
@@ -465,11 +480,13 @@ export function SettingsPage() {
       botButtons: (() => {
         const raw = (data as AdminSettings).botButtons;
         const loaded = Array.isArray(raw) ? raw : [];
-        return DEFAULT_BOT_BUTTONS.map((def) => {
+        return [...DEFAULT_BOT_BUTTONS.map((def) => {
           const fromApi = loaded.find((b: { id: string }) => b.id === def.id);
           return fromApi ? { ...def, ...fromApi } : def;
-        }) as BotButtonItem[];
+        }), ...loaded.filter((b) => b.id.startsWith("custom_"))] as BotButtonItem[];
       })(),
+      botMenuMode: data.botMenuMode ?? "classic",
+      botGroupCabinet: data.botGroupCabinet ?? false,
       botButtonsPerRow: (data as AdminSettings).botButtonsPerRow ?? 1,
       botEmojis: (data as AdminSettings).botEmojis ?? {},
       botBackLabel: (data as AdminSettings).botBackLabel ?? " В меню",
@@ -523,6 +540,7 @@ export function SettingsPage() {
       sellOptionsDevicesProducts: (data as AdminSettings).sellOptionsDevicesProducts ?? [],
       sellOptionsServersEnabled: (data as AdminSettings).sellOptionsServersEnabled ?? false,
       sellOptionsServersProducts: (data as AdminSettings).sellOptionsServersProducts ?? [],
+      liteMode: (data as AdminSettings).liteMode ?? false,
       giftSubscriptionsEnabled: (data as AdminSettings).giftSubscriptionsEnabled ?? false,
       giftCodeExpiryHours: (data as AdminSettings).giftCodeExpiryHours ?? 72,
       maxAdditionalSubscriptions: (data as AdminSettings).maxAdditionalSubscriptions ?? 5,
@@ -752,10 +770,37 @@ export function SettingsPage() {
     saveSettingsMut.mutate(payload);
   }
 
+  function validateBotMenu(): boolean {
+    if (!settings) return false;
+    const invalidButton = settings.botButtons?.find((button) => button.id.startsWith("custom_") && (!button.label.trim() || button.label.trim().length > 64 || !isBotButtonUrl(button.url?.trim() ?? "")));
+    if (invalidButton) {
+      setMessage(`Проверьте кнопку «${invalidButton.label || "Без названия"}»: нужно название до 64 символов и ссылка https://, http:// или tg://.`);
+      const input = document.getElementById(`bot-button-url-${invalidButton.id}`);
+      const details = input?.closest("details");
+      if (details) details.open = true;
+      input?.focus();
+      return false;
+    }
+    return true;
+  }
+
+  function saveBotMenu() {
+    if (!settings || !validateBotMenu()) return;
+    setMessage("");
+    saveSettingsMut.mutate({
+      botButtons: JSON.stringify(settings.botButtons ?? DEFAULT_BOT_BUTTONS),
+      botMenuMode: settings.botMenuMode ?? "classic",
+      botGroupCabinet: settings.botGroupCabinet ?? false,
+      botButtonsPerRow: settings.botButtonsPerRow ?? 1,
+      botBackLabel: settings.botBackLabel ?? " В меню",
+    });
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!settings) return;
     setMessage("");
+    if (!validateBotMenu()) return;
     const allowedLangs = installedLangCodes.length ? installedLangCodes : FALLBACK_LANGS;
     const langs = Array.isArray(settings.activeLanguages) ? settings.activeLanguages.filter((l) => allowedLangs.includes(l)) : allowedLangs;
     const currs = Array.isArray(settings.activeCurrencies) ? settings.activeCurrencies.filter((c) => ALLOWED_CURRENCIES.includes(c)) : ALLOWED_CURRENCIES;
@@ -766,6 +811,13 @@ export function SettingsPage() {
         activeCurrencies: currs.length ? currs.join(",") : ALLOWED_CURRENCIES.join(","),
         defaultLanguage: defaultLang,
         defaultCurrency: defaultCurr,
+        remnaAutoSyncEnabled: settings.remnaAutoSyncEnabled ?? false,
+        remnaAutoSyncIntervalMinutes: settings.remnaAutoSyncIntervalMinutes ?? 60,
+        maintenanceEnabled: settings.maintenanceEnabled ?? false,
+        maintenanceMessage: settings.maintenanceMessage ?? "",
+        referralRewardMode: settings.referralRewardMode ?? "percent",
+        referralRewardAmount: settings.referralRewardAmount ?? 50,
+        referralRewardDays: settings.referralRewardDays ?? 3,
         defaultReferralPercent: settings.defaultReferralPercent,
         referralPercentLevel2: settings.referralPercentLevel2 ?? 10,
         referralPercentLevel3: settings.referralPercentLevel3 ?? 10,
@@ -809,6 +861,7 @@ export function SettingsPage() {
         autoRenewNotifyDaysBefore: settings.autoRenewNotifyDaysBefore ?? 3,
         autoRenewGracePeriodDays: settings.autoRenewGracePeriodDays ?? 2,
         autoRenewMaxRetries: settings.autoRenewMaxRetries ?? 3,
+        paymentDescription: settings.paymentDescription ?? "",
         yookassaRecurringEnabled: settings.yookassaRecurringEnabled ?? false,
         useRemnaSubscriptionPage: settings.useRemnaSubscriptionPage ?? false,
         publicAppUrl: settings.publicAppUrl ?? null,
@@ -841,6 +894,8 @@ export function SettingsPage() {
         yookassaSecretKey: settings.yookassaSecretKey && settings.yookassaSecretKey !== "********" ? settings.yookassaSecretKey : undefined,
         yookassaWebhookBasicUser: (settings as { yookassaWebhookBasicUser?: string | null }).yookassaWebhookBasicUser ?? null,
         yookassaWebhookBasicPassword: (settings as { yookassaWebhookBasicPassword?: string | null }).yookassaWebhookBasicPassword && (settings as { yookassaWebhookBasicPassword?: string | null }).yookassaWebhookBasicPassword !== "********" ? (settings as { yookassaWebhookBasicPassword?: string | null }).yookassaWebhookBasicPassword : undefined,
+        telegramStarsEnabled: settings.telegramStarsEnabled ?? false,
+        telegramStarsRubPerStar: settings.telegramStarsRubPerStar ?? 0,
         cryptopayApiToken: settings.cryptopayApiToken ?? null,
         cryptopayTestnet: settings.cryptopayTestnet ?? false,
         heleketMerchantId: settings.heleketMerchantId ?? null,
@@ -873,6 +928,8 @@ export function SettingsPage() {
         groqFallback3: settings.groqFallback3 ?? undefined,
         aiSystemPrompt: settings.aiSystemPrompt ?? undefined,
         botButtons: settings.botButtons != null ? JSON.stringify(settings.botButtons) : undefined,
+        botMenuMode: settings.botMenuMode ?? "classic",
+      botGroupCabinet: settings.botGroupCabinet ?? false,
         botButtonsPerRow: settings.botButtonsPerRow ?? 1,
         botEmojis: settings.botEmojis != null ? settings.botEmojis : undefined,
         botBackLabel: settings.botBackLabel ?? null,
@@ -925,6 +982,7 @@ export function SettingsPage() {
         sellOptionsDevicesProducts: settings.sellOptionsDevicesProducts?.length ? JSON.stringify(settings.sellOptionsDevicesProducts) : null,
         sellOptionsServersEnabled: settings.sellOptionsServersEnabled ?? false,
         sellOptionsServersProducts: settings.sellOptionsServersProducts?.length ? JSON.stringify(settings.sellOptionsServersProducts) : null,
+        liteMode: settings.liteMode ?? false,
         giftSubscriptionsEnabled: settings.giftSubscriptionsEnabled ?? false,
         giftCodeExpiryHours: settings.giftCodeExpiryHours ?? 72,
         maxAdditionalSubscriptions: settings.maxAdditionalSubscriptions ?? 5,
@@ -1147,11 +1205,16 @@ export function SettingsPage() {
           <TabsTrigger value="gifts" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <Gift className="h-4 w-4 shrink-0" />Подарки
           </TabsTrigger>
+          <TabsTrigger value="roulette" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
+            <Sparkles className="h-4 w-4 shrink-0" />Рулетка
+          </TabsTrigger>
           <TabsTrigger value="sync" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
             <ArrowLeftRight className="h-4 w-4 shrink-0" />{t("admin.settings.tab_sync")}
           </TabsTrigger>
+          {state.admin?.role === "ADMIN" && <TabsTrigger value="updates" className="gap-1.5 py-2.5 px-3 rounded-xl text-xs sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"><Download className="h-4 w-4 shrink-0" />Обновления</TabsTrigger>}
         </TabsList>
 
+        {state.admin?.role === "ADMIN" && <TabsContent value="updates"><PanelUpdates token={token} /></TabsContent>}
         <form onSubmit={handleSubmit}>
           <TabsContent value="general">
             <Card className="overflow-hidden border-border">
@@ -1167,6 +1230,12 @@ export function SettingsPage() {
                 </div>
               </div>
               <CardContent className="space-y-5 p-4 sm:p-4">
+                <div className="rounded-xl border border-border p-4 space-y-3">
+                  <Label className="flex items-center justify-between gap-3">Режим технических работ<Switch checked={settings.maintenanceEnabled ?? false} onCheckedChange={value => setSettings(s => s ? { ...s, maintenanceEnabled: value } : s)} /></Label>
+                  <p className="text-xs text-muted-foreground">Кабинет и бот временно недоступны клиентам. Админка, уже оплаченные заказы и действующие VPN-подключения продолжают работать.</p>
+                  <Label htmlFor="maintenance-message">Сообщение клиентам</Label>
+                  <Textarea id="maintenance-message" maxLength={1000} value={settings.maintenanceMessage ?? ""} placeholder="Обновляем сервис. Пожалуйста, зайдите немного позже." onChange={e => setSettings(s => s ? { ...s, maintenanceMessage: e.target.value } : s)} />
+                </div>
                 {/* === Функции сервиса === */}
                 <div className="rounded-xl border border-sky-500/20 bg-muted p-4 space-y-3">
                   <div className="flex items-center gap-2.5">
@@ -1346,6 +1415,10 @@ export function SettingsPage() {
                       </div>
                     </div>
                   )}
+                </div>
+                <div className="rounded-xl border border-border bg-muted p-4 space-y-2">
+                  <Label className="flex items-center gap-3"><Switch checked={settings.liteMode ?? false} onCheckedChange={checked => setSettings(s => s ? { ...s, liteMode: checked === true } : s)} />Lite-режим кабинета и бота</Label>
+                  <p className="text-xs text-muted-foreground">Простой интерфейс: подписки, покупка, продление и подключение. Админка и данные сохраняются. Выключите, чтобы вернуть все разделы.</p>
                 </div>
                 {/* === Брендинг === */}
                 <div className="rounded-xl border border-purple-500/20 bg-muted p-4 space-y-4">
@@ -1810,7 +1883,7 @@ export function SettingsPage() {
                       <div className="flex items-center gap-2.5">
                         <h3 className="text-base font-semibold">Кнопки главного меню</h3>
                       </div>
-                      <p className="text-xs text-muted-foreground">Переименуй, скрой или поменяй порядок кнопок главного меню. Каждой кнопке можно задать иконку (эмодзи), цвет и режим «во всю ширину».</p>
+                      <p className="text-xs text-muted-foreground">Добавляйте свои кнопки со ссылками на канал, сайт или инструкции. Меняйте порядок, название, видимость и оформление любых кнопок.</p>
                       <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-card border border-border">
                         <Label htmlFor="bot-buttons-per-row" className="text-sm font-medium">Кнопок в ряд:</Label>
                         <select
@@ -1826,7 +1899,21 @@ export function SettingsPage() {
                         </select>
                         <span className="text-xs text-muted-foreground">Глобально для всего меню (отдельные кнопки можно вытолкнуть в свою строку флагом ниже)</span>
                       </div>
+                      <div className="space-y-2 rounded-xl border border-border bg-card p-3">
+                        <Label htmlFor="bot-menu-mode">Режим меню бота</Label>
+                        <select id="bot-menu-mode" className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm" value={settings.botMenuMode ?? "classic"} onChange={(e) => setSettings((s) => s ? { ...s, botMenuMode: e.target.value === "web" ? "web" : "classic" } : s)}>
+                          <option value="classic">Классический — разделы в переписке</option>
+                          <option value="web">Web — разделы в Mini App</option>
+                        </select>
+                        <p className="text-xs text-muted-foreground">Web-режиму нужен публичный HTTPS-адрес кабинета. Свои ссылки сохраняются. Новое меню появится после /start или возврата в меню; старые кнопки продолжат работать.</p>
+                      </div>
+                      <label className="flex items-start gap-3 rounded-xl border border-border p-3">
+                        <input type="checkbox" className="mt-1" checked={settings.botGroupCabinet ?? false} onChange={e => setSettings(s => s ? { ...s, botGroupCabinet: e.target.checked } : s)} />
+                        <span>Разделы внутри личного кабинета<span className="block text-xs text-muted-foreground">Тарифы, подписки, устройства, баланс и бонусы будут внутри «Профиля». Кнопка профиля останется доступной. Web-кабинет и поддержка останутся в главном меню.</span></span>
+                      </label>
                       <BotButtonsList
+                        onSave={saveBotMenu}
+                        saving={saving}
                         buttons={[...(settings.botButtons ?? DEFAULT_BOT_BUTTONS)].sort((a, b) => a.order - b.order)}
                         onChange={(updated) => setSettings((s) => (s ? { ...s, botButtons: updated } : s))}
                       />
@@ -2624,11 +2711,32 @@ export function SettingsPage() {
                     <h2 className="text-xl font-bold tracking-tight text-foreground">
                       {t("admin.settings.referral_title")}
                     </h2>
-                    <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.referral_subtitle")}</p>
+                    <p className="text-[12.5px] text-muted-foreground mt-1">{(settings.referralRewardMode ?? "percent") === "percent" ? t("admin.settings.referral_subtitle") : "Выберите награду за первую успешную оплату приглашённого друга."}</p>
                   </div>
                 </div>
               </div>
               <CardContent className="space-y-5 p-4 sm:p-4">
+                <div className="rounded-xl border border-border bg-card/50 p-4 space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="referral-reward-mode">Награда за реферала</Label>
+                    <select id="referral-reward-mode" className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={settings.referralRewardMode ?? "percent"} onChange={e => setSettings(s => s ? { ...s, referralRewardMode: e.target.value as "percent" | "balance" | "days" } : s)}>
+                      <option value="percent">Процент от оплат</option>
+                      <option value="balance">Фиксированная сумма на баланс</option>
+                      <option value="days">Дни подписки</option>
+                    </select>
+                  </div>
+                  {(settings.referralRewardMode ?? "percent") !== "percent" && <p className="text-xs text-muted-foreground">Разовый бонус за первую успешную оплату прямого реферала. Повторные оплаты бонус не дают. Проценты 2-го и 3-го уровней в этом режиме не начисляются.</p>}
+                  {settings.referralRewardMode === "balance" && <div className="space-y-2">
+                    <Label htmlFor="referral-reward-amount">Сумма бонуса ({settings.defaultCurrency?.toUpperCase()})</Label>
+                    <Input id="referral-reward-amount" type="number" min={0.01} max={1000000} step={0.01} value={settings.referralRewardAmount ?? 50} onChange={e => setSettings(s => s ? { ...s, referralRewardAmount: Number(e.target.value) } : s)} />
+                  </div>}
+                  {settings.referralRewardMode === "days" && <div className="space-y-2">
+                    <Label htmlFor="referral-reward-days">Дней за одного реферала</Label>
+                    <Input id="referral-reward-days" type="number" min={1} max={365} step={1} value={settings.referralRewardDays ?? 3} onChange={e => setSettings(s => s ? { ...s, referralRewardDays: Number(e.target.value) } : s)} />
+                    <p className="text-xs text-muted-foreground">Дни добавляются к основной подписке. Если подписки ещё нет, бонус сохранится и применится после её появления.</p>
+                  </div>}
+                </div>
+                {(settings.referralRewardMode ?? "percent") === "percent" && <>
                 <div className="rounded-xl border border-violet-500/20 bg-muted p-4 space-y-4">
                   <div className="flex items-center gap-2.5">
                     <h3 className="text-base font-semibold">3-уровневая реферальная сеть</h3>
@@ -2692,6 +2800,8 @@ export function SettingsPage() {
                   </div>
                 </div>
 
+                </>}
+
                 {/* заявки на вывод реф. баланса: вкл/выкл + мин. сумма.
                     Выключение прячет кнопку в боте и блок в кабинете/на сайте. */}
                 <div className="rounded-xl border border-border bg-card/50 p-4 space-y-4">
@@ -2732,6 +2842,11 @@ export function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="payments" className="space-y-4">
+            <Card><CardContent className="space-y-2 pt-6">
+              <Label htmlFor="payment-description">Описание платежа</Label>
+              <Input id="payment-description" maxLength={128} value={settings.paymentDescription ?? ""} onChange={e => setSettings(s => s ? { ...s, paymentDescription: e.target.value } : s)} placeholder="По умолчанию — название тарифа или пополнение баланса" />
+              <p className="text-xs text-muted-foreground">Для новых платежей через ЮKassa, ЮMoney, Platega, Crypto Pay, Overpay и ParityPay. Пустое поле возвращает стандартные описания. Название позиции в чеке ЮKassa сохраняется. Lava.top использует название своего оффера.</p>
+            </CardContent></Card>
             <Card className="overflow-hidden border-border">
               <div className="relative bg-muted p-4 border-b border-border">
                 <div className="absolute inset-0 bg-transparent pointer-events-none" />
@@ -3279,6 +3394,23 @@ export function SettingsPage() {
                 </CollapsibleContent>
               </Collapsible>
 
+              <Card>
+                <CardHeader><CardTitle>Telegram Stars</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <input id="telegramStarsEnabled" type="checkbox" checked={settings.telegramStarsEnabled ?? false} onChange={(e) => setSettings(s => s ? { ...s, telegramStarsEnabled: e.target.checked } : s)} />
+                    <Label htmlFor="telegramStarsEnabled">Принимать оплату звёздами</Label>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="telegramStarsRubPerStar">Стоимость одной звезды в рублях</Label>
+                    <Input id="telegramStarsRubPerStar" type="number" min="0" step="0.01" value={settings.telegramStarsRubPerStar ?? 0} onChange={(e) => setSettings(s => s ? { ...s, telegramStarsRubPerStar: Number(e.target.value) } : s)} />
+                    <p className="text-sm text-muted-foreground">Вы задаёте стоимость звезды для своего сервиса. Цена тарифа в рублях делится на это значение и округляется вверх до целого количества Stars. При нуле оплата недоступна.</p>
+                    {(settings.telegramStarsRubPerStar ?? 0) > 0 && <p className="text-sm">Например, 300 ₽ = {Math.ceil(300 / settings.telegramStarsRubPerStar!)} ⭐</p>}
+                    <p className="text-sm text-muted-foreground">Используется основной Telegram-бот. Оплата доступна для цен в рублях и аккаунтов с привязанным Telegram.</p>
+                  </div>
+                  <Button type="submit" disabled={saving}>{saving ? t("admin.settings.saving") : t("admin.settings.save")}</Button>
+                </CardContent>
+              </Card>
               <Collapsible defaultOpen={false} className="group mt-4">
                 <CollapsibleTrigger asChild>
                   <button
@@ -4238,6 +4370,7 @@ export function SettingsPage() {
                   </div>
                 </div>
                 </div>
+                {state.admin?.role === "ADMIN" && <MailTest token={token} initialEmail={state.admin.email} />}
               </CardContent>
             </Card>
             <Card className="mt-6 overflow-hidden border-border">
@@ -5492,6 +5625,10 @@ export function SettingsPage() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="roulette">
+          <RouletteAdminTab />
+        </TabsContent>
+
         <TabsContent value="sync">
           <Card className="overflow-hidden border-border">
             <div className="relative bg-muted p-4 border-b border-border">
@@ -5506,6 +5643,13 @@ export function SettingsPage() {
               </div>
             </div>
             <CardContent className="space-y-4 p-4 sm:p-4">
+              <div className="rounded-xl border border-border p-4 space-y-3">
+                <Label className="flex items-center justify-between gap-3">Автосинхронизация из Remnawave<Switch checked={settings.remnaAutoSyncEnabled ?? false} onCheckedChange={value => setSettings(s => s ? { ...s, remnaAutoSyncEnabled: value } : s)} /></Label>
+                <p className="text-xs text-muted-foreground">По расписанию импортирует клиентов и обновляет данные подписок в панели. Изменения в Remnawave не отправляются.</p>
+                <Label htmlFor="remna-sync-interval">Интервал, минут</Label>
+                <Input id="remna-sync-interval" type="number" min={5} max={1440} value={settings.remnaAutoSyncIntervalMinutes ?? 60} onChange={e => setSettings(s => s ? { ...s, remnaAutoSyncIntervalMinutes: Number(e.target.value) } : s)} />
+                <Button onClick={handleSubmit} disabled={saving}>Сохранить</Button>
+              </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <button type="button" onClick={handleSyncFromRemna} disabled={syncFromRemnaMut.isPending} className="group relative overflow-hidden rounded-xl border border-violet-500/30 bg-transparent p-4 text-left transition-all hover:border-violet-500/50 hover:shadow-violet-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
                   <div className="absolute -top-4 -right-4 w-20 h-20 rounded-full bg-violet-500/10 blur-2xl group-hover:bg-violet-500/20 transition-colors" />
@@ -5625,60 +5769,89 @@ export function SettingsPage() {
   );
 }
 
-//  Sortable cards для кнопок главного меню 
 
 function BotButtonsList({
   buttons,
   onChange,
+  onSave,
+  saving,
 }: {
   buttons: BotButtonItem[];
   onChange: (updated: BotButtonItem[]) => void;
+  onSave: () => void;
+  saving: boolean;
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  const moveButton = (id: string, newIdx: number) => {
+    const oldIdx = buttons.findIndex((button) => button.id === id);
+    if (oldIdx < 0 || newIdx < 0 || newIdx >= buttons.length || oldIdx === newIdx) return;
+    onChange(arrayMove(buttons, oldIdx, newIdx).map((button, index) => ({ ...button, order: index + 1 })));
+  };
 
   const handleDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const oldIdx = buttons.findIndex((b) => b.id === active.id);
-    const newIdx = buttons.findIndex((b) => b.id === over.id);
-    if (oldIdx < 0 || newIdx < 0) return;
-    const reordered = arrayMove(buttons, oldIdx, newIdx);
-    // Пересчитываем order по позиции в списке (1, 2, 3, ...). Стабильность других полей сохраняется.
-    const withOrder = reordered.map((b, idx) => ({ ...b, order: idx + 1 }));
-    onChange(withOrder);
+    moveButton(String(active.id), buttons.findIndex((button) => button.id === over.id));
   };
 
   const updateButton = (id: string, patch: Partial<BotButtonItem>) => {
     onChange(buttons.map((b) => (b.id === id ? { ...b, ...patch } : b)));
   };
 
+  const customCount = buttons.filter((button) => button.id.startsWith("custom_")).length;
+  const addButton = () => {
+    if (customCount >= 20) return;
+    onChange([{ id: `custom_${crypto.randomUUID()}`, label: "Новая кнопка", url: "", visible: true, order: Math.min(0, ...buttons.map((button) => button.order)) - 1, style: "", onePerRow: true }, ...buttons]);
+  };
+
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={buttons.map((b) => b.id)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-2">
-          {buttons.map((btn, idx) => (
-            <SortableBotButtonCard
-              key={btn.id}
-              btn={btn}
-              idx={idx}
-              onUpdate={(patch) => updateButton(btn.id, patch)}
-            />
-          ))}
-        </div>
-      </SortableContext>
-    </DndContext>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="button" variant="outline" onClick={addButton} disabled={customCount >= 20}>
+          <Plus className="mr-2 h-4 w-4" />Добавить кнопку-ссылку
+        </Button>
+        <Button type="button" onClick={onSave} disabled={saving}>{saving ? "Сохраняем…" : "Сохранить меню"}</Button>
+        <span className="text-xs text-muted-foreground">{customCount} из 20 своих кнопок</span>
+      </div>
+      <p className="text-xs text-muted-foreground">Перетащите строку за ⋮⋮ или выберите её номер. Нажмите на название, чтобы раскрыть настройки. Скрытые кнопки занимают место в списке, но не появляются в боте.</p>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={buttons.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-2">
+            {buttons.map((btn, idx) => (
+              <SortableBotButtonCard
+                key={btn.id}
+                btn={btn}
+                idx={idx}
+                total={buttons.length}
+                onMove={(position) => moveButton(btn.id, position)}
+                onUpdate={(patch) => updateButton(btn.id, patch)}
+                onRemove={btn.id.startsWith("custom_") ? () => onChange(buttons.filter((button) => button.id !== btn.id)) : undefined}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+    </div>
   );
 }
 
 function SortableBotButtonCard({
   btn,
   idx,
+  total,
+  onMove,
   onUpdate,
+  onRemove,
 }: {
   btn: BotButtonItem;
   idx: number;
+  total: number;
+  onMove: (position: number) => void;
   onUpdate: (patch: Partial<BotButtonItem>) => void;
+  onRemove?: () => void;
 }) {
+  const [expanded, setExpanded] = useState(btn.id.startsWith("custom_") && !btn.url);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: btn.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -5689,40 +5862,48 @@ function SortableBotButtonCard({
   const styleLabel = BOT_STYLE_OPTIONS.find((o) => o.value === (btn.style ?? ""))?.label ?? "По умолчанию";
 
   return (
-    <div
+    <details
       ref={setNodeRef}
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
       style={style}
-      className={`group rounded-xl border  bg-muted p-3 transition-all ${
-        btn.visible ? "border-border" : "border-border opacity-50"
-      } ${isDragging ? "shadow-2xl ring-2 ring-sky-500/40 z-10" : ""}`}
+      className={`relative group rounded-xl border bg-muted ${btn.visible ? "border-border" : "border-dashed border-border"} ${isDragging ? "shadow-2xl ring-2 ring-sky-500/40 z-10" : ""}`}
     >
-      <div className="flex items-center gap-2 mb-2.5">
+      <summary className="flex list-none cursor-pointer items-center gap-2 p-2.5 [&::-webkit-details-marker]:hidden">
         <button
           type="button"
-          className="cursor-grab active:cursor-grabbing touch-none p-1 rounded-md hover:bg-card transition-colors shrink-0"
+          className="cursor-grab active:cursor-grabbing touch-none p-1 rounded-md hover:bg-card shrink-0"
           {...attributes}
           {...listeners}
+          aria-label={`Переместить: ${btn.label}`}
           title="Перетащите чтобы изменить порядок"
+          onClick={(event) => event.preventDefault()}
         >
           <GripVertical className="h-4 w-4 text-muted-foreground" />
         </button>
-        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-sky-200 text-xs font-bold border border-sky-500/30 shrink-0">
-          {idx + 1}
+        <select
+          aria-label={`Позиция: ${btn.label}`}
+          className="h-8 w-14 shrink-0 rounded-md border border-input bg-background px-1 text-sm"
+          value={idx}
+          onChange={(event) => onMove(Number(event.target.value))}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {Array.from({ length: total }, (_, index) => <option key={index} value={index}>{index + 1}</option>)}
+        </select>
+        <span className={`h-2.5 w-2.5 rounded-full ${swatch} shrink-0`} title={styleLabel} />
+        <span className={`flex-1 min-w-0 truncate text-sm font-medium ${btn.visible ? "" : "text-muted-foreground"}`} title={btn.label}>
+          {btn.label || "Без названия"}
         </span>
-        <span className={`h-3 w-3 rounded-full ${swatch} shrink-0 ring-2 ring-white/10`} title={styleLabel} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold truncate">{BOT_BUTTON_HUMAN_NAMES[btn.id] ?? btn.id}</span>
-            <code className="text-[10px] text-muted-foreground bg-white/[0.04] rounded px-1.5 py-0.5 hidden sm:inline">{btn.id}</code>
-          </div>
+        <span className="text-xs text-muted-foreground shrink-0">{btn.visible ? "" : "Скрыта"}</span>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 ${expanded ? "rotate-180" : ""}`} />
+      </summary>
+      <div className="border-t border-border p-3">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="flex-1 text-xs text-muted-foreground">{btn.id.startsWith("custom_") ? "Своя кнопка-ссылка" : BOT_BUTTON_HUMAN_NAMES[btn.id] ?? btn.id}</span>
+          <Switch aria-label={`Видимость: ${btn.label}`} checked={btn.visible} onCheckedChange={(checked: boolean) => onUpdate({ visible: checked === true })} />
+          <span className="text-xs text-muted-foreground">{btn.visible ? "Видна" : "Скрыта"}</span>
+          {onRemove && <Button type="button" variant="ghost" size="icon" onClick={onRemove} aria-label={`Удалить кнопку: ${btn.label}`}><Trash2 className="h-4 w-4" /></Button>}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Switch checked={btn.visible} onCheckedChange={(checked: boolean) => onUpdate({ visible: checked === true })} />
-          <Label className="text-xs text-muted-foreground cursor-pointer">{btn.visible ? "Виден" : "Скрыт"}</Label>
-        </div>
-      </div>
-
-      {/* Preview как будет выглядеть кнопка в боте */}
       <div className="mb-2.5 p-2 rounded-lg bg-card border border-border">
         <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
           <Eye className="h-3 w-3" />
@@ -5738,17 +5919,22 @@ function SortableBotButtonCard({
         </div>
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-[1fr_140px_140px_auto]">
+      {onRemove && <div className="space-y-1 mb-3">
+        <Label htmlFor={`bot-button-url-${btn.id}`}>Ссылка</Label>
+        <Input id={`bot-button-url-${btn.id}`} type="url" maxLength={1000} value={btn.url ?? ""} onChange={(event) => onUpdate({ url: event.target.value })} placeholder="https://t.me/your_channel" required aria-invalid={!!btn.url && !isBotButtonUrl(btn.url.trim())} />
+        <p className="text-xs text-muted-foreground">Адрес сайта или Telegram: https://, http:// или tg://. Изменения появятся при следующем открытии меню, в течение минуты после сохранения.</p>
+      </div>}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_140px_140px_auto]">
         <div className="space-y-1">
           <Label className="text-[10px] uppercase text-muted-foreground tracking-wider">Текст кнопки</Label>
-          <Input className="h-9" value={btn.label} onChange={(e) => onUpdate({ label: e.target.value })} placeholder=" Подключиться" />
+          <Input aria-label={`Название кнопки ${idx + 1}`} maxLength={onRemove ? 64 : undefined} className="h-9" value={btn.label} onChange={(e) => onUpdate({ label: e.target.value })} placeholder=" Подключиться" />
         </div>
         <div className="space-y-1">
           <Label className="text-[10px] uppercase text-muted-foreground tracking-wider">Иконка (premium)</Label>
           <select
             className="flex h-9 w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
             value={btn.emojiKey ?? ""}
-            onChange={(e) => onUpdate({ emojiKey: e.target.value || undefined })}
+            onChange={(e) => onUpdate({ emojiKey: e.target.value })}
           >
             <option value="">— нет —</option>
             {BOT_EMOJI_KEYS.map((k) => (
@@ -5777,6 +5963,7 @@ function SortableBotButtonCard({
           <Label htmlFor={`onePerRow-${btn.id}`} className="text-xs cursor-pointer whitespace-nowrap">Во всю ширину</Label>
         </div>
       </div>
-    </div>
+      </div>
+    </details>
   );
 }

@@ -8,7 +8,7 @@ function load(path, mocks={}) {
  const code=ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  vm.runInNewContext(code,{exports,require:n=>mocks[n]??require(n),Buffer,URL,AbortSignal,fetch:(...a)=>global.fetch(...a),console,Date}); return exports;
 }
-const service=load('src/modules/paritypay/paritypay.service.ts');
+const service=load('src/modules/paritypay/paritypay.service.ts', { '../payment/payment-description.js': { paymentDescription: async fallback => fallback } });
 const cfg={shopId:'shop',apiKey:'api-secret',signingSecret:'webhook-secret',enabled:true};
 const invoice={id:'invoice',order_id:'order',shop_id:'shop',amount:100,status:'PAID',link:'https://pay.paritypay.net/invoice'};
 const signature=b=>crypto.createHmac('sha256',cfg.signingSecret).update(Object.keys(b).sort().map(k=>b[k]===null?'':String(b[k])).join('')).digest('hex');

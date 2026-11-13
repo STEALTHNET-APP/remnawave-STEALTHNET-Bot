@@ -1,3 +1,4 @@
+import { sendBroadcastEmail, subscribedEmailFilter } from "../email-unsubscribe/email-unsubscribe.service.js";
 /**
  * Рассылка: отправка сообщения клиентам через Telegram и/или Email.
  */
@@ -10,7 +11,7 @@ import { join } from "node:path";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
-import { sendEmail, isMailConfigured, mailConfigFromSystem } from "../mail/mail.service.js";
+import { isMailConfigured, mailConfigFromSystem } from "../mail/mail.service.js";
 import { proxyFetch } from "../proxy-util/proxy-fetch.js";
 import { getProxyUrl } from "../proxy-util/get-proxy-url.js";
 
@@ -132,7 +133,7 @@ export async function sendDirectEmail(to: string, subject: string | undefined, m
   const config = await getSystemConfig();
   const { smtpConfig, subj, htmlBody, emailAttachments } = buildEmailParts(config, subject, message, attachment);
   if (!isMailConfigured(smtpConfig)) return { ok: false, error: "Не настроен провайдер почты (Настройки → Почта)" };
-  const send = await sendEmail(smtpConfig, to, subj, htmlBody, emailAttachments);
+  const send = await sendBroadcastEmail(smtpConfig, config.publicAppUrl, to, subj, htmlBody, emailAttachments);
   return send.ok ? { ok: true } : { ok: false, error: send.error };
 }
 
@@ -231,7 +232,7 @@ export function startListSendJob(recipients: string[], message: string, extras?:
           return;
         }
         for (const to of ids) {
-          const send = await sendEmail(smtpConfig, to, subj, htmlBody, emailAttachments);
+          const send = await sendBroadcastEmail(smtpConfig, config.publicAppUrl, to, subj, htmlBody, emailAttachments);
           if (send.ok) job.sent++;
           else {
             job.failed++;
@@ -701,7 +702,7 @@ export async function runBroadcast(options: {
 
   // T-unify (12.05.2026, WolfVPN): применяем фильтр targetGroup к where-clause.
   const whereTelegram = buildClientWhereForGroup(targetGroup, { telegramId: { not: null } });
-  const whereEmail = buildClientWhereForGroup(targetGroup, { email: { not: null } });
+  const whereEmail = buildClientWhereForGroup(targetGroup, doEmail ? await subscribedEmailFilter() : { email: { not: null } });
   // Предварительно считаем получателей, чтобы фронт мог сразу показать "X из Y".
   const [totalTelegram, totalEmail] = await Promise.all([
     doTelegram ? prisma.client.count({ where: whereTelegram }) : Promise.resolve(0),
@@ -862,7 +863,7 @@ export async function runBroadcast(options: {
         const email = c.email!.trim();
         if (!email) continue;
         await delay(EMAIL_SEND_DELAY_MS);
-        const send = await sendEmail(smtpConfig, email, subj, htmlBody, emailAttachments);
+        const send = await sendBroadcastEmail(smtpConfig, config.publicAppUrl, email, subj, htmlBody, emailAttachments);
         if (send.ok) result.sentEmail++;
         else {
           result.failedEmail++;
@@ -883,7 +884,7 @@ export async function runBroadcast(options: {
 export async function getBroadcastRecipientsCount(): Promise<{ withTelegram: number; withEmail: number }> {
   const [withTelegram, withEmail] = await Promise.all([
     prisma.client.count({ where: { telegramId: { not: null } } }),
-    prisma.client.count({ where: { email: { not: null } } }),
+    prisma.client.count({ where: await subscribedEmailFilter() }),
   ]);
   return { withTelegram, withEmail };
 }

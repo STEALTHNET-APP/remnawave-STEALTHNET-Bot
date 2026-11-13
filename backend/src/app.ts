@@ -1,4 +1,9 @@
+import { starsBotRouter } from "./modules/telegram-stars/stars.routes.js";
+import { maintenanceGuard } from "./modules/client/maintenance.js";
+import { botTermsRouter } from "./modules/bot/terms.routes.js";
+import { emailUnsubscribeRouter } from "./modules/email-unsubscribe/email-unsubscribe.routes.js";
 import { paritypayWebhooksRouter } from "./modules/webhooks/paritypay.webhooks.routes.js";
+import { amneziawgRouter } from "./modules/singbox/amneziawg.routes.js";
 import express from "express";
 import path from "path";
 import cors from "cors";
@@ -29,10 +34,12 @@ import { contestAdminRouter } from "./modules/contest/contest.admin.routes.js";
 import { contestPublicRouter, contestClientRouter } from "./modules/contest/contest.public.routes.js";
 import { adminReferralsRouter } from "./modules/admin/referrals.routes.js";
 import { trafficAbuseRouter } from "./modules/admin/traffic-abuse.routes.js";
+import { antiAbuseRouter } from "./modules/anti-abuse/anti-abuse.routes.js";
 import { apiKeysAdminRouter } from "./modules/api-keys/api-keys.admin.routes.js";
 import { externalApiRouter } from "./modules/api-keys/external-api.routes.js";
 import { geoMapRouter } from "./modules/geo-map/geo-map.routes.js";
 import { giftRouter, giftPublicRouter } from "./modules/gift/gift.routes.js";
+import { rouletteClientRouter, rouletteAdminRouter } from "./modules/roulette/roulette.routes.js";
 import { paymentRedirectRouter } from "./modules/payment-redirect/payment-redirect.routes.js";
 import { marketplaceClientRouter } from "./modules/marketplace/marketplace.client.routes.js";
 import { marketplaceHubRouter } from "./modules/marketplace/marketplace.hub.routes.js";
@@ -60,6 +67,13 @@ import { requireAuth } from "./modules/auth/middleware.js";
 import { renderSpaIndex } from "./modules/branding/spa-html.js";
 
 const app = express();
+if (process.env.UPDATER_VERIFY_ONLY === "1") {
+  app.use((req, res) => {
+    if (req.method === "GET" && req.path === "/api/health") return res.json({ status: "ok", maintenance: true });
+    res.setHeader("Retry-After", "60");
+    return res.status(503).json({ message: "Устанавливается обновление. Повторите запрос позже." });
+  });
+}
 
 // За nginx: иначе express-rate-limit падает из-за X-Forwarded-For
 app.set("trust proxy", 1);
@@ -348,6 +362,7 @@ app.use("/api/admin/console", consoleAdminRouter);
 app.use("/api/internal/console", consoleInternalRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/admin/traffic-abuse", trafficAbuseRouter);
+app.use("/api/admin/anti-abuse", antiAbuseRouter);
 app.use("/api/admin/api-keys", apiKeysAdminRouter);
 app.use("/api/admin/geo-map", geoMapRouter);
 app.use("/api/admin/contests", contestAdminRouter);
@@ -355,9 +370,13 @@ app.use("/api/admin/proxy", proxyAdminRouter);
 app.use("/api/admin/singbox", singboxAdminRouter);
 app.use("/api/proxy-nodes", proxyAgentRouter);
 app.use("/api/singbox-nodes", singboxAgentRouter);
+app.use("/api/amneziawg-nodes", amneziawgRouter);
+app.use("/api/client", maintenanceGuard);
 app.use("/api/client", clientRouter);
 app.use("/api/client/contests", contestClientRouter);
 app.use("/api/client/gift", giftRouter);
+app.use("/api/client/roulette", rouletteClientRouter);
+app.use("/api/admin/roulette", rouletteAdminRouter);
 app.use("/api/gift/public", giftPublicRouter);
 app.use("/api/admin/landing", landingAdminRouter);
 app.use("/api/admin/audit", auditAdminRouter);
@@ -378,6 +397,9 @@ app.use("/api/admin/admin-permissions", adminPermissionsRouter);
 app.use("/api/admin/email-templates", emailTemplatesRouter);
 app.use("/api/admin/bot-messages", botMessagesRouter);
 app.use("/api/admin/bot-conversations", botConversationsRouter);
+app.use("/api/public/email-unsubscribe", rateLimit({ windowMs: 60_000, max: 120, standardHeaders: true, legacyHeaders: false }), emailUnsubscribeRouter);
+app.use("/api/bot/terms", botTermsRouter);
+app.use("/api/bot/stars", starsBotRouter);
 app.use("/api/public", publicConfigRouter);
 app.use("/api/public", botAssetsRouter);
 app.use("/api/public", contestPublicRouter);
@@ -403,6 +425,18 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   const code = (err as Error & { code?: string }).code;
   if (code === "TARIFF_RESTRICTED") {
     return res.status(403).json({ message: err.message || "Покупка этого тарифа ограничена", code: "TARIFF_RESTRICTED" });
+  }
+  if (code === "SUBSCRIPTION_INACTIVE") {
+    return res.status(409).json({ message: err.message || "Подписка истекла", code: "SUBSCRIPTION_INACTIVE" });
+  }
+  if (code === "EXTRA_DEVICE_LIMIT") {
+    return res.status(409).json({ message: err.message, code });
+  }
+  if (code === "SUBSCRIPTION_TARGET_INVALID") {
+    return res.status(400).json({ message: err.message || "Подписка для опции не найдена", code: "SUBSCRIPTION_TARGET_INVALID" });
+  }
+  if (code === "PAYMENT_INTENT_CONFLICT") {
+    return res.status(400).json({ message: err.message, code: "PAYMENT_INTENT_CONFLICT" });
   }
   console.error(err);
   res.status(500).json({ message: "Internal server error" });

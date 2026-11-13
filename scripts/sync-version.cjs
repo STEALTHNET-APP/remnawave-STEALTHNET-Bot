@@ -14,3 +14,12 @@ for (const relativePath of ["backend/package.json", "frontend/package.json", "bo
   json.version = version;
   fs.writeFileSync(filePath, `${JSON.stringify(json, null, 2)}\n`);
 }
+
+for (const name of ["backend", "frontend", "bot"]) {
+  const file = path.join(root, name, "package-lock.json");
+  if (!fs.existsSync(file)) continue;
+  const lock = JSON.parse(fs.readFileSync(file, "utf8"));
+  lock.version = version;
+  if (lock.packages?.[""]) lock.packages[""].version = version;
+  fs.writeFileSync(file, `${JSON.stringify(lock, null, 2)}\n`);
+}

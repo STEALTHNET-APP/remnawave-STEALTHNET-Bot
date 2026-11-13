@@ -1,4 +1,6 @@
 import { PrismaClient, Prisma } from "@prisma/client";
+import { deviceOptionMetadata, lockDevicePurchases, validateDevicePurchase, validateTariffDevices } from "./modules/extra-options/device-limit.js";
+import { isRenewalTargetTariffAllowed, parsePaymentIntentMetadata } from "./modules/payment/payment-intent.js";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
@@ -10,14 +12,96 @@ const basePrisma =
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = basePrisma;
 
+type ExtraOptionPaymentTarget = {
+  clientId: string;
+  metadata: unknown;
+};
+
+function paymentTargetError(message: string, code: "SUBSCRIPTION_TARGET_INVALID" | "SUBSCRIPTION_INACTIVE") {
+  const error = new Error(message) as Error & { code?: string };
+  error.code = code;
+  return error;
+}
+
+/**
+ * Последний DB-бэкстоп перед созданием платежа за опцию. Внешние платёжные
+ * провайдеры вызываются только после createPayment, поэтому здесь ещё можно
+ * безопасно остановить оплату на истёкшую/чужую подписку.
+ */
+export async function assertActiveExtraOptionTargetForPayment({ clientId, metadata }: ExtraOptionPaymentTarget): Promise<void> {
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    const value = typeof metadata === "string" ? JSON.parse(metadata) : metadata;
+    if (value && typeof value === "object" && !Array.isArray(value)) parsed = value as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  if (!parsed?.extraOption || typeof parsed.extraOption !== "object") return;
+
+  const targetId = typeof parsed.targetSubscriptionId === "string" && parsed.targetSubscriptionId.trim()
+    ? parsed.targetSubscriptionId.trim()
+    : null;
+  const target = targetId
+    ? await basePrisma.subscription.findFirst({
+        where: { id: targetId, ownerId: clientId },
+        select: { remnawaveUuid: true, expireAt: true },
+      })
+    : await basePrisma.subscription.findUnique({
+        where: { ownerId_subscriptionIndex: { ownerId: clientId, subscriptionIndex: 0 } },
+        select: { remnawaveUuid: true, expireAt: true },
+      });
+
+  if (!target?.remnawaveUuid) {
+    throw paymentTargetError("Подписка для опции не найдена или не принадлежит вам.", "SUBSCRIPTION_TARGET_INVALID");
+  }
+  if (target.expireAt && target.expireAt.getTime() <= Date.now()) {
+    throw paymentTargetError("Нельзя купить опцию для истёкшей подписки. Сначала продлите подписку.", "SUBSCRIPTION_INACTIVE");
+  }
+}
+
+export async function assertRenewalTargetForPayment(params: {
+  clientId: string;
+  tariffId: string | null | undefined;
+  metadata: unknown;
+}): Promise<void> {
+  const intent = parsePaymentIntentMetadata(params.metadata);
+  if (!intent.renewalTargetId) return;
+  if (!params.tariffId) {
+    throw paymentTargetError("Для продления не указан тариф.", "SUBSCRIPTION_TARGET_INVALID");
+  }
+
+  const target = await basePrisma.subscription.findFirst({
+    where: {
+      id: intent.renewalTargetId,
+      OR: [{ ownerId: params.clientId }, { giftedToClientId: params.clientId }],
+    },
+    select: { tariffId: true, trialId: true },
+  });
+  if (!target) {
+    throw paymentTargetError("Подписка для продления не найдена или не принадлежит вам.", "SUBSCRIPTION_TARGET_INVALID");
+  }
+  if (!isRenewalTargetTariffAllowed(target, params.tariffId)) {
+    throw paymentTargetError("Продление возможно только для текущего тарифа подписки.", "SUBSCRIPTION_TARGET_INVALID");
+  }
+}
+
 /**
  * Обёртка над prisma.payment.create. После выпила multi-bot (v5.0.0) botId-подстановки нет.
  * T-tariff-restriction (портировано из WolfVPN): бэкстоп — не создаём платёж за тариф,
  * запрещённый клиенту. Покрывает ВСЕ внешние платёжки (они создают pending-платёж здесь).
  * app.ts ловит code "TARIFF_RESTRICTED" → 403.
  */
-export async function createPayment(args: Prisma.PaymentCreateArgs) {
+export async function createPayment(args: Prisma.PaymentCreateArgs, debitBalance = false) {
   const data = args.data as Prisma.PaymentUncheckedCreateInput;
+  if (data.tariffId && typeof data.clientId === "string") await validateTariffDevices(basePrisma, data.clientId, data.tariffId, data.deviceCount, data.metadata);
+  if (typeof data.clientId === "string") {
+    await assertActiveExtraOptionTargetForPayment({ clientId: data.clientId, metadata: data.metadata });
+    await assertRenewalTargetForPayment({
+      clientId: data.clientId,
+      tariffId: typeof data.tariffId === "string" ? data.tariffId : null,
+      metadata: data.metadata,
+    });
+  }
   if (data.tariffId && typeof data.clientId === "string") {
     const cl = await basePrisma.client.findUnique({
       where: { id: data.clientId },
@@ -40,6 +124,22 @@ export async function createPayment(args: Prisma.PaymentCreateArgs) {
         throw err;
       }
     }
+  }
+  if (deviceOptionMetadata(data.metadata) || debitBalance) {
+    return basePrisma.$transaction(async (tx) => {
+      if (deviceOptionMetadata(data.metadata)) {
+        await lockDevicePurchases(tx, data.clientId);
+        data.metadata = await validateDevicePurchase(tx, data.clientId, data.metadata) as string;
+      }
+      if (debitBalance) {
+        const debit = await tx.client.updateMany({
+          where: { id: data.clientId, balance: { gte: data.amount } },
+          data: { balance: { decrement: data.amount } },
+        });
+        if (debit.count !== 1) throw Object.assign(new Error("Недостаточно средств на балансе."), { code: "EXTRA_DEVICE_LIMIT" });
+      }
+      return tx.payment.create({ ...args, data });
+    }, { maxWait: 10000, timeout: 30000 });
   }
   return basePrisma.payment.create(args);
 }

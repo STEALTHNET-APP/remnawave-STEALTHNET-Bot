@@ -45,3 +45,8 @@ git-manager.*
 .tools/
 staging_*.sql
 *.tsbuildinfo
+
+__pycache__/
+
+cloudflare.ini
+cloudflare-*.ini

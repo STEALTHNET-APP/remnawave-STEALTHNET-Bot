@@ -1,3 +1,4 @@
+import { useLocation } from "react-router-dom";
 /**
  * Stealth Tariffs / Payment — выбор подписки в стиле Hundler VPN.
  *
@@ -56,6 +57,7 @@ type PayMethod =
   | { kind: "platega"; id: number; label: string; icon: typeof Wallet }
   | { kind: "yookassa"; label: string; icon: typeof Wallet }
   | { kind: "yoomoney"; label: string; icon: typeof Wallet }
+  | { kind: "telegram_stars"; label: string; icon: typeof Bitcoin }
   | { kind: "cryptopay"; label: string; icon: typeof Bitcoin }
   | { kind: "heleket"; label: string; icon: typeof Bitcoin }
   | { kind: "rollypay"; label: string; icon: typeof Wallet }
@@ -98,7 +100,8 @@ export function StealthTariffs() {
 
   const categories = useMemo(() => (tariffsQuery.data?.items ?? []).filter((cat) => cat.tariffs.length > 0), [tariffsQuery.data]);
 
-  const [promoInput, setPromoInput] = useState("");
+  const promoLocation = useLocation();
+  const [promoInput, setPromoInput] = useState(() => typeof promoLocation.state?.promoCode === "string" ? promoLocation.state.promoCode : "");
   const [promoApplied, setPromoApplied] = useState<string | null>(null);
   const [promoMsg, setPromoMsg] = useState<string | null>(null);
   const [promoBusy, setPromoBusy] = useState(false);
@@ -253,13 +256,14 @@ export function StealthTariffs() {
     });
     if (config.yookassaEnabled) list.push({ kind: "yookassa", label: "YooKassa", icon: Wallet });
     if (config.yoomoneyEnabled) list.push({ kind: "yoomoney", label: "YooMoney", icon: Wallet });
+    if (config.telegramStarsEnabled && currency.toUpperCase() === "RUB") list.push({ kind: "telegram_stars", label: "⭐ Telegram Stars", icon: Wallet });
     if (config.cryptopayEnabled) list.push({ kind: "cryptopay", label: "Crypto Pay", icon: Bitcoin });
     if (config.heleketEnabled) list.push({ kind: "heleket", label: "Heleket", icon: Bitcoin });
     if ((config as { rollypayEnabled?: boolean }).rollypayEnabled) list.push({ kind: "rollypay", label: "RollyPay", icon: Wallet });
     if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kind: "paritypay", label: "ParityPay", icon: Wallet });
     if (config.lavaEnabled) list.push({ kind: "lava", label: "Lava", icon: Wallet });
     return list;
-  }, [config]);
+  }, [config, currency]);
 
   // Auto-select first method when methods load
   useEffect(() => {
@@ -402,6 +406,9 @@ export function StealthTariffs() {
       } else if (selectedMethod.kind === "yoomoney") {
         const r = await api.yoomoneyCreateFormPayment(state.token, { ...base, paymentType: "AC" });
         url = r.paymentUrl;
+      } else if (selectedMethod.kind === "telegram_stars") {
+        const r = await api.starsCreatePayment(state.token, base);
+        url = r.payUrl;
       } else if (selectedMethod.kind === "cryptopay") {
         const r = await api.cryptopayCreatePayment(state.token, base);
         // CryptoBot mini-app preferred when in Telegram, иначе fallback

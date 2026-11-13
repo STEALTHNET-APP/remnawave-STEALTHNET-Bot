@@ -78,6 +78,7 @@ export function ClientProxyPage() {
   const [plategaMethods, setPlategaMethods] = useState<{ id: number; label: string }[]>([]);
   const [yoomoneyEnabled, setYoomoneyEnabled] = useState(false);
   const [yookassaEnabled, setYookassaEnabled] = useState(false);
+  const [telegramStarsEnabled, setTelegramStarsEnabled] = useState(false);
   const [cryptopayEnabled, setCryptopayEnabled] = useState(false);
   const [heleketEnabled, setHeleketEnabled] = useState(false);
   const [rollypayEnabled, setRollypayEnabled] = useState(false);
@@ -108,6 +109,7 @@ export function ClientProxyPage() {
       setYoomoneyEnabled(Boolean(c.yoomoneyEnabled));
       setYookassaEnabled(Boolean(c.yookassaEnabled));
       setCryptopayEnabled(Boolean(c.cryptopayEnabled));
+      setTelegramStarsEnabled(Boolean(c.telegramStarsEnabled));
       setHeleketEnabled(Boolean(c.heleketEnabled));
       setRollypayEnabled(Boolean(c.rollypayEnabled));
       setParitypayEnabled(Boolean(c.paritypayEnabled));
@@ -195,17 +197,17 @@ export function ClientProxyPage() {
     }
   }
 
-  async function startCryptopayPayment(tariff: ProxyTariff) {
+  async function startCryptopayPayment(tariff: ProxyTariff, stars = false) {
     if (!token) return;
     setPayError(null);
     setPayLoading(true);
     try {
-      const res = await api.cryptopayCreatePayment(token, {
+      const res = await (stars ? api.starsCreatePayment : api.cryptopayCreatePayment)(token, {
         amount: tariff.price,
         currency: tariff.currency,
         proxyTariffId: tariff.id,
       });
-      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "Crypto Bot" });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: stars ? "Telegram Stars" : "Crypto Bot" });
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка");
     } finally {
@@ -446,6 +448,7 @@ async function startParitypayPayment(tariff: ProxyTariff) {
 
               type ProviderEntry = { id: string; enabled: boolean; onClick: () => void; label: string; icon: "crypto" | "card" };
               const providers: ProviderEntry[] = [
+                { id: "telegram_stars", enabled: Boolean(telegramStarsEnabled) && payModal.currency.toUpperCase() === "RUB", onClick: () => startCryptopayPayment(payModal, true), label: "⭐ Telegram Stars", icon: "crypto" },
                 { id: "cryptopay", enabled: cryptopayEnabled, onClick: () => startCryptopayPayment(payModal), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
                 { id: "heleket", enabled: heleketEnabled, onClick: () => startHeleketPayment(payModal), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
                 { id: "rollypay", enabled: rollypayEnabled, onClick: () => startRollypayPayment(payModal), label: providerLabel("rollypay", "RollyPay"), icon: "card" },

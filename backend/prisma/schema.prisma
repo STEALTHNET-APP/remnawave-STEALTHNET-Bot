@@ -142,6 +142,8 @@ model Client {
   payments              Payment[]
   autoRenewTariff       Tariff?             @relation("ClientAutoRenewTariff", fields: [autoRenewTariffId], references: [id], onDelete: SetNull)
   currentTariff         Tariff?             @relation("ClientCurrentTariff", fields: [currentTariffId], references: [id], onDelete: SetNull)
+  referralRewards       ReferralReward[] @relation("ReferralRewardOwner")
+  referralReward        ReferralReward? @relation("ReferralRewardSource")
   referralCredits       ReferralCredit[]
   withdrawalRequests    WithdrawalRequest[]
   promoActivations      PromoActivation[]
@@ -158,6 +160,7 @@ model Client {
   giftHistory           GiftHistory[]
   // T15 (11.05.2026, WolfVPN): какие триалы клиент уже активировал.
   trialUsages           ClientTrialUsage[]
+  rouletteSpins         ClientRouletteSpin[]
 
   // Email/google/apple/referralCode/telegramId глобально уникальны.
   @@index([email])
@@ -283,6 +286,7 @@ model Payment {
   singboxTariff     SingboxTariff?     @relation(fields: [singboxTariffId], references: [id], onDelete: SetNull)
   subscription      Subscription?      @relation("PaymentSubscription", fields: [subscriptionId], references: [id], onDelete: SetNull)
   referralCredits   ReferralCredit[]
+  singboxRenewal    SingboxRenewal?
 
   @@index([clientId])
   @@index([status])
@@ -377,7 +381,11 @@ model PromoCode {
   // Для DISCOUNT:
   discountPercent   Float?    @map("discount_percent") // Скидка в %
   discountFixed     Float?    @map("discount_fixed") // Или фикс. скидка в валюте
-  // Для FREE_DAYS:
+  // Для FREE_DAYS (squadUuid/лимиты оставлены для старых промокодов):
+  tariffId          String?   @map("tariff_id")
+  tariffPriceOptionId String? @map("tariff_price_option_id")
+  tariff            Tariff? @relation(fields: [tariffId], references: [id], onDelete: SetNull)
+  tariffPriceOption TariffPriceOption? @relation(fields: [tariffPriceOptionId], references: [id], onDelete: SetNull)
   squadUuid         String?   @map("squad_uuid")
   trafficLimitBytes BigInt?   @map("traffic_limit_bytes")
   deviceLimit       Int?      @map("device_limit")
@@ -482,6 +490,7 @@ model Tariff {
   autoRenewSubscriptions Subscription[]      @relation("SubscriptionAutoRenewTariff")
   priceOptions           TariffPriceOption[]
   // T15 (11.05.2026, WolfVPN): пресеты пробных подписок, привязанные к этому тарифу.
+  promoCodes             PromoCode[]
   trials                 Trial[]
 
   @@index([categoryId])
@@ -503,6 +512,7 @@ model TariffPriceOption {
 
   tariff   Tariff    @relation(fields: [tariffId], references: [id], onDelete: Cascade)
   payments Payment[]
+  promoCodes PromoCode[]
 
   @@index([tariffId])
   @@index([sortOrder])
@@ -796,6 +806,7 @@ model SingboxCategory {
 }
 
 model SingboxTariff {
+  protocol          String   @default("SINGBOX")
   id                String   @id @default(cuid())
   categoryId        String   @map("category_id")
   name              String
@@ -818,6 +829,12 @@ model SingboxTariff {
 }
 
 model SingboxSlot {
+  renewalBaseExpiresAt DateTime? @map("renewal_base_expires_at")
+  renewalBaseTrafficLimitBytes BigInt? @map("renewal_base_traffic_limit_bytes")
+  renewalAdjustmentMs Float @default(0) @map("renewal_adjustment_ms")
+  syncPending Boolean @default(false) @map("sync_pending")
+  renewals SingboxRenewal[]
+  sourcePaymentId    String?  @map("source_payment_id")
   id                 String   @id @default(cuid())
   nodeId             String   @map("node_id")
   clientId           String   @map("client_id")
@@ -841,6 +858,7 @@ model SingboxSlot {
   @@index([clientId])
   @@index([singboxTariffId])
   @@index([status])
+  @@index([sourcePaymentId])
   @@map("singbox_slots")
 }
 
@@ -967,6 +985,8 @@ model ContestWinner {
 // Теперь: ВСЕ подписки клиента живут в одной таблице. subscriptionIndex=0 — главная.
 // Поля Client.remnawaveUuid / currentTariffId / autoRenew* помечены deprecated (читаются для совместимости кабинета).
 model Subscription {
+  /// Created by a free-days promo; the first paid purchase/grant upgrades this same subscription.
+  promoGranted Boolean @default(false) @map("promo_granted")
   id                       String    @id @default(cuid())
   ownerId                  String    @map("owner_id")
   remnawaveUuid            String?   @map("remnawave_uuid")
@@ -1026,6 +1046,14 @@ model Subscription {
   /// Синхронизируется при каждом upsert/extend через extractCurrentExpireAt из Remna-ответа.
   /// null = подписка ещё не привязана к Remna user или дата неизвестна.
   expireAt                 DateTime? @map("expire_at")
+  /// Теневой бан подписки за превышение правил трафика.
+  /// Remnawave остаётся безлимитным; бан отключает пользователя до bannedUntil.
+  bannedUntil              DateTime? @map("banned_until")
+  banReason                String?   @map("ban_reason")
+  banRuleId                String?   @map("ban_rule_id")
+  banNotifiedAt            DateTime? @map("ban_notified_at")
+  /// Иммунитет после ручного разбана: планировщик не предупреждает и не банит до этой даты.
+  abuseImmuneUntil         DateTime? @map("abuse_immune_until")
   /// ── T-remna-mirror (9.08.2026): зеркало состояния подписки из Remnawave ──
   /// Чтобы даты/трафик/статус жили и в НАШЕЙ базе, а не только в панели Remna:
   /// переживают недоступность Remna, дают историю и позволяют считать отчёты
@@ -1053,6 +1081,8 @@ model Subscription {
   trial           Trial?     @relation(fields: [trialId], references: [id], onDelete: SetNull)
   giftCodes       GiftCode[] @relation("GiftCodeSubscription")
   payments        Payment[]  @relation("PaymentSubscription")
+  abuseStates     TrafficAbuseState[] @relation("SubscriptionAbuseStates")
+  abuseEvents     TrafficAbuseEvent[] @relation("SubscriptionAbuseEvents")
 
   @@unique([ownerId, subscriptionIndex])
   @@index([ownerId])
@@ -1061,6 +1091,7 @@ model Subscription {
   @@index([trialId])
   @@index([autoRenewEnabled])
   @@index([expireAt])
+  @@index([bannedUntil])
   @@map("subscriptions")
 }
 
@@ -1081,6 +1112,7 @@ model Trial {
   squadUuids        String?  @map("squad_uuids")
   /// лимит устройств standalone-триала.
   deviceLimit       Int?     @map("device_limit")
+  price             Float    @default(0)
   durationDays      Int      @map("duration_days") // длительность пробного периода
   /// T16 (12.05.2026, WolfVPN): отдельный лимит трафика для триала (опционально).
   /// Если null — используется trafficLimitBytes тарифа (старое поведение).
@@ -1507,4 +1539,150 @@ model AutoRenewNotification {
   @@index([triggerType, enabled])
   @@index([sortOrder])
   @@map("auto_renew_notifications")
+}
+
+
+// История вращений рулетки удачи
+model ClientRouletteSpin {
+  status      String   @default("APPLIED")
+  awardPlan   Json?    @map("award_plan")
+  id          String   @id @default(cuid())
+  clientId    String   @map("client_id")
+  rewardType  String   @map("reward_type") // "days" | "balance" | "traffic" | "discount" | "empty"
+  rewardValue Float    @default(0) @map("reward_value")
+  rewardLabel String   @map("reward_label")
+  sectorId    String   @map("sector_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, createdAt])
+  @@map("client_roulette_spins")
+}
+
+/// Правило теневого лимита трафика. Расписание определяет момент проверки,
+/// окно и limitBytes — анализируемый период и порог, action — WARN или BAN.
+model TrafficAbuseRule {
+  id                     String   @id @default(cuid())
+  name                   String   @db.VarChar(120)
+  enabled                Boolean  @default(true)
+  schedules              Json     @default("[]")
+  windowKind             String   @map("window_kind") @db.VarChar(16)
+  windowValueHours       Int?     @map("window_value_hours")
+  limitBytes             BigInt   @map("limit_bytes")
+  action                 String   @db.VarChar(8)
+  banDurationKind        String?  @map("ban_duration_kind") @db.VarChar(20)
+  banDurationHours       Int?     @map("ban_duration_hours")
+  channels               Json     @default("{}")
+  messageText            String   @map("message_text") @db.Text
+  emailSubject           String?  @map("email_subject") @db.VarChar(200)
+  scopeKind              String   @default("all") @map("scope_kind") @db.VarChar(16)
+  scopeValues            Json?    @map("scope_values")
+  excludeSubscriptionIds Json?    @map("exclude_subscription_ids")
+  priority               Int      @default(0)
+  resendAfterHours       Int?     @map("resend_after_hours")
+  lastRunAt              DateTime? @map("last_run_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  states TrafficAbuseState[] @relation("RuleAbuseStates")
+  events TrafficAbuseEvent[] @relation("RuleAbuseEvents")
+
+  @@index([enabled])
+  @@map("traffic_abuse_rules")
+}
+
+/// Состояние пары «подписка × правило»: дедупликация предупреждений и rolling-снапшот.
+model TrafficAbuseState {
+  id                String   @id @default(cuid())
+  subscriptionId    String   @map("subscription_id")
+  ruleId            String   @map("rule_id")
+  windowKey         String   @map("window_key") @db.VarChar(32)
+  warnedAt          DateTime? @map("warned_at")
+  lastPeriodBytes   BigInt?  @map("last_period_bytes")
+  lastLifetimeBytes BigInt?  @map("last_lifetime_bytes")
+  lastSnapshotAt    DateTime? @map("last_snapshot_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  subscription Subscription     @relation("SubscriptionAbuseStates", fields: [subscriptionId], references: [id], onDelete: Cascade)
+  rule         TrafficAbuseRule @relation("RuleAbuseStates", fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, ruleId])
+  @@index([ruleId])
+  @@map("traffic_abuse_states")
+}
+
+/// Журнал WARN/BAN/UNBAN/ERROR антиабуза.
+model TrafficAbuseEvent {
+  id             String   @id @default(cuid())
+  subscriptionId String   @map("subscription_id")
+  ruleId         String?  @map("rule_id")
+  eventType      String   @map("event_type") @db.VarChar(8)
+  periodBytes    BigInt?  @map("period_bytes")
+  windowKey      String?  @map("window_key") @db.VarChar(32)
+  channelsSent   Json?    @map("channels_sent")
+  detail         String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  subscription Subscription      @relation("SubscriptionAbuseEvents", fields: [subscriptionId], references: [id], onDelete: Cascade)
+  rule         TrafficAbuseRule? @relation("RuleAbuseEvents", fields: [ruleId], references: [id], onDelete: SetNull)
+
+  @@index([subscriptionId])
+  @@index([eventType])
+  @@index([createdAt(sort: Desc)])
+  @@map("traffic_abuse_events")
+}
+
+model EmailUnsubscribe {
+  email     String   @id
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("email_unsubscribes")
+}
+
+model TelegramConsent {
+  telegramId        String    @id @map("telegram_id")
+  presentedVersion  String    @map("presented_version")
+  acceptedVersion   String?   @map("accepted_version")
+  acceptedDocuments String?   @map("accepted_documents") @db.Text
+  acceptedAt        DateTime? @map("accepted_at")
+  pendingStart      String?   @map("pending_start")
+
+  @@map("telegram_consents")
+}
+
+model ReferralReward {
+  id String @id @default(cuid())
+  refereeId String @unique @map("referee_id")
+  referrerId String @map("referrer_id")
+  paymentId String @unique @map("payment_id")
+  kind String
+  amount Float @default(0)
+  days Int @default(0)
+  currency String
+  subscriptionId String? @map("subscription_id")
+  remnawaveUuid String? @map("remnawave_uuid")
+  targetExpireAt DateTime? @map("target_expire_at")
+  appliedAt DateTime? @map("applied_at")
+  nextAttemptAt DateTime @default(now()) @map("next_attempt_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  referee Client @relation("ReferralRewardSource", fields: [refereeId], references: [id], onDelete: Cascade)
+  referrer Client @relation("ReferralRewardOwner", fields: [referrerId], references: [id], onDelete: Cascade)
+  @@index([referrerId, appliedAt])
+  @@index([kind, appliedAt, nextAttemptAt])
+  @@map("referral_rewards")
+}
+
+model SingboxRenewal {
+  id String @id @default(cuid())
+  slotId String @map("slot_id")
+  paymentId String @unique @map("payment_id")
+  durationDays Int @map("duration_days")
+  trafficBytes BigInt? @map("traffic_bytes")
+  createdAt DateTime @default(now()) @map("created_at")
+  slot SingboxSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  @@index([slotId])
+  @@map("singbox_renewals")
 }

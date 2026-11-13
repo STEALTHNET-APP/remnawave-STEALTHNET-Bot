@@ -1,0 +1,34 @@
+services:
+  reports:
+    build: .
+    image: stealthnet-reports:latest
+    container_name: stealthnet-reports
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: https://reports.stealthnet.app
+      PANEL_URL: http://api:5000
+      DATA_DIR: /data
+    volumes:
+      - reports_data:/data
+    networks:
+      - panel
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 384m
+    cpus: 1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  reports_data:
+networks:
+  panel:
+    external: true
+    name: ${PANEL_NETWORK:-stealthnet_stealthnet}

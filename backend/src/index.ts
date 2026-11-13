@@ -1,3 +1,7 @@
+import { reconcileWebPanels } from "./modules/amnezia-web/service.js";
+import { reconcileStarsPayments } from "./modules/telegram-stars/stars.service.js";
+import { startRemnaSyncScheduler, stopRemnaSyncScheduler } from "./modules/sync/sync.scheduler.js";
+import { startReferralRewardsScheduler, stopReferralRewardsScheduler } from "./modules/referral/referral-rewards.scheduler.js";
 // Установить захват логов в кольцевой буфер ДО первого console.log в импортах.
 // Это даёт нам логи всех последующих вызовов в /api/admin/diagnostics/logs.
 import { installLogCapture } from "./modules/diagnostics/log-buffer.js";
@@ -16,6 +20,7 @@ import { startAutoRenewScheduler } from "./modules/payment/auto-renew.cron.js";
 import { startAutoBackupScheduler, stopAutoBackupScheduler } from "./modules/backup/auto-backup.scheduler.js";
 import { startGiftExpiryCron } from "./modules/gift/gift-expiry.cron.js";
 import { startMarketplaceScheduler, stopMarketplaceScheduler } from "./modules/marketplace/marketplace.scheduler.js";
+import { startAntiAbuseScheduler, stopAntiAbuseScheduler } from "./modules/anti-abuse/anti-abuse.scheduler.js";
 import { startBroadcastStaleScheduler, stopBroadcastStaleScheduler } from "./modules/broadcast/broadcast-stale.scheduler.js";
 import { ensureTheme, seedDefaultsToEmptyBlocks } from "./modules/landing/landing.service.js";
 import { migrateLandingToBlocks } from "./scripts/migrate-landing-to-blocks.js";
@@ -23,8 +28,18 @@ import { migrateRemnaIds } from "./scripts/migrate-remna-ids.js";
 import { registerCron } from "./modules/diagnostics/cron-registry.js";
 import { runContestDailyReminder } from "./modules/contest/contest-daily-reminder.service.js";
 
+import { verifyUpdateDatabase } from "./modules/update/verify-database.js";
+
 async function main() {
   await prisma.$connect();
+  if (process.env.UPDATER_VERIFY_ONLY === "1") {
+    await verifyUpdateDatabase();
+    const server = app.listen(env.PORT, "0.0.0.0");
+    const shutdown = async () => { server.close(); await prisma.$disconnect(); process.exit(0); };
+    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
+    return;
+  }
 
   await ensureFirstAdmin(env);
   await ensureSystemSettings();
@@ -59,15 +74,21 @@ async function main() {
     console.error("[remna-ids] migrateRemnaIds failed:", e);
   }
 
+  void reconcileWebPanels().catch(() => console.error("[Amnezia Web Panel] Ошибка синхронизации"));
+  setInterval(() => { void reconcileWebPanels().catch(() => console.error("[Amnezia Web Panel] Ошибка синхронизации")); }, 60000).unref();
   await startAutoBroadcastScheduler();
   startContestDailyReminderScheduler(env.CONTEST_REMINDER_CRON ?? undefined);
   startAutoRenewScheduler();
+  setInterval(() => { void reconcileStarsPayments().catch(() => console.error("[Stars] Не удалось сверить оплаты Telegram")); }, 60000).unref();
+  startReferralRewardsScheduler();
+  startRemnaSyncScheduler();
   startGiftExpiryCron();
   // крон удаления «заброшенных» аккаунтов УДАЛЁН.
   // Он удалял всех с onboardingCompleted=false старше 30 мин — а теперь этот флаг ставится
   // TG-юзерам для запуска онбординга (см. /telegram-login-check, /register). Крон бы их стирал.
   await startAutoBackupScheduler();
   startMarketplaceScheduler();
+  await startAntiAbuseScheduler();
   startBroadcastStaleScheduler();
 
   // Регистрация cron-задач в реестре для UI /admin/diagnostics → Cron monitor.
@@ -83,6 +104,8 @@ async function main() {
   });
   registerCron({ name: "auto-renew", cron: "*/15 * * * *", description: "Авто-продление подписок с баланса/yookassa" });
   registerCron({ name: "gift-expiry", cron: "*/30 * * * *", description: "Истёкшие gift-коды → освобождаем зарезервированные подписки" });
+  registerCron({ name: "remna-sync", cron: "* * * * *", description: "Автоматический импорт из Remnawave по настройкам панели" });
+  registerCron({ name: "referral-days", cron: "* * * * *", description: "Начисление бонусных дней за рефералов" });
   registerCron({ name: "auto-backup", cron: "0 4 * * *", description: "Автоматический бэкап БД" });
   registerCron({ name: "marketplace-heartbeat", cron: "*/10 * * * *", description: "Heartbeat в маркетплейс-хаб" });
 
@@ -92,10 +115,13 @@ async function main() {
 
   const shutdown = async () => {
     stopAutoBroadcastScheduler();
+    stopReferralRewardsScheduler();
+    stopRemnaSyncScheduler();
     stopBroadcastStaleScheduler();
     stopContestDailyReminderScheduler();
     stopAutoBackupScheduler();
     stopMarketplaceScheduler();
+    stopAntiAbuseScheduler();
     server.close();
     await prisma.$disconnect();
     process.exit(0);

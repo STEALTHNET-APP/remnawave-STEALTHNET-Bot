@@ -33,14 +33,14 @@ type AdminNotificationPreferenceRow = {
   notifyNewTicket: boolean;
 };
 
-export type TelegramUserSendOptions = { clientIdForBotToken?: string };
+export type TelegramUserSendOptions = { clientIdForBotToken?: string; throwOnError?: boolean };
 
 export async function sendTelegramToUser(
   telegramId: string,
   text: string,
   messageThreadId?: number | null,
   replyMarkup?: Record<string, unknown>,
-  _opts?: TelegramUserSendOptions,
+  opts?: TelegramUserSendOptions,
 ): Promise<void> {
   // v5.0.0: единственный бот, токен берётся из system_settings (или env).
   let token: string | undefined;
@@ -49,11 +49,15 @@ export async function sendTelegramToUser(
     token = config.telegramBotToken?.trim() ?? undefined;
   }
   if (!token) {
+    if (opts?.throwOnError) throw new Error("Telegram bot token is not configured");
     console.warn("[Telegram notify] Bot token not configured, skip notification");
     return;
   }
   const chatId = telegramId.trim();
-  if (!chatId) return;
+  if (!chatId) {
+    if (opts?.throwOnError) throw new Error("Telegram ID is empty");
+    return;
+  }
 
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
   const payload: Record<string, unknown> = {
@@ -73,9 +77,11 @@ export async function sendTelegramToUser(
     }, proxy);
     const data = (await res.json().catch(() => ({}))) as { ok?: boolean; description?: string };
     if (!res.ok || !data.ok) {
+      if (opts?.throwOnError) throw new Error(data.description ?? `Telegram HTTP ${res.status}`);
       console.warn("[Telegram notify] sendMessage failed", { chatId: chatId.slice(0, 8) + "...", error: data.description ?? res.statusText });
     }
   } catch (e) {
+    if (opts?.throwOnError) throw e;
     console.warn("[Telegram notify] sendMessage error", e);
   }
 }
@@ -451,6 +457,13 @@ export async function notifyExtraOptionApplied(clientId: string, paymentId: stri
   ];
   if (amount > 0) lines.push(`💵 Списано: <b>${formatMoney(amount, currency)}</b>`);
   lines.push("", "Изменения вступили в силу мгновенно — можете пользоваться.");
+
+  try {
+    const metadata = payment.metadata ? JSON.parse(payment.metadata) : null;
+    if (metadata?.extraOptionBalanceCreditAt) {
+      lines.splice(0, lines.length, `Лимит дополнительных устройств достигнут или подписка больше недоступна. ${formatMoney(amount, currency)} возвращено на ваш баланс.`);
+    }
+  } catch {}
 
   const cfg = await getSystemConfig();
   const botToken = cfg.telegramBotToken?.trim();
@@ -894,6 +907,11 @@ export async function notifySingboxSlotsCreated(clientId: string, slotIds: strin
   });
 
   const { buildSingboxSlotSubscriptionLink } = await import("../singbox/singbox-link.js");
+  if (slots.some(s => ["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(s.node.protocol))) {
+    const cfg = await getSystemConfig();
+    await sendTelegramToUser(client.telegramId, "✅ Доступ AmneziaWG оплачен. Скачайте .conf в личном кабинете → Sing-box / AmneziaWG → Мои доступы и импортируйте в приложение AmneziaVPN.", null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
+    return;
+  }
   const name = tariffName?.trim() || "Sing-box";
   let text = `✅ <b>Доступы «${escapeHtml(name)}»</b> оплачены.\n\n`;
   for (let i = 0; i < slots.length; i++) {
@@ -907,6 +925,17 @@ export async function notifySingboxSlotsCreated(clientId: string, slotIds: strin
   }
   text += "Скопируйте ссылку в приложение (v2rayN, Nekoray, Shadowrocket и др.).";
 
+  const cfg = await getSystemConfig();
+  await sendTelegramToUser(client.telegramId, text, null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
+}
+
+/** Админ продлил подписку (только дата, без смены тарифа) — короткое уведомление клиенту. */
+export async function notifySubscriptionExtendedByAdmin(clientId: string, expireAt: Date): Promise<void> {
+  const client = await prisma.client.findUnique({ where: { id: clientId }, select: { telegramId: true, id: true } });
+  if (!client?.telegramId) return;
+  const text = `✅ <b>Подписка продлена</b>
+
+Действует до: ${formatDate(expireAt)}`;
   const cfg = await getSystemConfig();
   await sendTelegramToUser(client.telegramId, text, null, backToMenuMarkup(cfg.botBackLabel), { clientIdForBotToken: client.id });
 }
