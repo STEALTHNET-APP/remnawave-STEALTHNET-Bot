@@ -27,6 +27,7 @@ import {
   isRemnaConfigured,
   remnaDeleteUser,
 } from "../remna/remna.client.js";
+import { normalizeClientSubscriptionSlots } from "../subscription/subscription.helpers.js";
 
 function extractCurrentExpireAt(data: unknown): Date | null {
   if (!data || typeof data !== "object") return null;
@@ -566,6 +567,10 @@ export async function deleteSubscription(
   // Hard delete
   await prisma.subscription.delete({
     where: { id: subscriptionId },
+  });
+
+  await normalizeClientSubscriptionSlots(ownerId).catch((e) => {
+    console.error("[gift] slot normalization failed:", e);
   });
 
   return { ok: true, data: undefined };

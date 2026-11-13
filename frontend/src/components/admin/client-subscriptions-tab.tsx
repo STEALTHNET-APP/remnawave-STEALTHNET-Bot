@@ -12,7 +12,8 @@ import { useState, useEffect, useCallback } from "react";
 import { api, type AdminClientSubscriptionItem } from "@/lib/api";
 import { SubscriptionRemnaPanel } from "./subscription-remna-panel";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Crown, Loader2 } from "lucide-react";
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 import { fmtMsk, fmtMskDate } from "@/lib/datetime";
 
 interface Props {
@@ -26,6 +27,7 @@ export function ClientSubscriptionsTab({ clientId, token, onChanged }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [promotingId, setPromotingId] = useState<string | null>(null);
   const [remnaSquads, setRemnaSquads] = useState<{ uuid: string; name?: string }[]>([]);
 
   const reload = useCallback(async () => {
@@ -69,6 +71,23 @@ export function ClientSubscriptionsTab({ clientId, token, onChanged }: Props) {
     });
   }
 
+  async function makePrimary(subId: string) {
+    const ok = await adminConfirm(
+      "Сделать эту подписку основной? Она займёт слот #0 в боте и веб-кабинете, а текущая основная (если есть) станет дополнительной.",
+    );
+    if (!ok) return;
+    setPromotingId(subId);
+    try {
+      await api.subscriptionMakePrimary(token, subId);
+      await reload();
+      onChanged?.();
+    } catch (e) {
+      await adminAlert(e instanceof Error ? e.message : "Не удалось сделать подписку основной");
+    } finally {
+      setPromotingId(null);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
@@ -105,50 +124,70 @@ export function ClientSubscriptionsTab({ clientId, token, onChanged }: Props) {
             key={sub.id}
             className="rounded-xl border border-border bg-foreground/[0.02] dark:bg-white/[0.02] overflow-hidden"
           >
-            <button
-              onClick={() => toggle(sub.id)}
-              className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/[0.04] transition-colors"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                {isOpen ? (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                )}
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className={
-                      sub.isPrimary
-                        ? "inline-flex items-center rounded-full bg-primary/10 border border-border px-2 py-0.5 text-[11px] font-semibold text-primary"
-                        : "inline-flex items-center rounded-full bg-card border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground"
-                    }
-                  >
-                    {sub.isPrimary ? "Главная" : `#${sub.subscriptionIndex}`}
-                  </span>
-                  <span className="text-sm font-medium truncate">
-                    {sub.tariffName ?? "— без тарифа —"}
-                  </span>
-                  {sub.giftStatus && (
-                    <span className="text-[11px] text-amber-400"> {sub.giftStatus}</span>
+            <div className="flex items-stretch">
+              <button
+                onClick={() => toggle(sub.id)}
+                className="flex-1 min-w-0 flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/[0.04] transition-colors text-left"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  {isOpen ? (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                   )}
-                  {sub.autoRenewEnabled && (
-                    <span className="text-[11px] text-green-400"> auto-renew</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className={
+                        sub.isPrimary
+                          ? "inline-flex items-center rounded-full bg-primary/10 border border-border px-2 py-0.5 text-[11px] font-semibold text-primary"
+                          : "inline-flex items-center rounded-full bg-card border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground"
+                      }
+                    >
+                      {sub.isPrimary ? "Главная" : `#${sub.subscriptionIndex}`}
+                    </span>
+                    <span className="text-sm font-medium truncate">
+                      {sub.tariffName ?? "— без тарифа —"}
+                    </span>
+                    {sub.giftStatus && (
+                      <span className="text-[11px] text-amber-400"> {sub.giftStatus}</span>
+                    )}
+                    {sub.autoRenewEnabled && (
+                      <span className="text-[11px] text-green-400"> auto-renew</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
+                  {sub.expireAt && (
+                    <span title={`Истекает: ${fmtMsk(sub.expireAt)}`}>
+                      до {fmtMskDate(sub.expireAt)}
+                    </span>
+                  )}
+                  {!sub.remnawaveUuid && (
+                    <span className="text-yellow-400" title="Подписка не привязана к Remna">
+                       нет Remna
+                    </span>
                   )}
                 </div>
-              </div>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
-                {sub.expireAt && (
-                  <span title={`Истекает: ${fmtMsk(sub.expireAt)}`}>
-                    до {fmtMskDate(sub.expireAt)}
-                  </span>
-                )}
-                {!sub.remnawaveUuid && (
-                  <span className="text-yellow-400" title="Подписка не привязана к Remna">
-                     нет Remna
-                  </span>
-                )}
-              </div>
-            </button>
+              </button>
+              {!sub.isPrimary && (
+                <div className="flex items-center pr-3 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-[11.5px] font-semibold"
+                    disabled={promotingId !== null}
+                    onClick={() => makePrimary(sub.id)}
+                  >
+                    {promotingId === sub.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Crown className="h-3.5 w-3.5" />
+                    )}
+                    Сделать основной
+                  </Button>
+                </div>
+              )}
+            </div>
 
             {isOpen && (
               <div className="border-t border-border p-4 bg-card">
