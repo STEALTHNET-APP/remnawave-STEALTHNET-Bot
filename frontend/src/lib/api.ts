@@ -1094,6 +1094,12 @@ export const api = {
   async getSubscriptionRemna(token: string, subId: string): Promise<unknown> {
     return request(`/admin/subscriptions/${subId}/remna`, { token });
   },
+  async subscriptionMakePrimary(token: string, subId: string): Promise<{ ok: boolean; subscriptionId: string; subscriptionIndex: number }> {
+    return request(`/admin/subscriptions/${subId}/make-primary`, { method: "POST", token });
+  },
+  async updateSubscriptionDb(token: string, subId: string, data: UpdateSubscriptionDbPayload): Promise<{ ok: boolean }> {
+    return request(`/admin/subscriptions/${subId}`, { method: "PATCH", body: JSON.stringify(data), token });
+  },
   async updateSubscriptionRemna(token: string, subId: string, data: UpdateClientRemnaPayload): Promise<unknown> {
     return request(`/admin/subscriptions/${subId}/remna`, { method: "PATCH", body: JSON.stringify(data), token });
   },
@@ -4069,8 +4075,22 @@ export interface AdminClientSubscriptionItem {
   ownerId?: string;
   giftedToClientId?: string | null;
   autoRenewEnabled: boolean;
+  customName?: string | null;
+  customPrice?: number | null;
+  extraDevices?: number;
   expireAt: string | null;
   createdAt: string;
+}
+
+export interface UpdateSubscriptionDbPayload {
+  customName?: string | null;
+  tariffId?: string | null;
+  remnawaveUuid?: string | null;
+  expireAt?: string | null;
+  customPrice?: number | null;
+  autoRenewEnabled?: boolean;
+  extraDevices?: number;
+  syncToClient?: boolean;
 }
 
 export interface RemnaUserFull {
