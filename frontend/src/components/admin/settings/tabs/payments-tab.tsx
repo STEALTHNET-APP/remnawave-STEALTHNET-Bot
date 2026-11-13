@@ -1054,11 +1054,10 @@ export function PaymentsTab({
                   </CardContent>
                 </CollapsibleContent>
               </Collapsible>
-              {/* RollyPay — приём рублей (СБП/карты/крипта) с конвертацией в USDT.
-                  Кнопка у клиента появляется только когда заполнены ОБА поля: без секрета
-                  подписи вебхук всё равно будет отвергнут. */}
-              <CispaySettings settings={settings} onChange={patch => setSettings(s => s ? { ...s, ...patch } : s)} saving={saving} />
-              <Collapsible defaultOpen={false} className="group mt-4">
+            </Card>
+            <CispaySettings settings={settings} onChange={patch => setSettings(s => s ? { ...s, ...patch } : s)} saving={saving} />
+            <Card>
+              <Collapsible defaultOpen={false} className="group">
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
