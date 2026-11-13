@@ -137,7 +137,10 @@ function mergeWithDefault(
         const name = (app as { name?: string }).name ?? `app-${i}`;
         const existing = currentByName.get(name);
         if (existing) {
-          merged.push(existing);
+          merged.push({
+            ...existing,
+            app: app as SubscriptionPageApp,
+          });
           usedNames.add(name);
         } else {
           merged.push({
