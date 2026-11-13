@@ -22,6 +22,7 @@ import { syncFromRemna, syncToRemna, syncSubscriptionsMirror, createRemnaUsersFo
 import { markPaymentPaid } from "../payment/mark-paid.service.js";
 import { registerBackupRoutes } from "../backup/backup.routes.js";
 import { invalidateBrandCache } from "../branding/spa-html.js";
+import { testNalogConnection } from "../nalog/nalog.service.js";
 import { adminCreateGiftCode } from "../gift/gift.service.js";
 import { languageRouter } from "./language.routes.js";
 import { adminGramadsRouter } from "./gramads.routes.js";
@@ -1003,6 +1004,11 @@ const updateSettingsSchema = z.object({
   proxyTelegram: z.boolean().optional(),
   proxyPayments: z.boolean().optional(),
   proxyAi: z.boolean().optional(),
+  nalogEnabled: z.boolean().optional(),
+  nalogInn: z.string().max(20).nullable().optional(),
+  nalogPassword: z.string().max(200).nullable().optional(),
+  nalogDeviceId: z.string().max(100).nullable().optional(),
+  nalogServiceName: z.string().max(300).nullable().optional(),
   liteMode: z.boolean().optional(),
   giftSubscriptionsEnabled: z.boolean().optional(),
   giftCodeExpiryHours: z.number().int().min(1).max(8760).optional(),
@@ -2174,6 +2180,23 @@ adminRouter.patch("/settings", async (req, res) => {
       update: { value: val },
     });
   }
+  const nalogKeys: [keyof typeof updates, string][] = [
+    ["nalogEnabled", "nalog_enabled"],
+    ["nalogInn", "nalog_inn"],
+    ["nalogPassword", "nalog_password"],
+    ["nalogDeviceId", "nalog_device_id"],
+    ["nalogServiceName", "nalog_service_name"],
+  ];
+  for (const [key, dbKey] of nalogKeys) {
+    const v = updates[key];
+    if (v === undefined) continue;
+    const val = typeof v === "boolean" ? (v ? "true" : "false") : (v === null ? "" : String(v));
+    await prisma.systemSetting.upsert({
+      where: { key: dbKey },
+      create: { key: dbKey, value: val },
+      update: { value: val },
+    });
+  }
   const giftKeys: [keyof typeof updates, string][] = [
     ["liteMode", "lite_mode"],
     ["giftSubscriptionsEnabled", "gift_subscriptions_enabled"],
@@ -2207,6 +2230,11 @@ adminRouter.patch("/settings", async (req, res) => {
   const config = await getSystemConfig();
   return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
 });
+
+adminRouter.post("/nalog/test", asyncRoute(async (_req, res) => {
+  const result = await testNalogConnection();
+  return res.json(result);
+}));
 
 /** Сброс всех текстов лендинга на исходные (из кода). Очищает значения в БД — фронт подставит дефолты. */
 const LANDING_TEXT_DB_KEYS = [

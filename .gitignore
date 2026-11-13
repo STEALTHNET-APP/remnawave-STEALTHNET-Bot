@@ -50,3 +50,6 @@ __pycache__/
 
 cloudflare.ini
 cloudflare-*.ini
+
+/bot/data/widget-preferences/
+/data/widget-preferences/

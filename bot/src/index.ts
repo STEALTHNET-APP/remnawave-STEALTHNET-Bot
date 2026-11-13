@@ -1,4 +1,5 @@
 import { createWidgetMiddleware } from "./widgets.js";
+import { createFileWidgetPreferences } from "./widget-preferences.js";
 import dns from "node:dns";
 import "dotenv/config";
 import { Bot, Composer, Context } from "grammy";
@@ -128,8 +129,15 @@ if (!token) {
 
 const b = await createBotWithProxy(token);
 b.api.config.use(ignoreNotModified);
-b.use(createWidgetMiddleware(api.getPublicConfig));
-b.use(sequentialize((ctx) => [ctx.from?.id ? `user:${ctx.from.id}` : undefined, ctx.chat?.id ? `chat:${ctx.chat.id}` : undefined].filter((key): key is string => !!key)));
+b.use(sequentialize((ctx) => {
+  const widget = (ctx.update as unknown as { widget_query?: { from?: { id?: number }; chat?: { id?: number } } }).widget_query;
+  const userId = ctx.from?.id ?? widget?.from?.id;
+  const chatId = ctx.chat?.id ?? widget?.chat?.id;
+  return [userId ? `user:${userId}` : undefined, chatId ? `chat:${chatId}` : undefined].filter((key): key is string => !!key);
+}));
+b.use(createWidgetMiddleware(api.getPublicConfig, {
+  preferences: createFileWidgetPreferences(process.env.BOT_WIDGET_PREFERENCES_DIR || "./data/widget-preferences"),
+}));
 b.use(composer);
 b.catch((err) => {
   const updateId = err.ctx?.update.update_id;

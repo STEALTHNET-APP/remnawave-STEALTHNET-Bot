@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { deflateSync } from "node:zlib";
+import { createMemoryWidgetPreferences, type WidgetPreferences } from "./widget-preferences.js";
 import type { Context, MiddlewareFn } from "grammy";
 import { cleanWidgetLabel, getWidgetSummary, widgetContentPages, type WidgetSummary } from "./widget-presentation.js";
 
@@ -8,7 +9,6 @@ type Action = { text: string; kind: "callback" | "url" | "copy"; value: string }
 type Screen = { summary?: WidgetSummary; owner: number; messageId: number; text: string; keyboard: Button[][]; expires: number; consumed: boolean; actions: Map<string, string> };
 type WidgetQuery = { id: string; from: { id: number; is_bot: boolean; first_name: string }; chat?: { id: number; type: string }; message_id?: number; data: string; chat_instance: string; type?: { type: string } };
 const screens = new Map<string, Screen>();
-const ordinary = new Map<number, number>();
 const TTL = 60 * 60_000;
 const key = (chatId: number, messageId: number) => `${chatId}:${messageId}`;
 const escape = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -58,16 +58,75 @@ export function buildWidget(text: string, keyboard: Button[][], brand: string, s
 function sweep() {
   const now = Date.now();
   for (const [id, screen] of screens) if (screen.expires <= now) screens.delete(id);
-  for (const [id, expiry] of ordinary) if (expiry <= now) ordinary.delete(id);
   while (screens.size >= 5000) screens.delete(screens.keys().next().value!);
 }
 
-export function createWidgetMiddleware(config: () => Promise<{ botHtmlBubblesTest?: boolean; serviceName?: string | null } | null>): MiddlewareFn<Context> {
+export function createWidgetMiddleware(config: () => Promise<{ botHtmlBubblesTest?: boolean; serviceName?: string | null } | null>, options: { preferences?: WidgetPreferences } = {}): MiddlewareFn<Context> {
+  const preferences = options.preferences ?? createMemoryWidgetPreferences();
+  const recoveryMessages = new Map<number, number>();
   return async (ctx, next) => {
     sweep();
     const update = ctx.update as unknown as { widget_query?: WidgetQuery; callback_query?: unknown };
     const query = update.widget_query;
     const cfg = await config().catch(() => null);
+    const callback = ctx.callbackQuery;
+    const classicAction = callback?.data === "widgets:classic";
+    const modernAction = callback?.data === "widgets:modern";
+    const switching = classicAction || modernAction;
+    const privateOwner = query
+      ? query.chat?.type === "private" && query.chat.id === query.from.id ? query.from.id : undefined
+      : ctx.chat?.type === "private" && ctx.chat.id === ctx.from?.id ? ctx.from.id : undefined;
+    if (switching && privateOwner === undefined) {
+      await ctx.answerCallbackQuery({ text: "Менять меню можно только в личном чате с ботом." }).catch(() => {});
+      return;
+    }
+    if (modernAction && !cfg?.botHtmlBubblesTest) {
+      await ctx.answerCallbackQuery({ text: "Новое меню сейчас отключено администратором.", show_alert: true }).catch(() => {});
+      return;
+    }
+    if (switching && privateOwner !== undefined) {
+      try {
+        await preferences.setClassic(privateOwner, classicAction);
+      } catch {
+        console.error("[Widgets] Could not save menu preference");
+        await ctx.answerCallbackQuery({ text: "Не удалось сохранить выбор меню. Попробуйте позже.", show_alert: true }).catch(() => {});
+        return;
+      }
+      await ctx.answerCallbackQuery({ text: classicAction ? "Обычное меню включено только для вас" : "Новое меню включено" }).catch(() => {});
+      if (classicAction) {
+        for (const [id, screen] of screens) if (screen.owner === privateOwner) screens.delete(id);
+        await ctx.reply("Обычное меню включено только для вас. Вернуть новое можно кнопкой ниже.", {
+          reply_markup: { inline_keyboard: [[{ text: "Включить новое меню", callback_data: "widgets:modern" }]] },
+        });
+      }
+      callback!.data = "menu:main";
+      ctx.api.config.use(async (prev, method, payload, signal) => {
+        const p = payload as unknown as Record<string, any>;
+        if (Number(p.chat_id) === privateOwner && p.message_id === callback?.message?.message_id && (method === "editMessageText" || method === "editMessageCaption")) {
+          const sent = await prev("sendMessage", {
+            chat_id: privateOwner, text: p.text ?? p.caption,
+            ...(p.reply_markup ? { reply_markup: p.reply_markup } : {}),
+            ...(p.parse_mode ? { parse_mode: p.parse_mode } : {}),
+            ...(p.entities || p.caption_entities ? { entities: p.entities ?? p.caption_entities } : {}),
+          } as any, signal);
+          if (sent.ok) {
+            screens.delete(key(privateOwner, p.message_id));
+            await prev("deleteMessage", { chat_id: privateOwner, message_id: p.message_id }, signal).catch(() => {});
+          }
+          return sent;
+        }
+        return prev(method, payload, signal);
+      });
+    }
+    let classic = classicAction;
+    if (!switching && privateOwner !== undefined && cfg?.botHtmlBubblesTest) {
+      try { classic = await preferences.isClassic(privateOwner); }
+      catch {
+        console.error("[Widgets] Could not read menu preference; using ordinary menu");
+        classic = true;
+      }
+    }
+    let recoverySent = false;
     let queryScreen: Screen | undefined;
     let queryAction: string | undefined;
     let queryAnswer: Promise<unknown> | undefined;
@@ -81,7 +140,7 @@ export function createWidgetMiddleware(config: () => Promise<{ botHtmlBubblesTes
       const raw = ctx.api.raw as unknown as { answerWidgetQuery(p: { widget_query_id: string; data?: string }): Promise<unknown> };
       const screen = query.chat && query.message_id ? screens.get(key(query.chat.id, query.message_id)) : undefined;
       const action = screen?.actions.get(query.data);
-      const allowed = cfg?.botHtmlBubblesTest && !ordinary.has(query.from.id) && query.chat?.type === "private" && query.chat.id === query.from.id && (!query.type || query.type.type === "data") && screen?.owner === query.from.id && !screen.consumed && action;
+      const allowed = cfg?.botHtmlBubblesTest && !classic && query.chat?.type === "private" && query.chat.id === query.from.id && (!query.type || query.type.type === "data") && screen?.owner === query.from.id && !screen.consumed && action;
       if (!allowed) {
         await raw.answerWidgetQuery({ widget_query_id: query.id, data: "Меню устарело. Отправьте /start или откройте обычное меню." }); return;
       }
@@ -90,14 +149,20 @@ export function createWidgetMiddleware(config: () => Promise<{ botHtmlBubblesTes
       queryAction = action;
       update.callback_query = { id: `widget:${query.id}`, from: query.from, chat_instance: query.chat_instance, data: action, message: { message_id: query.message_id, date: Math.floor(Date.now() / 1000), chat: query.chat, text: screen.text } };
     }
-    const fallback = ctx.callbackQuery?.data === "widgets:classic";
-    if (fallback && ctx.chat?.type === "private" && ctx.chat.id === ctx.from?.id) {
-      ordinary.set(ctx.from.id, Date.now() + 24 * TTL);
-      await ctx.answerCallbackQuery().catch(() => {});
-      await ctx.reply("Обычное меню включено на 24 часа. Отправьте /start."); return;
+    if (!cfg?.botHtmlBubblesTest || privateOwner === undefined) return next();
+    if (classic) {
+      const mainMenu = callback?.data === "menu:main" || /^\/start(?:@\w+)?(?:\s|$)/.test(ctx.message?.text ?? "");
+      if (mainMenu) ctx.api.config.use(async (prev, method, payload, signal) => {
+        const p = payload as unknown as Record<string, any>;
+        const rows = p.reply_markup?.inline_keyboard as Button[][] | undefined;
+        if (Number(p.chat_id) === privateOwner && rows?.length && ["sendMessage", "sendPhoto", "sendAnimation", "editMessageText", "editMessageCaption"].includes(method)) {
+          return prev(method, { ...payload, reply_markup: { ...p.reply_markup, inline_keyboard: [...rows, [{ text: "Включить новое меню", callback_data: "widgets:modern" }]] } } as any, signal);
+        }
+        return prev(method, payload, signal);
+      });
+      return next();
     }
-    if (!cfg?.botHtmlBubblesTest || ctx.chat?.type !== "private" || ctx.chat.id !== ctx.from?.id || ordinary.has(ctx.from.id)) return next();
-    const owner = ctx.from.id;
+    const owner = privateOwner;
     ctx.api.config.use(async (prev, method, payload, signal) => {
       const p = payload as unknown as Record<string, any>;
       if (query && method === "answerCallbackQuery" && p.callback_query_id === `widget:${query.id}`) {
@@ -148,6 +213,26 @@ export function createWidgetMiddleware(config: () => Promise<{ botHtmlBubblesTes
       if (edit && p.message_id) {
         screens.delete(key(owner, p.message_id));
         await prev("deleteMessage", { chat_id: owner, message_id: p.message_id }, signal).catch(() => {});
+      }
+      if (!recoverySent && keyboard.length > 0 && (modernAction || (send && !query && !callback))) {
+        recoverySent = true;
+        try {
+          const hint = await prev("sendMessage", {
+            chat_id: owner,
+            text: "Новое меню не отображается? Возможно, ваша версия Telegram ещё не поддерживает виджеты. Включите обычное меню — это изменит его только для вас.",
+            disable_notification: true,
+            reply_markup: { inline_keyboard: [[{ text: "Включить обычное меню", callback_data: "widgets:classic" }]] },
+          }, signal);
+          if (hint.ok) {
+            const previous = recoveryMessages.get(owner);
+            recoveryMessages.delete(owner);
+            recoveryMessages.set(owner, (hint.result as { message_id: number }).message_id);
+            if (previous) await prev("deleteMessage", { chat_id: owner, message_id: previous }, signal).catch(() => {});
+            while (recoveryMessages.size > 5000) recoveryMessages.delete(recoveryMessages.keys().next().value!);
+          }
+        } catch {
+          console.warn("[Widgets] Could not send menu recovery hint");
+        }
       }
       return response as any;
     });

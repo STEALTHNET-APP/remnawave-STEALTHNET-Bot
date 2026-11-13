@@ -155,6 +155,9 @@ services:
       # Rich-меню (Bot API 10.1+). Код читает process.env.BOT_RICH_MENU, но
       # переменную сюда не пробрасывали — флаг был невозможно включить.
       BOT_RICH_MENU: "${BOT_RICH_MENU:-}"
+      BOT_WIDGET_PREFERENCES_DIR: "/data/widget-preferences"
+    volumes:
+      - bot_preferences:/data/widget-preferences
     depends_on:
       api:
         condition: service_healthy
@@ -231,6 +234,7 @@ services:
       - api
 
 volumes:
+  bot_preferences:
   backups_data:
   postgres_data:
   frontend_dist:
