@@ -2,10 +2,39 @@ import { Composer } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
 import { activeDiscountCode, addsubPending, awaitingCustomTopup, clearUserState, convDropExtras, extendingSecondaryPending, extraOptionPending, extraOptionTargetSub, pendingDropExtras, selectedTariffOption, tariffOptionsCache, tokenStore, trialReplaceChoice } from "../state-store.js";
-import { EMAIL_PROMPT_TEXT, RECEIPT_OK_LINE, _t, applyExtraDevicesPriceBot, backButton, backToMenu, bestPricePerDayOptionId, blockUnsubscribedCallback, buildPaymentMessage, buildTariffDiscountArg, callbackUi, checkoutExtraDeviceCap, editMessageContent, enforceSubscription, formatMoney, formatRuDays, getDiscountedPrice, getOrRestoreToken, getUserLang, hasExtraDevices, hasPendingEmailInput, instructionFallbackText, isValidEmail, optionPaymentMethodButtons, payUrlMarkup, peekPendingReceipt, proxyPaymentMethodButtons, receiptPromptKeyboard, receiptPromptText, renewableSubscriptions, setPendingEmailInput, setTranslations, setUserLang, shouldShowPurchaseChoice, showCloudCheckout, showPaymentMethodsForTariff, singboxPaymentMethodButtons, sortedPriceOptions, storePendingReceipt, t, takePendingEmailInput, takePendingReceipt, tariffActionChoiceButtons, tariffDevicePickerButtons, tariffErrMarkup, tariffOptionPickerButtons, textInputUserId, titleWithEmoji, topUpPresets, topupPaymentMethodButtons, tryAutoDeleteUnknown } from "./shared.js";
-import type { InnerEmojiIds, TariffCategory, TariffItem } from "./shared.js";
+import { EMAIL_PROMPT_TEXT, RECEIPT_OK_LINE, _t, applyExtraDevicesPriceBot, backButton, backToMenu, bestPricePerDayOptionId, blockUnsubscribedCallback, buildPaymentMessage, callbackUi, checkoutExtraDeviceCap, editMessageContent, enforceSubscription, formatMoney, formatRuDays, getDiscountedPrice, getOrRestoreToken, getUserLang, hasExtraDevices, hasPendingEmailInput, instructionFallbackText, isValidEmail, optionPaymentMethodButtons, payUrlMarkup, peekPendingReceipt, proxyPaymentMethodButtons, receiptPromptKeyboard, receiptPromptText, renewableSubscriptions, setPendingEmailInput, setTranslations, setUserLang, shouldShowPurchaseChoice, showCloudCheckout, showPaymentMethodsForTariff, singboxPaymentMethodButtons, sortedPriceOptions, storePendingReceipt, t, takePendingEmailInput, takePendingReceipt, tariffActionChoiceButtons, tariffDevicePickerButtons, tariffErrMarkup, tariffOptionPickerButtons, textInputUserId, titleWithEmoji, topUpPresets, topupPaymentMethodButtons, tryAutoDeleteUnknown } from "./shared.js";
+import type { ConfigSnapshot, InnerEmojiIds, TariffCategory, TariffItem } from "./shared.js";
+
+type SellOptionItem = NonNullable<NonNullable<ConfigSnapshot>["sellOptions"]>[number];
+
+async function findTariff(tariffId: string): Promise<TariffItem | undefined> {
+  const { items } = await api.getPublicTariffs();
+  return items?.flatMap((category: TariffCategory) => category.tariffs).find((tariff: TariffItem) => tariff.id === tariffId);
+}
+
+function findSellOption(data: string, config: ConfigSnapshot | null): SellOptionItem | undefined {
+  const parts = data.split(":");
+  const kind = (parts[1] ?? "") as SellOptionItem["kind"];
+  const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
+  return (config?.sellOptions ?? []).find((option) => option.kind === kind && option.id === productId);
+}
 import { resolveCallbackDomain } from "./routing.js";
 import { showRenewalChoice } from "./subscriptions.js";
+import {
+  PRODUCT_GATEWAYS,
+  TARIFF_GATEWAYS,
+  TOPUP_GATEWAYS,
+  completeBalancePayment,
+  computeOptionDisplayPrice,
+  findProductTariff,
+  optionDisplayName,
+  prepareTariffCheckout,
+  resolveOptionTarget,
+  sendPaymentError,
+  startYookassaCheckout,
+  type ProductKind,
+  type SellOption,
+} from "./payment-gateways.js";
 
 export function createPaymentHandlers(): Composer<Context> {
   const composer = new Composer<Context>();
@@ -16,37 +45,35 @@ export function createPaymentHandlers(): Composer<Context> {
     if (!userId) return;
     if (resolveCallbackDomain(data) !== "payments") return next();
     if (data.startsWith("yk_recpt:")) {
-  if (data.startsWith("yk_recpt:")) {
-    const parts = data.split(":");
-    const action = parts[1]; // no | saved | ask
-    const tok = parts.slice(2).join(":");
-    if (action === "ask") {
-      const p = peekPendingReceipt(tok);
+      const parts = data.split(":");
+      const action = parts[1]; // no | saved | ask
+      const tok = parts.slice(2).join(":");
+      if (action === "ask") {
+        const p = peekPendingReceipt(tok);
+        if (!p || p.userId !== userId) {
+          await ctx.reply("⏰ Сессия истекла. Откройте «Оплатить» ещё раз.");
+          return;
+        }
+        setPendingEmailInput(userId, tok);
+        await ctx.reply(EMAIL_PROMPT_TEXT);
+        return;
+      }
+      const p = takePendingReceipt(tok);
       if (!p || p.userId !== userId) {
         await ctx.reply("⏰ Сессия истекла. Откройте «Оплатить» ещё раз.");
         return;
       }
-      setPendingEmailInput(userId, tok);
-      await ctx.reply(EMAIL_PROMPT_TEXT);
+      // для "no" передаём пустую строку (явный отказ),
+      // не undefined: иначе backend сделает fallback на client.email и пришлёт чек.
+      const receiptEmail: string = action === "saved" ? (p.savedEmail ?? "") : "";
+      try {
+        const payment = await p.builder(receiptEmail);
+        await p.finalize(payment, { receiptSentTo: receiptEmail || null });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Ошибка создания платежа ЮKassa";
+        await ctx.reply(`❌ ${msg}`);
+      }
       return;
-    }
-    const p = takePendingReceipt(tok);
-    if (!p || p.userId !== userId) {
-      await ctx.reply("⏰ Сессия истекла. Откройте «Оплатить» ещё раз.");
-      return;
-    }
-    // для "no" передаём пустую строку (явный отказ),
-    // не undefined: иначе backend сделает fallback на client.email и пришлёт чек.
-    const receiptEmail: string = action === "saved" ? (p.savedEmail ?? "") : "";
-    try {
-      const payment = await p.builder(receiptEmail);
-      await p.finalize(payment, { receiptSentTo: receiptEmail || null });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Ошибка создания платежа ЮKassa";
-      await ctx.reply(`❌ ${msg}`);
-    }
-    return;
-  }
     }
     const token = await getOrRestoreToken(userId, ctx.from?.username);
     if (!token) {
@@ -58,48 +85,21 @@ export function createPaymentHandlers(): Composer<Context> {
       if (config?.translations) setTranslations(config.translations);
       if (await blockUnsubscribedCallback(ctx, userId, config)) return;
       const { appUrl, innerStyles, botEmojis, innerEmojiIds } = callbackUi(config);
+      const chrome = { config, backStyle: innerStyles?.back, emojiIds: innerEmojiIds };
 
-    if (data.startsWith("pay_proxy_balance:")) {
-      const proxyTariffId = data.slice("pay_proxy_balance:".length);
-      try {
-        const result = await api.payByBalance(token, { proxyTariffId });
-        await editMessageContent(ctx, `✅ ${result.message}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка оплаты";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
+    if (data.startsWith("pay_proxy_balance:") || data.startsWith("pay_singbox_balance:")) {
+      const balanceKind = data.startsWith("pay_proxy_balance:") ? "proxy" : "singbox";
+      const tariffId = data.slice(data.indexOf(":") + 1);
+      await completeBalancePayment(ctx, chrome, () =>
+        api.payByBalance(token, balanceKind === "proxy" ? { proxyTariffId: tariffId } : { singboxTariffId: tariffId }),
+      );
       return;
     }
 
-    if (data.startsWith("pay_proxy_yoomoney:")) {
-      const proxyTariffId = data.slice("pay_proxy_yoomoney:".length);
-      const { items } = await api.getPublicProxyTariffs();
-      const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === proxyTariffId);
-      if (!tariff) {
-        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      try {
-        const payment = await api.createYoomoneyPayment(token, { amount: tariff.price, paymentType: "AC", proxyTariffId });
-        const msg = buildPaymentMessage(config, {
-          name: tariff.name,
-          price: formatMoney(tariff.price, tariff.currency),
-          amount: String(tariff.price),
-          currency: tariff.currency,
-          action: "Нажмите для оплаты:",
-        });
-        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.paymentUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-
-    if (data.startsWith("pay_proxy_yookassa:")) {
-      const proxyTariffId = data.slice("pay_proxy_yookassa:".length);
-      const { items } = await api.getPublicProxyTariffs();
-      const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === proxyTariffId);
+    if (data.startsWith("pay_proxy_yookassa:") || data.startsWith("pay_singbox_yookassa:")) {
+      const isProxy = data.startsWith("pay_proxy_yookassa:");
+      const kind: ProductKind = isProxy ? "proxy" : "singbox";
+      const tariff = await findProductTariff(kind, data.slice(data.indexOf(":") + 1));
       if (!tariff) {
         await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
@@ -109,52 +109,49 @@ export function createPaymentHandlers(): Composer<Context> {
         return;
       }
       try {
-        // 54-ФЗ-чек prompt перед созданием платежа.
-        const mePx = await api.getMe(token);
-        const savedEmailPx = mePx?.email ?? null;
-        const tokRcptP = storePendingReceipt({
+        const me = await api.getMe(token);
+        await startYookassaCheckout(ctx, chrome, {
           userId,
-          savedEmail: savedEmailPx,
-          builder: (receiptEmail) => api.createYookassaPayment(token, { amount: tariff.price, currency: "RUB", proxyTariffId, receiptEmail }),
-          finalize: async (payment, { receiptSentTo }) => {
-            const msg = buildPaymentMessage(config, {
-              name: tariff.name,
-              price: formatMoney(tariff.price, tariff.currency),
-              amount: String(tariff.price),
-              currency: tariff.currency,
-              action: "Нажмите для оплаты:",
-            });
-            const markup = payUrlMarkup(payment.confirmationUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
-            if (receiptSentTo) {
-              await ctx.reply(`${msg.text}\n\n${RECEIPT_OK_LINE(receiptSentTo)}`, { parse_mode: "HTML", reply_markup: markup });
-            } else {
-              await ctx.reply(msg.text, { entities: msg.entities, reply_markup: markup });
-            }
-          },
+          savedEmail: me?.email ?? null,
+          build: (receiptEmail) => api.createYookassaPayment(token, {
+            amount: tariff.price,
+            currency: "RUB",
+            ...(isProxy ? { proxyTariffId: tariff.id } : { singboxTariffId: tariff.id }),
+            receiptEmail,
+          }),
+          message: () => buildPaymentMessage(config, {
+            name: tariff.name,
+            price: formatMoney(tariff.price, tariff.currency),
+            amount: String(tariff.price),
+            currency: tariff.currency,
+            action: "Нажмите для оплаты:",
+          }),
         });
-        await editMessageContent(ctx, receiptPromptText(savedEmailPx), receiptPromptKeyboard(tokRcptP, savedEmailPx));
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
+        await sendPaymentError(ctx, chrome, e, "Ошибка создания платежа");
       }
       return;
     }
 
-    if (data.startsWith("pay_proxy_cryptopay:") || data.startsWith("pay_proxy_stars:")) {
-      const proxyTariffId = data.slice(data.indexOf(":") + 1);
-      const { items } = await api.getPublicProxyTariffs();
-      const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === proxyTariffId);
+    const productGateway = PRODUCT_GATEWAYS.find((gateway) => data.startsWith(gateway.prefix));
+    if (productGateway) {
+      const tariff = await findProductTariff(productGateway.kind, data.slice(productGateway.prefix.length));
       if (!tariff) {
         await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
       try {
-        const payment = await (data.startsWith("pay_proxy_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, { amount: tariff.price, currency: tariff.currency, proxyTariffId });
-        const msg = buildPaymentMessage(config, { name: tariff.name, price: formatMoney(tariff.price, tariff.currency), amount: String(tariff.price), currency: tariff.currency, action: "Нажмите для оплаты:" });
-        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
+        const payment = await productGateway.create(token, tariff);
+        const msg = buildPaymentMessage(config, {
+          name: tariff.name,
+          price: formatMoney(tariff.price, tariff.currency),
+          amount: String(tariff.price),
+          currency: tariff.currency,
+          action: "Нажмите для оплаты:",
+        });
+        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.url, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
+        await sendPaymentError(ctx, chrome, e, "Ошибка создания платежа");
       }
       return;
     }
@@ -224,106 +221,6 @@ export function createPaymentHandlers(): Composer<Context> {
         action: "Выберите способ оплаты:",
       }, discountArgProxy);
       await editMessageContent(ctx, msg.text, markup, msg.entities);
-      return;
-    }
-
-    if (data.startsWith("pay_singbox_balance:")) {
-      const singboxTariffId = data.slice("pay_singbox_balance:".length);
-      try {
-        const result = await api.payByBalance(token, { singboxTariffId });
-        await editMessageContent(ctx, `✅ ${result.message}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка оплаты";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-
-    if (data.startsWith("pay_singbox_yoomoney:")) {
-      const singboxTariffId = data.slice("pay_singbox_yoomoney:".length);
-      const { items } = await api.getPublicSingboxTariffs();
-      const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === singboxTariffId);
-      if (!tariff) {
-        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      try {
-        const payment = await api.createYoomoneyPayment(token, { amount: tariff.price, paymentType: "AC", singboxTariffId });
-        const msg = buildPaymentMessage(config, {
-          name: tariff.name,
-          price: formatMoney(tariff.price, tariff.currency),
-          amount: String(tariff.price),
-          currency: tariff.currency,
-          action: "Нажмите для оплаты:",
-        });
-        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.paymentUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-
-    if (data.startsWith("pay_singbox_yookassa:")) {
-      const singboxTariffId = data.slice("pay_singbox_yookassa:".length);
-      const { items } = await api.getPublicSingboxTariffs();
-      const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === singboxTariffId);
-      if (!tariff) {
-        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      if (tariff.currency.toUpperCase() !== "RUB") {
-        await editMessageContent(ctx, "ЮKassa принимает только рубли (RUB).", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      try {
-        // 54-ФЗ-чек prompt.
-        const meSb = await api.getMe(token);
-        const savedEmailSb = meSb?.email ?? null;
-        const tokRcptSb = storePendingReceipt({
-          userId,
-          savedEmail: savedEmailSb,
-          builder: (receiptEmail) => api.createYookassaPayment(token, { amount: tariff.price, currency: "RUB", singboxTariffId, receiptEmail }),
-          finalize: async (payment, { receiptSentTo }) => {
-            const msg = buildPaymentMessage(config, {
-              name: tariff.name,
-              price: formatMoney(tariff.price, tariff.currency),
-              amount: String(tariff.price),
-              currency: tariff.currency,
-              action: "Нажмите для оплаты:",
-            });
-            const markup = payUrlMarkup(payment.confirmationUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
-            if (receiptSentTo) {
-              await ctx.reply(`${msg.text}\n\n${RECEIPT_OK_LINE(receiptSentTo)}`, { parse_mode: "HTML", reply_markup: markup });
-            } else {
-              await ctx.reply(msg.text, { entities: msg.entities, reply_markup: markup });
-            }
-          },
-        });
-        await editMessageContent(ctx, receiptPromptText(savedEmailSb), receiptPromptKeyboard(tokRcptSb, savedEmailSb));
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-
-    if (data.startsWith("pay_singbox_cryptopay:") || data.startsWith("pay_singbox_stars:")) {
-      const singboxTariffId = data.slice(data.indexOf(":") + 1);
-      const { items } = await api.getPublicSingboxTariffs();
-      const tariff = items?.flatMap((c: { tariffs: { id: string; name: string; price: number; currency: string }[] }) => c.tariffs).find((t: { id: string }) => t.id === singboxTariffId);
-      if (!tariff) {
-        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      try {
-        const payment = await (data.startsWith("pay_singbox_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, { amount: tariff.price, currency: tariff.currency, singboxTariffId });
-        const msg = buildPaymentMessage(config, { name: tariff.name, price: formatMoney(tariff.price, tariff.currency), amount: String(tariff.price), currency: tariff.currency, action: "Нажмите для оплаты:" });
-        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
       return;
     }
 
@@ -499,93 +396,37 @@ export function createPaymentHandlers(): Composer<Context> {
       return;
     }
 
-    if (data.startsWith("pay_tariff_yoomoney:")) {
-      const tariffId = data.slice("pay_tariff_yoomoney:".length);
-      const { items } = await api.getPublicTariffs();
-      const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
+    const tariffGateway = TARIFF_GATEWAYS.find((gateway) => data.startsWith(gateway.prefix));
+    if (tariffGateway) {
+      const tariff = await findTariff(data.slice(tariffGateway.prefix.length));
       if (!tariff) {
         await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
       try {
-        const discountInfoYm = activeDiscountCode.get(userId);
-        const promoCode = discountInfoYm?.code;
-        const sel = selectedTariffOption.get(userId);
-        const opts = sortedPriceOptions(tariff.priceOptions);
-        const eff = sel?.tariffId === tariff.id ? sel.option : (opts.length === 1 ? opts[0]! : null);
-        const unitPrice = eff?.price ?? tariff.price;
-        const effectiveDays = eff?.durationDays ?? tariff.durationDays;
-        const extraDevices = sel?.tariffId === tariff.id ? sel.extraDevices : 0;
-        const { extrasTotal } = applyExtraDevicesPriceBot(tariff.pricePerExtraDevice ?? 0, extraDevices, tariff.deviceDiscountTiers, effectiveDays);
-        const effectivePrice = unitPrice + extrasTotal;
-        // addsub mode → backend mark metadata.isAdditionalSubscription
-        // → activateTariffByPaymentId создаст secondary вместо основной подписки.
-        const asAdditional = addsubPending.get(userId) === tariff.id;
-        const extPairT = extendingSecondaryPending.get(userId);
-        const extendsSecondarySubId = extPairT && extPairT.tariffId === tariff.id ? extPairT.secondaryId : undefined;
-        // юзер выбрал «продлить без устройств».
-        // Флаг прокидываем в backend — там после успешной активации helper удалит устройства.
-        // НЕ удаляем здесь — юзер может закрыть экран оплаты и устройства останутся при нём.
-        const removeExtrasOnActivate = !!(extendsSecondarySubId && pendingDropExtras.get(userId) === extendsSecondarySubId) || (!extendsSecondarySubId && convDropExtras.has(userId));
-        const replaceTrialSubId = !extendsSecondarySubId ? trialReplaceChoice.get(userId) : undefined;
-        let subExtrasForPeriod = 0;
-        if (extendsSecondarySubId && !removeExtrasOnActivate) {
-          try {
-            const allSubs = await api.getAllSubscriptions(token);
-            const target = allSubs.items?.find((it) => it.id === extendsSecondarySubId);
-            const monthly = target?.extraDevicesMonthlyPrice ?? 0;
-            if (monthly > 0 && effectiveDays > 0) {
-              subExtrasForPeriod = Math.round(monthly * (effectiveDays / 30) * 100) / 100;
-            }
-          } catch { /* ignore */ }
+        const checkout = await prepareTariffCheckout({ token, userId, tariff });
+        const payment = await tariffGateway.create(token, checkout.body);
+        checkout.cleanup();
+        if (payment.checkout) {
+          await showCloudCheckout(ctx, token, payment.checkout, config?.cloudpaymentsBotDirect === true);
+        } else {
+          const msg = buildPaymentMessage(config, {
+            name: checkout.name,
+            price: formatMoney(checkout.finalPrice, checkout.currency),
+            amount: String(checkout.finalPrice),
+            currency: checkout.currency,
+            action: "Нажмите кнопку ниже для оплаты:",
+          }, checkout.discountArg);
+          await editMessageContent(ctx, msg.text, payUrlMarkup(payment.url ?? "", config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
         }
-        const totalPrice = effectivePrice + subExtrasForPeriod;
-        // унифицированный расчёт personal+promo,
-        // отображаем зачёркнутую базовую цену и финальную с %.
-        const me = await api.getMe(token);
-        const pd = me?.personalDiscountPercent ?? 0;
-        const { discountArg: discountArgYm, finalPrice: priceWithDiscount } = buildTariffDiscountArg(totalPrice, pd, discountInfoYm, tariff.currency);
-        const payment = await api.createYoomoneyPayment(token, {
-          amount: totalPrice,
-          paymentType: "AC",
-          tariffId: tariff.id,
-          tariffPriceOptionId: eff?.id,
-          deviceCount: extraDevices,
-          promoCode,
-          asAdditional: asAdditional || undefined,
-          extendsSecondarySubId,
-          removeExtrasOnActivate,
-          replaceTrialSubId,
-        });
-        if (promoCode) activeDiscountCode.delete(userId);
-        selectedTariffOption.delete(userId);
-        if (extendsSecondarySubId && removeExtrasOnActivate) extendingSecondaryPending.delete(userId);
-        if (asAdditional) addsubPending.delete(userId);
-        if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
-        convDropExtras.delete(userId);
-        trialReplaceChoice.delete(userId);
-        const nameWithDays = (opts.length > 1 || (sel?.tariffId === tariff.id))
-          ? `${tariff.name} · ${formatRuDays(effectiveDays)}`
-          : tariff.name;
-        const msg = buildPaymentMessage(config, {
-          name: nameWithDays,
-          price: formatMoney(priceWithDiscount, tariff.currency),
-          amount: String(priceWithDiscount),
-          currency: tariff.currency,
-          action: "Нажмите кнопку ниже для оплаты:",
-        }, discountArgYm);
-        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.paymentUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа ЮMoney";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
+        await sendPaymentError(ctx, chrome, e, tariffGateway.errorText, tariffGateway.errorMarkup);
       }
       return;
     }
 
     if (data.startsWith("pay_tariff_yookassa:")) {
-      const tariffId = data.slice("pay_tariff_yookassa:".length);
-      const { items } = await api.getPublicTariffs();
-      const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
+      const tariff = await findTariff(data.slice("pay_tariff_yookassa:".length));
       if (!tariff) {
         await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
@@ -595,728 +436,79 @@ export function createPaymentHandlers(): Composer<Context> {
         return;
       }
       try {
-        const discountInfoYk = activeDiscountCode.get(userId);
-        const promoCode = discountInfoYk?.code;
-        const sel = selectedTariffOption.get(userId);
-        const opts = sortedPriceOptions(tariff.priceOptions);
-        const eff = sel?.tariffId === tariff.id ? sel.option : (opts.length === 1 ? opts[0]! : null);
-        const unitPrice = eff?.price ?? tariff.price;
-        const effectiveDays = eff?.durationDays ?? tariff.durationDays;
-        const extraDevices = sel?.tariffId === tariff.id ? sel.extraDevices : 0;
-        const { extrasTotal } = applyExtraDevicesPriceBot(tariff.pricePerExtraDevice ?? 0, extraDevices, tariff.deviceDiscountTiers, effectiveDays);
-        const effectivePrice = unitPrice + extrasTotal;
-        // см. yoomoney handler выше.
-        const asAdditional = addsubPending.get(userId) === tariff.id;
-        const extPairT = extendingSecondaryPending.get(userId);
-        const extendsSecondarySubId = extPairT && extPairT.tariffId === tariff.id ? extPairT.secondaryId : undefined;
-        // юзер выбрал «продлить без устройств».
-        // Флаг прокидываем в backend — там после успешной активации helper удалит устройства.
-        // НЕ удаляем здесь — юзер может закрыть экран оплаты и устройства останутся при нём.
-        const removeExtrasOnActivate = !!(extendsSecondarySubId && pendingDropExtras.get(userId) === extendsSecondarySubId) || (!extendsSecondarySubId && convDropExtras.has(userId));
-        const replaceTrialSubId = !extendsSecondarySubId ? trialReplaceChoice.get(userId) : undefined;
-        let subExtrasForPeriod = 0;
-        if (extendsSecondarySubId && !removeExtrasOnActivate) {
-          try {
-            const allSubs = await api.getAllSubscriptions(token);
-            const target = allSubs.items?.find((it) => it.id === extendsSecondarySubId);
-            const monthly = target?.extraDevicesMonthlyPrice ?? 0;
-            if (monthly > 0 && effectiveDays > 0) {
-              subExtrasForPeriod = Math.round(monthly * (effectiveDays / 30) * 100) / 100;
-            }
-          } catch { /* ignore */ }
-        }
-        const totalPrice = effectivePrice + subExtrasForPeriod;
-        // см. yoomoney handler.
-        const meYk = await api.getMe(token);
-        const pdYk = meYk?.personalDiscountPercent ?? 0;
-        const { discountArg: discountArgYk, finalPrice: priceWithDiscountYk } = buildTariffDiscountArg(totalPrice, pdYk, discountInfoYk, tariff.currency);
-        // 54-ФЗ: перед созданием платежа спрашиваем, нужен ли чек.
-        const savedEmailYk = (meYk?.email ?? null);
-        const tokRcptT = storePendingReceipt({
+        const checkout = await prepareTariffCheckout({ token, userId, tariff });
+        await startYookassaCheckout(ctx, chrome, {
           userId,
-          savedEmail: savedEmailYk,
-          builder: (receiptEmail) => api.createYookassaPayment(token, {
-            amount: totalPrice,
-            currency: "RUB",
-            tariffId: tariff.id,
-            tariffPriceOptionId: eff?.id,
-            deviceCount: extraDevices,
-            promoCode,
-            asAdditional: asAdditional || undefined,
-            extendsSecondarySubId,
-            removeExtrasOnActivate,
-            replaceTrialSubId,
-            receiptEmail,
-          }),
-          finalize: async (payment, { receiptSentTo }) => {
-            if (promoCode) activeDiscountCode.delete(userId);
-            selectedTariffOption.delete(userId);
-            if (extendsSecondarySubId && removeExtrasOnActivate) extendingSecondaryPending.delete(userId);
-            if (asAdditional) addsubPending.delete(userId);
-            if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
-            convDropExtras.delete(userId);
-            trialReplaceChoice.delete(userId);
-            const nameWithDays = (opts.length > 1 || (sel?.tariffId === tariff.id))
-              ? `${tariff.name} · ${formatRuDays(effectiveDays)}`
-              : tariff.name;
-            const msg = buildPaymentMessage(config, {
-              name: nameWithDays,
-              price: formatMoney(priceWithDiscountYk, tariff.currency),
-              amount: String(priceWithDiscountYk),
-              currency: tariff.currency,
-              action: "Нажмите кнопку ниже для оплаты:",
-            }, discountArgYk);
-            const baseText = msg.text;
-            const markup = payUrlMarkup(payment.confirmationUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
-            if (receiptSentTo) {
-              await ctx.reply(`${baseText}\n\n${RECEIPT_OK_LINE(receiptSentTo)}`, { parse_mode: "HTML", reply_markup: markup });
-            } else {
-              await ctx.reply(baseText, { entities: msg.entities, reply_markup: markup });
-            }
-          },
+          savedEmail: checkout.email,
+          build: (receiptEmail) => api.createYookassaPayment(token, { ...checkout.body, receiptEmail }),
+          message: () => buildPaymentMessage(config, {
+            name: checkout.name,
+            price: formatMoney(checkout.finalPrice, checkout.currency),
+            amount: String(checkout.finalPrice),
+            currency: checkout.currency,
+            action: "Нажмите кнопку ниже для оплаты:",
+          }, checkout.discountArg),
+          onPaid: checkout.cleanup,
         });
-        await editMessageContent(ctx, receiptPromptText(savedEmailYk), receiptPromptKeyboard(tokRcptT, savedEmailYk));
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа ЮKassa";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-
-    if (data.startsWith("pay_tariff_cryptopay:") || data.startsWith("pay_tariff_stars:")) {
-      const tariffId = data.slice(data.indexOf(":") + 1);
-      const { items } = await api.getPublicTariffs();
-      const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
-      if (!tariff) {
-        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      try {
-        const discountInfoCp = activeDiscountCode.get(userId);
-        const promoCode = discountInfoCp?.code;
-        const sel = selectedTariffOption.get(userId);
-        const opts = sortedPriceOptions(tariff.priceOptions);
-        const eff = sel?.tariffId === tariff.id ? sel.option : (opts.length === 1 ? opts[0]! : null);
-        const unitPrice = eff?.price ?? tariff.price;
-        const effectiveDays = eff?.durationDays ?? tariff.durationDays;
-        const extraDevices = sel?.tariffId === tariff.id ? sel.extraDevices : 0;
-        const { extrasTotal } = applyExtraDevicesPriceBot(tariff.pricePerExtraDevice ?? 0, extraDevices, tariff.deviceDiscountTiers, effectiveDays);
-        const effectivePrice = unitPrice + extrasTotal;
-        // см. yoomoney handler.
-        const asAdditional = addsubPending.get(userId) === tariff.id;
-        const extPairT = extendingSecondaryPending.get(userId);
-        const extendsSecondarySubId = extPairT && extPairT.tariffId === tariff.id ? extPairT.secondaryId : undefined;
-        // юзер выбрал «продлить без устройств».
-        // Флаг прокидываем в backend — там после успешной активации helper удалит устройства.
-        // НЕ удаляем здесь — юзер может закрыть экран оплаты и устройства останутся при нём.
-        const removeExtrasOnActivate = !!(extendsSecondarySubId && pendingDropExtras.get(userId) === extendsSecondarySubId) || (!extendsSecondarySubId && convDropExtras.has(userId));
-        const replaceTrialSubId = !extendsSecondarySubId ? trialReplaceChoice.get(userId) : undefined;
-        let subExtrasForPeriod = 0;
-        if (extendsSecondarySubId && !removeExtrasOnActivate) {
-          try {
-            const allSubs = await api.getAllSubscriptions(token);
-            const target = allSubs.items?.find((it) => it.id === extendsSecondarySubId);
-            const monthly = target?.extraDevicesMonthlyPrice ?? 0;
-            if (monthly > 0 && effectiveDays > 0) {
-              subExtrasForPeriod = Math.round(monthly * (effectiveDays / 30) * 100) / 100;
-            }
-          } catch { /* ignore */ }
-        }
-        const totalPrice = effectivePrice + subExtrasForPeriod;
-        // см. yoomoney handler.
-        const meCp = await api.getMe(token);
-        const pdCp = meCp?.personalDiscountPercent ?? 0;
-        const { discountArg: discountArgCp, finalPrice: priceWithDiscountCp } = buildTariffDiscountArg(totalPrice, pdCp, discountInfoCp, tariff.currency);
-        const payment = await (data.startsWith("pay_tariff_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, {
-          amount: totalPrice,
-          currency: tariff.currency,
-          tariffId: tariff.id,
-          tariffPriceOptionId: eff?.id,
-          deviceCount: extraDevices,
-          promoCode,
-          asAdditional: asAdditional || undefined,
-          extendsSecondarySubId,
-          removeExtrasOnActivate,
-          replaceTrialSubId,
-        });
-        if (promoCode) activeDiscountCode.delete(userId);
-        selectedTariffOption.delete(userId);
-        if (extendsSecondarySubId && removeExtrasOnActivate) extendingSecondaryPending.delete(userId);
-        if (asAdditional) addsubPending.delete(userId);
-        if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
-        convDropExtras.delete(userId);
-        trialReplaceChoice.delete(userId);
-        const nameWithDays = (opts.length > 1 || (sel?.tariffId === tariff.id))
-          ? `${tariff.name} · ${formatRuDays(effectiveDays)}`
-          : tariff.name;
-        const msg = buildPaymentMessage(config, { name: nameWithDays, price: formatMoney(priceWithDiscountCp, tariff.currency), amount: String(priceWithDiscountCp), currency: tariff.currency, action: "Нажмите кнопку ниже для оплаты:" }, discountArgCp);
-        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-
-    // Lava: оплата тарифа (RUB only, СБП/Карта/СберPay)
-    if (data.startsWith("pay_tariff_lava:")) {
-      const tariffId = data.slice("pay_tariff_lava:".length);
-      const { items } = await api.getPublicTariffs();
-      const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
-      if (!tariff) {
-        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      try {
-        const discountInfo = activeDiscountCode.get(userId);
-        const promoCode = discountInfo?.code;
-        const sel = selectedTariffOption.get(userId);
-        const opts = sortedPriceOptions(tariff.priceOptions);
-        const eff = sel?.tariffId === tariff.id ? sel.option : (opts.length === 1 ? opts[0]! : null);
-        const unitPrice = eff?.price ?? tariff.price;
-        const effectiveDays = eff?.durationDays ?? tariff.durationDays;
-        const extraDevices = sel?.tariffId === tariff.id ? sel.extraDevices : 0;
-        const { extrasTotal } = applyExtraDevicesPriceBot(tariff.pricePerExtraDevice ?? 0, extraDevices, tariff.deviceDiscountTiers, effectiveDays);
-        const effectivePrice = unitPrice + extrasTotal;
-        // см. yoomoney handler.
-        const asAdditional = addsubPending.get(userId) === tariff.id;
-        const extPairT = extendingSecondaryPending.get(userId);
-        const extendsSecondarySubId = extPairT && extPairT.tariffId === tariff.id ? extPairT.secondaryId : undefined;
-        // юзер выбрал «продлить без устройств».
-        // Флаг прокидываем в backend — там после успешной активации helper удалит устройства.
-        // НЕ удаляем здесь — юзер может закрыть экран оплаты и устройства останутся при нём.
-        const removeExtrasOnActivate = !!(extendsSecondarySubId && pendingDropExtras.get(userId) === extendsSecondarySubId) || (!extendsSecondarySubId && convDropExtras.has(userId));
-        const replaceTrialSubId = !extendsSecondarySubId ? trialReplaceChoice.get(userId) : undefined;
-        let subExtrasForPeriod = 0;
-        if (extendsSecondarySubId && !removeExtrasOnActivate) {
-          try {
-            const allSubs = await api.getAllSubscriptions(token);
-            const target = allSubs.items?.find((it) => it.id === extendsSecondarySubId);
-            const monthly = target?.extraDevicesMonthlyPrice ?? 0;
-            if (monthly > 0 && effectiveDays > 0) {
-              subExtrasForPeriod = Math.round(monthly * (effectiveDays / 30) * 100) / 100;
-            }
-          } catch { /* ignore */ }
-        }
-        const totalPrice = effectivePrice + subExtrasForPeriod;
-        // см. yoomoney handler.
-        const meLava = await api.getMe(token);
-        const pdLava = meLava?.personalDiscountPercent ?? 0;
-        const { discountArg, finalPrice: priceWithDiscountLava } = buildTariffDiscountArg(totalPrice, pdLava, discountInfo, tariff.currency);
-        const payment = await api.createLavaPayment(token, {
-          amount: totalPrice,
-          currency: tariff.currency,
-          tariffId: tariff.id,
-          tariffPriceOptionId: eff?.id,
-          deviceCount: extraDevices,
-          promoCode,
-          asAdditional: asAdditional || undefined,
-          extendsSecondarySubId,
-          removeExtrasOnActivate,
-          replaceTrialSubId,
-        });
-        if (promoCode) activeDiscountCode.delete(userId);
-        selectedTariffOption.delete(userId);
-        if (extendsSecondarySubId && removeExtrasOnActivate) extendingSecondaryPending.delete(userId);
-        if (asAdditional) addsubPending.delete(userId);
-        if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
-        convDropExtras.delete(userId);
-        trialReplaceChoice.delete(userId);
-        const nameWithDays = (opts.length > 1 || (sel?.tariffId === tariff.id))
-          ? `${tariff.name} · ${formatRuDays(effectiveDays)}`
-          : tariff.name;
-        const msg = buildPaymentMessage(config, { name: nameWithDays, price: formatMoney(priceWithDiscountLava, tariff.currency), amount: String(priceWithDiscountLava), currency: tariff.currency, action: "Нажмите кнопку ниже для оплаты:" }, discountArg);
-        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
-      } catch (e: unknown) {
-        const m = e instanceof Error ? e.message : "Ошибка создания платежа Lava";
-        await editMessageContent(ctx, `❌ ${m}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-
-    if (data.startsWith("pay_tariff_lavatop:")) {
-      const tariffId = data.slice("pay_tariff_lavatop:".length);
-      const { items } = await api.getPublicTariffs();
-      const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
-      if (!tariff) {
-        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      try {
-        const discountInfo = activeDiscountCode.get(userId);
-        const promoCode = discountInfo?.code;
-        const sel = selectedTariffOption.get(userId);
-        const opts = sortedPriceOptions(tariff.priceOptions);
-        const eff = sel?.tariffId === tariff.id ? sel.option : (opts.length === 1 ? opts[0]! : null);
-        const unitPrice = eff?.price ?? tariff.price;
-        const effectiveDays = eff?.durationDays ?? tariff.durationDays;
-        const extraDevices = sel?.tariffId === tariff.id ? sel.extraDevices : 0;
-        const { extrasTotal } = applyExtraDevicesPriceBot(tariff.pricePerExtraDevice ?? 0, extraDevices, tariff.deviceDiscountTiers, effectiveDays);
-        const effectivePrice = unitPrice + extrasTotal;
-        // см. yoomoney handler.
-        const asAdditional = addsubPending.get(userId) === tariff.id;
-        const extPairT = extendingSecondaryPending.get(userId);
-        const extendsSecondarySubId = extPairT && extPairT.tariffId === tariff.id ? extPairT.secondaryId : undefined;
-        // юзер выбрал «продлить без устройств».
-        // Флаг прокидываем в backend — там после успешной активации helper удалит устройства.
-        // НЕ удаляем здесь — юзер может закрыть экран оплаты и устройства останутся при нём.
-        const removeExtrasOnActivate = !!(extendsSecondarySubId && pendingDropExtras.get(userId) === extendsSecondarySubId) || (!extendsSecondarySubId && convDropExtras.has(userId));
-        const replaceTrialSubId = !extendsSecondarySubId ? trialReplaceChoice.get(userId) : undefined;
-        let subExtrasForPeriod = 0;
-        if (extendsSecondarySubId && !removeExtrasOnActivate) {
-          try {
-            const allSubs = await api.getAllSubscriptions(token);
-            const target = allSubs.items?.find((it) => it.id === extendsSecondarySubId);
-            const monthly = target?.extraDevicesMonthlyPrice ?? 0;
-            if (monthly > 0 && effectiveDays > 0) {
-              subExtrasForPeriod = Math.round(monthly * (effectiveDays / 30) * 100) / 100;
-            }
-          } catch { /* ignore */ }
-        }
-        const totalPrice = effectivePrice + subExtrasForPeriod;
-        // см. yoomoney handler.
-        const meLavatop = await api.getMe(token);
-        const pdLavatop = meLavatop?.personalDiscountPercent ?? 0;
-        const { discountArg, finalPrice: priceWithDiscountLavatop } = buildTariffDiscountArg(totalPrice, pdLavatop, discountInfo, tariff.currency);
-        const payment = await api.createLavatopPayment(token, {
-          amount: totalPrice,
-          currency: tariff.currency,
-          tariffId: tariff.id,
-          tariffPriceOptionId: eff?.id,
-          deviceCount: extraDevices,
-          promoCode,
-          asAdditional: asAdditional || undefined,
-          extendsSecondarySubId,
-          removeExtrasOnActivate,
-          replaceTrialSubId,
-        });
-        if (promoCode) activeDiscountCode.delete(userId);
-        selectedTariffOption.delete(userId);
-        if (extendsSecondarySubId && removeExtrasOnActivate) extendingSecondaryPending.delete(userId);
-        if (asAdditional) addsubPending.delete(userId);
-        if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
-        convDropExtras.delete(userId);
-        trialReplaceChoice.delete(userId);
-        const nameWithDays = (opts.length > 1 || (sel?.tariffId === tariff.id))
-          ? `${tariff.name} · ${formatRuDays(effectiveDays)}`
-          : tariff.name;
-        const msg = buildPaymentMessage(config, { name: nameWithDays, price: formatMoney(priceWithDiscountLavatop, tariff.currency), amount: String(priceWithDiscountLavatop), currency: tariff.currency, action: "Нажмите кнопку ниже для оплаты:" }, discountArg);
-        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
-      } catch (e: unknown) {
-        const m = e instanceof Error ? e.message : "Ошибка создания платежа Lava.top";
-        await editMessageContent(ctx, `❌ ${m}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-
-    // Heleket: оплата тарифа (крипто)
-    if (data.startsWith("pay_tariff_heleket:")) {
-      const tariffId = data.slice("pay_tariff_heleket:".length);
-      const { items } = await api.getPublicTariffs();
-      const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
-      if (!tariff) {
-        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      try {
-        const discountInfo = activeDiscountCode.get(userId);
-        const promoCode = discountInfo?.code;
-        const sel = selectedTariffOption.get(userId);
-        const opts = sortedPriceOptions(tariff.priceOptions);
-        const eff = sel?.tariffId === tariff.id ? sel.option : (opts.length === 1 ? opts[0]! : null);
-        const unitPrice = eff?.price ?? tariff.price;
-        const effectiveDays = eff?.durationDays ?? tariff.durationDays;
-        const extraDevices = sel?.tariffId === tariff.id ? sel.extraDevices : 0;
-        const { extrasTotal } = applyExtraDevicesPriceBot(tariff.pricePerExtraDevice ?? 0, extraDevices, tariff.deviceDiscountTiers, effectiveDays);
-        const effectivePrice = unitPrice + extrasTotal;
-        // см. yoomoney handler.
-        const asAdditional = addsubPending.get(userId) === tariff.id;
-        const extPairT = extendingSecondaryPending.get(userId);
-        const extendsSecondarySubId = extPairT && extPairT.tariffId === tariff.id ? extPairT.secondaryId : undefined;
-        // юзер выбрал «продлить без устройств».
-        // Флаг прокидываем в backend — там после успешной активации helper удалит устройства.
-        // НЕ удаляем здесь — юзер может закрыть экран оплаты и устройства останутся при нём.
-        const removeExtrasOnActivate = !!(extendsSecondarySubId && pendingDropExtras.get(userId) === extendsSecondarySubId) || (!extendsSecondarySubId && convDropExtras.has(userId));
-        const replaceTrialSubId = !extendsSecondarySubId ? trialReplaceChoice.get(userId) : undefined;
-        let subExtrasForPeriod = 0;
-        if (extendsSecondarySubId && !removeExtrasOnActivate) {
-          try {
-            const allSubs = await api.getAllSubscriptions(token);
-            const target = allSubs.items?.find((it) => it.id === extendsSecondarySubId);
-            const monthly = target?.extraDevicesMonthlyPrice ?? 0;
-            if (monthly > 0 && effectiveDays > 0) {
-              subExtrasForPeriod = Math.round(monthly * (effectiveDays / 30) * 100) / 100;
-            }
-          } catch { /* ignore */ }
-        }
-        const totalPrice = effectivePrice + subExtrasForPeriod;
-        // см. yoomoney handler.
-        const meHeleket = await api.getMe(token);
-        const pdHeleket = meHeleket?.personalDiscountPercent ?? 0;
-        const { discountArg, finalPrice: priceWithDiscountHeleket } = buildTariffDiscountArg(totalPrice, pdHeleket, discountInfo, tariff.currency);
-        const payment = await api.createHeleketPayment(token, {
-          amount: totalPrice,
-          currency: tariff.currency,
-          tariffId: tariff.id,
-          tariffPriceOptionId: eff?.id,
-          deviceCount: extraDevices,
-          promoCode,
-          asAdditional: asAdditional || undefined,
-          extendsSecondarySubId,
-          removeExtrasOnActivate,
-          replaceTrialSubId,
-        });
-        if (promoCode) activeDiscountCode.delete(userId);
-        selectedTariffOption.delete(userId);
-        if (extendsSecondarySubId && removeExtrasOnActivate) extendingSecondaryPending.delete(userId);
-        if (asAdditional) addsubPending.delete(userId);
-        if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
-        convDropExtras.delete(userId);
-        trialReplaceChoice.delete(userId);
-        const nameWithDays = (opts.length > 1 || (sel?.tariffId === tariff.id))
-          ? `${tariff.name} · ${formatRuDays(effectiveDays)}`
-          : tariff.name;
-        const msg = buildPaymentMessage(config, { name: nameWithDays, price: formatMoney(priceWithDiscountHeleket, tariff.currency), amount: String(priceWithDiscountHeleket), currency: tariff.currency, action: "Нажмите кнопку ниже для оплаты:" }, discountArg);
-        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
-      } catch (e: unknown) {
-        const m = e instanceof Error ? e.message : "Ошибка создания платежа Heleket";
-        await editMessageContent(ctx, `❌ ${m}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-if (data.startsWith("pay_tariff_rollypay:") || data.startsWith("pay_tariff_cispay:")) {
-      const tariffId = data.slice(data.indexOf(":") + 1);
-      const { items } = await api.getPublicTariffs();
-      const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
-      if (!tariff) {
-        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      try {
-        const discountInfo = activeDiscountCode.get(userId);
-        const promoCode = discountInfo?.code;
-        const sel = selectedTariffOption.get(userId);
-        const opts = sortedPriceOptions(tariff.priceOptions);
-        const eff = sel?.tariffId === tariff.id ? sel.option : (opts.length === 1 ? opts[0]! : null);
-        const unitPrice = eff?.price ?? tariff.price;
-        const effectiveDays = eff?.durationDays ?? tariff.durationDays;
-        const extraDevices = sel?.tariffId === tariff.id ? sel.extraDevices : 0;
-        const { extrasTotal } = applyExtraDevicesPriceBot(tariff.pricePerExtraDevice ?? 0, extraDevices, tariff.deviceDiscountTiers, effectiveDays);
-        const effectivePrice = unitPrice + extrasTotal;
-        // см. yoomoney handler.
-        const asAdditional = addsubPending.get(userId) === tariff.id;
-        const extPairT = extendingSecondaryPending.get(userId);
-        const extendsSecondarySubId = extPairT && extPairT.tariffId === tariff.id ? extPairT.secondaryId : undefined;
-        // юзер выбрал «продлить без устройств».
-        // Флаг прокидываем в backend — там после успешной активации helper удалит устройства.
-        // НЕ удаляем здесь — юзер может закрыть экран оплаты и устройства останутся при нём.
-        const removeExtrasOnActivate = !!(extendsSecondarySubId && pendingDropExtras.get(userId) === extendsSecondarySubId) || (!extendsSecondarySubId && convDropExtras.has(userId));
-        const replaceTrialSubId = !extendsSecondarySubId ? trialReplaceChoice.get(userId) : undefined;
-        let subExtrasForPeriod = 0;
-        if (extendsSecondarySubId && !removeExtrasOnActivate) {
-          try {
-            const allSubs = await api.getAllSubscriptions(token);
-            const target = allSubs.items?.find((it) => it.id === extendsSecondarySubId);
-            const monthly = target?.extraDevicesMonthlyPrice ?? 0;
-            if (monthly > 0 && effectiveDays > 0) {
-              subExtrasForPeriod = Math.round(monthly * (effectiveDays / 30) * 100) / 100;
-            }
-          } catch { /* ignore */ }
-        }
-        const totalPrice = effectivePrice + subExtrasForPeriod;
-        // см. yoomoney handler.
-        const meHeleket = await api.getMe(token);
-        const pdHeleket = meHeleket?.personalDiscountPercent ?? 0;
-        const { discountArg, finalPrice: priceWithDiscountHeleket } = buildTariffDiscountArg(totalPrice, pdHeleket, discountInfo, tariff.currency);
-        const payment = await (data.startsWith("pay_tariff_cispay:") ? api.createCispayPayment : api.createRollypayPayment)(token, {
-          amount: totalPrice,
-          currency: tariff.currency,
-          tariffId: tariff.id,
-          tariffPriceOptionId: eff?.id,
-          deviceCount: extraDevices,
-          promoCode,
-          asAdditional: asAdditional || undefined,
-          extendsSecondarySubId,
-          removeExtrasOnActivate,
-          replaceTrialSubId,
-        });
-        if (promoCode) activeDiscountCode.delete(userId);
-        selectedTariffOption.delete(userId);
-        if (extendsSecondarySubId && removeExtrasOnActivate) extendingSecondaryPending.delete(userId);
-        if (asAdditional) addsubPending.delete(userId);
-        if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
-        convDropExtras.delete(userId);
-        trialReplaceChoice.delete(userId);
-        const nameWithDays = (opts.length > 1 || (sel?.tariffId === tariff.id))
-          ? `${tariff.name} · ${formatRuDays(effectiveDays)}`
-          : tariff.name;
-        const msg = buildPaymentMessage(config, { name: nameWithDays, price: formatMoney(priceWithDiscountHeleket, tariff.currency), amount: String(priceWithDiscountHeleket), currency: tariff.currency, action: "Нажмите кнопку ниже для оплаты:" }, discountArg);
-        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
-      } catch (e: unknown) {
-        const m = e instanceof Error ? e.message : "Ошибка создания платежа RollyPay";
-        await editMessageContent(ctx, `❌ ${m}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-    if (data.startsWith("pay_tariff_cloudpayments:")) {
-      const tariffId = data.slice("pay_tariff_cloudpayments:".length);
-      const { items } = await api.getPublicTariffs();
-      const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
-      if (!tariff) {
-        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      try {
-        const discountInfo = activeDiscountCode.get(userId);
-        const promoCode = discountInfo?.code;
-        const sel = selectedTariffOption.get(userId);
-        const opts = sortedPriceOptions(tariff.priceOptions);
-        const eff = sel?.tariffId === tariff.id ? sel.option : (opts.length === 1 ? opts[0]! : null);
-        const unitPrice = eff?.price ?? tariff.price;
-        const effectiveDays = eff?.durationDays ?? tariff.durationDays;
-        const extraDevices = sel?.tariffId === tariff.id ? sel.extraDevices : 0;
-        const { extrasTotal } = applyExtraDevicesPriceBot(tariff.pricePerExtraDevice ?? 0, extraDevices, tariff.deviceDiscountTiers, effectiveDays);
-        const effectivePrice = unitPrice + extrasTotal;
-        const asAdditional = addsubPending.get(userId) === tariff.id;
-        const extPairT = extendingSecondaryPending.get(userId);
-        const extendsSecondarySubId = extPairT && extPairT.tariffId === tariff.id ? extPairT.secondaryId : undefined;
-        const removeExtrasOnActivate = !!(extendsSecondarySubId && pendingDropExtras.get(userId) === extendsSecondarySubId) || (!extendsSecondarySubId && convDropExtras.has(userId));
-        const replaceTrialSubId = !extendsSecondarySubId ? trialReplaceChoice.get(userId) : undefined;
-        let subExtrasForPeriod = 0;
-        if (extendsSecondarySubId && !removeExtrasOnActivate) {
-          try {
-            const allSubs = await api.getAllSubscriptions(token);
-            const target = allSubs.items?.find((it) => it.id === extendsSecondarySubId);
-            const monthly = target?.extraDevicesMonthlyPrice ?? 0;
-            if (monthly > 0 && effectiveDays > 0) {
-              subExtrasForPeriod = Math.round(monthly * (effectiveDays / 30) * 100) / 100;
-            }
-          } catch {}
-        }
-        const totalPrice = effectivePrice + subExtrasForPeriod;
-        const meHeleket = await api.getMe(token);
-        const pdHeleket = meHeleket?.personalDiscountPercent ?? 0;
-        const { discountArg, finalPrice: priceWithDiscountHeleket } = buildTariffDiscountArg(totalPrice, pdHeleket, discountInfo, tariff.currency);
-        const payment = await api.createCloudpaymentsPayment(token, {
-          amount: totalPrice,
-          currency: tariff.currency,
-          tariffId: tariff.id,
-          tariffPriceOptionId: eff?.id,
-          deviceCount: extraDevices,
-          promoCode,
-          asAdditional: asAdditional || undefined,
-          extendsSecondarySubId,
-          removeExtrasOnActivate,
-          replaceTrialSubId,
-        });
-        if (promoCode) activeDiscountCode.delete(userId);
-        selectedTariffOption.delete(userId);
-        if (extendsSecondarySubId && removeExtrasOnActivate) extendingSecondaryPending.delete(userId);
-        if (asAdditional) addsubPending.delete(userId);
-        if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
-        convDropExtras.delete(userId);
-        trialReplaceChoice.delete(userId);
-        await showCloudCheckout(ctx, token, payment, config?.cloudpaymentsBotDirect === true);
-      } catch (e: unknown) {
-        const m = e instanceof Error ? e.message : "Ошибка создания платежа CloudPayments";
-        await editMessageContent(ctx, `❌ ${m}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-    if (data.startsWith("pay_tariff_paritypay:")) {
-      const tariffId = data.slice("pay_tariff_paritypay:".length);
-      const { items } = await api.getPublicTariffs();
-      const tariff = items?.flatMap((c: TariffCategory) => c.tariffs).find((t: TariffItem) => t.id === tariffId);
-      if (!tariff) {
-        await editMessageContent(ctx, "Тариф не найден.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      try {
-        const discountInfo = activeDiscountCode.get(userId);
-        const promoCode = discountInfo?.code;
-        const sel = selectedTariffOption.get(userId);
-        const opts = sortedPriceOptions(tariff.priceOptions);
-        const eff = sel?.tariffId === tariff.id ? sel.option : (opts.length === 1 ? opts[0]! : null);
-        const unitPrice = eff?.price ?? tariff.price;
-        const effectiveDays = eff?.durationDays ?? tariff.durationDays;
-        const extraDevices = sel?.tariffId === tariff.id ? sel.extraDevices : 0;
-        const { extrasTotal } = applyExtraDevicesPriceBot(tariff.pricePerExtraDevice ?? 0, extraDevices, tariff.deviceDiscountTiers, effectiveDays);
-        const effectivePrice = unitPrice + extrasTotal;
-        // см. yoomoney handler.
-        const asAdditional = addsubPending.get(userId) === tariff.id;
-        const extPairT = extendingSecondaryPending.get(userId);
-        const extendsSecondarySubId = extPairT && extPairT.tariffId === tariff.id ? extPairT.secondaryId : undefined;
-        // юзер выбрал «продлить без устройств».
-        // Флаг прокидываем в backend — там после успешной активации helper удалит устройства.
-        // НЕ удаляем здесь — юзер может закрыть экран оплаты и устройства останутся при нём.
-        const removeExtrasOnActivate = !!(extendsSecondarySubId && pendingDropExtras.get(userId) === extendsSecondarySubId) || (!extendsSecondarySubId && convDropExtras.has(userId));
-        const replaceTrialSubId = !extendsSecondarySubId ? trialReplaceChoice.get(userId) : undefined;
-        let subExtrasForPeriod = 0;
-        if (extendsSecondarySubId && !removeExtrasOnActivate) {
-          try {
-            const allSubs = await api.getAllSubscriptions(token);
-            const target = allSubs.items?.find((it) => it.id === extendsSecondarySubId);
-            const monthly = target?.extraDevicesMonthlyPrice ?? 0;
-            if (monthly > 0 && effectiveDays > 0) {
-              subExtrasForPeriod = Math.round(monthly * (effectiveDays / 30) * 100) / 100;
-            }
-          } catch { /* ignore */ }
-        }
-        const totalPrice = effectivePrice + subExtrasForPeriod;
-        // см. yoomoney handler.
-        const meHeleket = await api.getMe(token);
-        const pdHeleket = meHeleket?.personalDiscountPercent ?? 0;
-        const { discountArg, finalPrice: priceWithDiscountHeleket } = buildTariffDiscountArg(totalPrice, pdHeleket, discountInfo, tariff.currency);
-        const payment = await api.createParitypayPayment(token, {
-          amount: totalPrice,
-          currency: tariff.currency,
-          tariffId: tariff.id,
-          tariffPriceOptionId: eff?.id,
-          deviceCount: extraDevices,
-          promoCode,
-          asAdditional: asAdditional || undefined,
-          extendsSecondarySubId,
-          removeExtrasOnActivate,
-          replaceTrialSubId,
-        });
-        if (promoCode) activeDiscountCode.delete(userId);
-        selectedTariffOption.delete(userId);
-        if (extendsSecondarySubId && removeExtrasOnActivate) extendingSecondaryPending.delete(userId);
-        if (asAdditional) addsubPending.delete(userId);
-        if (removeExtrasOnActivate) pendingDropExtras.delete(userId);
-        convDropExtras.delete(userId);
-        trialReplaceChoice.delete(userId);
-        const nameWithDays = (opts.length > 1 || (sel?.tariffId === tariff.id))
-          ? `${tariff.name} · ${formatRuDays(effectiveDays)}`
-          : tariff.name;
-        const msg = buildPaymentMessage(config, { name: nameWithDays, price: formatMoney(priceWithDiscountHeleket, tariff.currency), amount: String(priceWithDiscountHeleket), currency: tariff.currency, action: "Нажмите кнопку ниже для оплаты:" }, discountArg);
-        await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
-      } catch (e: unknown) {
-        const m = e instanceof Error ? e.message : "Ошибка создания платежа ParityPay";
-        await editMessageContent(ctx, `❌ ${m}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        await sendPaymentError(ctx, chrome, e, "Ошибка создания платежа ЮKassa");
       }
       return;
     }
 
     if (data.startsWith("pay_option_balance:")) {
-      const parts = data.split(":");
-      const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
-      const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
-      const options = config?.sellOptions ?? [];
-      const option = options.find((o) => o.kind === kind && o.id === productId);
+      const option = findSellOption(data, config);
       if (!option) {
         await editMessageContent(ctx, "Опция не найдена.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
-      // T7c: consume target подписки (если был выбран). primary = передаём undefined backend'у.
-      const target = extraOptionTargetSub.get(userId);
-      const targetSubscriptionId = target && target !== "primary" ? target : undefined;
-
-      // рассчитываем pro-rata цену для display.
-      let displayPrice = option.price;
-      if (option.kind === "devices" && targetSubscriptionId) {
-        try {
-          const subs = await api.getAllSubscriptions(token);
-          const target_sub = subs.items?.find((it) => it.id === targetSubscriptionId);
-          const inner = target_sub?.subscription as Record<string, unknown> | null;
-          const innerData = inner ? ((inner.response ?? inner.data ?? inner) as Record<string, unknown>) : null;
-          const expireAtRaw = innerData?.expireAt ?? innerData?.expire_at;
-          let daysLeft = 30;
-          if (typeof expireAtRaw === "string" || typeof expireAtRaw === "number") {
-            const exp = typeof expireAtRaw === "number" ? new Date(expireAtRaw * 1000) : new Date(expireAtRaw);
-            if (!isNaN(exp.getTime())) daysLeft = Math.max(0, (exp.getTime() - Date.now()) / 86_400_000);
-          }
-          const coef = Math.max(1, daysLeft / 30);
-          displayPrice = Math.floor(option.price * coef);
-        } catch { /* ignore */ }
-      }
-      const me = await api.getMe(token).catch(() => null);
-      const pd = me?.personalDiscountPercent ?? 0;
-      if (pd > 0) {
-        displayPrice = Math.max(0, Math.floor(displayPrice * (1 - pd / 100)));
-      }
-
-      try {
-        const result = await api.payOptionByBalance(token, { kind: option.kind, productId: option.id, targetSubscriptionId });
-        extraOptionTargetSub.delete(userId);
-        extraOptionPending.delete(userId);
-        await editMessageContent(ctx, `✅ ${result.message}`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка оплаты";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
+      const targetSubscriptionId = resolveOptionTarget(userId);
+      await completeBalancePayment(ctx, chrome,
+        () => api.payOptionByBalance(token, { kind: option.kind, productId: option.id, targetSubscriptionId }),
+        () => {
+          extraOptionTargetSub.delete(userId);
+          extraOptionPending.delete(userId);
+        },
+      );
       return;
     }
 
     if (data.startsWith("pay_option_yookassa:")) {
-      const parts = data.split(":");
-      const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
-      const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
-      const options = config?.sellOptions ?? [];
-      const option = options.find((o) => o.kind === kind && o.id === productId);
+      const option = findSellOption(data, config);
       if (!option) {
         await editMessageContent(ctx, "Опция не найдена.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
-      const target = extraOptionTargetSub.get(userId);
-      const targetSubscriptionId = target && target !== "primary" ? target : undefined;
-
-      // рассчитываем pro-rata цену для display.
-      let displayPrice = option.price;
-      if (option.kind === "devices" && targetSubscriptionId) {
-        try {
-          const subs = await api.getAllSubscriptions(token);
-          const target_sub = subs.items?.find((it) => it.id === targetSubscriptionId);
-          const inner = target_sub?.subscription as Record<string, unknown> | null;
-          const innerData = inner ? ((inner.response ?? inner.data ?? inner) as Record<string, unknown>) : null;
-          const expireAtRaw = innerData?.expireAt ?? innerData?.expire_at;
-          let daysLeft = 30;
-          if (typeof expireAtRaw === "string" || typeof expireAtRaw === "number") {
-            const exp = typeof expireAtRaw === "number" ? new Date(expireAtRaw * 1000) : new Date(expireAtRaw);
-            if (!isNaN(exp.getTime())) daysLeft = Math.max(0, (exp.getTime() - Date.now()) / 86_400_000);
-          }
-          const coef = Math.max(1, daysLeft / 30);
-          displayPrice = Math.floor(option.price * coef);
-        } catch { /* ignore */ }
-      }
+      const targetSubscriptionId = resolveOptionTarget(userId);
       const me = await api.getMe(token).catch(() => null);
-      const pd = me?.personalDiscountPercent ?? 0;
-      if (pd > 0) {
-        displayPrice = Math.max(0, Math.floor(displayPrice * (1 - pd / 100)));
-      }
-
+      const displayPrice = await computeOptionDisplayPrice({
+        token,
+        option,
+        targetSubscriptionId,
+        personalDiscountPercent: me?.personalDiscountPercent ?? 0,
+      });
       try {
-        // 54-ФЗ-чек prompt.
-        const savedEmailOp = me?.email ?? null;
-        const optName = option.name || (option.kind === "traffic" ? `+${option.trafficGb} ГБ` : option.kind === "devices" ? `+${option.deviceCount} устр.` : "Сервер");
-        const tokRcptOp = storePendingReceipt({
+        await startYookassaCheckout(ctx, chrome, {
           userId,
-          savedEmail: savedEmailOp,
-          builder: (receiptEmail) => api.createYookassaPayment(token, {
+          savedEmail: me?.email ?? null,
+          build: (receiptEmail) => api.createYookassaPayment(token, {
             extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId },
             receiptEmail,
           }),
-          finalize: async (payment, { receiptSentTo }) => {
-            const msg = buildPaymentMessage(config, {
-              name: optName,
-              price: formatMoney(displayPrice, option.currency),
-              amount: String(displayPrice),
-              currency: option.currency,
-              action: "Нажмите кнопку ниже для оплаты:",
-            });
-            const markup = payUrlMarkup(payment.confirmationUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
-            if (receiptSentTo) {
-              await ctx.reply(`${msg.text}\n\n${RECEIPT_OK_LINE(receiptSentTo)}`, { parse_mode: "HTML", reply_markup: markup });
-            } else {
-              await ctx.reply(msg.text, { entities: msg.entities, reply_markup: markup });
-            }
+          message: () => buildPaymentMessage(config, {
+            name: optionDisplayName(option),
+            price: formatMoney(displayPrice, option.currency),
+            amount: String(displayPrice),
+            currency: option.currency,
+            action: "Нажмите кнопку ниже для оплаты:",
+          }),
+          onPaid: () => {
             extraOptionTargetSub.delete(userId);
           },
         });
-        await editMessageContent(ctx, receiptPromptText(savedEmailOp), receiptPromptKeyboard(tokRcptOp, savedEmailOp));
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
-        const isAuthError = /401|unauthorized|истек|авториз|токен/i.test(msg);
+        const message = e instanceof Error ? e.message : "Ошибка создания платежа";
+        const isAuthError = /401|unauthorized|истек|авториз|токен/i.test(message);
         if (isAuthError) {
           tokenStore.delete(userId);
           const freshToken = await getOrRestoreToken(userId, ctx.from?.username);
@@ -1326,58 +518,42 @@ if (data.startsWith("pay_tariff_rollypay:") || data.startsWith("pay_tariff_cispa
             await editMessageContent(ctx, "❌ Ошибка авторизации. Отправьте /start", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
           }
         } else {
-          await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
+          await sendPaymentError(ctx, chrome, e, "Ошибка создания платежа");
         }
       }
       return;
     }
 
     if (data.startsWith("pay_option_cryptopay:") || data.startsWith("pay_option_stars:")) {
-      const parts = data.split(":");
-      const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
-      const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
-      const options = config?.sellOptions ?? [];
-      const option = options.find((o) => o.kind === kind && o.id === productId);
+      const option = findSellOption(data, config);
       if (!option) {
         await editMessageContent(ctx, "Опция не найдена.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
-      const target = extraOptionTargetSub.get(userId);
-      const targetSubscriptionId = target && target !== "primary" ? target : undefined;
-
-      // рассчитываем pro-rata цену для display.
-      let displayPrice = option.price;
-      if (option.kind === "devices" && targetSubscriptionId) {
-        try {
-          const subs = await api.getAllSubscriptions(token);
-          const target_sub = subs.items?.find((it) => it.id === targetSubscriptionId);
-          const inner = target_sub?.subscription as Record<string, unknown> | null;
-          const innerData = inner ? ((inner.response ?? inner.data ?? inner) as Record<string, unknown>) : null;
-          const expireAtRaw = innerData?.expireAt ?? innerData?.expire_at;
-          let daysLeft = 30;
-          if (typeof expireAtRaw === "string" || typeof expireAtRaw === "number") {
-            const exp = typeof expireAtRaw === "number" ? new Date(expireAtRaw * 1000) : new Date(expireAtRaw);
-            if (!isNaN(exp.getTime())) daysLeft = Math.max(0, (exp.getTime() - Date.now()) / 86_400_000);
-          }
-          const coef = Math.max(1, daysLeft / 30);
-          displayPrice = Math.floor(option.price * coef);
-        } catch { /* ignore */ }
-      }
+      const targetSubscriptionId = resolveOptionTarget(userId);
       const me = await api.getMe(token).catch(() => null);
-      const pd = me?.personalDiscountPercent ?? 0;
-      if (pd > 0) {
-        displayPrice = Math.max(0, Math.floor(displayPrice * (1 - pd / 100)));
-      }
-
+      const displayPrice = await computeOptionDisplayPrice({
+        token,
+        option,
+        targetSubscriptionId,
+        personalDiscountPercent: me?.personalDiscountPercent ?? 0,
+      });
       try {
-        const payment = await (data.startsWith("pay_option_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, { extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId } });
-        const optName = option.name || (option.kind === "traffic" ? `+${option.trafficGb} ГБ` : option.kind === "devices" ? `+${option.deviceCount} устр.` : "Сервер");
-        const msg = buildPaymentMessage(config, { name: optName, price: formatMoney(displayPrice, option.currency), amount: String(displayPrice), currency: option.currency, action: "Нажмите кнопку ниже для оплаты:" });
+        const payment = await (data.startsWith("pay_option_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, {
+          extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId },
+        });
+        const msg = buildPaymentMessage(config, {
+          name: optionDisplayName(option),
+          price: formatMoney(displayPrice, option.currency),
+          amount: String(displayPrice),
+          currency: option.currency,
+          action: "Нажмите кнопку ниже для оплаты:",
+        });
         await editMessageContent(ctx, msg.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
         extraOptionTargetSub.delete(userId);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
-        const isAuthError = /401|unauthorized|истек|авториз|токен/i.test(msg);
+        const message = e instanceof Error ? e.message : "Ошибка создания платежа";
+        const isAuthError = /401|unauthorized|истек|авториз|токен/i.test(message);
         if (isAuthError) {
           tokenStore.delete(userId);
           const freshToken = await getOrRestoreToken(userId, ctx.from?.username);
@@ -1387,58 +563,34 @@ if (data.startsWith("pay_tariff_rollypay:") || data.startsWith("pay_tariff_cispa
             await editMessageContent(ctx, "❌ Ошибка авторизации. Отправьте /start", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
           }
         } else {
-          await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
+          await sendPaymentError(ctx, chrome, e, "Ошибка создания платежа");
         }
       }
       return;
     }
 
     if (data.startsWith("pay_option_yoomoney:")) {
-      const parts = data.split(":");
-      const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
-      const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
-      const options = config?.sellOptions ?? [];
-      const option = options.find((o) => o.kind === kind && o.id === productId);
+      const option = findSellOption(data, config);
       if (!option) {
         await editMessageContent(ctx, "Опция не найдена.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
-      const target = extraOptionTargetSub.get(userId);
-      const targetSubscriptionId = target && target !== "primary" ? target : undefined;
-
-      // рассчитываем pro-rata цену для display.
-      let displayPrice = option.price;
-      if (option.kind === "devices" && targetSubscriptionId) {
-        try {
-          const subs = await api.getAllSubscriptions(token);
-          const target_sub = subs.items?.find((it) => it.id === targetSubscriptionId);
-          const inner = target_sub?.subscription as Record<string, unknown> | null;
-          const innerData = inner ? ((inner.response ?? inner.data ?? inner) as Record<string, unknown>) : null;
-          const expireAtRaw = innerData?.expireAt ?? innerData?.expire_at;
-          let daysLeft = 30;
-          if (typeof expireAtRaw === "string" || typeof expireAtRaw === "number") {
-            const exp = typeof expireAtRaw === "number" ? new Date(expireAtRaw * 1000) : new Date(expireAtRaw);
-            if (!isNaN(exp.getTime())) daysLeft = Math.max(0, (exp.getTime() - Date.now()) / 86_400_000);
-          }
-          const coef = Math.max(1, daysLeft / 30);
-          displayPrice = Math.floor(option.price * coef);
-        } catch { /* ignore */ }
-      }
+      const targetSubscriptionId = resolveOptionTarget(userId);
       const me = await api.getMe(token).catch(() => null);
-      const pd = me?.personalDiscountPercent ?? 0;
-      if (pd > 0) {
-        displayPrice = Math.max(0, Math.floor(displayPrice * (1 - pd / 100)));
-      }
-
+      const displayPrice = await computeOptionDisplayPrice({
+        token,
+        option,
+        targetSubscriptionId,
+        personalDiscountPercent: me?.personalDiscountPercent ?? 0,
+      });
       try {
         const payment = await api.createYoomoneyPayment(token, {
           amount: displayPrice,
           paymentType: "AC",
           extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId },
         });
-        const optName = option.name || (option.kind === "traffic" ? `+${option.trafficGb} ГБ` : option.kind === "devices" ? `+${option.deviceCount} устр.` : "Сервер");
         const msg = buildPaymentMessage(config, {
-          name: optName,
+          name: optionDisplayName(option),
           price: formatMoney(displayPrice, option.currency),
           amount: String(displayPrice),
           currency: option.currency,
@@ -1447,19 +599,17 @@ if (data.startsWith("pay_tariff_rollypay:") || data.startsWith("pay_tariff_cispa
         await editMessageContent(ctx, msg.text, payUrlMarkup(payment.paymentUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
         extraOptionTargetSub.delete(userId);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа ЮMoney";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
+        await sendPaymentError(ctx, chrome, e, "Ошибка создания платежа ЮMoney");
       }
       return;
     }
 
     if (data.startsWith("pay_option_platega:")) {
       const parts = data.split(":");
-      const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
+      const kind = (parts[1] ?? "") as SellOption["kind"];
       const productId = parts.length > 3 ? parts.slice(2, -1).join(":") : parts[2] ?? "";
       const methodId = parts.length >= 4 ? Number(parts[parts.length - 1]) : Number(parts[2]);
-      const options = config?.sellOptions ?? [];
-      const option = options.find((o) => o.kind === kind && o.id === productId);
+      const option = (config?.sellOptions ?? []).find((o) => o.kind === kind && o.id === productId);
       if (!option) {
         await editMessageContent(ctx, "Опция не найдена.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
@@ -1468,33 +618,14 @@ if (data.startsWith("pay_tariff_rollypay:") || data.startsWith("pay_tariff_cispa
         await editMessageContent(ctx, "Неверный способ оплаты.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
-      const target = extraOptionTargetSub.get(userId);
-      const targetSubscriptionId = target && target !== "primary" ? target : undefined;
-
-      // рассчитываем pro-rata цену для display.
-      let displayPrice = option.price;
-      if (option.kind === "devices" && targetSubscriptionId) {
-        try {
-          const subs = await api.getAllSubscriptions(token);
-          const target_sub = subs.items?.find((it) => it.id === targetSubscriptionId);
-          const inner = target_sub?.subscription as Record<string, unknown> | null;
-          const innerData = inner ? ((inner.response ?? inner.data ?? inner) as Record<string, unknown>) : null;
-          const expireAtRaw = innerData?.expireAt ?? innerData?.expire_at;
-          let daysLeft = 30;
-          if (typeof expireAtRaw === "string" || typeof expireAtRaw === "number") {
-            const exp = typeof expireAtRaw === "number" ? new Date(expireAtRaw * 1000) : new Date(expireAtRaw);
-            if (!isNaN(exp.getTime())) daysLeft = Math.max(0, (exp.getTime() - Date.now()) / 86_400_000);
-          }
-          const coef = Math.max(1, daysLeft / 30);
-          displayPrice = Math.floor(option.price * coef);
-        } catch { /* ignore */ }
-      }
+      const targetSubscriptionId = resolveOptionTarget(userId);
       const me = await api.getMe(token).catch(() => null);
-      const pd = me?.personalDiscountPercent ?? 0;
-      if (pd > 0) {
-        displayPrice = Math.max(0, Math.floor(displayPrice * (1 - pd / 100)));
-      }
-
+      const displayPrice = await computeOptionDisplayPrice({
+        token,
+        option,
+        targetSubscriptionId,
+        personalDiscountPercent: me?.personalDiscountPercent ?? 0,
+      });
       try {
         const payment = await api.createPlategaPayment(token, {
           amount: displayPrice,
@@ -1503,9 +634,8 @@ if (data.startsWith("pay_tariff_rollypay:") || data.startsWith("pay_tariff_cispa
           description: option.name || `${option.kind} ${option.id}`,
           extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId },
         });
-        const optName = option.name || (option.kind === "traffic" ? `+${option.trafficGb} ГБ` : option.kind === "devices" ? `+${option.deviceCount} устр.` : "Сервер");
         const msg = buildPaymentMessage(config, {
-          name: optName,
+          name: optionDisplayName(option),
           price: formatMoney(displayPrice, option.currency),
           amount: String(displayPrice),
           currency: option.currency,
@@ -1514,18 +644,13 @@ if (data.startsWith("pay_tariff_rollypay:") || data.startsWith("pay_tariff_cispa
         await editMessageContent(ctx, msg.text, payUrlMarkup(payment.paymentUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
         extraOptionTargetSub.delete(userId);
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
+        await sendPaymentError(ctx, chrome, e, "Ошибка создания платежа");
       }
       return;
     }
 
     if (data.startsWith("pay_option:")) {
-      const parts = data.split(":");
-      const kind = (parts[1] ?? "") as "traffic" | "devices" | "servers";
-      const productId = parts.length > 2 ? parts.slice(2).join(":") : "";
-      const options = config?.sellOptions ?? [];
-      const option = options.find((o) => o.kind === kind && o.id === productId);
+      const option = findSellOption(data, config);
       if (!option) {
         await editMessageContent(ctx, "Опция не найдена. Обновите меню (/start) и попробуйте снова.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
@@ -1535,37 +660,15 @@ if (data.startsWith("pay_tariff_rollypay:") || data.startsWith("pay_tariff_cispa
         return;
       }
       const client = await api.getMe(token);
-      const optName = option.name || (option.kind === "traffic" ? `+${option.trafficGb} ГБ` : option.kind === "devices" ? `+${option.deviceCount} устр.` : "Сервер");
-
-      // на экране выбора способа оплаты
-      // показываем РЕАЛЬНУЮ цену (с pro-rata + personal discount), а не базовую option.price.
-      let displayPrice = option.price;
-      if (option.kind === "devices") {
-        const target = extraOptionTargetSub.get(userId);
-        if (target && target !== "primary") {
-          try {
-            const subs = await api.getAllSubscriptions(token);
-            const targetSub = subs.items?.find((it) => it.id === target);
-            const inner = targetSub?.subscription as Record<string, unknown> | null;
-            const innerData = inner ? ((inner.response ?? inner.data ?? inner) as Record<string, unknown>) : null;
-            const expireAtRaw = innerData?.expireAt ?? innerData?.expire_at;
-            let daysLeft = 30;
-            if (typeof expireAtRaw === "string" || typeof expireAtRaw === "number") {
-              const exp = typeof expireAtRaw === "number" ? new Date(expireAtRaw * 1000) : new Date(expireAtRaw);
-              if (!isNaN(exp.getTime())) daysLeft = Math.max(0, (exp.getTime() - Date.now()) / 86_400_000);
-            }
-            const coef = Math.max(1, daysLeft / 30);
-            displayPrice = Math.floor(option.price * coef);
-          } catch { /* ignore */ }
-        }
-      }
-      const pd = client?.personalDiscountPercent ?? 0;
-      if (pd > 0) {
-        displayPrice = Math.max(0, Math.floor(displayPrice * (1 - pd / 100)));
-      }
+      const displayPrice = await computeOptionDisplayPrice({
+        token,
+        option,
+        targetSubscriptionId: resolveOptionTarget(userId),
+        personalDiscountPercent: client?.personalDiscountPercent ?? 0,
+      });
 
       const choiceText = buildPaymentMessage(config, {
-        name: optName,
+        name: optionDisplayName(option),
         price: formatMoney(displayPrice, option.currency),
         amount: String(displayPrice),
         currency: option.currency,
@@ -1922,186 +1025,45 @@ if (data.startsWith("pay_tariff_rollypay:") || data.startsWith("pay_tariff_cispa
       return;
     }
 
-    if (data.startsWith("topup_yoomoney:")) {
-      const amountStr = data.slice("topup_yoomoney:".length);
-      const amount = Number(amountStr);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      const client = await api.getMe(token);
-      try {
-        const payment = await api.createYoomoneyPayment(token, {
-          amount,
-          paymentType: "AC",
-        });
-        const yooTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency)}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
-        await editMessageContent(ctx, yooTopup.text, payUrlMarkup(payment.paymentUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), yooTopup.entities);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа ЮMoney";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-
     if (data.startsWith("topup_yookassa:")) {
-      const amountStr = data.slice("topup_yookassa:".length);
-      const amount = Number(amountStr);
+      const amount = Number(data.slice("topup_yookassa:".length));
       if (!Number.isFinite(amount) || amount <= 0) {
         await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
       const client = await api.getMe(token);
       try {
-        // 54-ФЗ-чек prompt.
-        const savedEmailTp = client?.email ?? null;
-        const tokRcptTp = storePendingReceipt({
+        await startYookassaCheckout(ctx, chrome, {
           userId,
-          savedEmail: savedEmailTp,
-          builder: (receiptEmail) => api.createYookassaPayment(token, { amount, currency: "RUB", receiptEmail }),
-          finalize: async (payment, { receiptSentTo }) => {
-            const yooTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
-            const markup = payUrlMarkup(payment.confirmationUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
-            if (receiptSentTo) {
-              await ctx.reply(`${yooTopup.text}\n\n${RECEIPT_OK_LINE(receiptSentTo)}`, { parse_mode: "HTML", reply_markup: markup });
-            } else {
-              await ctx.reply(yooTopup.text, { entities: yooTopup.entities, reply_markup: markup });
-            }
-          },
+          savedEmail: client?.email ?? null,
+          build: (receiptEmail) => api.createYookassaPayment(token, { amount, currency: "RUB", receiptEmail }),
+          message: () => titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis),
         });
-        await editMessageContent(ctx, receiptPromptText(savedEmailTp), receiptPromptKeyboard(tokRcptTp, savedEmailTp));
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа ЮKassa";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
+        await sendPaymentError(ctx, chrome, e, "Ошибка создания платежа ЮKassa");
       }
       return;
     }
 
-    if (data.startsWith("topup_cryptopay:") || data.startsWith("topup_stars:")) {
-      const amountStr = data.slice(data.indexOf(":") + 1);
-      const amount = Number(amountStr);
+    const topupGateway = TOPUP_GATEWAYS.find((gateway) => data.startsWith(gateway.prefix));
+    if (topupGateway) {
+      const amount = Number(data.slice(topupGateway.prefix.length));
       if (!Number.isFinite(amount) || amount <= 0) {
         await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
         return;
       }
       const client = await api.getMe(token);
+      const currency = client.preferredCurrency ?? "RUB";
       try {
-        const payment = await (data.startsWith("topup_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, { amount, currency: client.preferredCurrency ?? "RUB" });
-        const cpTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
-        await editMessageContent(ctx, cpTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), cpTopup.entities);
+        const payment = await topupGateway.create(token, amount, currency);
+        if (payment.checkout) {
+          await showCloudCheckout(ctx, token, payment.checkout, config?.cloudpaymentsBotDirect === true);
+        } else {
+          const msg = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, currency)}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
+          await editMessageContent(ctx, msg.text, payUrlMarkup(payment.url ?? "", config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), msg.entities);
+        }
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа Crypto Bot";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-
-    if (data.startsWith("topup_lava:")) {
-      const amountStr = data.slice("topup_lava:".length);
-      const amount = Number(amountStr);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      const client = await api.getMe(token);
-      try {
-        const payment = await api.createLavaPayment(token, { amount, currency: client.preferredCurrency ?? "RUB" });
-        const lvTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
-        await editMessageContent(ctx, lvTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), lvTopup.entities);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа Lava";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-
-    if (data.startsWith("topup_lavatop:")) {
-      const amountStr = data.slice("topup_lavatop:".length);
-      const amount = Number(amountStr);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      const client = await api.getMe(token);
-      try {
-        const payment = await api.createLavatopPayment(token, { amount, currency: client.preferredCurrency ?? "RUB" });
-        const lvTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
-        await editMessageContent(ctx, lvTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), lvTopup.entities);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа Lava.top";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-
-    if (data.startsWith("topup_heleket:")) {
-      const amountStr = data.slice("topup_heleket:".length);
-      const amount = Number(amountStr);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      const client = await api.getMe(token);
-      try {
-        const payment = await api.createHeleketPayment(token, { amount, currency: client.preferredCurrency ?? "RUB" });
-        const hkTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
-        await editMessageContent(ctx, hkTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), hkTopup.entities);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа Heleket";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-if (data.startsWith("topup_rollypay:") || data.startsWith("topup_cispay:")) {
-      const amountStr = data.slice(data.indexOf(":") + 1);
-      const amount = Number(amountStr);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      const client = await api.getMe(token);
-      try {
-        const payment = await (data.startsWith("topup_cispay:") ? api.createCispayPayment : api.createRollypayPayment)(token, { amount, currency: client.preferredCurrency ?? "RUB" });
-        const rpTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
-        await editMessageContent(ctx, rpTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), rpTopup.entities);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа RollyPay";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-if (data.startsWith("topup_cloudpayments:")) {
-      const amountStr = data.slice("topup_cloudpayments:".length);
-      const amount = Number(amountStr);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      const client = await api.getMe(token);
-      try {
-        const payment = await api.createCloudpaymentsPayment(token, { amount, currency: client.preferredCurrency ?? "RUB" });
-        await showCloudCheckout(ctx, token, payment, config?.cloudpaymentsBotDirect === true);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа CloudPayments";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
-      }
-      return;
-    }
-if (data.startsWith("topup_paritypay:")) {
-      const amountStr = data.slice("topup_paritypay:".length);
-      const amount = Number(amountStr);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        await editMessageContent(ctx, "Неверная сумма.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
-        return;
-      }
-      const client = await api.getMe(token);
-      try {
-        const payment = await api.createParitypayPayment(token, { amount, currency: client.preferredCurrency ?? "RUB" });
-        const rpTopup = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency ?? "RUB")}\n\nНажмите кнопку ниже для оплаты:`, config?.botEmojis);
-        await editMessageContent(ctx, rpTopup.text, payUrlMarkup(payment.payUrl, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds), rpTopup.entities);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Ошибка создания платежа ParityPay";
-        await editMessageContent(ctx, `❌ ${msg}`, tariffErrMarkup(e, config, innerStyles?.back, innerEmojiIds));
+        await sendPaymentError(ctx, chrome, e, topupGateway.errorText);
       }
       return;
     }

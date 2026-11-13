@@ -272,7 +272,6 @@ export const SYSTEM_CONFIG_KEYS = [
   // Прокси
   "proxy_enabled", "proxy_url", "proxy_telegram", "proxy_payments", "proxy_ai",
   // Мой Налог (самозанятые)
-  "nalog_enabled", "nalog_inn", "nalog_password", "nalog_device_id", "nalog_service_name",
   // Дополнительные подписки и подарки
   "gift_subscriptions_enabled", "gift_code_expiry_hours", "max_additional_subscriptions",
   "gift_code_format_length", "gift_rate_limit_per_minute",
@@ -794,7 +793,7 @@ async function loadSystemConfigFromDb() {
     overpayLogin: (map.overpay_login ?? "").trim() || null,
     overpayPassword: (map.overpay_password ?? "").trim() || null,
     groqApiKey: (map.groq_api_key ?? "").trim() || null,
-    groqModel: (map.groq_model ?? "").trim() || "llama3-8b-8192",
+    groqModel: (map.groq_model ?? "").trim() || "openai/gpt-oss-120b",
     groqFallback1: (map.groq_fallback_1 ?? "").trim() || null,
     groqFallback2: (map.groq_fallback_2 ?? "").trim() || null,
     groqFallback3: (map.groq_fallback_3 ?? "").trim() || null,
@@ -1058,11 +1057,6 @@ async function loadSystemConfigFromDb() {
     proxyTelegram: map.proxy_telegram === "true" || map.proxy_telegram === "1",
     proxyPayments: map.proxy_payments === "true" || map.proxy_payments === "1",
     proxyAi: map.proxy_ai === "true" || map.proxy_ai === "1",
-    nalogEnabled: map.nalog_enabled === "true" || map.nalog_enabled === "1",
-    nalogInn: (map.nalog_inn ?? "").trim() || null,
-    nalogPassword: (map.nalog_password ?? "").trim() || null,
-    nalogDeviceId: (map.nalog_device_id ?? "").trim() || null,
-    nalogServiceName: (map.nalog_service_name ?? "").trim() || null,
     giftSubscriptionsEnabled: map.gift_subscriptions_enabled === "true" || map.gift_subscriptions_enabled === "1",
     giftCodeExpiryHours: parseInt(map.gift_code_expiry_hours || "72", 10) || 72,
     maxAdditionalSubscriptions: parseInt(map.max_additional_subscriptions || "5", 10) || 5,
@@ -1872,4 +1866,26 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     botInfoBlock: full.botInfoBlock ?? null,
     translations: await loadAllLanguagePacks(full.activeLanguages),
   };
+}
+
+/** Общая валидация промокода — возвращает объект PromoCode или ошибку */
+export type PromoCodeRow = NonNullable<Awaited<ReturnType<typeof prisma.promoCode.findUnique>>>;
+export type ValidateResult = { ok: true; promo: PromoCodeRow } | { ok: false; error: string; status: number };
+
+export async function validatePromoCode(code: string, clientId: string): Promise<ValidateResult> {
+  const promo = await prisma.promoCode.findUnique({ where: { code: code.trim() } });
+  if (!promo || !promo.isActive) return { ok: false, error: "Промокод не найден или неактивен", status: 404 };
+  if (promo.expiresAt && promo.expiresAt < new Date()) return { ok: false, error: "Срок действия промокода истёк", status: 400 };
+
+  if (promo.maxUses > 0) {
+    const totalUsages = await prisma.promoCodeUsage.count({ where: { promoCodeId: promo.id } });
+    if (totalUsages >= promo.maxUses) return { ok: false, error: "Лимит использований промокода исчерпан", status: 400 };
+  }
+
+  const clientUsages = await prisma.promoCodeUsage.count({
+    where: { promoCodeId: promo.id, clientId },
+  });
+  if (clientUsages >= promo.maxUsesPerClient) return { ok: false, error: "Вы уже использовали этот промокод", status: 400 };
+
+  return { ok: true, promo };
 }

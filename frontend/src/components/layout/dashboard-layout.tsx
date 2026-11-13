@@ -1,10 +1,9 @@
 import { openAdminSearch, searchShortcut } from "@/lib/search-shortcut";
 import { ModernAdminShell } from "./modern-admin-shell";
 import { AdminAppearanceChoice } from "./admin-appearance";
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import gsap from "gsap";
-import { reducedMotion } from "@/lib/gsap-utils";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Shield, LayoutDashboard, Users, CreditCard, Settings, LogOut, KeyRound,
   Search, Megaphone, Tag, BarChart3, FileText, ExternalLink, Sun, Moon, Monitor,
@@ -229,63 +228,6 @@ export function DashboardLayout() {
     };
   }, [mobileMenuOpen]);
 
-  const [mobileSidebarVisible, setMobileSidebarVisible] = useState(false);
-  const sidebarRef = useRef<HTMLElement>(null);
-  const sidebarOverlayRef = useRef<HTMLDivElement>(null);
-  const sidebarCloseTimer = useRef<number | null>(null);
-  // gsap-шторка: open → slide-in; close → slide-out, потом unmount (двухфазный mount-паттерн).
-  useEffect(() => {
-    if (sidebarCloseTimer.current !== null) {
-      window.clearTimeout(sidebarCloseTimer.current);
-      sidebarCloseTimer.current = null;
-    }
-    if (mobileMenuOpen) {
-      setMobileSidebarVisible(true);
-    } else if (mobileSidebarVisible) {
-      if (reducedMotion()) {
-        setMobileSidebarVisible(false);
-        return;
-      }
-      const panel = sidebarRef.current;
-      const overlay = sidebarOverlayRef.current;
-      if (!panel) {
-        setMobileSidebarVisible(false);
-        return;
-      }
-      const ctx = gsap.context(() => {
-        gsap.to(panel, { x: -290, duration: 0.25, ease: "power2.in", overwrite: "auto" });
-        if (overlay) gsap.to(overlay, { opacity: 0, duration: 0.2, ease: "power2.in" });
-      }, panel);
-      sidebarCloseTimer.current = window.setTimeout(() => {
-        sidebarCloseTimer.current = null;
-        ctx.revert();
-        gsap.set(panel, { clearProps: "all" });
-        setMobileSidebarVisible(false);
-      }, 260);
-      return () => {
-        window.clearTimeout(sidebarCloseTimer.current ?? 0);
-        ctx.revert();
-      };
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mobileMenuOpen]);
-
-  // Вход шторки после монтирования.
-  useLayoutEffect(() => {
-    const panel = sidebarRef.current;
-    const overlay = sidebarOverlayRef.current;
-    if (!panel || !mobileSidebarVisible || !mobileMenuOpen) return;
-    if (reducedMotion()) {
-      gsap.set(panel, { clearProps: "all" });
-      return;
-    }
-    const ctx = gsap.context(() => {
-      gsap.fromTo(panel, { x: -290 }, { x: 0, duration: 0.3, ease: "power2.out", overwrite: "auto" });
-      if (overlay) gsap.fromTo(overlay, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power2.out" });
-    }, panel);
-    return () => ctx.revert();
-  }, [mobileSidebarVisible, mobileMenuOpen]);
-
   const allNav = useNavSections();
   const managerRedirect = getManagerRedirect(state.admin, location.pathname, allNav);
   useEffect(() => {
@@ -406,13 +348,21 @@ export function DashboardLayout() {
         </div>
       </aside>
 
-      {/*  Mobile sidebar overlay — gsap-шторка (замена AnimatePresence): mount-двухфазный паттерн как в floating-chat  */}
-      {mobileSidebarVisible && (
+      <AnimatePresence>
+      {mobileMenuOpen && (
         <>
-          <div ref={sidebarOverlayRef} data-sidebar="overlay"
+          <motion.div data-sidebar="overlay"
             data-pwa-block-update
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
             className="fixed inset-0 z-[69] bg-card md:hidden" onClick={() => setMobileMenuOpen(false)} />
-          <aside ref={sidebarRef} data-sidebar="panel"
+          <motion.aside data-sidebar="panel"
+            initial={{ x: -290 }}
+            animate={{ x: 0 }}
+            exit={{ x: -290 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
             className="fixed left-0 top-0 bottom-0 z-[70] w-[290px] flex flex-col md:hidden bg-background border-r border-border overflow-hidden"
           >
             <div className="flex h-16 items-center justify-center px-4 relative z-10">
@@ -453,9 +403,10 @@ export function DashboardLayout() {
               </Button>
               <ProjectLinks />
             </div>
-          </aside>
+          </motion.aside>
         </>
       )}
+      </AnimatePresence>
 
       {/*  Main content  */}
       <main className="flex-1 min-w-0 flex flex-col md:pl-[240px] w-full relative z-10">

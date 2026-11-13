@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import gsap from "gsap";
+import { animate, motion, useReducedMotion, type Variants } from "framer-motion";
 import { Gift, Sparkles, Clock, Wifi, Smartphone, Loader2, Check, Infinity as InfinityIcon } from "lucide-react";
 import {
   Dialog,
@@ -18,7 +18,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { api, type ClientTrialOption } from "@/lib/api";
 import { formatRuDays } from "@/lib/i18n";
-import { EASE_OUT, reducedMotion, useStaggerReveal } from "@/lib/gsap-utils";
 
 interface TrialsPickerDialogProps {
   open: boolean;
@@ -63,35 +62,18 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
   const [error, setError] = useState<string | null>(null);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  // Контейнер карточек — stagger-появление при каждом открытии/загрузке списка.
-  const gridRef = useStaggerReveal<HTMLDivElement>([open, loading, items.length > 0], { y: 10, stagger: 0.05, dur: 0.32, selector: "[data-trial-card]" });
+  const reduceMotion = useReducedMotion();
 
-  // Открытие модалки: scale + fade через gsap.
-  useEffect(() => {
-    const el = contentRef.current;
-    if (!el || !open || reducedMotion()) return;
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        el,
-        { scale: 0.96, opacity: 0 },
-        { scale: 1, opacity: 1, duration: 0.25, ease: EASE_OUT, overwrite: "auto" },
-      );
-    }, el);
-    return () => ctx.revert();
-  }, [open]);
+  const listVariants: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
+  const cardVariants: Variants = {
+    hidden: { opacity: 0, y: 10 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: "easeOut" } },
+  };
 
-  // Закрытие: короткий scale-out перед onOpenChange(false) — иначе Radix сносит узел мгновенно.
   const requestClose = () => {
     const el = contentRef.current;
-    if (!el || reducedMotion()) { onOpenChange(false); return; }
-    gsap.fromTo(
-      el,
-      { scale: 1, opacity: 1 },
-      {
-        scale: 0.96, opacity: 0, duration: 0.15, ease: "power2.in", overwrite: "auto",
-        onComplete: () => { gsap.set(el, { clearProps: "all" }); onOpenChange(false); },
-      },
-    );
+    if (!el || reduceMotion) { onOpenChange(false); return; }
+    animate(el, { opacity: 0, scale: 0.96 }, { duration: 0.15, ease: "easeIn", onComplete: () => onOpenChange(false) });
   };
 
   useEffect(() => {
@@ -123,6 +105,12 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) requestClose(); else onOpenChange(true); }}>
       <DialogContent ref={contentRef} className="max-w-2xl p-0 gap-0 overflow-hidden border-border/50 bg-card/95 backdrop-blur-xl [&>button]:z-20">
+        <motion.div
+          initial={reduceMotion ? false : { opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+          className="relative"
+        >
         {/* Декоративные blur-блобы — pointer-events-none чтобы не перекрывали крестик закрытия. */}
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-48 h-48 rounded-full bg-emerald-500/15 blur-[80px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-40 h-40 rounded-full bg-violet-500/15 blur-[80px] pointer-events-none" />
@@ -164,7 +152,7 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
             )}
 
             {!loading && !error && items.length > 0 && (
-              <div ref={gridRef} className="grid gap-3">
+              <motion.div initial="hidden" animate="show" variants={listVariants} className="grid gap-3">
                   {items.map((trial, idx) => {
                     const isActivating = activatingId === trial.id;
                     const isDisabled = activatingId !== null && !isActivating;
@@ -173,9 +161,9 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
                     const traffic = formatTrafficLabel(trial.trafficLimitBytes);
                     const devices = trial.deviceLimit ?? trial.includedDevices ?? null;
                     return (
-                      <div
+                      <motion.div
                         key={trial.id}
-                        data-trial-card
+                        variants={cardVariants}
                         className={`relative overflow-hidden rounded-2xl border ${gradient} p-5 transition-all duration-300 ${isDisabled ? "opacity-50" : "hover:scale-[1.015] hover:shadow-xl"}`}
                       >
                         <div className="flex items-start gap-4">
@@ -234,12 +222,13 @@ export function TrialsPickerDialog({ open, token, onOpenChange, onActivated }: T
                             </>
                           )}
                         </Button>
-                      </div>
+                      </motion.div>
                     );
                   })}
-              </div>
+              </motion.div>
             )}
           </div>
+        </motion.div>
       </DialogContent>
     </Dialog>
   );

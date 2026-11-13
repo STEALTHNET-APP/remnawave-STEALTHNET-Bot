@@ -2,12 +2,10 @@
  * Шапка лендинга с навигацией. Не блок — рендерится статически в LandingPage сверху.
  */
 
-import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import gsap from "gsap";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
-import { EASE_OUT, reducedMotion } from "@/lib/gsap-utils";
 import { useUtmCaptureAndBuildLink, useLandingTheme } from "./utils";
 
 interface LandingHeaderProps {
@@ -23,20 +21,6 @@ export function LandingHeader({ serviceName, logoUrl, navItems, loginText, ctaTe
   const { accentTheme } = useLandingTheme();
   const buildLink = useUtmCaptureAndBuildLink();
 
-  const actionsRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = actionsRef.current;
-    if (!el || reducedMotion()) return;
-    const ctx = gsap.context(() => {
-      gsap.fromTo(
-        el,
-        { opacity: 0, x: 8 },
-        { opacity: 1, x: 0, duration: 0.4, ease: EASE_OUT, overwrite: "auto", clearProps: "transform" },
-      );
-    }, el);
-    return () => ctx.revert();
-  }, []);
   const accentBg = accentTheme.ctaBg;
 
   return (
@@ -71,7 +55,12 @@ export function LandingHeader({ serviceName, logoUrl, navItems, loginText, ctaTe
           ))}
         </nav>
 
-        <div ref={actionsRef} className="flex items-center gap-2">
+        <motion.div
+          initial={{ opacity: 0, x: 8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="flex items-center gap-2"
+        >
           <Button asChild variant="ghost" className="hidden h-9 rounded-full px-4 text-sm font-medium text-slate-900 dark:text-slate-100 sm:inline-flex">
             <Link to={buildLink("/cabinet/login")}>{loginText}</Link>
           </Button>
@@ -81,7 +70,7 @@ export function LandingHeader({ serviceName, logoUrl, navItems, loginText, ctaTe
               {ctaText}
             </Link>
           </Button>
-        </div>
+        </motion.div>
       </div>
     </header>
   );

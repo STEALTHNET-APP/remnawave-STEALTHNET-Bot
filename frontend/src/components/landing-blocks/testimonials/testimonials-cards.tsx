@@ -4,7 +4,7 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Quote } from "lucide-react";
-import { useScrollReveal } from "../scroll-reveal";
+import { Reveal } from "../reveal";
 import { txt, arr, SECTION_SCROLL_OFFSET, useLandingTheme } from "../utils";
 import type { LandingApiBlock } from "../types";
 
@@ -26,7 +26,6 @@ export function TestimonialsCards({ block }: { block: LandingApiBlock }) {
   const items = arr<Testimonial>(block.text, "items", DEFAULT_TESTIMONIALS);
   const title = txt(block.text, "title", "Что говорят пользователи");
   const subtitle = txt(block.text, "subtitle");
-  const gridRef = useScrollReveal<HTMLDivElement>([items.length], { y: 14, dur: 0.4, stagger: 0.05 });
 
   return (
     <section className={`max-w-7xl mx-auto px-4 py-16 md:py-24 ${SECTION_SCROLL_OFFSET}`}>
@@ -34,9 +33,9 @@ export function TestimonialsCards({ block }: { block: LandingApiBlock }) {
         <h2 className="text-3xl font-black tracking-[-0.04em] text-slate-950 md:text-4xl dark:text-white">{title}</h2>
         {subtitle ? <p className="mx-auto mt-3 max-w-xl text-base text-slate-600 dark:text-slate-300">{subtitle}</p> : null}
       </div>
-      <div ref={gridRef} className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {items.slice(0, 6).map((it, idx) => (
-          <div key={`${it.author}-${idx}`}>
+          <Reveal key={`${it.author}-${idx}`} y={14} delay={idx * 0.05}>
             <Card className="h-full border-slate-200/70 dark:border-border bg-card dark:bg-card">
               <CardContent className="flex h-full flex-col p-6">
                 <Quote className="h-7 w-7" style={{ color: accentTheme.primary }} />
@@ -59,7 +58,7 @@ export function TestimonialsCards({ block }: { block: LandingApiBlock }) {
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </Reveal>
         ))}
       </div>
     </section>

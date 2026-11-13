@@ -1,23 +1,12 @@
 import { AdminDialogHost } from "@/components/admin/admin-dialog-host";
 import { lazyPage } from "@/lib/lazy-page";
-const CabinetDesignEditorPage = lazyPage(() => import("@/pages/cabinet-design-editor").then(module => ({ default: module.CabinetDesignEditorPage })));
-const CabinetDesignPreviewPage = lazyPage(() => import("@/pages/cabinet-design-preview").then(module => ({ default: module.CabinetDesignPreviewPage })));
 import { CabinetDesignRuntime } from "@/components/cabinet-design/runtime";
 import { CabinetConfigProvider } from "@/contexts/cabinet-config";
-import { ClientHistoryPage } from "@/pages/cabinet/client-history";
-import { ClientWalletPage } from "@/pages/cabinet/client-wallet";
-import { ClientHelpPage } from "@/pages/cabinet/client-help";
 import { MaintenanceGate } from "@/components/maintenance-gate";
 import { clientMenuReturnTo } from "@/lib/client-menu-return";
-import { ClientBotMenuPage } from "@/pages/cabinet/client-bot-menu";
 import { needsClientOnboarding } from "@/lib/client-onboarding";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-
-const routerFutureFlags = {
-  v7_startTransition: true,
-  v7_relativeSplatPath: true,
-};
 import { AuthProvider, useAuth } from "@/contexts/auth";
 import { ClientAuthProvider, useClientAuth } from "@/contexts/client-auth";
 import { ThemeProvider } from "@/contexts/theme";
@@ -25,6 +14,19 @@ import { AnimatedBackground } from "@/components/animated-background";
 import { PwaUpdatePrompt } from "@/components/pwa/pwa-update-prompt";
 import { LoginPage } from "@/pages/login";
 import { ChangePasswordPage } from "@/pages/change-password";
+import { CmdKPalette } from "@/components/cmd-k-palette";
+import type { PublicConfig } from "@/lib/api";
+import { getPublicConfigCached } from "@/lib/public-config";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/query-client";
+
+const routerFutureFlags = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+};
+
+const CabinetDesignEditorPage = lazyPage(() => import("@/pages/cabinet-design-editor").then(module => ({ default: module.CabinetDesignEditorPage })));
+const CabinetDesignPreviewPage = lazyPage(() => import("@/pages/cabinet-design-preview").then(module => ({ default: module.CabinetDesignPreviewPage })));
 const DashboardPage = lazyPage(() => import("@/pages/dashboard").then(module => ({ default: module.DashboardPage })));
 const ClientsPage = lazyPage(() => import("@/pages/clients").then(module => ({ default: module.ClientsPage })));
 const TariffsPage = lazyPage(() => import("@/pages/tariffs").then(module => ({ default: module.TariffsPage })));
@@ -42,7 +44,6 @@ const AdminAntiFraudPage = lazyPage(() => import("@/pages/admin-anti-fraud").the
 const AdminEmailTemplatesPage = lazyPage(() => import("@/pages/admin-email-templates").then(module => ({ default: module.AdminEmailTemplatesPage })));
 const AdminBotMessagesPage = lazyPage(() => import("@/pages/admin-bot-messages").then(module => ({ default: module.AdminBotMessagesPage })));
 const AdminBotConversationsPage = lazyPage(() => import("@/pages/admin-bot-conversations").then(module => ({ default: module.AdminBotConversationsPage })));
-import { CmdKPalette } from "@/components/cmd-k-palette";
 const PromoPage = lazyPage(() => import("@/pages/promo").then(module => ({ default: module.PromoPage })));
 const PromoCodesPage = lazyPage(() => import("@/pages/promo-codes").then(module => ({ default: module.PromoCodesPage })));
 const RemnaNodesPage = lazyPage(() => import("@/pages/remna-nodes").then(module => ({ default: module.RemnaNodesPage })));
@@ -74,43 +75,48 @@ const ProxyPage = lazyPage(() => import("@/pages/proxy").then(module => ({ defau
 const SingboxPage = lazyPage(() => import("@/pages/singbox").then(module => ({ default: module.SingboxPage })));
 const LanguagesPage = lazyPage(() => import("@/pages/languages"));
 const TourConstructorPage = lazyPage(() => import("@/pages/tour-constructor").then(module => ({ default: module.TourConstructorPage })));
-import { MarketplaceLayout } from "@/pages/marketplace/marketplace-layout";
-import { MarketplaceBrowsePage } from "@/pages/marketplace/marketplace-browse";
-import { MarketplaceMyListingsPage } from "@/pages/marketplace/marketplace-my";
-import { MarketplaceEditListingPage } from "@/pages/marketplace/marketplace-edit";
-import { MarketplaceHubInstallationsPage } from "@/pages/marketplace/marketplace-hub-installations";
-import { MarketplaceHubReportsPage } from "@/pages/marketplace/marketplace-hub-reports";
-import { MarketplaceHubCategoriesPage } from "@/pages/marketplace/marketplace-hub-categories";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { CabinetLayout } from "@/pages/cabinet/cabinet-layout";
-import { ClientLoginPage } from "@/pages/cabinet/client-login";
-import { ClientRegisterPage } from "@/pages/cabinet/client-register";
-import { ClientForgotPasswordPage } from "@/pages/cabinet/client-forgot-password";
-import { ClientResetPasswordPage } from "@/pages/cabinet/client-reset-password";
-import { ClientPaymentWaitPage } from "@/pages/cabinet/client-payment-wait";
-import { ClientOnboardingPage } from "@/pages/cabinet/client-onboarding";
-import { ClientVerifyEmailPage } from "@/pages/cabinet/client-verify-email";
-import { ClientVerifyLinkEmailPage } from "@/pages/cabinet/client-verify-link-email";
-import { ClientDashboardPage } from "@/pages/cabinet/client-dashboard";
-import { ClientTariffsPage } from "@/pages/cabinet/client-tariffs";
-import { ClientProfilePage } from "@/pages/cabinet/client-profile";
-import { ClientReferralPage } from "@/pages/cabinet/client-referral";
-import { ClientSubscribePage } from "@/pages/cabinet/client-subscribe";
-import { ClientYooMoneyPayPage } from "@/pages/cabinet/client-yoomoney-pay";
-import { ClientExtraOptionsPage } from "@/pages/cabinet/client-extra-options";
-import { ClientProxyPage } from "@/pages/cabinet/client-proxy";
-import { ClientSingboxPage } from "@/pages/cabinet/client-singbox";
-import { ClientTicketsPage } from "@/pages/cabinet/client-tickets";
-import { ClientCustomBuildPage } from "@/pages/cabinet/client-custom-build";
-import { ClientGiftsPage } from "@/pages/cabinet/client-gifts";
-import { ClientRoulettePage } from "@/pages/cabinet/client-roulette";
-import { ClientLegalDocsPage } from "@/pages/cabinet/client-legal-docs";
-import { GiftActivatePage } from "@/pages/gift-activate";
-import { LandingPage } from "@/pages/landing";
-import type { PublicConfig } from "@/lib/api";
-import { getPublicConfigCached } from "@/lib/public-config";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "@/lib/query-client";
+
+const MarketplaceLayout = lazyPage(() => import("@/pages/marketplace/marketplace-layout").then(module => ({ default: module.MarketplaceLayout })));
+const MarketplaceBrowsePage = lazyPage(() => import("@/pages/marketplace/marketplace-browse").then(module => ({ default: module.MarketplaceBrowsePage })));
+const MarketplaceMyListingsPage = lazyPage(() => import("@/pages/marketplace/marketplace-my").then(module => ({ default: module.MarketplaceMyListingsPage })));
+const MarketplaceEditListingPage = lazyPage(() => import("@/pages/marketplace/marketplace-edit").then(module => ({ default: module.MarketplaceEditListingPage })));
+const MarketplaceHubInstallationsPage = lazyPage(() => import("@/pages/marketplace/marketplace-hub-installations").then(module => ({ default: module.MarketplaceHubInstallationsPage })));
+const MarketplaceHubReportsPage = lazyPage(() => import("@/pages/marketplace/marketplace-hub-reports").then(module => ({ default: module.MarketplaceHubReportsPage })));
+const MarketplaceHubCategoriesPage = lazyPage(() => import("@/pages/marketplace/marketplace-hub-categories").then(module => ({ default: module.MarketplaceHubCategoriesPage })));
+
+const DashboardLayout = lazyPage(() => import("@/components/layout/dashboard-layout").then(module => ({ default: module.DashboardLayout })));
+const CabinetLayout = lazyPage(() => import("@/pages/cabinet/cabinet-layout").then(module => ({ default: module.CabinetLayout })));
+
+const ClientLoginPage = lazyPage(() => import("@/pages/cabinet/client-login").then(module => ({ default: module.ClientLoginPage })));
+const ClientRegisterPage = lazyPage(() => import("@/pages/cabinet/client-register").then(module => ({ default: module.ClientRegisterPage })));
+const ClientForgotPasswordPage = lazyPage(() => import("@/pages/cabinet/client-forgot-password").then(module => ({ default: module.ClientForgotPasswordPage })));
+const ClientResetPasswordPage = lazyPage(() => import("@/pages/cabinet/client-reset-password").then(module => ({ default: module.ClientResetPasswordPage })));
+const ClientPaymentWaitPage = lazyPage(() => import("@/pages/cabinet/client-payment-wait").then(module => ({ default: module.ClientPaymentWaitPage })));
+const ClientOnboardingPage = lazyPage(() => import("@/pages/cabinet/client-onboarding").then(module => ({ default: module.ClientOnboardingPage })));
+const ClientVerifyEmailPage = lazyPage(() => import("@/pages/cabinet/client-verify-email").then(module => ({ default: module.ClientVerifyEmailPage })));
+const ClientVerifyLinkEmailPage = lazyPage(() => import("@/pages/cabinet/client-verify-link-email").then(module => ({ default: module.ClientVerifyLinkEmailPage })));
+const ClientDashboardPage = lazyPage(() => import("@/pages/cabinet/client-dashboard").then(module => ({ default: module.ClientDashboardPage })));
+const ClientTariffsPage = lazyPage(() => import("@/pages/cabinet/client-tariffs").then(module => ({ default: module.ClientTariffsPage })));
+const ClientProfilePage = lazyPage(() => import("@/pages/cabinet/client-profile").then(module => ({ default: module.ClientProfilePage })));
+const ClientReferralPage = lazyPage(() => import("@/pages/cabinet/client-referral").then(module => ({ default: module.ClientReferralPage })));
+const ClientSubscribePage = lazyPage(() => import("@/pages/cabinet/client-subscribe").then(module => ({ default: module.ClientSubscribePage })));
+const ClientYooMoneyPayPage = lazyPage(() => import("@/pages/cabinet/client-yoomoney-pay").then(module => ({ default: module.ClientYooMoneyPayPage })));
+const ClientExtraOptionsPage = lazyPage(() => import("@/pages/cabinet/client-extra-options").then(module => ({ default: module.ClientExtraOptionsPage })));
+const ClientProxyPage = lazyPage(() => import("@/pages/cabinet/client-proxy").then(module => ({ default: module.ClientProxyPage })));
+const ClientSingboxPage = lazyPage(() => import("@/pages/cabinet/client-singbox").then(module => ({ default: module.ClientSingboxPage })));
+const ClientTicketsPage = lazyPage(() => import("@/pages/cabinet/client-tickets").then(module => ({ default: module.ClientTicketsPage })));
+const ClientCustomBuildPage = lazyPage(() => import("@/pages/cabinet/client-custom-build").then(module => ({ default: module.ClientCustomBuildPage })));
+const ClientGiftsPage = lazyPage(() => import("@/pages/cabinet/client-gifts").then(module => ({ default: module.ClientGiftsPage })));
+const ClientRoulettePage = lazyPage(() => import("@/pages/cabinet/client-roulette").then(module => ({ default: module.ClientRoulettePage })));
+const ClientLegalDocsPage = lazyPage(() => import("@/pages/cabinet/client-legal-docs").then(module => ({ default: module.ClientLegalDocsPage })));
+const ClientHistoryPage = lazyPage(() => import("@/pages/cabinet/client-history").then(module => ({ default: module.ClientHistoryPage })));
+const ClientWalletPage = lazyPage(() => import("@/pages/cabinet/client-wallet").then(module => ({ default: module.ClientWalletPage })));
+const ClientHelpPage = lazyPage(() => import("@/pages/cabinet/client-help").then(module => ({ default: module.ClientHelpPage })));
+const ClientBotMenuPage = lazyPage(() => import("@/pages/cabinet/client-bot-menu").then(module => ({ default: module.ClientBotMenuPage })));
+
+const GiftActivatePage = lazyPage(() => import("@/pages/gift-activate").then(module => ({ default: module.GiftActivatePage })));
+const loadLandingPage = () => import("@/pages/landing").then(module => ({ default: module.LandingPage }));
+const LandingPage = lazyPage(loadLandingPage);
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { state } = useAuth();
@@ -192,7 +198,10 @@ function RootRoute() {
     // LandingPage перезагрузит контент внутри себя (старое поведение, редкий кейс).
     // Module-level promise: StrictMode (mount→cleanup→mount) не порождает второй fetch.
     getPublicConfigCached()
-      .then((c) => { if (alive) setConfig(c); })
+      .then((c) => {
+        if (c.landingEnabled) void loadLandingPage();
+        if (alive) setConfig(c);
+      })
       .catch(() => { if (alive) setConfig(null); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };

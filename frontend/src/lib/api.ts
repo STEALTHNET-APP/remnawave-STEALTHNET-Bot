@@ -436,10 +436,6 @@ export const api = {
     return request("/admin/server/ssh", { method: "PATCH", body: JSON.stringify(data), token });
   },
 
-  async testNalogConnection(token: string): Promise<{ ok: boolean; error?: string; inn?: string }> {
-    return request("/admin/nalog/test", { method: "POST", token });
-  },
-
   async getAutoRenewStats(token: string): Promise<AutoRenewStats> {
     return request("/admin/auto-renew/stats", { token });
   },
@@ -1131,6 +1127,14 @@ export const api = {
 
   async getSettings(token: string): Promise<AdminSettings> {
     return request("/admin/settings", { token });
+  },
+
+  async getGroqModels(token: string, apiKey?: string): Promise<{ models: string[] }> {
+    return request("/admin/settings/groq-models", {
+      method: "POST",
+      body: JSON.stringify({ apiKey: apiKey || undefined }),
+      token,
+    });
   },
 
   async getReferralNetwork(token: string): Promise<{
@@ -3962,11 +3966,6 @@ export type UpdateSettingsPayload = {
   proxyTelegram?: boolean;
   proxyPayments?: boolean;
   proxyAi?: boolean;
-  nalogEnabled?: boolean;
-  nalogInn?: string | null;
-  nalogPassword?: string | null;
-  nalogDeviceId?: string | null;
-  nalogServiceName?: string | null;
   giftSubscriptionsEnabled?: boolean;
   giftCodeExpiryHours?: number;
   maxAdditionalSubscriptions?: number;
@@ -4543,11 +4542,6 @@ export interface AdminSettings {
   proxyTelegram?: boolean;
   proxyPayments?: boolean;
   proxyAi?: boolean;
-  nalogEnabled?: boolean;
-  nalogInn?: string | null;
-  nalogPassword?: string | null;
-  nalogDeviceId?: string | null;
-  nalogServiceName?: string | null;
   giftSubscriptionsEnabled?: boolean;
   giftCodeExpiryHours?: number;
   maxAdditionalSubscriptions?: number;

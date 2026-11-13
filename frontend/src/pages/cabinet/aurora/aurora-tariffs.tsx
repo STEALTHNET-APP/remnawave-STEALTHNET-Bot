@@ -1,378 +1,127 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { Wallet, Bitcoin, Check, Gift, Loader2, RefreshCw, ArrowRight, Tag } from "lucide-react";
+import { Wallet, Check, Gift, Loader2, RefreshCw, ArrowRight, Tag } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
-import { api, type PublicTariff, type PublicTariffCategory, type PublicConfig, type TariffConversionPreview } from "@/lib/api";
+import type { PublicTariffCategory } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { AuroraSheet } from "@/components/aurora/aurora-sheet";
 import { AuroraTrialsSheet } from "@/components/aurora/aurora-trials-sheet";
 import { AuButton, AuNotice } from "@/components/aurora/aurora-ui";
-import { openPaymentInBrowser, getTelegramWebApp } from "@/lib/open-payment-url";
-import { AuroraTariffCard, auroraPrice, auroraPeriodLabel, auroraTraffic, auroraDevices } from "./aurora-tariff-card";
+import { AuroraTariffCard, auroraPeriodLabel, auroraTraffic, auroraDevices } from "./aurora-tariff-card";
+import { formatMoney, formatMoneyPerDay, useCabinetTariffPurchase } from "../use-cabinet-tariff-purchase";
 
-interface PriceOption {
-  id: string;
-  durationDays: number;
-  price: number;
-}
-
-type TariffLite = PublicTariff;
-
-type PayMethod =
-  | { kind: "platega"; id: number; label: string; icon: typeof Wallet }
-  | { kind: "yookassa"; label: string; icon: typeof Wallet }
-  | { kind: "yoomoney"; label: string; icon: typeof Wallet }
-  | { kind: "telegram_stars"; label: string; icon: typeof Bitcoin }
-  | { kind: "cryptopay"; label: string; icon: typeof Bitcoin }
-  | { kind: "heleket"; label: string; icon: typeof Bitcoin }
-  | { kind: "rollypay"; label: string; icon: typeof Wallet }
-  | { kind: "cispay"; label: string; icon: typeof Wallet }
-  | { kind: "paritypay"; label: string; icon: typeof Wallet }
-  | { kind: "cloudpayments"; label: string; icon: typeof Wallet }
-  | { kind: "lava"; label: string; icon: typeof Wallet }
-  | { kind: "overpay"; label: string; icon: typeof Wallet }
-  | { kind: "lavatop"; label: string; icon: typeof Wallet }
-  | { kind: "balance"; label: string; icon: typeof Wallet };
-
-const fmtPrice = auroraPrice;
-
-function fmtPricePerDay(n: number, currency: string) {
-  return new Intl.NumberFormat("ru-RU", { style: "currency", currency: currency.toUpperCase(), minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-}
+const fmtPrice = (amount: number, currency: string) => formatMoney(amount, currency, "aurora");
+const fmtPricePerDay = (amount: number, currency: string) => formatMoneyPerDay(amount, currency, "aurora");
 
 export function AuroraTariffs() {
   const { t, i18n } = useTranslation();
   const { state, refreshProfile } = useClientAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  const extendParam = searchParams.get("extend");
   const [trialsSheetOpen, setTrialsSheetOpen] = useState(false);
-  const trialsQuery = useQuery({
-    queryKey: ["aurora", "trials-available", state.token],
-    queryFn: () => api.getClientAvailableTrials(state.token!),
-    enabled: !!state.token,
-  });
-  const availableTrials = trialsQuery.data?.items ?? [];
-  const hasTrials = availableTrials.length > 0;
-  const [extendTarget, setExtendTarget] = useState<{ id: string; label: string; tariffId: string | null; isTrial: boolean; trialName: string | null; convertTariffIds: string[]; trialConvertAllTariffs: boolean; extraDevices: number; extraDevicesMonthlyPrice: number } | null>(null);
-  const [trialConversionBlocked, setTrialConversionBlocked] = useState(false);
-  const [extKeepExtras, setExtKeepExtras] = useState(true);
-
-  const [categories, setCategories] = useState<PublicTariffCategory[]>([]);
-  const [config, setConfig] = useState<PublicConfig | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
-  const [selectedTariffId, setSelectedTariffId] = useState<string | null>(null);
-  const [selectedPriceOptionId, setSelectedPriceOptionId] = useState<string | null>(null);
-
-  const promoLocation = useLocation();
-  const [promoInput, setPromoInput] = useState(() => typeof promoLocation.state?.promoCode === "string" ? promoLocation.state.promoCode : "");
-  const [promoApplied, setPromoApplied] = useState<string | null>(null);
-  const [promoInfo, setPromoInfo] = useState<{ percent: number; fixed: number; name: string } | null>(null);
-  const [promoMsg, setPromoMsg] = useState<string | null>(null);
-  const [promoBusy, setPromoBusy] = useState(false);
-  const [extraDevices, setExtraDevices] = useState(0);
-
-  const [selectedMethod, setSelectedMethod] = useState<PayMethod | null>(null);
-  const [paying, setPaying] = useState(false);
-  const [payError, setPayError] = useState<string | null>(null);
-  const [convPreview, setConvPreview] = useState<TariffConversionPreview | null>(null);
-  const [convKeepExtras, setConvKeepExtras] = useState(true);
-  const [previewKey, setPreviewKey] = useState<string | null>(null);
-  const [previewError, setPreviewError] = useState(false);
-  const [previewRetry, setPreviewRetry] = useState(0);
-  const [balConfirm, setBalConfirm] = useState<{ title: string; body: string } | null>(null);
   const [paySheet, setPaySheet] = useState(false);
+  const [balConfirm, setBalConfirm] = useState<{ title: string; body: string } | null>(null);
+
+  const {
+    config,
+    categories,
+    displayCategories,
+    selectedTariff: currentTariff,
+    loading,
+    selectedCatId,
+    setSelectedCatId,
+    selectedTariffId,
+    setSelectedTariffId,
+    setSelectedPriceOptionId,
+    extraDevices,
+    setExtraDevices,
+    days,
+    basePrice,
+    extrasTotal,
+    extendExtrasCost,
+    keepExtrasCost,
+    convExtendExtrasCost,
+    promoDiscount,
+    finalPrice,
+    pricePerDay,
+    currency,
+    balance,
+    canPayWithBalance: canPayByBalance,
+    availableMethods,
+    selectedMethod,
+    setSelectedMethod,
+    paying,
+    payError,
+    setPayError,
+    doPay,
+    prepareBalancePayment,
+    mySubs,
+    refreshSubscriptions,
+    extendTarget,
+    extKeepExtras,
+    setExtKeepExtras,
+    trialConversionBlocked,
+    hasTrials,
+    refetchTrials,
+    ownedTrials,
+    activeTrial,
+    checkoutTrial,
+    checkoutIsTrial,
+    checkoutTrialName,
+    checkoutTariffName,
+    duplicateSubscription,
+    replaceTrialChoice,
+    setReplaceTrialChoice,
+    convPreview,
+    convKeepExtras,
+    setConvKeepExtras,
+    previewReady,
+    previewError,
+    retryPreview,
+    setPreviewEnabled,
+    promoInput,
+    setPromoInput,
+    promoApplied,
+    promoMsg,
+    setPromoMsg,
+    promoBusy,
+    applyPromo,
+    clearPromo,
+  } = useCabinetTariffPurchase({
+    subLabel: (index) => t("aurora.subscription_index", { index }),
+    autoSelectFirst: true,
+    autoSelectExtended: "withTrialConversion",
+    extras: true,
+    resetExtrasOnSelection: true,
+    promoDiscount: "plan",
+    promoAppliedMessage: t("aurora.promo_applied"),
+    promoInvalidMessage: t("aurora.promo_invalid"),
+    additional: "multiSubscriptions",
+    deviceCount: "positive",
+    trialReplacement: "convertible",
+    trialConversionGuard: true,
+    preview: "manual",
+    previewReplaceTrialSubId: true,
+    requirePreview: true,
+    trialBadgeLabel: t("aurora.trial_badge"),
+    tariffFallbackLabel: t("aurora.checkout_tariff_fallback"),
+    extraProviders: ["lavatop", "overpay"],
+    providerLabels: { yookassa: t("aurora.payment_card_sbp") },
+    payErrorMessage: t("aurora.pay_error"),
+  });
 
   useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    Promise.all([
-      api.getPublicTariffs().catch(() => ({ items: [] as PublicTariffCategory[] })),
-      api.getPublicConfig().catch(() => null),
-    ]).then(([t, c]) => {
-      if (!alive) return;
-      const cats = (t.items ?? []).filter((cat) => cat.tariffs.length > 0);
-      setCategories(cats);
-      setConfig(c);
-      if (cats.length > 0) {
-        setSelectedCatId(cats[0].id);
-        const firstTariff = cats[0].tariffs[0];
-        if (firstTariff) {
-          setSelectedTariffId(firstTariff.id);
-          const opts = (firstTariff as TariffLite).priceOptions ?? [];
-          if (opts.length > 0) {
-            const def = opts.find((o) => o.durationDays === 30) ?? opts[0];
-            setSelectedPriceOptionId(def.id);
-          }
-        }
-      }
-    }).finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
-  }, []);
-
-  const [mySubs, setMySubs] = useState<{ id: string; label: string; tariffId: string | null; expireAt: string | null; isTrial: boolean; trialName: string | null; trialConvertEnabled: boolean }[]>([]);
-  const [replaceTrialChoice, setReplaceTrialChoice] = useState<string | null>(null);
-  const activeTrial = mySubs.find((sub) => sub.isTrial && sub.trialConvertEnabled && (!sub.expireAt || Date.parse(sub.expireAt) > Date.now())) ?? null;
-  const checkoutTrial = (replaceTrialChoice ? mySubs.find((sub) => sub.id === replaceTrialChoice) : null) ?? activeTrial;
-  const selectedTrialSubId = extendTarget?.id ?? replaceTrialChoice ?? activeTrial?.id ?? undefined;
-  const checkoutIsTrial = extendTarget?.isTrial === true
-    || convPreview?.subscription?.isTrial === true
-    || convPreview?.subscription?.trialId != null
-    || (!extendTarget && checkoutTrial != null);
-
-  const loadMySubs = useCallback(async () => {
-    if (!state.token) {
-      setExtendTarget(null);
-      setMySubs([]);
-      setTrialConversionBlocked(false);
-      return;
-    }
-    try {
-      const r = await api.clientAllSubscriptions(state.token);
-      const items = r.items ?? [];
-      setMySubs(items.map((it) => {
-        const raw = it.subscription as Record<string, unknown> | null;
-        const payload = (raw && typeof raw === "object" && raw.response && typeof raw.response === "object")
-          ? (raw.response as Record<string, unknown>)
-          : raw;
-        return {
-          id: it.id,
-          label: it.tariffDisplayName?.trim() || t("aurora.subscription_index", { index: it.subscriptionIndex ?? 0 }),
-          tariffId: it.tariffId ?? null,
-          expireAt: payload && typeof payload.expireAt === "string" ? payload.expireAt : null,
-          isTrial: Boolean(it.trialId),
-          trialName: it.trialName ?? null,
-          trialConvertEnabled: it.trialConvertEnabled !== false,
-        };
-      }));
-      if (!extendParam) {
-        setExtendTarget(null);
-        setTrialConversionBlocked(false);
-        return;
-      }
-      const it = items.find((s) => s.id === extendParam);
-      if (!it) {
-        setExtendTarget(null);
-        setTrialConversionBlocked(false);
-        return;
-      }
-      if (it.trialId && it.trialConvertEnabled === false) {
-        setExtendTarget(null);
-        setTrialConversionBlocked(true);
-        return;
-      }
-      const idx = it.subscriptionIndex ?? 0;
-      setExtendTarget({
-        id: it.id,
-        label: it.tariffDisplayName?.trim() || t("aurora.subscription_index", { index: idx }),
-        tariffId: it.tariffId ?? null,
-        isTrial: Boolean(it.trialId),
-        trialName: it.trialName ?? null,
-        convertTariffIds: it.convertTariffIds ?? [],
-        trialConvertAllTariffs: it.trialConvertAllTariffs ?? false,
-        extraDevices: it.extraDevices ?? 0,
-        extraDevicesMonthlyPrice: it.extraDevicesMonthlyPrice ?? 0,
-      });
-      setTrialConversionBlocked(false);
-      setExtKeepExtras(true);
-    } catch {
-      setExtendTarget(null);
-      setMySubs([]);
-      setTrialConversionBlocked(false);
-    }
-  }, [extendParam, state.token, t]);
-
-  useEffect(() => {
-    void loadMySubs();
-  }, [loadMySubs]);
-
-  const displayCategories = useMemo(() => {
-    if (!extendTarget) return categories;
-    if (extendTarget.isTrial && extendTarget.trialConvertAllTariffs) return categories;
-    const allowed = [
-      ...(extendTarget.tariffId ? [extendTarget.tariffId] : []),
-      ...(extendTarget.isTrial ? extendTarget.convertTariffIds : []),
-    ];
-    if (allowed.length === 0) return categories;
-    const filtered = categories
-      .map((c) => ({ ...c, tariffs: c.tariffs.filter((t) => allowed.includes(t.id)) }))
-      .filter((c) => c.tariffs.length > 0);
-    return filtered.length > 0 ? filtered : categories;
-  }, [categories, extendTarget]);
-
-  useEffect(() => {
-    if (!extendTarget || categories.length === 0) return;
-    const preferredId = extendTarget.tariffId
-      ?? (extendTarget.isTrial && extendTarget.convertTariffIds.length > 0 ? extendTarget.convertTariffIds[0] : null);
-    if (!preferredId) return;
-    const cat = categories.find((c) => c.tariffs.some((t) => t.id === preferredId));
-    const tariff = cat?.tariffs.find((t) => t.id === preferredId) as TariffLite | undefined;
-    if (!cat || !tariff) return;
-    setSelectedCatId(cat.id);
-    setSelectedTariffId(tariff.id);
-    const opts = tariff.priceOptions ?? [];
-    if (opts.length > 0) {
-      const def = opts.find((o) => o.durationDays === 30) ?? opts[0];
-      setSelectedPriceOptionId(def.id);
-    }
-  }, [extendTarget?.tariffId, extendTarget?.isTrial, extendTarget?.convertTariffIds, categories]);
-
-  const currentCat = selectedCatId === "__all"
-    ? { id: "__all", name: t("aurora.all_categories"), emojiKey: null, emoji: "", tariffs: displayCategories.flatMap((category) => category.tariffs) } as PublicTariffCategory
-    : displayCategories.find((c) => c.id === selectedCatId) ?? displayCategories[0];
-  const currentTariff = currentCat?.tariffs.find((t) => t.id === selectedTariffId) as TariffLite | undefined;
-  const checkoutTariffName = currentTariff?.name ?? t("aurora.checkout_tariff_fallback");
-  const checkoutTrialName = extendTarget?.trialName
-    || convPreview?.subscription?.trialName
-    || checkoutTrial?.trialName
-    || extendTarget?.label
-    || checkoutTrial?.label
-    || convPreview?.subscription?.tariffName
-    || t("aurora.trial_badge");
-  const priceOptions: PriceOption[] = currentTariff?.priceOptions ?? [];
-  const currentOption = priceOptions.find((o) => o.id === selectedPriceOptionId);
-  const basePrice = currentOption?.price ?? currentTariff?.price ?? 0;
-  const days = currentOption?.durationDays ?? currentTariff?.durationDays ?? 30;
-  const extendExtrasCost = extendTarget && extKeepExtras && extendTarget.extraDevices > 0
-    ? Math.round(extendTarget.extraDevicesMonthlyPrice * (Math.max(1, days) / 30))
-    : 0;
-  const convExtendExtrasCost = !extendTarget && convPreview?.mode === "extend" && convKeepExtras && (convPreview.extras?.extraDevices ?? 0) > 0
-    ? Math.round((convPreview.extras?.extraDevicesMonthlyPrice ?? 0) * (Math.max(1, days) / 30))
-    : 0;
-  const extrasCost = (() => {
-    if (extendTarget || !currentTariff || extraDevices <= 0) return 0;
-    const perDevice = currentTariff.pricePerExtraDevice ?? 0;
-    if (perDevice <= 0) return 0;
-    const tiers = [...(currentTariff.deviceDiscountTiers ?? [])].sort((a, b) => b.minExtraDevices - a.minExtraDevices);
-    const tier = tiers.find((t) => extraDevices >= t.minExtraDevices);
-    const percent = tier?.discountPercent ?? 0;
-    const monthly = (perDevice * extraDevices * (100 - percent)) / 100;
-    return Math.round(monthly * (Math.max(1, days) / 30) * 100) / 100;
-  })();
-  const promoDiscount = (() => {
-    if (!promoInfo) return 0;
-    const gross = basePrice + extrasCost;
-    const raw = promoInfo.percent > 0 ? (gross * promoInfo.percent) / 100 : promoInfo.fixed;
-    return Math.min(gross, Math.max(0, Math.round(raw * 100) / 100));
-  })();
-  const totalPrice = Math.max(0, basePrice + extrasCost + extendExtrasCost + convExtendExtrasCost - promoDiscount);
-  const pricePerDay = days > 0 ? totalPrice / days : 0;
-  const currency = currentTariff?.currency ?? "rub";
-  const requestedPreviewKey = `${selectedTariffId}:${selectedPriceOptionId ?? "base"}`;
-  const previewReady = !!extendTarget || (previewKey === requestedPreviewKey && !previewError);
-
-  const availableMethods: PayMethod[] = useMemo(() => {
-    if (!config) return [];
-    const list: PayMethod[] = [];
-    const labels = new Map((config.paymentProviders ?? []).map((p) => [p.id, p.label]));
-    const labelFor = (id: string, fallbackLabel: string) => labels.get(id)?.trim() || fallbackLabel;
-    (config.plategaMethods ?? []).forEach((m) => {
-      const id = `platega_${m.id}`;
-      list.push({ kind: "platega", id: m.id, label: labelFor(id, m.label), icon: Wallet });
-    });
-    if (config.yookassaEnabled) list.push({ kind: "yookassa", label: labelFor("yookassa", t("aurora.payment_card_sbp")), icon: Wallet });
-    if (config.yoomoneyEnabled) list.push({ kind: "yoomoney", label: labelFor("yoomoney", "YooMoney"), icon: Wallet });
-    if (config.telegramStarsEnabled && currency.toUpperCase() === "RUB") list.push({ kind: "telegram_stars", label: labelFor("telegram_stars", "⭐ Telegram Stars"), icon: Wallet });
-    if (config.cryptopayEnabled) list.push({ kind: "cryptopay", label: labelFor("cryptopay", "Crypto Pay"), icon: Bitcoin });
-    if (config.heleketEnabled) list.push({ kind: "heleket", label: labelFor("heleket", "Heleket"), icon: Bitcoin });
-    if ((config as { rollypayEnabled?: boolean }).rollypayEnabled) list.push({ kind: "rollypay", label: labelFor("rollypay", "RollyPay"), icon: Wallet });
-    if ((config as { cispayEnabled?: boolean }).cispayEnabled) list.push({ kind: "cispay", label: labelFor("cispay", "CisPay"), icon: Wallet });
-    if ((config as { cloudpaymentsEnabled?: boolean }).cloudpaymentsEnabled) list.push({ kind: "cloudpayments", label: labelFor("cloudpayments", "CloudPayments"), icon: Wallet });
-    if ((config as { paritypayEnabled?: boolean }).paritypayEnabled) list.push({ kind: "paritypay", label: labelFor("paritypay", "ParityPay"), icon: Wallet });
-    if (config.lavaEnabled) list.push({ kind: "lava", label: labelFor("lava", "Lava"), icon: Wallet });
-    if (config.lavatopEnabled) list.push({ kind: "lavatop", label: labelFor("lavatop", "Lava.top"), icon: Wallet });
-    if (config.overpayEnabled) list.push({ kind: "overpay", label: labelFor("overpay", "Overpay"), icon: Wallet });
-    const methodId = (m: PayMethod) => m.kind === "platega" ? `platega_${m.id}` : m.kind;
-    const order = new Map((config.paymentProviders ?? []).map((p, i) => [p.id, p.sortOrder ?? i]));
-    const fallback = new Map(list.map((m, i) => [methodId(m), 100 + i]));
-    return list.sort((a, b) => (order.get(methodId(a)) ?? fallback.get(methodId(a)) ?? 999) - (order.get(methodId(b)) ?? fallback.get(methodId(b)) ?? 999));
-  }, [config, currency, t]);
-
-  useEffect(() => {
-    if (!selectedMethod && availableMethods.length > 0) {
-      setSelectedMethod(availableMethods[0]);
-    }
-  }, [availableMethods, selectedMethod]);
-
-  useEffect(() => {
-    setExtraDevices(0);
-  }, [selectedTariffId, selectedPriceOptionId]);
-
-  useEffect(() => {
-    refreshProfile().catch(() => {});
-  }, []);
-
-  const balance = state.client?.balance ?? 0;
-  const canPayByBalance = balance >= totalPrice && totalPrice > 0;
-
-  useEffect(() => {
-    if (selectedMethod?.kind === "balance" && !canPayByBalance) {
-      setSelectedMethod(availableMethods[0] ?? null);
-    }
-  }, [canPayByBalance]);
-
-  useEffect(() => {
-    if (!paySheet || !state.token || !selectedTariffId) { setConvPreview(null); return; }
-    let alive = true;
-    setConvKeepExtras(true);
-    setPreviewKey(null);
-    setPreviewError(false);
-    setConvPreview(null);
-    api.clientTariffConversionPreview(state.token, {
-      tariffId: selectedTariffId,
-      priceOptionId: selectedPriceOptionId ?? undefined,
-      replaceTrialSubId: selectedTrialSubId,
-    })
-      .then((p) => { if (alive) { setConvPreview(p); setPreviewKey(requestedPreviewKey); } })
-      .catch(() => { if (alive) { setConvPreview(null); setPreviewError(true); } });
-    return () => { alive = false; };
-  }, [state.token, selectedTariffId, selectedPriceOptionId, selectedTrialSubId, paySheet, previewRetry, requestedPreviewKey]);
-
-  async function applyPromo() {
-    if (!state.token || !promoInput.trim()) return;
-    setPromoBusy(true);
-    setPromoMsg(null);
-    try {
-      const res = await api.clientCheckPromoCode(state.token, promoInput.trim());
-      setPromoApplied(promoInput.trim());
-      setPromoInfo({
-        percent: res.discountPercent ?? 0,
-        fixed: res.discountFixed ?? 0,
-        name: res.name ?? "",
-      });
-      setPromoMsg(t("aurora.promo_applied"));
-    } catch (e) {
-      setPromoApplied(null);
-      setPromoInfo(null);
-      setPromoMsg(e instanceof Error ? e.message : t("aurora.promo_invalid"));
-    } finally {
-      setPromoBusy(false);
-    }
-  }
+    setPreviewEnabled(paySheet);
+  }, [paySheet, setPreviewEnabled]);
 
   async function pay() {
     if (!state.token || !selectedTariffId || !selectedMethod || !previewReady) return;
     if (selectedMethod.kind === "balance") {
-      setPaying(true);
-      setPayError(null);
-      const prev = await api.clientTariffConversionPreview(state.token, {
-        tariffId: selectedTariffId,
-        priceOptionId: selectedPriceOptionId ?? undefined,
-        replaceTrialSubId: selectedTrialSubId,
-      }).catch(() => null);
-      setPaying(false);
-      const willReplace = !!(prev && prev.willConvert && (prev.mode !== "extend" || (prev.othersToRemove ?? 0) > 0));
-      const isTrial = extendTarget?.isTrial === true
-        || (!extendTarget && checkoutTrial != null)
-        || prev?.subscription?.isTrial === true
-        || prev?.subscription?.trialId != null;
-      if (willReplace || isTrial) {
+      const info = await prepareBalancePayment(true);
+      if (info && (info.willReplace || info.isTrial)) {
+        const prev = info.preview;
+        const isTrial = info.isTrial;
         const trialName = extendTarget?.trialName
           || prev?.subscription?.trialName
           || checkoutTrial?.trialName
@@ -407,110 +156,6 @@ export function AuroraTariffs() {
       }
     }
     await doPay();
-  }
-
-  async function doPay() {
-    if (!state.token || !selectedTariffId || !selectedMethod || !previewReady) return;
-    setPaying(true);
-    setPayError(null);
-    try {
-      const base = {
-        tariffId: selectedTariffId,
-        tariffPriceOptionId: selectedPriceOptionId ?? undefined,
-        promoCode: promoApplied ?? undefined,
-        ...(extraDevices > 0 && !extendTarget ? { deviceCount: extraDevices } : {}),
-        ...(config?.multiSubscriptionsEnabled !== false && !extendTarget && !convPreview?.willConvert && mySubs.length > 0 ? { asAdditional: true } : {}),
-        ...(extendTarget ? { extendsSecondarySubId: extendTarget.id } : {}),
-        ...(extendTarget && extendTarget.extraDevices > 0 && !extKeepExtras
-          ? { removeExtrasOnActivate: true }
-          : {}),
-        ...(!extendTarget && convPreview?.mode === "extend" && convPreview.subscription
-          ? {
-              extendsSecondarySubId: convPreview.subscription.id,
-              ...(((convPreview.extras?.extraDevices ?? 0) > 0 && !convKeepExtras) ? { removeExtrasOnActivate: true } : {}),
-            }
-          : {}),
-        ...(convPreview?.willConvert && convPreview.mode !== "extend" && (convPreview.extras?.extraDevices ?? 0) > 0 && !convKeepExtras
-          ? { removeExtrasOnActivate: true }
-          : {}),
-        ...(!extendTarget
-          && selectedTrialSubId
-          && (!convPreview?.willConvert || convPreview?.subscription?.isTrial === true || convPreview?.subscription?.trialId != null)
-          ? { replaceTrialSubId: selectedTrialSubId }
-          : {}),
-      };
-      let url: string | null = null;
-      let paymentId: string | null = null;
-      if (selectedMethod.kind === "platega") {
-        const r = await api.clientCreatePlategaPayment(state.token, { ...base, paymentMethod: selectedMethod.id });
-        url = r.paymentUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "yookassa") {
-        const r = await api.yookassaCreatePayment(state.token, base);
-        url = r.confirmationUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "yoomoney") {
-        const r = await api.yoomoneyCreateFormPayment(state.token, { ...base, paymentType: "AC" });
-        url = r.paymentUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "telegram_stars") {
-        const r = await api.starsCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "cryptopay") {
-        const r = await api.cryptopayCreatePayment(state.token, base);
-        url = r.miniAppPayUrl ?? r.webAppPayUrl ?? r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "heleket") {
-        const r = await api.heleketCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "cloudpayments") {
-        const r = await api.cloudpaymentsCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "paritypay") {
-        const r = await api.paritypayCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "rollypay") {
-        const r = await api.rollypayCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "cispay") {
-        const r = await api.cispayCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "lava") {
-        const r = await api.lavaCreatePayment(state.token, base);
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "lavatop") {
-        const r = await api.lavatopCreatePayment(state.token, { ...base, amount: totalPrice, currency });
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "overpay") {
-        const r = await api.overpayCreatePayment(state.token, { ...base, amount: totalPrice, currency });
-        url = r.payUrl;
-        paymentId = r.paymentId;
-      } else if (selectedMethod.kind === "balance") {
-        await api.clientPayByBalance(state.token, base);
-        await refreshProfile();
-        navigate("/cabinet/dashboard?paid=balance");
-        return;
-      }
-      if (url) {
-        openPaymentInBrowser(url);
-        if (paymentId && getTelegramWebApp()) {
-          setPaySheet(false);
-          navigate(`/cabinet/payment-wait?id=${encodeURIComponent(paymentId)}&kind=tariff`, { state: { url, provider: selectedMethod.label } });
-        }
-      }
-    } catch (e) {
-      setPayError(e instanceof Error ? e.message : t("aurora.pay_error"));
-    } finally {
-      setPaying(false);
-    }
   }
 
   if (loading) {
@@ -553,6 +198,10 @@ export function AuroraTariffs() {
       active ? "border-[var(--au-from)]" : "border-transparent",
     );
 
+  const currentCat = selectedCatId === "__all"
+    ? { id: "__all", name: t("aurora.all_categories"), emojiKey: null, emoji: "", tariffs: displayCategories.flatMap((category) => category.tariffs) } as PublicTariffCategory
+    : displayCategories.find((category) => category.id === selectedCatId) ?? displayCategories[0];
+
   const renewalNotice = (<>
     {extendTarget && (
       <motion.section
@@ -583,7 +232,7 @@ export function AuroraTariffs() {
             <button type="button" onClick={() => setExtKeepExtras(true)} className={choiceCls(extKeepExtras)}>
               <p className="text-[13px] font-bold">{t("aurora.renewal_extra_devices", { count: extendTarget.extraDevices })}</p>
               <p className="mt-0.5 text-[12px] text-[var(--au-muted)]">
-                {t("aurora.renewal_keep", { price: fmtPrice(Math.round(extendTarget.extraDevicesMonthlyPrice * (Math.max(1, days) / 30)), currency) })}
+                {t("aurora.renewal_keep", { price: fmtPrice(keepExtrasCost, currency) })}
               </p>
             </button>
             <button type="button" onClick={() => setExtKeepExtras(false)} className={choiceCls(!extKeepExtras)}>
@@ -598,7 +247,7 @@ export function AuroraTariffs() {
 
   const purchaseNotices = (<>
     {!extendTarget && !convPreview?.willConvert && (() => {
-      const trialsOwned = mySubs.filter((s) => s.isTrial);
+      const trialsOwned = ownedTrials;
       if (trialsOwned.length === 0) return null;
       const chosen = replaceTrialChoice ?? trialsOwned[0].id;
       return (
@@ -624,10 +273,7 @@ export function AuroraTariffs() {
     })()}
 
     {!extendTarget && !convPreview?.willConvert && (() => {
-      const matches = selectedTariffId ? mySubs.filter((s) => s.tariffId === selectedTariffId && !s.isTrial) : [];
-      const dup = matches.length > 0
-        ? [...matches].sort((a, b) => (b.expireAt ? Date.parse(b.expireAt) : 0) - (a.expireAt ? Date.parse(a.expireAt) : 0))[0]
-        : null;
+      const dup = duplicateSubscription;
       if (!dup) return null;
       return (
         <section className={noticeCls("accent")}>
@@ -838,13 +484,10 @@ export function AuroraTariffs() {
               onChoose={(chosen, optionId) => {
                 setSelectedTariffId(chosen.id);
                 setSelectedPriceOptionId(optionId ?? null);
-                setConvPreview(null);
-                setPreviewKey(null);
-                setPreviewError(false);
                 setPayError(null);
                 setConvKeepExtras(true);
                 setReplaceTrialChoice(null);
-                setPromoInput(""); setPromoApplied(null); setPromoMsg(null);
+                clearPromo();
                 setPaySheet(true);
               }}
             />)}
@@ -868,7 +511,7 @@ export function AuroraTariffs() {
                 >
                   {paying
                     ? t("aurora.pay_creating")
-                    : t("aurora.balance_confirm_pay", { amount: fmtPrice(totalPrice, currency) })}
+                    : t("aurora.balance_confirm_pay", { amount: fmtPrice(finalPrice, currency) })}
                 </AuButton>
                 <AuButton
                   variant="surface"
@@ -884,7 +527,7 @@ export function AuroraTariffs() {
                 disabled={paying || !selectedMethod || !currentTariff || !previewReady}
                 loading={paying}
               >
-                {paying ? t("aurora.pay_creating") : t("aurora.pay_for", { amount: fmtPrice(totalPrice, currency) })}
+                {paying ? t("aurora.pay_creating") : t("aurora.pay_for", { amount: fmtPrice(finalPrice, currency) })}
               </AuButton>
             )}
           </div>
@@ -897,10 +540,10 @@ export function AuroraTariffs() {
               <p className="mt-2.5 whitespace-pre-line text-[14px] leading-relaxed text-[var(--au-muted)]">{balConfirm.body}</p>
               <div className="mt-4 flex items-center justify-between gap-3 rounded-[16px] bg-[var(--au-bg)] px-4 py-3">
                 <span className="text-[13px] font-semibold text-[var(--au-muted)]">{t("aurora.checkout_total")}</span>
-                <span className="text-[21px] font-extrabold tabular-nums text-[var(--au-ink)]">{fmtPrice(totalPrice, currency)}</span>
+                <span className="text-[21px] font-extrabold tabular-nums text-[var(--au-ink)]">{fmtPrice(finalPrice, currency)}</span>
               </div>
               <p className="mt-3 text-[12.5px] leading-relaxed text-[var(--au-muted)]">
-                {t("aurora.checkout_charge_confirm", { amount: fmtPrice(totalPrice, currency) })}
+                {t("aurora.checkout_charge_confirm", { amount: fmtPrice(finalPrice, currency) })}
               </p>
             </div>
           </div>
@@ -916,7 +559,7 @@ export function AuroraTariffs() {
             </div>
             <div className="shrink-0 text-right">
               <p className="text-[12px] text-[var(--au-muted)]">{t("aurora.checkout_total")}</p>
-              <p className="mt-0.5 text-[24px] font-extrabold tabular-nums text-[var(--au-ink)]">{fmtPrice(totalPrice, currency)}</p>
+              <p className="mt-0.5 text-[24px] font-extrabold tabular-nums text-[var(--au-ink)]">{fmtPrice(finalPrice, currency)}</p>
             </div>
           </div>
 
@@ -929,7 +572,7 @@ export function AuroraTariffs() {
             <div className="flex items-center justify-between gap-3 rounded-[18px] bg-[var(--au-surface)] px-4 py-3">
               <div className="min-w-0">
                 <p className="text-[13.5px] font-semibold">{t("aurora.checkout_extra_devices")}</p>
-                <p className="text-[11.5px] text-[var(--au-muted)]">{extrasCost > 0 ? `+${fmtPrice(extrasCost, currency)}` : t("aurora.checkout_extra_devices_hint")}</p>
+                <p className="text-[11.5px] text-[var(--au-muted)]">{extrasTotal > 0 ? `+${fmtPrice(extrasTotal, currency)}` : t("aurora.checkout_extra_devices_hint")}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" aria-label={t("aurora.checkout_less_devices")} onClick={() => setExtraDevices((value) => Math.max(0, value - 1))} className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--au-bg)] text-[18px] font-bold">−</button>
@@ -941,7 +584,7 @@ export function AuroraTariffs() {
 
           <dl className="au-tariff-checkout-breakdown">
             <div><dt>{t("aurora.checkout_plan_line", { period: auroraPeriodLabel(days, t) })}</dt><dd>{fmtPrice(basePrice, currency)}</dd></div>
-            {extrasCost > 0 && <div><dt>{t("aurora.checkout_extra_line")}</dt><dd>+{fmtPrice(extrasCost, currency)}</dd></div>}
+            {extrasTotal > 0 && <div><dt>{t("aurora.checkout_extra_line")}</dt><dd>+{fmtPrice(extrasTotal, currency)}</dd></div>}
             {promoDiscount > 0 && <div><dt>{t("aurora.checkout_promo_line")}</dt><dd>−{fmtPrice(promoDiscount, currency)}</dd></div>}
             {(extendExtrasCost + convExtendExtrasCost) > 0 && <div><dt>{t("aurora.checkout_saved_line")}</dt><dd>+{fmtPrice(extendExtrasCost + convExtendExtrasCost, currency)}</dd></div>}
           </dl>
@@ -950,7 +593,7 @@ export function AuroraTariffs() {
             {extendTarget ? renewalNotice : previewReady ? purchaseNotices : previewError ? (
               <div role="alert" className="rounded-[18px] bg-[var(--au-surface)] p-4 text-[13px]">
                 <p>{t("aurora.checkout_check_failed")}</p>
-                <button type="button" className="mt-3 min-h-11 rounded-xl bg-[var(--au-bg)] px-4 font-bold" onClick={() => setPreviewRetry((value) => value + 1)}>{t("aurora.checkout_retry")}</button>
+                <button type="button" className="mt-3 min-h-11 rounded-xl bg-[var(--au-bg)] px-4 font-bold" onClick={retryPreview}>{t("aurora.checkout_retry")}</button>
               </div>
             ) : (
               <p role="status" className="flex items-center gap-2 text-[13px] text-[var(--au-muted)]">
@@ -1054,8 +697,8 @@ export function AuroraTariffs() {
         open={trialsSheetOpen}
         onClose={() => setTrialsSheetOpen(false)}
         onActivated={() => {
-          void trialsQuery.refetch();
-          void loadMySubs();
+          void refetchTrials();
+          void refreshSubscriptions();
           void refreshProfile();
         }}
       />

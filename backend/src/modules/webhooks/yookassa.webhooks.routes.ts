@@ -15,7 +15,6 @@ import { createSingboxSlotsByPaymentId } from "../singbox/singbox-slots-activati
 import { applyExtraOptionByPaymentId } from "../extra-options/extra-options.service.js";
 import { distributeReferralRewards } from "../referral/referral.service.js";
 import { notifyBalanceToppedUp, notifyProxySlotsCreated, notifySingboxSlotsCreated } from "../notification/telegram-notify.service.js";
-import { createNalogReceipt } from "../nalog/nalog.service.js";
 import { recordPromoCodeUsageFromPayment } from "../payment/promo-code-usage.util.js";
 import { handlePaymentActivationResult } from "../payment/payment-fulfillment.util.js";
 import { auditPaymentClientBotAlignment } from "../payment/payment-webhook-audit.util.js";
@@ -326,20 +325,6 @@ yookassaWebhooksRouter.post("/yookassa", async (req, res) => {
 
   await distributeReferralRewards(payment.id).catch((e) => {
     console.error("[YooKassa Webhook] Referral distribution error", { paymentId: payment.id, error: e });
-  });
-
-  const tariffForReceipt = payment.tariffId
-    ? await prisma.tariff.findUnique({ where: { id: payment.tariffId }, select: { name: true } }).catch(() => null)
-    : null;
-  const receiptDesc = tariffForReceipt?.name ? `Оплата тарифа «${tariffForReceipt.name}»` : "Пополнение баланса";
-  createNalogReceipt({
-    paymentId: payment.id,
-    amount: payment.amount,
-    currency: payment.currency || "RUB",
-    description: receiptDesc,
-    paidAt: new Date(),
-  }).catch((e) => {
-    console.warn("[YooKassa Webhook] Nalog receipt error (non-critical):", e);
   });
 
   ack(200, fulfillmentError ? "error" : "accepted", fulfillmentError, payment.id);

@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useScrollReveal } from "../scroll-reveal";
+import { Reveal } from "../reveal";
 import { Check, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,8 +33,6 @@ export function TariffsLive({ block }: TariffsLiveProps) {
       .finally(() => setLoading(false));
   }, []);
 
-  const tariffsGridRef = useScrollReveal<HTMLDivElement>([loading, categories?.length], { y: 14, dur: 0.35, stagger: 0.04 });
-
   const title = txt(block.text, "title", "Тарифы");
   const subtitle = txt(block.text, "subtitle", "Выбирай удобный сценарий — без переплат и со свободой смены тарифа.");
   const noTariffsMessage = txt(block.text, "noTariffsMessage", "Скоро тарифы появятся — следи за обновлениями.");
@@ -56,9 +54,9 @@ export function TariffsLive({ block }: TariffsLiveProps) {
           ))}
         </div>
       ) : categories && categories.length > 0 ? (
-        <div ref={tariffsGridRef} className="mt-12 space-y-12">
+        <div className="mt-12 space-y-12">
           {categories.map((cat) => (
-            <div key={cat.id}>
+            <Reveal key={cat.id} y={14} duration={0.35}>
               {cat.name ? <h3 className="mb-5 text-xl font-bold text-slate-950 dark:text-white">{cat.name}</h3> : null}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {cat.tariffs.map((t) => (
@@ -114,7 +112,7 @@ export function TariffsLive({ block }: TariffsLiveProps) {
                   </div>
                 ))}
               </div>
-            </div>
+            </Reveal>
           ))}
         </div>
       ) : (

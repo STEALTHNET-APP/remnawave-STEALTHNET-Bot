@@ -1,5 +1,5 @@
 import { canSafelyApplyUpdate } from "./update-safety";
-import { Component, lazy, Suspense, type ComponentType, type ReactNode } from "react";
+import { Component, lazy, Suspense, type ComponentProps, type ComponentType, type ReactNode } from "react";
 
 const CHUNK_RETRY_KEY = "chunk_retry_timestamp";
 const CHUNK_RETRY_WINDOW_MS = 30_000;
@@ -54,17 +54,17 @@ class PageLoadBoundary extends Component<{ children: ReactNode }, { failed: bool
   }
 }
 
-function withChunkRecovery(load: () => Promise<{ default: ComponentType }>) {
+function withChunkRecovery<C extends ComponentType<any>>(load: () => Promise<{ default: C }>) {
   return () => load().catch((error: unknown) => {
     if (!isChunkLoadError(error)) throw error;
-    if (recoverChunkLoad()) return new Promise<{ default: ComponentType }>(() => {});
+    if (recoverChunkLoad()) return new Promise<{ default: C }>(() => {});
     throw error;
   });
 }
 
-export function lazyPage(load: () => Promise<{ default: ComponentType }>) {
+export function lazyPage<C extends ComponentType<any>>(load: () => Promise<{ default: C }>) {
   const Page = lazy(withChunkRecovery(load));
-  return function DeferredPage() {
-    return <PageLoadBoundary><Suspense fallback={<div role="status" className="p-6 text-sm text-muted-foreground">Открываем раздел…</div>}><Page /></Suspense></PageLoadBoundary>;
+  return function DeferredPage(props: ComponentProps<C>) {
+    return <PageLoadBoundary><Suspense fallback={<div role="status" className="p-6 text-sm text-muted-foreground">Открываем раздел…</div>}><Page {...props} /></Suspense></PageLoadBoundary>;
   };
 }
