@@ -135,9 +135,6 @@ function SubscriptionDbEditor({
   const [customName, setCustomName] = useState(subscription.customName ?? "");
   const [tariffId, setTariffId] = useState(subscription.tariffId ?? "");
   const [remnawaveUuid, setRemnawaveUuid] = useState(subscription.remnawaveUuid ?? "");
-  const [customPrice, setCustomPrice] = useState(
-    subscription.customPrice != null ? String(subscription.customPrice) : "",
-  );
   const [extraDevices, setExtraDevices] = useState(String(subscription.extraDevices ?? 0));
   const [autoRenewEnabled, setAutoRenewEnabled] = useState(subscription.autoRenewEnabled);
 
@@ -145,7 +142,6 @@ function SubscriptionDbEditor({
     setCustomName(subscription.customName ?? "");
     setTariffId(subscription.tariffId ?? "");
     setRemnawaveUuid(subscription.remnawaveUuid ?? "");
-    setCustomPrice(subscription.customPrice != null ? String(subscription.customPrice) : "");
     setExtraDevices(String(subscription.extraDevices ?? 0));
     setAutoRenewEnabled(subscription.autoRenewEnabled);
   }, [
@@ -153,7 +149,6 @@ function SubscriptionDbEditor({
     subscription.customName,
     subscription.tariffId,
     subscription.remnawaveUuid,
-    subscription.customPrice,
     subscription.extraDevices,
     subscription.autoRenewEnabled,
   ]);
@@ -177,11 +172,6 @@ function SubscriptionDbEditor({
 
   async function save() {
     setMsg(null);
-    const price = customPrice.trim() === "" ? null : Number(customPrice);
-    if (price !== null && (!Number.isFinite(price) || price < 0)) {
-      setMsg("Персональная цена должна быть неотрицательным числом");
-      return;
-    }
     const devices = extraDevices.trim() === "" ? 0 : Number(extraDevices);
     if (!Number.isInteger(devices) || devices < 0) {
       setMsg("Дополнительные устройства должны быть целым неотрицательным числом");
@@ -191,7 +181,6 @@ function SubscriptionDbEditor({
       customName: customName.trim() ? customName.trim() : null,
       tariffId: tariffId || null,
       remnawaveUuid: remnawaveUuid.trim() ? remnawaveUuid.trim() : null,
-      customPrice: price,
       extraDevices: devices,
       autoRenewEnabled,
       syncToClient: true,
@@ -223,24 +212,13 @@ function SubscriptionDbEditor({
             ]}
           />
         </div>
-        <div className="space-y-2 sm:col-span-2">
+        <div className="space-y-2">
           <Label>Remnawave UUID</Label>
           <Input
             value={remnawaveUuid}
             onChange={(e) => setRemnawaveUuid(e.target.value)}
             placeholder="—"
             className="font-mono text-xs"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Персональная цена</Label>
-          <Input
-            type="number"
-            min={0}
-            step={0.01}
-            value={customPrice}
-            onChange={(e) => setCustomPrice(e.target.value)}
-            placeholder="—"
           />
         </div>
         <div className="space-y-2">
