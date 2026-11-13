@@ -38,6 +38,18 @@
                   },
                   "type": "external",
                   "svgIconKey": "ExternalLink"
+                },
+                {
+                  "link": "https://apps.apple.com/us/app/stealthnet/id6790923730",
+                  "text": {
+                    "en": "App Store (Global)",
+                    "fa": "اپ استور (جهانی)",
+                    "fr": "App Store (Global)",
+                    "ru": "App Store (Global)",
+                    "zh": "App Store (Global)"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
                 }
               ],
               "svgIconKey": "DownloadIcon",
@@ -116,18 +128,6 @@
               },
               "buttons": [
                 {
-                  "link": "https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973",
-                  "text": {
-                    "en": "App Store (RU)",
-                    "fa": "اپ استور (RU)",
-                    "fr": "App Store (RU)",
-                    "ru": "App Store (RU)",
-                    "zh": "App Store (RU)"
-                  },
-                  "type": "external",
-                  "svgIconKey": "ExternalLink"
-                },
-                {
                   "link": "https://apps.apple.com/us/app/happ-proxy-utility/id6504287215",
                   "text": {
                     "en": "App Store (Global)",
@@ -145,7 +145,7 @@
                 "en": "Open the page in App Store and install the app. Launch it, in the VPN configuration permission window click Allow and enter your passcode.",
                 "fa": "صفحه را در App Store باز کنید و برنامه را نصب کنید. آن را اجرا کنید، در پنجره مجوز پیکربندی VPN روی Allow کلیک کنید و رمز عبور خود را وارد کنید.",
                 "fr": "Ouvre la page de l’App Store et installe l’app. Lance-la ; dans la fenêtre d’autorisation de configuration VPN, appuie sur « Allow » puis entre ton code.",
-                "ru": "Откройте страницу в App Store и установите приложение. Запустите его, в окне разрешения VPN-конфигурации нажмите Allow и введите свой пароль.",
+                "ru": "⚠️ Приложение временно недоступно в российском App Store. Для установки требуется зарубежный Apple ID (например, США). Откройте страницу в App Store и установите приложение. Запустите его, в окне разрешения VPN-конфигурации нажмите Allow и введите свой пароль.",
                 "zh": "在 App Store 打开页面并安装应用。启动应用后，在 VPN 配置权限窗口点击“允许”，并输入您的密码。"
               },
               "svgIconColor": "violet"
@@ -203,6 +203,94 @@
             }
           ],
           "featured": true
+        },
+        {
+          "name": "INCY",
+          "blocks": [
+            {
+              "title": {
+                "en": "App Installation",
+                "fa": "نصب برنامه",
+                "fr": "Installation de l'application",
+                "ru": "Установка приложения",
+                "zh": "应用安装"
+              },
+              "buttons": [
+                {
+                  "link": "https://apps.apple.com/us/app/incy/id6756943388",
+                  "text": {
+                    "en": "App Store (Global)",
+                    "fa": "اپ استور (جهانی)",
+                    "fr": "App Store (Global)",
+                    "ru": "App Store (Global)",
+                    "zh": "App Store (Global)"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                }
+              ],
+              "svgIconKey": "DownloadIcon",
+              "description": {
+                "en": "Open the App Store and install INCY. Launch the app and allow VPN configuration.",
+                "fa": "⚠️ این برنامه در App Store روسیه در دسترس نیست. برای نصب، منطقه Apple ID خود را به ایالات متحده تغییر دهید یا از حساب خارجی استفاده کنید. App Store را باز کنید و INCY را نصب کنید.",
+                "fr": "⚠️ L’application n’est pas disponible sur l’App Store russe. Pour l’installer, changez la région de votre identifiant Apple vers les États-Unis ou utilisez un compte étranger. Ouvrez l’App Store et installez INCY.",
+                "ru": "⚠️ Приложение недоступно в российском App Store. Для установки переключите регион Apple ID на США или используйте зарубежный аккаунт. Откройте App Store и установите INCY.",
+                "zh": "⚠️ 该应用在俄罗斯 App Store 不可用。请将 Apple ID 地区切换到美国或使用海外账号。打开 App Store 并安装 INCY。"
+              },
+              "svgIconColor": "violet"
+            },
+            {
+              "title": {
+                "en": "Add Subscription",
+                "fa": "اضافه کردن اشتراک",
+                "fr": "Ajouter une souscription",
+                "ru": "Добавление подписки",
+                "zh": "添加订阅"
+              },
+              "buttons": [
+                {
+                  "link": "incy://import/{{SUBSCRIPTION_LINK}}",
+                  "text": {
+                    "en": "Add to INCY",
+                    "fa": "افزودن به INCY",
+                    "fr": "Ajouter à INCY",
+                    "ru": "Добавить в INCY",
+                    "zh": "添加到 INCY"
+                  },
+                  "type": "subscriptionLink",
+                  "svgIconKey": "Plus"
+                }
+              ],
+              "svgIconKey": "CloudDownload",
+              "description": {
+                "en": "Click the button below — the app will open and the subscription will be added automatically.",
+                "fa": "روی دکمه زیر کلیک کنید — برنامه باز می‌شود و اشتراک به‌طور خودکار اضافه می‌شود.",
+                "fr": "Cliquez sur le bouton ci-dessous — l’application s’ouvrira et l’abonnement sera ajouté automatiquement.",
+                "ru": "Нажмите кнопку ниже — приложение откроется, и подписка добавится автоматически.",
+                "zh": "点击下方按钮，应用将会打开，并自动添加订阅。"
+              },
+              "svgIconColor": "cyan"
+            },
+            {
+              "title": {
+                "en": "Connect",
+                "fa": "اتصال",
+                "fr": "Connexion",
+                "ru": "Подключение",
+                "zh": "连接"
+              },
+              "buttons": [],
+              "svgIconKey": "Check",
+              "description": {
+                "en": "Turn on the tunnel in INCY and confirm the VPN configuration prompt if it appears.",
+                "fa": "تونل را در INCY روشن کنید و در صورت نمایش درخواست، افزودن پیکربندی VPN را تأیید کنید.",
+                "fr": "Activez le tunnel dans INCY et confirmez l’ajout de la configuration VPN si une invite apparaît.",
+                "ru": "Включите туннель в INCY и подтвердите добавление VPN-конфигурации, если появится запрос.",
+                "zh": "在 INCY 中开启隧道，如有提示请确认添加 VPN 配置。"
+              },
+              "svgIconColor": "green"
+            }
+          ]
         },
         {
           "name": "Stash",
@@ -1067,18 +1155,6 @@
               },
               "buttons": [
                 {
-                  "link": "https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973",
-                  "text": {
-                    "en": "App Store (RU)",
-                    "fa": "اپ استور (RU)",
-                    "fr": "App Store (RU)",
-                    "ru": "App Store (RU)",
-                    "zh": "App Store (RU)"
-                  },
-                  "type": "external",
-                  "svgIconKey": "ExternalLink"
-                },
-                {
                   "link": "https://apps.apple.com/us/app/happ-proxy-utility/id6504287215",
                   "text": {
                     "en": "App Store (Global)",
@@ -1096,7 +1172,7 @@
                 "en": "Choose the version for your device, click the button below and install the app.",
                 "fa": "نسخه مناسب برای دستگاه خود را انتخاب کنید، دکمه زیر را فشار دهید و برنامه را نصب کنید",
                 "fr": "Choisis la version pour ton appareil, clique sur le bouton ci‑dessous et installe l’app.",
-                "ru": "Выберите подходящую версию для вашего устройства, нажмите на кнопку ниже и установите приложение.",
+                "ru": "⚠️ Приложение временно недоступно в российском App Store. Для установки требуется зарубежный Apple ID (например, США). Выберите подходящую версию для вашего устройства, нажмите на кнопку ниже и установите приложение.",
                 "zh": "选择适合您设备的版本，点击下方按钮并安装应用程序。"
               },
               "svgIconColor": "cyan"
@@ -1154,6 +1230,87 @@
             }
           ],
           "featured": true
+        },
+        {
+          "name": "INCY",
+          "blocks": [
+            {
+              "title": {
+                "en": "App Installation",
+                "fa": "نصب برنامه",
+                "fr": "Installation de l'application",
+                "ru": "Установка приложения",
+                "zh": "应用安装"
+              },
+              "buttons": [
+                {
+                  "link": "https://apps.apple.com/us/app/incy/id6756943388",
+                  "text": {
+                    "en": "App Store (Global)",
+                    "fa": "اپ استور (جهانی)",
+                    "fr": "App Store (Global)",
+                    "ru": "App Store (Global)",
+                    "zh": "App Store (Global)"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                },
+                {
+                  "link": "https://github.com/INCY-DEV/incy-platforms/releases",
+                  "text": {
+                    "en": "GitHub / DMG",
+                    "fa": "GitHub / DMG",
+                    "fr": "GitHub / DMG",
+                    "ru": "GitHub / DMG",
+                    "zh": "GitHub / DMG"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                }
+              ],
+              "svgIconKey": "DownloadIcon",
+              "description": {
+                "en": "Install INCY from the App Store or download the DMG from GitHub. Launch the app and allow VPN configuration.",
+                "fa": "INCY را از App Store نصب کنید یا DMG را از GitHub دانلود کنید. برنامه را اجرا کنید و پیکربندی VPN را مجاز کنید.",
+                "fr": "Installez INCY depuis l’App Store ou téléchargez le DMG depuis GitHub. Lancez l’application et autorisez la configuration VPN.",
+                "ru": "Установите INCY из App Store или скачайте DMG с GitHub. Запустите приложение и разрешите VPN-конфигурацию.",
+                "zh": "从 App Store 安装 INCY，或从 GitHub 下载 DMG。启动应用并允许 VPN 配置。"
+              },
+              "svgIconColor": "violet"
+            },
+            {
+              "title": {
+                "en": "Add Subscription",
+                "fa": "اضافه کردن اشتراک",
+                "fr": "Ajouter une souscription",
+                "ru": "Добавление подписки",
+                "zh": "添加订阅"
+              },
+              "buttons": [
+                {
+                  "link": "incy://import/{{SUBSCRIPTION_LINK}}",
+                  "text": {
+                    "en": "Add to INCY",
+                    "fa": "افزودن به INCY",
+                    "fr": "Ajouter à INCY",
+                    "ru": "Добавить в INCY",
+                    "zh": "添加到 INCY"
+                  },
+                  "type": "subscriptionLink",
+                  "svgIconKey": "Plus"
+                }
+              ],
+              "svgIconKey": "CloudDownload",
+              "description": {
+                "en": "Click the button below — the app will open and the subscription will be added automatically.",
+                "fa": "روی دکمه زیر کلیک کنید — برنامه باز می‌شود و اشتراک به‌طور خودکار اضافه می‌شود.",
+                "fr": "Cliquez sur le bouton ci-dessous — l’application s’ouvrira et l’abonnement sera ajouté automatiquement.",
+                "ru": "Нажмите кнопку ниже — приложение откроется, и подписка добавится автоматически.",
+                "zh": "点击下方按钮，应用将会打开，并自动添加订阅。"
+              },
+              "svgIconColor": "cyan"
+            }
+          ]
         },
         {
           "name": "FlClashX",
@@ -1779,6 +1936,87 @@
             }
           ],
           "featured": true
+        },
+        {
+          "name": "INCY",
+          "blocks": [
+            {
+              "title": {
+                "en": "App Installation",
+                "fa": "نصب برنامه",
+                "fr": "Installation de l'application",
+                "ru": "Установка приложения",
+                "zh": "应用安装"
+              },
+              "buttons": [
+                {
+                  "link": "https://play.google.com/store/apps/details?id=io.incy.client",
+                  "text": {
+                    "en": "Google Play",
+                    "fa": "Google Play",
+                    "fr": "Google Play",
+                    "ru": "Google Play",
+                    "zh": "Google Play"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                },
+                {
+                  "link": "https://github.com/INCY-DEV/incy-platforms/releases",
+                  "text": {
+                    "en": "GitHub / APK",
+                    "fa": "GitHub / APK",
+                    "fr": "GitHub / APK",
+                    "ru": "GitHub / APK",
+                    "zh": "GitHub / APK"
+                  },
+                  "type": "external",
+                  "svgIconKey": "ExternalLink"
+                }
+              ],
+              "svgIconKey": "DownloadIcon",
+              "description": {
+                "en": "Install INCY from Google Play or download the APK from GitHub. Launch the app and allow VPN configuration.",
+                "fa": "INCY را از Google Play نصب کنید یا APK را از GitHub دانلود کنید. برنامه را اجرا کنید و اجازه افزودن پیکربندی VPN را بدهید.",
+                "fr": "Installez INCY depuis Google Play ou téléchargez l’APK depuis GitHub. Lancez l’application et autorisez l’ajout de la configuration VPN.",
+                "ru": "Установите INCY из Google Play или скачайте APK с GitHub. Запустите приложение и разрешите добавление VPN-конфигурации.",
+                "zh": "从 Google Play 安装 INCY，或从 GitHub 下载 APK。启动应用并允许添加 VPN 配置。"
+              },
+              "svgIconColor": "violet"
+            },
+            {
+              "title": {
+                "en": "Add Subscription",
+                "fa": "اضافه کردن اشتراک",
+                "fr": "Ajouter une souscription",
+                "ru": "Добавление подписки",
+                "zh": "添加订阅"
+              },
+              "buttons": [
+                {
+                  "link": "incy://import/{{SUBSCRIPTION_LINK}}",
+                  "text": {
+                    "en": "Add to INCY",
+                    "fa": "افزودن به INCY",
+                    "fr": "Ajouter à INCY",
+                    "ru": "Добавить в INCY",
+                    "zh": "添加到 INCY"
+                  },
+                  "type": "subscriptionLink",
+                  "svgIconKey": "Plus"
+                }
+              ],
+              "svgIconKey": "CloudDownload",
+              "description": {
+                "en": "Click the button below — the app will open and the subscription will be added automatically.",
+                "fa": "روی دکمه زیر کلیک کنید — برنامه باز می‌شود و اشتراک به‌طور خودکار اضافه می‌شود.",
+                "fr": "Cliquez sur le bouton ci-dessous — l’application s’ouvrira et l’abonnement sera ajouté automatiquement.",
+                "ru": "Нажмите кнопку ниже — приложение откроется, и подписка добавится автоматически.",
+                "zh": "点击下方按钮，应用将会打开，并自动添加订阅。"
+              },
+              "svgIconColor": "cyan"
+            }
+          ]
         },
         {
           "name": "FlClashX",

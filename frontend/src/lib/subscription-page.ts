@@ -14,6 +14,7 @@ export const DEFAULT_SUBSCRIPTION_PAGE_CONFIG: SubscriptionPageConfig = {
               description: { ru: "Откройте App Store и установите приложение STEALTHNET. Запустите его и разрешите добавление VPN-конфигурации.", en: "Open App Store and install STEALTHNET. Launch the app and allow VPN configuration." },
               buttons: [
                 { link: "https://apps.apple.com/ru/app/stealthnet/id6790923730", text: { ru: "App Store (RU)", en: "App Store (RU)" }, type: "external" },
+                { link: "https://apps.apple.com/us/app/stealthnet/id6790923730", text: { ru: "App Store (Global)", en: "App Store (Global)" }, type: "external" },
                 { link: "stealthnet://add/{{SUBSCRIPTION_LINK}}", text: { ru: "Добавить подписку", en: "Add Subscription" }, type: "subscriptionLink" },
               ],
             },
@@ -29,11 +30,35 @@ export const DEFAULT_SUBSCRIPTION_PAGE_CONFIG: SubscriptionPageConfig = {
           blocks: [
             {
               title: { ru: "Установка приложения", en: "App Installation" },
-              description: { ru: "Откройте App Store и установите приложение. Запустите его и разрешите конфигурацию VPN.", en: "Open App Store, install the app, then allow VPN configuration." },
+              description: { ru: "⚠️ Приложение временно недоступно в российском App Store. Для установки требуется зарубежный Apple ID (например, США). Откройте App Store и установите приложение. Запустите его и разрешите конфигурацию VPN.", en: "Open App Store, install the app, then allow VPN configuration." },
               buttons: [
-                { link: "https://apps.apple.com/us/app/happ-proxy-utility/id6504287215", text: { ru: "App Store", en: "App Store" }, type: "external" },
+                { link: "https://apps.apple.com/us/app/happ-proxy-utility/id6504287215", text: { ru: "App Store (Global)", en: "App Store (Global)" }, type: "external" },
                 { link: "happ://add/{{SUBSCRIPTION_LINK}}", text: { ru: "Добавить подписку", en: "Add Subscription" }, type: "subscriptionLink" },
               ],
+            },
+          ],
+        },
+        {
+          name: "INCY",
+          blocks: [
+            {
+              title: { ru: "Установка приложения", en: "App Installation" },
+              description: { ru: "⚠️ Приложение недоступно в российском App Store. Для установки переключите регион Apple ID на США или используйте зарубежный аккаунт. Откройте App Store и установите INCY.", en: "Open the App Store and install INCY. Launch the app and allow VPN configuration." },
+              buttons: [
+                { link: "https://apps.apple.com/us/app/incy/id6756943388", text: { ru: "App Store (Global)", en: "App Store (Global)" }, type: "external" },
+              ],
+            },
+            {
+              title: { ru: "Добавление подписки", en: "Add Subscription" },
+              description: { ru: "Нажмите кнопку ниже — приложение откроется, и подписка добавится автоматически.", en: "Click the button below — the app will open and the subscription will be added automatically." },
+              buttons: [
+                { link: "incy://import/{{SUBSCRIPTION_LINK}}", text: { ru: "Добавить в INCY", en: "Add to INCY" }, type: "subscriptionLink" },
+              ],
+            },
+            {
+              title: { ru: "Подключение", en: "Connect" },
+              description: { ru: "Включите туннель в INCY и подтвердите добавление VPN-конфигурации, если появится запрос.", en: "Turn on the tunnel in INCY and confirm the VPN configuration prompt if it appears." },
+              buttons: [],
             },
           ],
         },
@@ -76,6 +101,26 @@ export const DEFAULT_SUBSCRIPTION_PAGE_CONFIG: SubscriptionPageConfig = {
           ],
         },
         {
+          name: "INCY",
+          blocks: [
+            {
+              title: { ru: "Установка приложения", en: "App Installation" },
+              description: { ru: "Установите INCY из Google Play или скачайте APK с GitHub. Запустите приложение и разрешите добавление VPN-конфигурации.", en: "Install INCY from Google Play or download the APK from GitHub. Launch the app and allow VPN configuration." },
+              buttons: [
+                { link: "https://play.google.com/store/apps/details?id=io.incy.client", text: { ru: "Google Play", en: "Google Play" }, type: "external" },
+                { link: "https://github.com/INCY-DEV/incy-platforms/releases", text: { ru: "GitHub / APK", en: "GitHub / APK" }, type: "external" },
+              ],
+            },
+            {
+              title: { ru: "Добавление подписки", en: "Add Subscription" },
+              description: { ru: "Нажмите кнопку ниже — приложение откроется, и подписка добавится автоматически.", en: "Click the button below — the app will open and the subscription will be added automatically." },
+              buttons: [
+                { link: "incy://import/{{SUBSCRIPTION_LINK}}", text: { ru: "Добавить в INCY", en: "Add to INCY" }, type: "subscriptionLink" },
+              ],
+            },
+          ],
+        },
+        {
           name: "v2rayNG",
           blocks: [
             {
@@ -109,6 +154,26 @@ export const DEFAULT_SUBSCRIPTION_PAGE_CONFIG: SubscriptionPageConfig = {
               title: { ru: "Подключение", en: "Connect" },
               description: { ru: "Выберите добавленный сервер и нажмите кнопку подключения.", en: "Select the added server and tap connect." },
               buttons: [],
+            },
+          ],
+        },
+        {
+          name: "INCY",
+          blocks: [
+            {
+              title: { ru: "Установка приложения", en: "App Installation" },
+              description: { ru: "Установите INCY из App Store или скачайте DMG с GitHub. Запустите приложение и разрешите VPN-конфигурацию.", en: "Install INCY from the App Store or download the DMG from GitHub. Launch the app and allow VPN configuration." },
+              buttons: [
+                { link: "https://apps.apple.com/us/app/incy/id6756943388", text: { ru: "App Store (Global)", en: "App Store (Global)" }, type: "external" },
+                { link: "https://github.com/INCY-DEV/incy-platforms/releases", text: { ru: "GitHub / DMG", en: "GitHub / DMG" }, type: "external" },
+              ],
+            },
+            {
+              title: { ru: "Добавление подписки", en: "Add Subscription" },
+              description: { ru: "Нажмите кнопку ниже — приложение откроется, и подписка добавится автоматически.", en: "Click the button below — the app will open and the subscription will be added automatically." },
+              buttons: [
+                { link: "incy://import/{{SUBSCRIPTION_LINK}}", text: { ru: "Добавить в INCY", en: "Add to INCY" }, type: "subscriptionLink" },
+              ],
             },
           ],
         },
