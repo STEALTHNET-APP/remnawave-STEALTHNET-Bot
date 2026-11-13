@@ -450,3 +450,21 @@ html[data-tg-miniapp] {
     opacity: 1 !important;
   }
 }
+
+@keyframes ui-collapsible-open {
+  from { height: 0; opacity: 0; }
+  to { height: var(--radix-collapsible-content-height); opacity: 1; }
+}
+@keyframes ui-collapsible-close {
+  from { height: var(--radix-collapsible-content-height); opacity: 1; }
+  to { height: 0; opacity: 0; }
+}
+.ui-collapsible-content[data-state="open"] {
+  animation: ui-collapsible-open 220ms cubic-bezier(.2,.75,.25,1);
+}
+.ui-collapsible-content[data-state="closed"] {
+  animation: ui-collapsible-close 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-collapsible-content[data-state] { animation: none; }
+}

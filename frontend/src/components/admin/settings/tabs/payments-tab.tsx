@@ -428,7 +428,7 @@ export function PaymentsTab({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-inset"
                   >
                     <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
                       <div className="flex items-center justify-between pr-2">
@@ -573,7 +573,7 @@ export function PaymentsTab({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-inset"
                   >
                     <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
                       <div className="flex items-center justify-between pr-2">
@@ -658,7 +658,7 @@ export function PaymentsTab({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-inset"
                   >
                     <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
                       <div className="flex items-center justify-between pr-2">
@@ -773,7 +773,7 @@ export function PaymentsTab({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-inset"
                   >
                     <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
                       <div className="flex items-center justify-between pr-2">
@@ -811,7 +811,7 @@ export function PaymentsTab({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-inset"
                   >
                     <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
                       <div className="flex items-center justify-between pr-2">
@@ -900,7 +900,7 @@ export function PaymentsTab({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-inset"
                   >
                     <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
                       <div className="flex items-center justify-between pr-2">
@@ -984,7 +984,7 @@ export function PaymentsTab({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-inset"
                   >
                     <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
                       <div className="flex items-center justify-between pr-2">
@@ -1061,7 +1061,7 @@ export function PaymentsTab({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-inset"
                   >
                     <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
                       <div className="flex items-center justify-between pr-2">
@@ -1153,7 +1153,7 @@ export function PaymentsTab({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-inset"
                   >
                     <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
                       <div className="flex items-center justify-between pr-2">
@@ -1287,7 +1287,7 @@ export function PaymentsTab({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    className="w-full cursor-pointer rounded-t-lg text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/40 focus-visible:ring-inset"
                   >
                     <CardHeader className="pointer-events-none [&_.chevron]:transition-transform [&_.chevron]:duration-200 group-data-[state=open]:[&_.chevron]:rotate-180">
                       <div className="flex items-center justify-between pr-2">

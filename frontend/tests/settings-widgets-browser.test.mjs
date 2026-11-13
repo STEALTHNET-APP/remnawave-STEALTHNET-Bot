@@ -75,6 +75,29 @@ try{
   if(output)await page.screenshot({path:output+'/settings-mobile.png'});
   await select.selectOption('bot');assert.equal(new URL(page.url()).searchParams.get('tab'),'bot');assert.deepEqual(errors,[]);await page.close();
  });
+ await test('payment accordions animate and mouse focus has no accent ring',async()=>{
+  const page=await browser.newPage({viewport:{width:1440,height:1000}});
+  await page.goto(base+'/admin/settings?tab=payments');
+  const trigger=page.getByRole('button',{name:/^RollyPay/});
+  const id=await trigger.getAttribute('aria-controls');
+  await trigger.click();
+  const content=page.locator('[id='+JSON.stringify(id)+']');
+  assert.equal(await content.evaluate(e=>getComputedStyle(e).animationName),'ui-collapsible-open');
+  assert.equal(await trigger.evaluate(e=>e.matches(':focus-visible')),false);
+  assert.equal(await trigger.evaluate(e=>getComputedStyle(e).boxShadow),'none');
+  await page.waitForTimeout(260);
+  assert.ok((await content.boundingBox()).height>100);
+  if(output)await page.screenshot({path:output+'/rollypay-open.png'});
+  await trigger.click();
+  assert.equal(await content.evaluate(e=>getComputedStyle(e).animationName),'ui-collapsible-close');
+  await content.waitFor({state:'hidden'});
+  await trigger.press('Tab');await page.keyboard.press('Shift+Tab');
+  assert.equal(await trigger.evaluate(e=>e.matches(':focus-visible')),true);
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await trigger.press('Enter');
+  assert.equal(await content.evaluate(e=>getComputedStyle(e).animationName),'none');
+  await page.close();
+ });
  await test('widget markup pages actions and sends an opaque query without overflow',async()=>{
   const {buildWidget}=await import('../../bot/dist/widgets.js');
   const widget=buildWidget('Ваша подписка активна. Осталось 23 дня.\nУстройства: 1 из 3.\nБаланс: 260 ₽.',[[{text:'Подключиться',callback_data:'connect:fixture'},{text:'Продлить подписку',callback_data:'renew:fixture'},{text:'Пополнить баланс',callback_data:'topup:fixture'},{text:'Баланс',callback_data:'balance:fixture'},{text:'Устройства',callback_data:'devices:fixture'},{text:'Профиль',callback_data:'profile:fixture'},{text:'Помощь',callback_data:'help:fixture'}]],'STEALTHNET');
