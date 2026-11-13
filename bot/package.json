@@ -1,6 +1,6 @@
 {
   "name": "stealthnet-bot",
-  "version": "6.9.1",
+  "version": "7.0.0",
   "description": "STEALTHNET — Telegram-бот для продажи подписок",
   "type": "module",
   "engines": {
