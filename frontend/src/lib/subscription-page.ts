@@ -6,6 +6,25 @@ export const DEFAULT_SUBSCRIPTION_PAGE_CONFIG: SubscriptionPageConfig = {
       displayName: { ru: "iOS", en: "iOS" },
       apps: [
         {
+          name: "STEALTHNET",
+          featured: true,
+          blocks: [
+            {
+              title: { ru: "Установка приложения", en: "App Installation" },
+              description: { ru: "Откройте App Store и установите приложение STEALTHNET. Запустите его и разрешите добавление VPN-конфигурации.", en: "Open App Store and install STEALTHNET. Launch the app and allow VPN configuration." },
+              buttons: [
+                { link: "https://apps.apple.com/ru/app/stealthnet/id6790923730", text: { ru: "App Store (RU)", en: "App Store (RU)" }, type: "external" },
+                { link: "stealthnet://add/{{SUBSCRIPTION_LINK}}", text: { ru: "Добавить подписку", en: "Add Subscription" }, type: "subscriptionLink" },
+              ],
+            },
+            {
+              title: { ru: "Подключение", en: "Connect" },
+              description: { ru: "Выберите добавленный сервер и нажмите кнопку подключения.", en: "Select the added server and tap connect." },
+              buttons: [],
+            },
+          ],
+        },
+        {
           name: "Happ",
           blocks: [
             {
@@ -37,6 +56,26 @@ export const DEFAULT_SUBSCRIPTION_PAGE_CONFIG: SubscriptionPageConfig = {
       displayName: { ru: "Android", en: "Android" },
       apps: [
         {
+          name: "STEALTHNET",
+          featured: true,
+          blocks: [
+            {
+              title: { ru: "Установка приложения", en: "App Installation" },
+              description: { ru: "Скачайте APK-файл по ссылке ниже и установите приложение STEALTHNET.", en: "Download the APK file from the link below and install STEALTHNET." },
+              buttons: [
+                { link: "https://stealthnet.app/updates/STEALTHNET_3.0.5.apk", text: { ru: "Скачать APK", en: "Download APK" }, type: "external" },
+                { link: "https://stealthnet.app/", text: { ru: "Сайт STEALTHNET", en: "STEALTHNET Website" }, type: "external" },
+                { link: "stealthnet://add/{{SUBSCRIPTION_LINK}}", text: { ru: "Добавить подписку", en: "Add Subscription" }, type: "subscriptionLink" },
+              ],
+            },
+            {
+              title: { ru: "Подключение", en: "Connect" },
+              description: { ru: "Выберите добавленный сервер и нажмите кнопку подключения.", en: "Select the added server and tap connect." },
+              buttons: [],
+            },
+          ],
+        },
+        {
           name: "v2rayNG",
           blocks: [
             {
@@ -55,6 +94,25 @@ export const DEFAULT_SUBSCRIPTION_PAGE_CONFIG: SubscriptionPageConfig = {
       displayName: { ru: "macOS", en: "macOS" },
       apps: [
         {
+          name: "STEALTHNET",
+          featured: true,
+          blocks: [
+            {
+              title: { ru: "Установка приложения", en: "App Installation" },
+              description: { ru: "Скачайте DMG-файл по ссылке ниже и установите приложение STEALTHNET.", en: "Download the DMG file from the link below and install STEALTHNET." },
+              buttons: [
+                { link: "https://stealthnet.app/updates/STEALTHNET_3.0.5_aarch64.dmg", text: { ru: "Скачать DMG", en: "Download DMG" }, type: "external" },
+                { link: "stealthnet://add/{{SUBSCRIPTION_LINK}}", text: { ru: "Добавить подписку", en: "Add Subscription" }, type: "subscriptionLink" },
+              ],
+            },
+            {
+              title: { ru: "Подключение", en: "Connect" },
+              description: { ru: "Выберите добавленный сервер и нажмите кнопку подключения.", en: "Select the added server and tap connect." },
+              buttons: [],
+            },
+          ],
+        },
+        {
           name: "Clash / V2rayU / Surge и др.",
           blocks: [
             {
@@ -69,6 +127,25 @@ export const DEFAULT_SUBSCRIPTION_PAGE_CONFIG: SubscriptionPageConfig = {
     windows: {
       displayName: { ru: "Windows", en: "Windows" },
       apps: [
+        {
+          name: "STEALTHNET",
+          featured: true,
+          blocks: [
+            {
+              title: { ru: "Установка приложения", en: "App Installation" },
+              description: { ru: "Скачайте установщик по ссылке ниже и установите приложение STEALTHNET.", en: "Download the installer from the link below and install STEALTHNET." },
+              buttons: [
+                { link: "https://stealthnet.app/updates/STEALTHNET_3.0.5_x64-setup.exe", text: { ru: "Скачать EXE", en: "Download EXE" }, type: "external" },
+                { link: "stealthnet://add/{{SUBSCRIPTION_LINK}}", text: { ru: "Добавить подписку", en: "Add Subscription" }, type: "subscriptionLink" },
+              ],
+            },
+            {
+              title: { ru: "Подключение", en: "Connect" },
+              description: { ru: "Выберите добавленный сервер и нажмите кнопку подключения.", en: "Select the added server and tap connect." },
+              buttons: [],
+            },
+          ],
+        },
         {
           name: "Clash / v2rayN / Nekoray и др.",
           blocks: [
