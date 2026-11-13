@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DndContext,
   closestCenter,
@@ -23,7 +24,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Loader2, Download, Smartphone, RefreshCw, Upload, ChevronDown, Copy, Check as CheckIcon } from "lucide-react";
+import { GripVertical, Loader2, Download, Smartphone, RefreshCw, Upload, ChevronDown, Copy, Check as CheckIcon, Eye, ExternalLink, Info, Plus } from "lucide-react";
 import type { SubscriptionPageConfig } from "@/lib/api";
 
 const PLATFORM_ORDER = ["ios", "android", "macos", "windows", "linux", "other"] as const;
@@ -136,7 +137,10 @@ function mergeWithDefault(
         const name = (app as { name?: string }).name ?? `app-${i}`;
         const existing = currentByName.get(name);
         if (existing) {
-          merged.push(existing);
+          merged.push({
+            ...existing,
+            app: app as SubscriptionPageApp,
+          });
           usedNames.add(name);
         } else {
           merged.push({
@@ -510,6 +514,145 @@ function SortableAppRow({
   );
 }
 
+const PREVIEW_SUBSCRIPTION_LINK = "https://vpn.example.com/sub/demo-preview-subscription";
+
+function previewText(value?: Record<string, string>): string {
+  return value?.ru || value?.en || Object.values(value ?? {})[0] || "";
+}
+
+function fillPreviewLink(link: string): string {
+  return link
+    .replace(/\{\{SUBSCRIPTION_LINK\}\}/g, PREVIEW_SUBSCRIPTION_LINK)
+    .replace(/\{\{HAPP_CRYPT3_LINK\}\}/g, PREVIEW_SUBSCRIPTION_LINK)
+    .replace(/\{\{HAPP_CRYPT4_LINK\}\}/g, PREVIEW_SUBSCRIPTION_LINK)
+    .replace(/\{\{USERNAME\}\}/g, "demo");
+}
+
+function SubscriptionPagePreviewDialog({
+  open,
+  onOpenChange,
+  editorState,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editorState: Record<string, { apps: EditorApp[] }>;
+}) {
+  const [selectedPlatform, setSelectedPlatform] = useState<string>("ios");
+  const [copied, setCopied] = useState(false);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(PREVIEW_SUBSCRIPTION_LINK);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const apps = (editorState[selectedPlatform]?.apps ?? []).filter((item) => item.enabled);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Предпросмотр страницы подписки</DialogTitle>
+          <DialogDescription>
+            Так клиент увидит страницу подписки в кабинете.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-wrap gap-2">
+          {PLATFORM_ORDER.map((platformKey) => (
+            <Button
+              key={platformKey}
+              type="button"
+              size="sm"
+              variant={selectedPlatform === platformKey ? "default" : "outline"}
+              onClick={() => setSelectedPlatform(platformKey)}
+            >
+              {PLATFORM_LABELS[platformKey] ?? platformKey}
+            </Button>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-xl border bg-muted/30 p-3 sm:flex-row sm:items-center">
+          <code className="flex-1 truncate text-xs">{PREVIEW_SUBSCRIPTION_LINK}</code>
+          <Button type="button" variant="outline" size="sm" className="shrink-0 gap-2" onClick={copyLink}>
+            {copied ? <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? "Скопировано" : "Копировать"}
+          </Button>
+        </div>
+
+        {apps.length === 0 ? (
+          <div className="flex items-center gap-2 rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+            <Info className="h-4 w-4 shrink-0" />
+            Нет включённых приложений для этой платформы
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {apps.map((item) => (
+              <Card key={item.id}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+                    <Smartphone className="h-4 w-4 text-muted-foreground" />
+                    {item.app.name}
+                    {item.app.featured && (
+                      <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                        Рекомендуемое
+                      </span>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {item.app.blocks?.map((block, blockIndex) => (
+                    <div key={blockIndex} className="space-y-2">
+                      <div className="space-y-1">
+                        <h4 className="flex items-center gap-2 text-sm font-semibold">
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">
+                            {blockIndex + 1}
+                          </span>
+                          {previewText(block.title)}
+                        </h4>
+                        {block.description && (
+                          <p className="pl-7 text-xs leading-relaxed text-muted-foreground">
+                            {previewText(block.description)}
+                          </p>
+                        )}
+                      </div>
+                      {(block.buttons?.length ?? 0) > 0 && (
+                        <div className="flex flex-wrap gap-2 pl-7">
+                          {block.buttons?.map((btn, btnIndex) =>
+                            btn.type === "subscriptionLink" ? (
+                              <Button key={btnIndex} asChild size="sm" className="gap-2">
+                                <a href={fillPreviewLink(btn.link)}>
+                                  <Plus className="h-3.5 w-3.5" />
+                                  {previewText(btn.text)}
+                                </a>
+                              </Button>
+                            ) : (
+                              <Button key={btnIndex} asChild size="sm" variant="outline" className="gap-2">
+                                <a href={btn.link} target="_blank" rel="noopener noreferrer">
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  {previewText(btn.text)}
+                                </a>
+                              </Button>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function SubscriptionPageEditor({
   currentConfigJson,
   defaultConfig,
@@ -529,6 +672,7 @@ export function SubscriptionPageEditor({
   );
   const [loadDefaultLoading, setLoadDefaultLoading] = useState(false);
   const [loadDefaultError, setLoadDefaultError] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [latestDefault, setLatestDefault] = useState<SubscriptionPageConfig | null>(defaultConfig ?? null);
 
   useEffect(() => {
@@ -716,6 +860,17 @@ export function SubscriptionPageEditor({
             if (fileInputRef.current) fileInputRef.current.value = "";
           }}
         />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => setPreviewOpen(true)}
+          title="Предпросмотр клиентской страницы подписки"
+        >
+          <Eye className="h-4 w-4" />
+          Предпросмотр
+        </Button>
         {loadDefaultError && (
           <p className="text-sm text-destructive">{loadDefaultError}</p>
         )}
@@ -808,6 +963,12 @@ export function SubscriptionPageEditor({
           );
         })}
       </div>
+
+      <SubscriptionPagePreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        editorState={editorState}
+      />
     </div>
   );
 }
