@@ -22,6 +22,7 @@ import { startContestDailyReminderScheduler, stopContestDailyReminderScheduler }
 import { startAutoRenewScheduler } from "./modules/payment/auto-renew.cron.js";
 import { startAutoBackupScheduler, stopAutoBackupScheduler } from "./modules/backup/auto-backup.scheduler.js";
 import { startTicketCleanupScheduler, stopTicketCleanupScheduler } from "./modules/ticket/ticket-cleanup.scheduler.js";
+import { startTrialCleanupScheduler, stopTrialCleanupScheduler } from "./modules/trial/trial-cleanup.scheduler.js";
 import { startGiftExpiryCron } from "./modules/gift/gift-expiry.cron.js";
 import { startMarketplaceScheduler, stopMarketplaceScheduler } from "./modules/marketplace/marketplace.scheduler.js";
 import { startAntiAbuseScheduler, stopAntiAbuseScheduler } from "./modules/anti-abuse/anti-abuse.scheduler.js";
@@ -109,6 +110,7 @@ async function main() {
   // TG-юзерам для запуска онбординга (см. /telegram-login-check, /register). Крон бы их стирал.
   await startAutoBackupScheduler();
   startTicketCleanupScheduler();
+  startTrialCleanupScheduler();
   startMarketplaceScheduler();
   await startAntiAbuseScheduler();
   startBroadcastStaleScheduler();
@@ -144,6 +146,7 @@ async function main() {
     stopContestDailyReminderScheduler();
     stopAutoBackupScheduler();
     stopTicketCleanupScheduler();
+    stopTrialCleanupScheduler();
     stopMarketplaceScheduler();
     stopAntiAbuseScheduler();
     server.close();

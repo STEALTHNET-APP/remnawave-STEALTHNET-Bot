@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db.js";
+import { logAdmin } from "../audit/audit.service.js";
+import { runTrialCleanup } from "../trial/trial-cleanup.service.js";
 
 export const adminTrialsRouter = Router();
 
@@ -101,6 +103,27 @@ function trialToJson(t: {
     updatedAt: t.updatedAt.toISOString(),
   };
 }
+
+const cleanupNowSchema = z.object({
+  dryRun: z.boolean().optional(),
+});
+
+adminTrialsRouter.post("/cleanup-now", async (req, res) => {
+  const body = cleanupNowSchema.safeParse(req.body ?? {});
+  if (!body.success) return res.status(400).json({ message: "Неверные данные", errors: body.error.flatten() });
+  try {
+    const result = await runTrialCleanup({ dryRun: body.data.dryRun ?? false });
+    await logAdmin(req, "trials.cleanup_run", undefined, {
+      dryRun: result.dryRun,
+      candidateCount: result.candidateCount,
+      deletedCount: result.deletedCount,
+    });
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("[trial-cleanup] Manual run failed:", error);
+    return res.status(500).json({ message: "Не удалось выполнить очистку" });
+  }
+});
 
 adminTrialsRouter.get("/", async (_req, res) => {
   const list = await prisma.trial.findMany({
