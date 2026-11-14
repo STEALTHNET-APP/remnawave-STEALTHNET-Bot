@@ -15,6 +15,41 @@ class LocalChangesTests(unittest.TestCase):
         backup.mkdir()
         return backup
 
+    def test_backup_only_does_not_block_update(self):
+        folder = self.root / 'backups' / '2026'
+        folder.mkdir(parents=True)
+        (folder / 'daily.sql.gz').write_bytes(b'archive')
+        self.assertIsNone(self.updater.local_changes())
+        self.updater.clean()
+
+    def test_backups_stay_in_place_when_source_is_stashed(self):
+        folder = self.root / 'backups'
+        folder.mkdir()
+        dump = folder / 'daily.sql'
+        dump.write_text('keep database')
+        (self.root / 'version.json').write_text('modified source')
+        before = self.updater.local_changes()
+        self.assertEqual(before['files'], ['version.json'])
+        stash = self.updater.save_local_changes(self.backup(), before['id'])
+        self.assertEqual(dump.read_text(), 'keep database')
+        self.updater.restore_local_changes(stash)
+        self.assertEqual(dump.read_text(), 'keep database')
+
+    def test_tracked_backup_changes_and_unknown_files_are_not_ignored(self):
+        folder = self.root / 'backups'
+        folder.mkdir()
+        (folder / 'tracked.sql').write_text('tracked')
+        self.commit()
+        (folder / 'tracked.sql').write_text('changed')
+        (folder / 'source.py').write_text('code')
+        self.assertEqual(set(self.updater.local_changes()['files']), {'backups/tracked.sql', 'backups/source.py'})
+
+    def test_backup_symlink_is_not_ignored(self):
+        folder = self.root / 'backups'
+        folder.mkdir()
+        (folder / 'linked.sql').symlink_to(self.root / 'version.json')
+        self.assertIn('backups/linked.sql', self.updater.local_changes()['files'])
+
     def test_round_trip_preserves_index_binary_untracked_and_existing_stash(self):
         (self.root / 'prior.txt').write_text('prior')
         self.updater.git('stash', 'push', '-u')

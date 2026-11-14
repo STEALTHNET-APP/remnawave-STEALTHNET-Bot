@@ -1,4 +1,5 @@
 import datetime as dt
+import copy
 import json
 from pathlib import Path
 import secrets
@@ -14,6 +15,7 @@ class Deployment:
         return json.loads(self.compose('config', '--format', 'json', source=source))
 
     def validate_layout(self, before, after):
+        after = self.without_new_bot_preferences(before, after)
         allowed = {'api', 'bot', 'broadcast-worker', 'frontend', 'console', 'nginx'}
         if set(before['services']) != set(after['services']):
             raise RuntimeError('Меняется состав служб. Сначала требуется подготовка сервера по инструкции релиза.')
@@ -27,6 +29,45 @@ class Deployment:
             for key in ('volumes', 'networks', 'network_mode', 'container_name'):
                 if service.get(key) != candidate.get(key):
                     raise RuntimeError(f'Меняются подключения или хранилища службы {name}. Нужна подготовка сервера.')
+
+    def without_new_bot_preferences(self, before, after):
+        key = 'bot_preferences'
+        target = '/data/widget-preferences'
+        if key in before.get('volumes', {}):
+            return after
+        if not before.get('name') or after.get('volumes', {}).get(key) != {'name': before['name'] + '_' + key}:
+            return after
+        old_bot = before.get('services', {}).get('bot')
+        new_bot = after.get('services', {}).get('bot')
+        if old_bot is None or new_bot is None:
+            return after
+        old_mounts = old_bot.get('volumes', [])
+        for mount in old_mounts:
+            if not isinstance(mount, dict) or not mount.get('target'):
+                return after
+            path = mount['target'].rstrip('/')
+            if path == target or target.startswith(path + '/') or path.startswith(target + '/'):
+                return after
+        new_mounts = new_bot.get('volumes', [])
+        added = [mount for mount in new_mounts if mount not in old_mounts]
+        if len(added) != 1:
+            return after
+        mount = dict(added[0])
+        if mount.pop('read_only', False) is not False or mount.pop('volume', {}) not in ({}, {'nocopy': False}):
+            return after
+        if mount != {'type': 'volume', 'source': key, 'target': target}:
+            return after
+        if [item for item in new_mounts if item != added[0]] != old_mounts:
+            return after
+        normalized = copy.deepcopy(after)
+        del normalized['volumes'][key]
+        if not normalized['volumes'] and 'volumes' not in before:
+            del normalized['volumes']
+        if 'volumes' in old_bot:
+            normalized['services']['bot']['volumes'] = old_mounts
+        else:
+            normalized['services']['bot'].pop('volumes', None)
+        return normalized
 
     def health(self, override, services):
         self.compose('up', '-d', '--no-deps', '--no-build', '--pull', 'never', '--wait', '--wait-timeout', '600', *services, override=override, capture=False, timeout=660)

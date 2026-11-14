@@ -5,6 +5,18 @@ import subprocess
 
 
 class LocalChanges:
+    def is_runtime_backup(self, path):
+        if not path.startswith('backups/') or not path.endswith(('.sql', '.sql.gz', '.dump', '.dump.gz')):
+            return False
+        file = self.root / path
+        if not file.is_file():
+            return False
+        return not any(part.is_symlink() for part in [file, *file.parents] if part != self.root and self.root in part.parents)
+
+    def untracked_runtime_backups(self):
+        raw = subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard', '-z', '--', 'backups/'], cwd=self.root)
+        return [os.fsdecode(path) for path in raw.split(b'\0') if path and self.is_runtime_backup(os.fsdecode(path))]
+
     def local_changes(self):
         raw = subprocess.check_output(['git', 'status', '--porcelain=v1', '-z', '--untracked-files=all'], cwd=self.root)
         records = raw.split(b'\0')
@@ -14,7 +26,7 @@ class LocalChanges:
         while records and records[0]:
             record = records.pop(0)
             code, path = record[:2], os.fsdecode(record[3:])
-            if code == b'??' and path == 'docker-compose.override.yml':
+            if code == b'??' and (path == 'docker-compose.override.yml' or self.is_runtime_backup(path)):
                 continue
             if code == b' M' and path == 'nginx/nginx.conf' and (self.root / path).is_file() and not (self.root / path).is_symlink():
                 continue
@@ -53,8 +65,9 @@ class LocalChanges:
             return None
         self.status['localChangesRecoveryRequired'] = True
         self.persist()
+        exclusions = [':(exclude,literal)' + path for path in self.untracked_runtime_backups()]
         self.git('stash', 'push', '--include-untracked', '-m', 'STEALTHNET ' + backup.name,
-                 '--', '.', ':(exclude)docker-compose.override.yml')
+                 '--', '.', ':(exclude)docker-compose.override.yml', *exclusions)
         stash = self.git('rev-parse', 'refs/stash')
         try:
             self.write_json(backup / 'local-changes.json', {'stash': stash, 'previous': self.git('rev-parse', 'HEAD')})
