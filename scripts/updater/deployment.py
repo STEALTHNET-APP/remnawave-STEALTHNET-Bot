@@ -230,6 +230,7 @@ class Deployment:
         if not self.status['available']:
             return
         target, previous = self.status['target'], self.status['current']
+        self.preflight()
         self.check_space()
         images = self.service_images()
         api_revision = self.run(['docker', 'image', 'inspect', '--format', '{{index .Config.Labels "org.opencontainers.image.revision"}}', images['api']])
@@ -272,7 +273,7 @@ class Deployment:
         built['broadcast-worker'] = built['api']
         if 'nginx' in images:
             tag = after['services']['nginx']['image']
-            self.run(['docker', 'pull', tag], capture=False, timeout=600)
+            self.download_retry('Docker: nginx', lambda: self.run(['docker', 'pull', tag], capture=False, timeout=600))
             built['nginx'] = self.run(['docker', 'image', 'inspect', '--format', '{{.Id}}', tag])
         self.check_space()
         self.rehearse(build, built['api'], after)

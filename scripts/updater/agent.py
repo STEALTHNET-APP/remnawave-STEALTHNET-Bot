@@ -14,6 +14,7 @@ import urllib.request
 
 from deployment import Deployment
 from local_changes import LocalChanges
+from reliability import CommandFailure, Reliability
 
 REPOSITORY = 'https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git'
 RELEASES = 'https://api.github.com/repos/STEALTHNET-APP/remnawave-STEALTHNET-Bot/releases/latest'
@@ -60,7 +61,7 @@ def validate_settings(value):
     return {**value, 'backupRetentionDays': days}
 
 
-class Updater(Deployment, LocalChanges):
+class Updater(Deployment, LocalChanges, Reliability):
     write_json = staticmethod(save)
 
     def __init__(self, config):
@@ -89,12 +90,17 @@ class Updater(Deployment, LocalChanges):
         self.persist()
 
     def run(self, args, timeout=120, capture=True, output=None, input=None):
-        result = subprocess.run(args, cwd=self.root, stdin=input if input is not None else subprocess.DEVNULL,
-                                stdout=output or (subprocess.PIPE if capture else self.log),
-                                stderr=self.log or subprocess.DEVNULL, timeout=timeout,
-                                env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
+        try:
+            result = subprocess.run(args, cwd=self.root, stdin=input if input is not None else subprocess.DEVNULL,
+                                    stdout=output or (subprocess.PIPE if capture else self.log),
+                                    stderr=self.log or subprocess.DEVNULL, timeout=timeout,
+                                    env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
+        except FileNotFoundError as error:
+            raise RuntimeError(f'Не найдена команда {args[0]}. Проверьте зависимости на сервере; подробности в docs/auto-update.md.') from error
+        except subprocess.TimeoutExpired as error:
+            raise CommandFailure(f'Команда {args[0]} не завершилась за {timeout} сек. Подробности в журнале службы.') from error
         if result.returncode:
-            raise RuntimeError(f'Команда {args[0]} завершилась с кодом {result.returncode}. Подробности в журнале службы.')
+            raise CommandFailure(f'Команда {args[0]} завершилась с кодом {result.returncode}. Подробности в журнале службы.')
         return result.stdout.decode().strip() if capture and output is None else ''
 
     def git(self, *args):
@@ -122,13 +128,11 @@ class Updater(Deployment, LocalChanges):
         ref = 'refs/heads/main'
         release = None
         if self.settings['channel'] == 'stable':
-            request = urllib.request.Request(RELEASES, headers={'User-Agent': 'STEALTHNET-Updater', 'Accept': 'application/vnd.github+json'})
-            with urllib.request.urlopen(request, timeout=30) as response:
-                release = json.load(response)
+            release = self.release_info(RELEASES)
             if release.get('draft') or release.get('prerelease') or not re.fullmatch(r'v?\d+\.\d+\.\d+(?:-lts)?', release['tag_name']):
                 raise RuntimeError('Не найден подходящий стабильный релиз')
             ref = 'refs/tags/' + release['tag_name']
-        self.git('fetch', '--no-tags', REPOSITORY, ref)
+        self.download_retry('GitHub: исходники', lambda: self.git('fetch', '--no-tags', REPOSITORY, ref))
         target = self.git('rev-parse', 'FETCH_HEAD^{commit}')
         current = self.git('rev-parse', 'HEAD')
         version = json.loads(self.git('show', target + ':version.json'))['version']
@@ -224,8 +228,13 @@ class Updater(Deployment, LocalChanges):
                 return
             day = instant.strftime('%Y-%m-%d')
             if self.status.get('lastCleanupDay') != day:
-                self.cleanup_backups(instant)
-                self.cleanup_images()
+                try:
+                    self.cleanup_backups(instant)
+                    self.cleanup_images()
+                    self.status['cleanupWarning'] = None
+                except Exception as error:
+                    self.status['cleanupWarning'] = 'Не удалось завершить очистку старых копий/образов: ' + str(error)
+                    print(self.status['cleanupWarning'], file=sys.stderr, flush=True)
                 self.status['lastCleanupDay'] = day
                 self.persist()
             if (self.settings['enabled'] and instant.hour == self.settings['hourUtc']
