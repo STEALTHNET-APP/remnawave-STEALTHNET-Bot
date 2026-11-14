@@ -8,6 +8,7 @@ import { Transform } from "node:stream";
 import { createGzip } from "node:zlib";
 import { holdBackup } from "./backup-retention.js";
 import type { DbConnection } from "./backup.service.js";
+import { APP_VERSION } from "../../config/app-version.js";
 
 export const TELEGRAM_PART_BYTES = 45 * 1024 * 1024;
 export const AUTO_BACKUPS_DIR = path.join(process.env.BACKUPS_DIR || path.join(process.cwd(), "backups"), "automatic");
@@ -45,6 +46,24 @@ export function writeSqlArchive(proc: ChildProcess, fullPath: string): Promise<v
   return writeArchive(proc, fullPath, false);
 }
 
+export function dumpHeaderComment(createdAt = new Date()): string {
+  return `-- StealthNet v${APP_VERSION} Database Dump\n-- Created at: ${createdAt.toISOString()}\n\n`;
+}
+
+function prependDumpHeader(): Transform {
+  let pending = true;
+  return new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      if (pending && chunk.length > 0) {
+        pending = false;
+        this.push(dumpHeaderComment());
+      }
+      this.push(chunk);
+      callback();
+    },
+  });
+}
+
 async function writeArchive(proc: ChildProcess, fullPath: string, gzip: boolean): Promise<void> {
   const release = holdBackup(fullPath);
   const partial = `${fullPath}.partial`;
@@ -58,8 +77,8 @@ async function writeArchive(proc: ChildProcess, fullPath: string, gzip: boolean)
     if (!proc.stdout) throw new Error("pg_dump stdout unavailable");
     const output = createWriteStream(partial, { flags: "wx", mode: 0o600 });
     compressed = gzip
-      ? pipeline(proc.stdout, compatibleDumpHeader(), createGzip({ level: 6 }), output)
-      : pipeline(proc.stdout, compatibleDumpHeader(), output);
+      ? pipeline(proc.stdout, prependDumpHeader(), compatibleDumpHeader(), createGzip({ level: 6 }), output)
+      : pipeline(proc.stdout, prependDumpHeader(), compatibleDumpHeader(), output);
     await Promise.all([exited, compressed]);
     if ((await stat(partial)).size <= (gzip ? 20 : 0)) throw new Error("pg_dump produced an empty archive");
     await rename(partial, fullPath);
