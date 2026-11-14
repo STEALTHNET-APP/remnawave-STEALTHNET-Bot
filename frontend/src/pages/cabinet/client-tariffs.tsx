@@ -129,6 +129,9 @@ function ClassicTariffsPage() {
     extendTarget,
     totalPrice,
     finalPrice,
+    personalDiscountPct,
+    personalDiscountAmount,
+    hasPersonalDiscount,
     canPayWithBalance,
     availableMethods,
     paying: payLoading,
@@ -292,6 +295,7 @@ function ClassicTariffsPage() {
     if (!payModal) return null;
     const tariff = payModal.tariff;
     const price = finalPrice;
+    const hasDiscount = hasPersonalDiscount || Boolean(promoResult);
     const hasBalance = canPayWithBalance;
     const balanceMethod: PayMethod = { kind: "balance", label: t("cabinet.tariffs.pay_balance"), icon: Wallet };
 
@@ -333,7 +337,7 @@ function ClassicTariffsPage() {
               
               {isMobileOrMiniapp && (
                 <div className="flex items-baseline gap-2">
-                  {promoResult ? (
+                  {hasDiscount ? (
                     <>
                       <span className="text-3xl font-black text-primary">{formatMoney(price, tariff.currency)}</span>
                       <span className="text-lg line-through text-muted-foreground decoration-2">{formatMoney(totalPrice, tariff.currency)}</span>
@@ -347,7 +351,7 @@ function ClassicTariffsPage() {
             
             {!isMobileOrMiniapp && (
               <div className="text-right">
-                {promoResult ? (
+                {hasDiscount ? (
                   <div className="flex flex-col items-end">
                     <span className="line-through text-muted-foreground/70 text-sm decoration-2">{formatMoney(totalPrice, tariff.currency)}</span>
                     <span className="font-bold text-xl text-primary">{formatMoney(price, tariff.currency)}</span>
@@ -358,6 +362,20 @@ function ClassicTariffsPage() {
               </div>
             )}
           </div>
+
+          {hasPersonalDiscount && (
+            <div className={cn(
+              "mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 relative z-10",
+              isMobileOrMiniapp ? "text-sm" : "text-xs",
+            )}>
+              <span className="font-bold text-amber-600 dark:text-amber-400">
+                🎰 {t("cabinet.tariffs.personal_discount_badge", { percent: personalDiscountPct })}
+              </span>
+              <span className="font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                −{formatMoney(personalDiscountAmount, tariff.currency)}
+              </span>
+            </div>
+          )}
           
           {isMobileOrMiniapp && (
             <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-3 relative z-10">
