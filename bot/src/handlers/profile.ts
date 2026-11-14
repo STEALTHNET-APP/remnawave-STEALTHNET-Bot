@@ -2,7 +2,7 @@ import { Composer } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
 import { activeDiscountCode, awaitingPromoCode, awaitingWithdrawAmount, awaitingWithdrawDetails, clearUserState, pendingWithdrawals, type WithdrawMethod } from "../state-store.js";
-import { _t, applyMarkdownAndEmoji, backButton, backToMenu, blockUnsubscribedCallback, callbackUi, currencyButtons, editMessageContent, enforceSubscription, formatMoney, getOrRestoreToken, getUserLang, groupedProfileMenu, langButtons, profileButtons, referralRewardLines, setTranslations, setUserLang, t, tariffErrMarkup, textInputUserId, titleWithEmoji } from "./shared.js";
+import { _t, applyMarkdownAndEmoji, backButton, backToMenu, blockUnsubscribedCallback, callbackUi, currencyButtons, editMessageContent, enforceSubscription, formatMoney, getOrRestoreToken, getUserLang, groupedProfileMenu, langButtons, navRowWithProfileBack, profileButtons, referralRewardLines, sectionBackToMenu, setTranslations, setUserLang, t, tariffErrMarkup, textInputUserId, titleWithEmoji } from "./shared.js";
 import { resolveCallbackDomain } from "./routing.js";
 
 const WITHDRAW_METHODS: WithdrawMethod[] = ["sbp", "card", "usdt"];
@@ -140,7 +140,7 @@ composer.command("referral", async (ctx) => {
     if (cfg?.withdrawalsEnabled !== false) {
       rows.push([{ text: `💰 Заявка на вывод (от ${cfg?.withdrawalMinAmount ?? 3000}₽)`, callback_data: "withdraw:start" }]);
     }
-    rows.push([{ text: "🏠 Главное меню", callback_data: "menu:main" }]);
+    rows.push(navRowWithProfileBack([{ text: "🏠 Главное меню", callback_data: "menu:main" }], "referral", cfg));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await ctx.reply(lines.join("\n"), { reply_markup: { inline_keyboard: rows as any } });
   } catch (e: unknown) {
@@ -281,7 +281,7 @@ composer.command("referral", async (ctx) => {
       const client = await api.getMe(token);
       if (client?.preferredLang) setUserLang(userId, client.preferredLang);
       if (!client.referralCode) {
-        await editMessageContent(ctx, _t("referral.link_unavailable", lang), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        await editMessageContent(ctx, _t("referral.link_unavailable", lang), sectionBackToMenu("referral", config, innerStyles, innerEmojiIds, lang));
         return;
       }
       // новый текст по эталону клиента + статистика из /referral-stats.
@@ -355,7 +355,7 @@ composer.command("referral", async (ctx) => {
       if (config?.withdrawalsEnabled !== false) {
         rows.push([{ text: `💰 Заявка на вывод (от ${config?.withdrawalMinAmount ?? 3000}₽)`, callback_data: "withdraw:start" }]);
       }
-      rows.push([{ text: "🏠 Главное меню", callback_data: "menu:main" }]);
+      rows.push(navRowWithProfileBack([{ text: "🏠 Главное меню", callback_data: "menu:main" }], "referral", config, innerStyles, innerEmojiIds, lang));
 
       const { text: refText, entities: refEntities } = titleWithEmoji("LINK", lines.join("\n"), config?.botEmojis);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -524,7 +524,7 @@ composer.command("referral", async (ctx) => {
       await editMessageContent(
         ctx,
         (config?.botPromocodeText ?? "").trim() || _t("promo.enter_title", lang),
-        backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds),
+        sectionBackToMenu("promocode", config, innerStyles, innerEmojiIds, lang),
       );
       return;
     }

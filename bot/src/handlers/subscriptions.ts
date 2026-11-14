@@ -3,7 +3,7 @@ import { InputFile } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
 import { addsubPending, extendingSecondaryPending, pendingDropExtras, selectedTariffOption, tariffOptionsCache, trialConvertPickCache } from "../state-store.js";
-import { _t, applyMarkdownAndEmoji, backButton, backToMenu, backToSubLabel, backToSubsListLabel, bestPricePerDayOptionId, blockUnsubscribedCallback, bytesToGb, callbackUi, connectableSubscriptions, deviceFlow, deviceFlowButtons, editMessageContent, formatDaysRu, formatDeviceCount, formatRuDays, getMenuEmojiKey, getOrRestoreToken, getSubscriptionUrl, getUserLang, instructionFallbackText, mySubsListButtons, parseSubInfo, renewableSubscriptions, setTranslations, showPaymentMethodsForTariff, sortedPriceOptions, subDetailButtons, subscriptionDeviceLimit, t, tariffErrMarkup, tariffOptionPickerButtons, titleWithOptionalEmoji } from "./shared.js";
+import { _t, applyMarkdownAndEmoji, backButton, backToMenu, backToSubLabel, backToSubsListLabel, bestPricePerDayOptionId, blockUnsubscribedCallback, bytesToGb, callbackUi, connectableSubscriptions, deviceFlow, deviceFlowButtons, editMessageContent, formatDaysRu, formatDeviceCount, formatRuDays, getMenuEmojiKey, getOrRestoreToken, getSubscriptionUrl, getUserLang, instructionFallbackText, isCabinetGrouped, mySubsListButtons, navRowWithProfileBack, parseSubInfo, renewableSubscriptions, sectionBackToMenu, setTranslations, showPaymentMethodsForTariff, sortedPriceOptions, subDetailButtons, subscriptionDeviceLimit, t, tariffErrMarkup, tariffOptionPickerButtons, titleWithOptionalEmoji } from "./shared.js";
 import type { ConfigSnapshot, InnerButtonStyles, InnerEmojiIds, TariffCategory, TariffItem } from "./shared.js";
 import { resolveCallbackDomain } from "./routing.js";
 
@@ -237,9 +237,10 @@ composer.command("subscriptions", async (ctx) => {
   }
   try {
     const result = await api.getAllSubscriptions(token);
+    const cfg = await api.getPublicConfig().catch(() => null);
     if (!result.items?.length) {
       await ctx.reply("📋 Мои подписки\n\nУ вас пока нет активных подписок.", {
-        reply_markup: { inline_keyboard: [[{ text: "🏠 Главное меню", callback_data: "menu:main" }]] },
+        reply_markup: { inline_keyboard: [navRowWithProfileBack([{ text: "🏠 Главное меню", callback_data: "menu:main" }], "my_subs", cfg)] },
       });
       return;
     }
@@ -247,7 +248,6 @@ composer.command("subscriptions", async (ctx) => {
       if (a.type !== b.type) return a.type === "root" ? -1 : 1;
       return (a.subscriptionIndex ?? 0) - (b.subscriptionIndex ?? 0);
     });
-    const cfg = await api.getPublicConfig().catch(() => null);
     const bodyLines = [`📋 Мои подписки (**${sorted.length}**)`, ""];
     const buttonItems = sorted.map((it) => {
       const info = parseSubInfo(it);
@@ -318,7 +318,7 @@ composer.command("subscriptions", async (ctx) => {
         const all = await api.getAllSubscriptions(token);
         const items = connectableSubscriptions(all.items ?? []);
         if (items.length === 0) {
-          await editMessageContent(ctx, _t("vpn.link_unavailable", lang), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+          await editMessageContent(ctx, _t("vpn.link_unavailable", lang), sectionBackToMenu("vpn", config, innerStyles, innerEmojiIds, lang));
           return;
         }
         if (items.length === 1) {
@@ -346,20 +346,20 @@ composer.command("subscriptions", async (ctx) => {
                 [{ text: "📲 Открыть страницу подключения", url }],
                 // T16-fix (11.05.2026): «menu:back» нигде не зарегистрирован → кнопка ломалась.
                 // Используем «menu:main» который рендерит главное меню. Текст — «🏠 Главное меню».
-                [{ text: "🏠 Главное меню", callback_data: "menu:main" }],
+                navRowWithProfileBack([{ text: "🏠 Главное меню", callback_data: "menu:main" }], "vpn", config, innerStyles, innerEmojiIds, lang),
               ],
             });
           } else if (webAppPath) {
             await editMessageContent(ctx, "📲 Подключитесь через мини-приложение:", {
               inline_keyboard: [
                 [{ text: "📲 Открыть страницу подключения", web_app: { url: webAppPath } }],
-                [{ text: "🏠 Главное меню", callback_data: "menu:main" }],
+                navRowWithProfileBack([{ text: "🏠 Главное меню", callback_data: "menu:main" }], "vpn", config, innerStyles, innerEmojiIds, lang),
               ],
             });
           } else if (url) {
-            await editMessageContent(ctx, `📲 Ссылка на подписку:\n\n${url}\n\nОткройте её в приложении VPN.`, backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+            await editMessageContent(ctx, `📲 Ссылка на подписку:\n\n${url}\n\nОткройте её в приложении VPN.`, sectionBackToMenu("vpn", config, innerStyles, innerEmojiIds, lang));
           } else {
-            await editMessageContent(ctx, _t("vpn.link_unavailable", lang), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+            await editMessageContent(ctx, _t("vpn.link_unavailable", lang), sectionBackToMenu("vpn", config, innerStyles, innerEmojiIds, lang));
           }
           return;
         }
@@ -393,7 +393,7 @@ composer.command("subscriptions", async (ctx) => {
           const btnLabel = `#${idx}${trialMark} ${tariff}`;
           rows.push([{ text: btnLabel.slice(0, 60), callback_data: `sub:connect:${s.type}:${s.id}`.slice(0, 64) }]);
         }
-        rows.push([{ text: "🏠 Главное меню", callback_data: "menu:main" }]);
+        rows.push(navRowWithProfileBack([{ text: "🏠 Главное меню", callback_data: "menu:main" }], "vpn", config, innerStyles, innerEmojiIds, lang));
         await editMessageContent(ctx, bodyLines.join("\n").trim(), { inline_keyboard: rows });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Ошибка";
@@ -409,7 +409,7 @@ composer.command("subscriptions", async (ctx) => {
           await editMessageContent(
             ctx,
             "📋 Мои подписки\n\nУ вас пока нет активных подписок.",
-            backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds),
+            sectionBackToMenu("my_subs", config, innerStyles, innerEmojiIds, getUserLang(userId)),
           );
           return;
         }
@@ -451,7 +451,7 @@ composer.command("subscriptions", async (ctx) => {
         await editMessageContent(
           ctx,
           text,
-          mySubsListButtons(buttonItems, config?.botBackLabel ?? null, innerStyles, innerEmojiIds),
+          mySubsListButtons(buttonItems, config?.botBackLabel ?? null, innerStyles, innerEmojiIds, isCabinetGrouped("my_subs", config)),
           entities,
         );
       } catch (e: unknown) {
@@ -917,7 +917,7 @@ composer.command("subscriptions", async (ctx) => {
       const titleKey = deviceConfig ? deviceConfig.emojiKey : getMenuEmojiKey(config, "devices");
       const title = titleWithOptionalEmoji(titleKey, screen.text.split("\n", 1)[0], botEmojis);
       const text = title.text + screen.text.slice(screen.text.indexOf("\n"));
-      await editMessageContent(ctx, text, deviceFlowButtons(screen, config), title.entities);
+      await editMessageContent(ctx, text, deviceFlowButtons(screen, config, isCabinetGrouped("devices", config)), title.entities);
       return;
     }
 

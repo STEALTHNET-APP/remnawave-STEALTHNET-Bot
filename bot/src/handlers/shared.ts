@@ -11,6 +11,9 @@ import { renewableSubscriptions, connectableSubscriptions, directConnectionTarge
 import {
   mainMenu,
   backToMenu,
+  backNavRow,
+  profileBackButton,
+  DEFAULT_CABINET_GROUPED_IDS,
   deviceFlowButtons,
   backToSubLabel,
   backToSubsListLabel,
@@ -53,6 +56,7 @@ import {
   subDetailButtons,
   tariffActionChoiceButtons,
   type InlineMarkup,
+  type InlineButton,
   type InnerEmojiIds,
 } from "../keyboard.js";
 import { t as _t, formatDays as _formatDays, setTranslations } from "../i18n.js";
@@ -2076,6 +2080,7 @@ export function callbackUi(config: ConfigSnapshot | null): {
     trialConfirm: rawStyles?.trialConfirm !== undefined ? rawStyles.trialConfirm : "success",
     lang: rawStyles?.lang !== undefined ? rawStyles.lang : "primary",
     currency: rawStyles?.currency !== undefined ? rawStyles.currency : "primary",
+    backProfile: rawStyles?.backProfile !== undefined ? rawStyles.backProfile : "danger",
   };
   const botEmojis = config?.botEmojis;
   const innerEmojiIds: InnerEmojiIds | undefined = botEmojis
@@ -2086,9 +2091,45 @@ export function callbackUi(config: ConfigSnapshot | null): {
         trial: botEmojis.TRIAL?.tgEmojiId,
         profile: botEmojis.PROFILE?.tgEmojiId || botEmojis.PUZZLE?.tgEmojiId,
         connect: botEmojis.SERVERS?.tgEmojiId || botEmojis.CONNECT?.tgEmojiId,
+        backProfile: botEmojis.BACK_TO_PROFILE?.tgEmojiId,
+        backProfileUnicode: botEmojis.BACK_TO_PROFILE?.unicode,
       }
     : undefined;
   return { appUrl, innerStyles, botEmojis, innerEmojiIds };
+}
+
+export function isCabinetGrouped(buttonId: string, config: ConfigSnapshot | null | undefined): boolean {
+  if (!config?.botGroupCabinet) return false;
+  const items = Array.isArray(config.botGroupCabinetItems)
+    ? config.botGroupCabinetItems
+    : DEFAULT_CABINET_GROUPED_IDS;
+  return items.includes(buttonId);
+}
+
+export function sectionBackToMenu(
+  sectionId: string,
+  config: ConfigSnapshot | null,
+  innerStyles?: InnerButtonStyles,
+  innerEmojiIds?: InnerEmojiIds,
+  lang = "ru",
+): InlineMarkup {
+  return {
+    inline_keyboard: [
+      backNavRow(config?.botBackLabel ?? null, innerStyles, innerEmojiIds, isCabinetGrouped(sectionId, config), lang),
+    ],
+  };
+}
+
+export function navRowWithProfileBack<T extends { text: string }>(
+  mainRow: T[],
+  sectionId: string,
+  config: ConfigSnapshot | null,
+  innerStyles?: InnerButtonStyles,
+  innerEmojiIds?: InnerEmojiIds,
+  lang = "ru",
+): (T | InlineButton)[] {
+  if (!isCabinetGrouped(sectionId, config)) return mainRow;
+  return [profileBackButton(innerStyles, innerEmojiIds, lang), ...mainRow];
 }
 
 export async function blockUnsubscribedCallback(

@@ -2,7 +2,7 @@ import { Composer } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
 import { awaitingGiftCode, clearUserState, giftOptionsCache, selectedGiftOption } from "../state-store.js";
-import { RECEIPT_OK_LINE, _t, applyExtraDevicesPriceBot, backButton, backToMenu, blockUnsubscribedCallback, buildPaymentMessage, callbackUi, editMessageContent, enforceSubscription, formatMoney, formatRuDays, getOrRestoreToken, getSubscriptionUrl, getUserLang, giftCodeResultButtons, giftCodesListButtons, giftMenuButtons, giftPostPurchaseButtons, giftSubscriptionButtons, giftTariffButtons, hasExtraDevices, markHasOptions, openSubscribePageMarkup, payUrlMarkup, receiptPromptKeyboard, receiptPromptText, setTranslations, showCloudCheckout, showGiftDevicePicker, showGiftPaymentConfirm, sortedPriceOptions, storePendingReceipt, t, tariffErrMarkup, textInputUserId } from "./shared.js";
+import { RECEIPT_OK_LINE, _t, applyExtraDevicesPriceBot, backButton, backToMenu, blockUnsubscribedCallback, buildPaymentMessage, callbackUi, editMessageContent, enforceSubscription, formatMoney, formatRuDays, getOrRestoreToken, getSubscriptionUrl, getUserLang, giftCodeResultButtons, giftCodesListButtons, giftMenuButtons, giftPostPurchaseButtons, giftSubscriptionButtons, giftTariffButtons, hasExtraDevices, isCabinetGrouped, markHasOptions, openSubscribePageMarkup, payUrlMarkup, receiptPromptKeyboard, receiptPromptText, sectionBackToMenu, setTranslations, showCloudCheckout, showGiftDevicePicker, showGiftPaymentConfirm, sortedPriceOptions, storePendingReceipt, t, tariffErrMarkup, textInputUserId } from "./shared.js";
 import type { InlineMarkup, TariffCategory, TariffItem } from "./shared.js";
 import { resolveCallbackDomain } from "./routing.js";
 
@@ -28,7 +28,7 @@ export function createGiftHandlers(): Composer<Context> {
     if (data === "menu:gift") {
       clearUserState(userId);
       if (!config?.giftSubscriptionsEnabled) {
-        await editMessageContent(ctx, "Функция подарков недоступна.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        await editMessageContent(ctx, "Функция подарков недоступна.", sectionBackToMenu("gift", config, innerStyles, innerEmojiIds, getUserLang(userId)));
         return;
       }
       const intro = ((config as { giftIntroText?: string | null })?.giftIntroText ?? "").trim()
@@ -36,7 +36,7 @@ export function createGiftHandlers(): Composer<Context> {
       await editMessageContent(
         ctx,
         intro,
-        giftMenuButtons(config?.botBackLabel ?? null, innerStyles, innerEmojiIds),
+        giftMenuButtons(config?.botBackLabel ?? null, innerStyles, innerEmojiIds, isCabinetGrouped("gift", config)),
       );
       return;
     }

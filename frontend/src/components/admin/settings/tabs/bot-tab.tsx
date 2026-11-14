@@ -68,7 +68,7 @@ export const DEFAULT_CABINET_GROUPED_IDS: string[] = [
   "tg_proxy",
 ];
 
-const BOT_EMOJI_KEYS = ["HEADER", "MAIN_MENU", "STATUS", "BALANCE", "TARIFFS", "PACKAGE", "PROFILE", "CARD", "TRIAL", "LINK", "SERVERS", "BACK", "BACK_TO_SUB", "BACK_TO_SUBS_LIST", "PUZZLE", "DATE", "TIME", "TRAFFIC", "ACTIVE_GREEN", "ACTIVE_YELLOW", "INACTIVE", "CONNECT", "NOTE", "STAR", "CROWN", "DURATION", "DEVICES", "LOCATION", "CUSTOM_1", "CUSTOM_2", "CUSTOM_3", "CUSTOM_4", "CUSTOM_5"] as const;
+const BOT_EMOJI_KEYS = ["HEADER", "MAIN_MENU", "STATUS", "BALANCE", "TARIFFS", "PACKAGE", "PROFILE", "CARD", "TRIAL", "LINK", "SERVERS", "BACK", "BACK_TO_PROFILE", "BACK_TO_SUB", "BACK_TO_SUBS_LIST", "PUZZLE", "DATE", "TIME", "TRAFFIC", "ACTIVE_GREEN", "ACTIVE_YELLOW", "INACTIVE", "CONNECT", "NOTE", "STAR", "CROWN", "DURATION", "DEVICES", "LOCATION", "CUSTOM_1", "CUSTOM_2", "CUSTOM_3", "CUSTOM_4", "CUSTOM_5"] as const;
 
 export const DEFAULT_BOT_MENU_TEXTS: Record<string, string> = {
   welcomeTitlePrefix: " ",
@@ -153,6 +153,7 @@ export const DEFAULT_BOT_INNER_STYLES: Record<string, string> = {
   trialConfirm: "success",
   lang: "primary",
   currency: "primary",
+  backProfile: "danger",
 };
 
 const BOT_MENU_TEXT_LABELS: Record<string, string> = {
@@ -192,6 +193,7 @@ const BOT_EMOJI_LABELS: Record<string, string> = {
   LINK: "Ссылка / Реферал",
   SERVERS: "VPN / Серверы",
   BACK: "Кнопка «Назад»",
+  BACK_TO_PROFILE: "Кнопка «Назад» (в профиль)",
   BACK_TO_SUB: "Кнопка «К подписке»",
   BACK_TO_SUBS_LIST: "Кнопка «К списку подписок»",
   PUZZLE: "Меню профиля",
@@ -254,6 +256,7 @@ const BOT_INNER_STYLE_LABELS: Record<string, { label: string; desc: string }> = 
   trialConfirm: { label: "Подтверждение триала", desc: "Подтверждение активации триала" },
   lang: { label: "Выбор языка", desc: "Кнопки выбора языка интерфейса" },
   currency: { label: "Выбор валюты", desc: "Кнопки выбора валюты" },
+  backProfile: { label: "Кнопка «Назад» (в профиль)", desc: "Возврат в меню профиля при включённых разделах в кабинете" },
 };
 
 export function BotTab({

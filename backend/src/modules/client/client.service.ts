@@ -425,6 +425,7 @@ export type BotInnerButtonStyles = {
   trialConfirm?: string;
   lang?: string;
   currency?: string;
+  backProfile?: string;
 };
 
 const DEFAULT_BOT_INNER_BUTTON_STYLES: Required<BotInnerButtonStyles> = {
@@ -435,6 +436,7 @@ const DEFAULT_BOT_INNER_BUTTON_STYLES: Required<BotInnerButtonStyles> = {
   trialConfirm: "success",
   lang: "primary",
   currency: "primary",
+  backProfile: "danger",
 };
 
 function parseBotInnerButtonStyles(raw: string | undefined): Required<BotInnerButtonStyles> {

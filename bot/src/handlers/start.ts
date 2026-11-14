@@ -3,7 +3,7 @@ import { Composer } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
 import { clearUserState, invalidateSubscriptionCache, startThrottle, tokenStore } from "../state-store.js";
-import { RICH_BUTTONS_MAX, TELEGRAM_CAPTION_MAX, _t, backButton, backToMenu, blockUnsubscribedCallback, botLogoUrl, buildMainMenuRichBlocks, buildMainMenuRichMarkdown, buildMainMenuText, callbackUi, checkUserSubscription, clearCloudEmail, connectableSubscriptions, directConnectionTarget, documentsSubMenu, editMessageContent, enforceSubscription, flattenMenuButtons, getOrRestoreToken, getSubscriptionUrl, getToken, getUserLang, instructionFallbackText, logoToMediaSource, mainMenu, rememberMediaFileId, renewableSubscriptions, sendRichBlocks, sendRichMarkdown, setToken, setTranslations, setUserLang, t } from "./shared.js";
+import { RICH_BUTTONS_MAX, TELEGRAM_CAPTION_MAX, _t, backButton, backToMenu, blockUnsubscribedCallback, botLogoUrl, buildMainMenuRichBlocks, buildMainMenuRichMarkdown, buildMainMenuText, callbackUi, checkUserSubscription, clearCloudEmail, connectableSubscriptions, directConnectionTarget, documentsSubMenu, editMessageContent, enforceSubscription, flattenMenuButtons, getOrRestoreToken, getSubscriptionUrl, getToken, getUserLang, instructionFallbackText, logoToMediaSource, mainMenu, navRowWithProfileBack, rememberMediaFileId, renewableSubscriptions, sectionBackToMenu, sendRichBlocks, sendRichMarkdown, setToken, setTranslations, setUserLang, t } from "./shared.js";
 import type { ConfigSnapshot, RichInlineKeyboard, TariffCategory, TariffItem } from "./shared.js";
 import { resolveCallbackDomain } from "./routing.js";
 
@@ -798,7 +798,7 @@ composer.command("link", async (ctx) => {
       }
       // «menu:back» не зарегистрирован → кнопка ломалась.
       // Используем «menu:main» и переименуем в «🏠 Главное меню».
-      rows.push([{ text: "🏠 Главное меню", callback_data: "menu:main" }]);
+      rows.push(navRowWithProfileBack([{ text: "🏠 Главное меню", callback_data: "menu:main" }], "tg_proxy", config, innerStyles, innerEmojiIds, getUserLang(userId)));
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await editMessageContent(ctx, text, { inline_keyboard: rows as any });
       return;
@@ -882,7 +882,7 @@ composer.command("link", async (ctx) => {
       const appUrl = config?.publicAppUrl?.replace(/\/$/, "") ?? null;
       const rouletteUrl = appUrl ? `${appUrl}/cabinet/roulette` : null;
       if (!rouletteUrl) {
-        await editMessageContent(ctx, "Рулетка временно недоступна.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        await editMessageContent(ctx, "Рулетка временно недоступна.", sectionBackToMenu("roulette", config, innerStyles, innerEmojiIds, getUserLang(userId)));
         return;
       }
       await editMessageContent(
@@ -893,7 +893,7 @@ composer.command("link", async (ctx) => {
         {
           inline_keyboard: [
             [{ text: "🎰 Крутить рулетку", web_app: { url: rouletteUrl } }],
-            [{ text: backButton(config?.botEmojis ?? null).text, callback_data: "menu:main" }],
+            navRowWithProfileBack([{ text: backButton(config?.botEmojis ?? null).text, callback_data: "menu:main" }], "roulette", config, innerStyles, innerEmojiIds, getUserLang(userId)),
           ],
         }
       );

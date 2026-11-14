@@ -2,7 +2,7 @@ import { Composer } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
 import { activeDiscountCode, addsubPending, awaitingCustomTopup, clearUserState, convDropExtras, extendingSecondaryPending, extraOptionPending, extraOptionTargetSub, pendingDropExtras, selectedTariffOption, tariffOptionsCache, tokenStore, trialReplaceChoice } from "../state-store.js";
-import { EMAIL_PROMPT_TEXT, RECEIPT_OK_LINE, _t, applyExtraDevicesPriceBot, backButton, backToMenu, bestPricePerDayOptionId, blockUnsubscribedCallback, buildPaymentMessage, callbackUi, checkoutExtraDeviceCap, editMessageContent, enforceSubscription, formatMoney, formatRuDays, getDiscountedPrice, getOrRestoreToken, getUserLang, hasExtraDevices, hasPendingEmailInput, instructionFallbackText, isValidEmail, optionPaymentMethodButtons, payUrlMarkup, peekPendingReceipt, proxyPaymentMethodButtons, receiptPromptKeyboard, receiptPromptText, renewableSubscriptions, setPendingEmailInput, setTranslations, setUserLang, shouldShowPurchaseChoice, showCloudCheckout, showPaymentMethodsForTariff, singboxPaymentMethodButtons, sortedPriceOptions, storePendingReceipt, t, takePendingEmailInput, takePendingReceipt, tariffActionChoiceButtons, tariffDevicePickerButtons, tariffErrMarkup, tariffOptionPickerButtons, textInputUserId, titleWithEmoji, topUpPresets, topupPaymentMethodButtons, tryAutoDeleteUnknown } from "./shared.js";
+import { EMAIL_PROMPT_TEXT, RECEIPT_OK_LINE, _t, applyExtraDevicesPriceBot, backButton, backToMenu, bestPricePerDayOptionId, blockUnsubscribedCallback, buildPaymentMessage, callbackUi, checkoutExtraDeviceCap, editMessageContent, enforceSubscription, formatMoney, formatRuDays, getDiscountedPrice, getOrRestoreToken, getUserLang, hasExtraDevices, hasPendingEmailInput, instructionFallbackText, isCabinetGrouped, isValidEmail, navRowWithProfileBack, optionPaymentMethodButtons, payUrlMarkup, peekPendingReceipt, proxyPaymentMethodButtons, receiptPromptKeyboard, receiptPromptText, renewableSubscriptions, sectionBackToMenu, setPendingEmailInput, setTranslations, setUserLang, shouldShowPurchaseChoice, showCloudCheckout, showPaymentMethodsForTariff, singboxPaymentMethodButtons, sortedPriceOptions, storePendingReceipt, t, takePendingEmailInput, takePendingReceipt, tariffActionChoiceButtons, tariffDevicePickerButtons, tariffErrMarkup, tariffOptionPickerButtons, textInputUserId, titleWithEmoji, topUpPresets, topupPaymentMethodButtons, tryAutoDeleteUnknown } from "./shared.js";
 import type { ConfigSnapshot, InnerEmojiIds, TariffCategory, TariffItem } from "./shared.js";
 
 type SellOptionItem = NonNullable<NonNullable<ConfigSnapshot>["sellOptions"]>[number];
@@ -1024,13 +1024,13 @@ export function createPaymentHandlers(): Composer<Context> {
       const yooEnabled = !!config?.yoomoneyEnabled;
       const yookassaEnabledTopup = !!config?.yookassaEnabled;
       if (!methods.length && !yooEnabled && !yookassaEnabledTopup && !config?.telegramStarsEnabled) {
-        await editMessageContent(ctx, _t("topup.unavailable", lang), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        await editMessageContent(ctx, _t("topup.unavailable", lang), sectionBackToMenu("topup", config, innerStyles, innerEmojiIds, lang));
         return;
       }
       // текст редактируется в админке («Тексты бота» → bot_topup_text).
       const topupBody = (config?.botTopupText ?? "").trim() || "Пополнить баланс\n\nВыберите сумму или введите свою (числом):";
       const topupTitle = titleWithEmoji("CARD", topupBody, config?.botEmojis);
-      await editMessageContent(ctx, topupTitle.text, topUpPresets(client.preferredCurrency, config?.botBackLabel ?? null, innerStyles, innerEmojiIds), topupTitle.entities);
+      await editMessageContent(ctx, topupTitle.text, topUpPresets(client.preferredCurrency, config?.botBackLabel ?? null, innerStyles, innerEmojiIds, isCabinetGrouped("topup", config)), topupTitle.entities);
       return;
     }
 
@@ -1193,7 +1193,7 @@ export function createPaymentHandlers(): Composer<Context> {
         if (!hasAnyEnabled && config?.trialEnabled) {
           const current = await api.getMe(token);
           if (!current.trialUsed) {
-            await editMessageContent(ctx, (config.botTrialText ?? "").trim() || "Активировать бесплатный пробный доступ?", { inline_keyboard: [[{ text: "Активировать пробный доступ", callback_data: "trial:confirm" }], [{ text: config.botBackLabel || "В меню", callback_data: "menu:main" }]] });
+            await editMessageContent(ctx, (config.botTrialText ?? "").trim() || "Активировать бесплатный пробный доступ?", { inline_keyboard: [[{ text: "Активировать пробный доступ", callback_data: "trial:confirm" }], navRowWithProfileBack([{ text: config.botBackLabel || "В меню", callback_data: "menu:main" }], "trial", config, innerStyles, innerEmojiIds, getUserLang(userId))] });
             return;
           }
         }
@@ -1202,7 +1202,7 @@ export function createPaymentHandlers(): Composer<Context> {
           await editMessageContent(
             ctx,
             (config?.botTrialUsedText ?? "").trim() || "🎁 Пробные подписки\n\nВсе доступные пробные подписки уже использованы.",
-            backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds),
+            sectionBackToMenu("trial", config, innerStyles, innerEmojiIds, getUserLang(userId)),
           );
           return;
         }
@@ -1233,7 +1233,7 @@ export function createPaymentHandlers(): Composer<Context> {
         const rows: { text: string; callback_data: string }[][] = items.map((t) => [
           { text: `${t.name} — ${(t.price ?? 0) > 0 ? `${t.price} ₽` : "бесплатно"}`.slice(0, 64), callback_data: `trial:activate:${t.id}` },
         ]);
-        rows.push([{ text: "🏠 Главное меню", callback_data: "menu:main" }]);
+        rows.push(navRowWithProfileBack([{ text: "🏠 Главное меню", callback_data: "menu:main" }], "trial", config, innerStyles, innerEmojiIds, getUserLang(userId)));
         await editMessageContent(ctx, lines.join("\n"), { inline_keyboard: rows });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Ошибка загрузки триалов";
