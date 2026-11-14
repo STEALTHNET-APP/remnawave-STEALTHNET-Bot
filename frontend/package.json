@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/generate-pwa-icons.mjs && tsc -b tsconfig.app.json && vite build",
+    "build": "node scripts/generate-pwa-icons.mjs && tsc -b tsconfig.app.json && vite build && node scripts/check-precache-graph.mjs",
     "build:icons": "node scripts/generate-pwa-icons.mjs",
     "preview": "vite preview"
   },
