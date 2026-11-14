@@ -8,6 +8,15 @@ import { test } from 'node:test';
 import { writeSqlArchive, writeGzipArchive, readFileParts, pruneDeliveredBackups, compatibleDumpHeader } from '../dist/modules/backup/backup-archive.js';
 import { Readable } from 'node:stream';
 
+const appVersion = JSON.parse(await readFile(new URL('../../version.json', import.meta.url), 'utf8')).version;
+
+function stripDumpHeader(text) {
+  const match = text.match(/^-- StealthNet v[^\n]+ Database Dump\n-- Created at: [^\n]+\n\n/);
+  assert.ok(match, 'dump header is missing');
+  assert.ok(match[0].startsWith(`-- StealthNet v${appVersion} Database Dump\n-- Created at: `));
+  return text.slice(match[0].length);
+}
+
 async function workspace(t) {
   const dir = await mkdtemp(fileURLToPath(new URL('../../temp/backup-test-', import.meta.url)));
   t.after(() => rm(dir, { recursive: true, force: true }));
@@ -21,7 +30,7 @@ test('streams a dump to gzip and publishes only after successful process exit', 
   const sql = line.repeat(10000);
   const child = spawn(process.execPath, ['-e', `process.stdout.write(${JSON.stringify(line)}.repeat(10000))`]);
   await writeGzipArchive(child, file);
-  assert.equal(gunzipSync(await readFile(file)).toString(), sql);
+  assert.equal(stripDumpHeader(gunzipSync(await readFile(file)).toString()), sql);
   assert.deepEqual(await readdir(dir), ['dump.sql.gz']);
 });
 
@@ -99,7 +108,7 @@ test('actual gzip multipart reassembly passes integrity validation', async t => 
   const parts = [];
   for await (const part of readFileParts(file, 50)) { assert.ok(part.length <= 50); parts.push(part); }
   assert.ok(parts.length > 1);
-  assert.equal(gunzipSync(Buffer.concat(parts)).toString(), sql);
+  assert.equal(stripDumpHeader(gunzipSync(Buffer.concat(parts)).toString()), sql);
 });
 
 
@@ -109,7 +118,7 @@ test('manual SQL backup waits for process exit and strips incompatible header', 
   const sql = '-- PostgreSQL database dump\nSET transaction_timeout = 0;\n--\n-- Name: test\nSELECT 1;\n';
   const child = spawn(process.execPath, ['-e', `process.stdout.write(${JSON.stringify(sql)})`]);
   await writeSqlArchive(child, file);
-  assert.equal(await readFile(file, 'utf8'), sql.replace('SET transaction_timeout = 0;\n', ''));
+  assert.equal(stripDumpHeader(await readFile(file, 'utf8')), sql.replace('SET transaction_timeout = 0;\n', ''));
 });
 
 test('failed and empty manual dumps are never published', async t => {
