@@ -53,7 +53,7 @@ test("renewal button supports existing configs, visibility, label, order, groupe
     assert(buttons({ ...base, ...extra }).some(b => "callback_data" in b && b.callback_data === "menu:renew"));
   }
   assert(!buttons({ ...base, showRenew: false }).some(b => "callback_data" in b && b.callback_data === "menu:renew"));
-  assert(buttons({ ...base, botButtons: [{ id: "vpn", visible: true, label: "Connect", order: 5 }] }).some(b => "callback_data" in b && b.callback_data === "menu:renew"));
+  assert(!buttons({ ...base, botButtons: [{ id: "vpn", visible: true, label: "Connect", order: 5 }] }).some(b => "callback_data" in b && b.callback_data === "menu:renew"));
   const configured = { id: "renew", visible: true, label: "Продлить доступ", order: -1, style: "success" };
   assert.equal(buttons({ ...base, botButtons: [configured] })[0].text, "Продлить доступ");
   assert(!buttons({ ...base, botButtons: [{ ...configured, visible: false }] }).some(b => b.text === configured.label));

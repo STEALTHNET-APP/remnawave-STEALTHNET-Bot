@@ -1041,7 +1041,7 @@ export function buildMainMenuText(opts: {
 
   // Приветствие + имя сервиса в ОДНУ строку, жирным:
   // «👋 Добро пожаловать в 🛡 STEALTHNET».
-  pushLine("welcomeGreeting", `**${t(menuTexts, "welcomeGreeting")}${t(menuTexts, "welcomeTitlePrefix")}${name}**`);
+  pushLine("welcomeGreeting", `**${t(menuTexts, "welcomeGreeting")}${shouldShow("welcomeTitlePrefix") ? t(menuTexts, "welcomeTitlePrefix") + name : ""}**`);
   // Баланс — сразу под шапкой (выше списка подписок), жирным.
   pushLine("balancePrefix", `**${t(menuTexts, "balancePrefix")}${balanceStr}**`);
   pushLine("telegramIdPrefix", t(menuTexts, "telegramIdPrefix") + "`" + opts.telegramId + "`");
@@ -1057,7 +1057,7 @@ export function buildMainMenuText(opts: {
       lineStartKeys.push(null);
       lineEntitiesByIndex.push(entities);
     };
-    if (allSubs && allSubs.items.length > 0) {
+    if (allSubs && allSubs.items.length > 0 && (allSubs.items.length > 1 || !shouldShow("subscriptionPrefix"))) {
       pushRaw("");
       if (opts.multiSubscriptionsEnabled === true) {
         pushLine("subsCountLabel", t(menuTexts, "subsCountLabel") + `**${allSubs.items.length}**`);
@@ -1106,7 +1106,7 @@ export function buildMainMenuText(opts: {
     pushLine("subscriptionPrefix", t(menuTexts, "subscriptionPrefix") + statusLabel);
     pushLine("expirePrefix", t(menuTexts, "expirePrefix") + expireStr);
     if (daysLeft != null) {
-      pushLine("daysLeftPrefix", t(menuTexts, "daysLeftPrefix") + `${daysLeft} ${daysLeft === 1 ? "день" : daysLeft < 5 ? "дня" : "дней"}`);
+      pushLine("daysLeftPrefix", t(menuTexts, "daysLeftPrefix") + `${daysLeft} ${formatDaysRu(daysLeft)}`);
     }
     const rawDeviceLimit = subscriptionDeviceLimit(subscription);
     const deviceLimit = typeof rawDeviceLimit === "number" && Number.isFinite(rawDeviceLimit)
@@ -1115,8 +1115,7 @@ export function buildMainMenuText(opts: {
     const devicesUsed = user?.devicesUsed ?? user?.devices_used;
     if (deviceLimit != null && typeof deviceLimit === "number") {
       widgetDevices = deviceLimit === 0 ? "Без лимита" : devicesUsed != null ? `${devicesUsed} / ${deviceLimit}` : `До ${deviceLimit}`;
-      const available = devicesUsed != null ? Math.max(0, deviceLimit - Number(devicesUsed)) : deviceLimit;
-      pushLine("devicesLabel", t(menuTexts, "devicesLabel") + available + t(menuTexts, "devicesAvailable"));
+      pushLine("devicesLabel", t(menuTexts, "devicesLabel") + (deviceLimit === 0 ? "Без лимита" : devicesUsed != null ? `${devicesUsed} / ${deviceLimit}` : `До ${deviceLimit}`));
     }
     const trafficUsedBytes =
       (user?.userTraffic as { usedTrafficBytes?: number } | undefined)?.usedTrafficBytes ??
@@ -1127,12 +1126,10 @@ export function buildMainMenuText(opts: {
     const usedNum = typeof trafficUsedBytes === "string" ? parseFloat(trafficUsedBytes) : Number(trafficUsedBytes);
     const limitNum = typeof trafficLimitBytes === "string" ? parseFloat(trafficLimitBytes) : Number(trafficLimitBytes);
     if (Number.isFinite(usedNum) && Number.isFinite(limitNum) && limitNum > 0) {
-      const pct = usedNum / limitNum;
       const usedGb = bytesToGb(usedNum);
       const limitGb = bytesToGb(limitNum);
       widgetTraffic = `${usedGb} / ${limitGb} GB`;
-      const pctInt = Math.round(Math.min(100, pct * 100));
-      pushLine("trafficPrefix", t(menuTexts, "trafficPrefix") + `🟢 ${progressBar(pct, 14)} ${pctInt}% (${usedGb} / ${limitGb} GB)`);
+      pushLine("trafficPrefix", t(menuTexts, "trafficPrefix") + `${usedGb} / ${limitGb} GB`);
     } else if (Number.isFinite(usedNum)) {
       widgetTraffic = `${bytesToGb(usedNum)} GB`;
       pushLine("trafficPrefix", t(menuTexts, "trafficPrefix") + ` ${bytesToGb(usedNum)} GB`);

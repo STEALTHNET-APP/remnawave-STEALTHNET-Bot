@@ -122,7 +122,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     else delete document.body.dataset.adminUi;
     return () => { delete document.body.dataset.adminUi; };
   }, [pathname, adminAppearance]);
-  const [personalConfig, setPersonalConfig] = useState<ThemeConfig | null>(() => loadTheme(isAdminThemePath(pathname)));
+  const isAdmin = isAdminThemePath(pathname);
+  const [personalThemes, setPersonalThemes] = useState(() => ({ admin: loadTheme(true), client: loadTheme(false) }));
+  const personalConfig = isAdmin ? personalThemes.admin : personalThemes.client;
   const [systemDark, setSystemDark] = useState(getSystemDark);
   const [serverConfig, setServerConfig] = useState<ServerThemeConfig>(loadInitialServerTheme);
   const { config, editable } = resolveThemePolicy(pathname, personalConfig, serverConfig);
@@ -169,7 +171,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setConfig = useCallback((cfg: ThemeConfig) => {
     if (!editable) return;
     const next = normalizeTheme(cfg);
-    setPersonalConfig(next);
+    setPersonalThemes(previous => ({ ...previous, [isAdminThemePath(pathname) ? "admin" : "client"]: next }));
     saveTheme(next, isAdminThemePath(pathname));
   }, [editable, pathname]);
 

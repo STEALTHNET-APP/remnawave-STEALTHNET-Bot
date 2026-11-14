@@ -53,3 +53,8 @@ cloudflare-*.ini
 
 /bot/data/widget-preferences/
 /data/widget-preferences/
+
+/backups/**/*.sql
+/backups/**/*.sql.gz
+/backups/**/*.dump
+/backups/**/*.dump.gz

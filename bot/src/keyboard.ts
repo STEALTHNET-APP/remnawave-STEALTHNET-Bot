@@ -302,36 +302,8 @@ export function mainMenu(opts: {
   remnaSubscriptionUrl?: string | null;
 }): InlineMarkup {
   const configButtons = opts.botButtons ?? [];
-  const fromConfig = configButtons.length > 0;
+  const fromConfig = Array.isArray(opts.botButtons);
   let list = (fromConfig ? configButtons : DEFAULT_BUTTONS).map(b => ({ ...b }));
-  for (const id of ["cloudtrial", "autopay"]) if (!list.some(b => b.id === id)) list.push({ ...DEFAULT_BUTTONS.find(b => b.id === id)! });
-  if (fromConfig && !list.some((b) => b.id === "renew")) {
-    list.push({ ...DEFAULT_BUTTONS.find(b => b.id === "renew")! });
-  }
-  if (fromConfig && !list.some((b) => b.id === "devices")) {
-    list.push({ id: "devices", visible: true, label: "📱 Устройства", order: 1.5, style: "primary" });
-  }
-  // Auto-add «Мои подписки» если её нет в админ-конфиге (новая кнопка,
-  // в существующих инсталляциях её ещё не было — fallback не даёт её потерять).
-  if (fromConfig && !list.some((b) => b.id === "my_subs")) {
-    list.push({ id: "my_subs", visible: true, label: "📋 Мои подписки", order: 0.05, style: "primary" });
-  }
-  // T14 (11.05.2026): auto-add «🛡 Бесплатный Прокси для Telegram» — новая кнопка по эталону.
-  // В существующих инсталляциях её не было; fallback подставляет с дефолтным лейблом и order=6.8.
-  if (fromConfig && !list.some((b) => b.id === "tg_proxy")) {
-    list.push({ id: "tg_proxy", visible: true, label: "🛡 Бесплатный Прокси для Telegram", order: 6.8, style: "primary", onePerRow: true });
-  }
-  if (fromConfig && opts.showGift === true && !list.some((b) => b.id === "gift")) {
-    list.push({ id: "gift", visible: true, label: "🎁 Подарки", order: 8.5, style: "primary" });
-  }
-  if (fromConfig && !list.some((b) => b.id === "roulette")) {
-    list.push({ id: "roulette", visible: true, label: "🎰 Рулетка", order: 8.7, style: "primary" });
-  }
-  // auto-add «🌐 Сайт» если её ещё нет в админ-конфиге.
-  // URL берётся из publicAppUrl. Если URL не задан — кнопка скрывается обработчиком ниже.
-  if (fromConfig && !!opts.appUrl?.trim() && !list.some((b) => b.id === "site")) {
-    list.push({ id: "site", visible: true, label: "🌐 Сайт", order: 10, style: "primary", onePerRow: true });
-  }
   const cabinetIds = new Set(
     Array.isArray(opts.groupCabinetItems)
       ? opts.groupCabinetItems

@@ -21,7 +21,7 @@ test('URL validation agrees in API, bot and settings', () => {
   ]) for (const validate of [isBotButtonUrl, botUrl, frontendUrl]) assert.equal(validate(url), valid, url);
 });
 test('saved custom links survive parsing and become URL buttons, with built-in callbacks preserved', () => {
-  const buttons = parse([{ ...defaults[0], visible: false }, { ...custom, url: ' https://t.me/example ', label: ' Our channel ' }]);
+  const buttons = parse([{ ...defaults[0], visible: false }, defaults[1], { ...custom, url: ' https://t.me/example ', label: ' Our channel ' }]);
   assert.equal(buttons.find(b => b.id === 'tariffs').visible, false);
   assert.ok(buttons.some(b => b.id === 'profile'));
   const rows = menu(buttons).inline_keyboard;
@@ -55,4 +55,12 @@ test('broken stored links are skipped; legacy/default menus still render', () =>
   assert.ok(menu(buttons).inline_keyboard.flat().some(b => b.callback_data === 'menu:tariffs'));
   assert.ok(!menu([{...custom,url:'javascript:alert(1)'}]).inline_keyboard.flat().some(b => b.text === custom.label));
   assert.ok(!menu([{...defaults[0],url:custom.url}]).inline_keyboard.flat().some(b => b.url === custom.url));
+});
+
+test('saved menus do not automatically enable missing or newly introduced buttons', () => {
+  const buttons = parse([custom]);
+  assert.equal(buttons.find(button => button.id === 'profile').visible, false);
+  assert.equal(buttons.find(button => button.id === 'tariffs').visible, false);
+  assert.deepEqual(menu(buttons).inline_keyboard.flat().map(button => button.text), ['Our channel']);
+  assert.equal(menu(parse([])).inline_keyboard.flat().length, 0);
 });

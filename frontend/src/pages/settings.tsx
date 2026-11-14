@@ -42,12 +42,7 @@ const DEFAULT_GROQ_MODELS = [
   "llama-3.1-8b-instant",
   "openai/gpt-oss-120b",
   "openai/gpt-oss-20b",
-  "deepseek-r1-distill-llama-70b",
-  "deepseek-r1-distill-qwen-32b",
   "qwen/qwen3.8-27b",
-  "qwen-2.5-coder-32b",
-  "mixtral-8x7b-32768",
-  "gemma2-9b-it",
 ];
 
 export function SettingsPage() {
@@ -559,6 +554,8 @@ export function SettingsPage() {
     setMessage("");
     saveSettingsMut.mutate({
       botButtons: JSON.stringify(settings.botButtons ?? DEFAULT_BOT_BUTTONS),
+      botMenuTexts: settings.botMenuTexts != null ? JSON.stringify(settings.botMenuTexts) : undefined,
+      botMenuLineVisibility: settings.botMenuLineVisibility != null ? JSON.stringify(settings.botMenuLineVisibility) : undefined,
       botCommands: settings.botCommands,
       botMenuMode: settings.botMenuMode ?? "classic",
       botGroupCabinet: settings.botGroupCabinet ?? false,
@@ -1130,7 +1127,7 @@ export function SettingsPage() {
                         options={availableModels}
                         value={settings.groqFallback2}
                         onChange={(model) => setSettings((s) => (s ? { ...s, groqFallback2: model } : s))}
-                        placeholder="deepseek-r1-distill-llama-70b"
+                        placeholder="openai/gpt-oss-20b"
                         allowEmpty
                         emptyLabel={t("admin.settings.ai_no_fallback")}
                       />

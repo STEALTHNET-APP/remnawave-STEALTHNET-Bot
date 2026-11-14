@@ -1,3 +1,4 @@
+import { compactBotMenu } from "@/lib/bot-menu-preset";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -398,6 +399,10 @@ export function BotTab({
                             </div>
                           </div>
                         )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3">
+                        <Button type="button" variant="outline" onClick={() => setSettings(current => current ? compactBotMenu(current, DEFAULT_BOT_BUTTONS) : current)}>Компактное меню</Button>
+                        <p className="text-xs text-muted-foreground flex-1 min-w-48">Подключение, продление, тарифы, профиль и поддержка — на главной. Остальные кнопки — в профиле. Короткий текст без повторов. Проверьте изменения ниже и нажмите «Сохранить».</p>
                       </div>
                       <BotButtonsList
                         onSave={saveBotMenu}

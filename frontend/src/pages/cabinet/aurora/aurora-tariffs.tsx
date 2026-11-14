@@ -98,7 +98,7 @@ export function AuroraTariffs() {
     autoSelectExtended: "withTrialConversion",
     extras: true,
     resetExtrasOnSelection: true,
-    promoDiscount: "plan",
+    promoDiscount: "total",
     promoAppliedMessage: t("aurora.promo_applied"),
     promoInvalidMessage: t("aurora.promo_invalid"),
     additional: "multiSubscriptions",

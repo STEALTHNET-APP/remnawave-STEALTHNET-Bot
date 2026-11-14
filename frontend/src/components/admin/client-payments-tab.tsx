@@ -79,7 +79,7 @@ function statusLabel(status: string) {
 export function ClientPaymentsTab({ clientId, token }: Props) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { data, isLoading, isFetching, refetch } = useAdminClientPayments(token, clientId);
+  const { data, isLoading, isFetching, isError, error, refetch } = useAdminClientPayments(token, clientId);
   const [actionsPaymentId, setActionsPaymentId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -89,7 +89,7 @@ export function ClientPaymentsTab({ clientId, token }: Props) {
   const failedCount = items.filter((p) => p.status === "FAILED" || p.status === "REFUNDED").length;
 
   const totalsByCurrency = new Map<string, number>();
-  for (const payment of paidItems) {
+  for (const payment of paidItems.filter(payment => !["balance", "admin_grant"].includes(payment.provider))) {
     totalsByCurrency.set(payment.currency, (totalsByCurrency.get(payment.currency) ?? 0) + payment.amount);
   }
   const ltv = totalsByCurrency.size
@@ -135,6 +135,13 @@ export function ClientPaymentsTab({ clientId, token }: Props) {
       setDeletingId(null);
     }
   };
+
+  if (isError) {
+    return <div role="alert" className="space-y-3 py-6 text-sm">
+      <p>{error instanceof Error ? error.message : "Не удалось загрузить платежи"}</p>
+      <Button variant="outline" onClick={() => void refetch()} disabled={isFetching}>Повторить</Button>
+    </div>;
+  }
 
   if (isLoading) {
     return (

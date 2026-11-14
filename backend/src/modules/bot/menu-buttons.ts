@@ -75,7 +75,7 @@ export function parseConfiguredBotButtons(raw: string | undefined, DEFAULT_BOT_B
     const savedIds = new Set(result.map((b) => b.id));
     for (const def of DEFAULT_BOT_BUTTONS) {
       if (!savedIds.has(def.id)) {
-        result.push({ id: def.id, visible: def.visible, label: def.label, order: def.order, style: def.style ?? "", emojiKey: undefined, onePerRow: def.onePerRow });
+        result.push({ id: def.id, visible: false, label: def.label, order: def.order, style: def.style ?? "", emojiKey: undefined, onePerRow: def.onePerRow });
       }
     }
     return result;

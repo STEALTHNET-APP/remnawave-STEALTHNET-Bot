@@ -3,6 +3,8 @@ import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { syncFromRemna, syncSubscriptionsMirror } from "./sync.service.js";
 
+import { syncFailureSummary } from "./sync-diagnostics.js";
+
 let task: ScheduledTask | null = null;
 let running = false;
 export async function runScheduledRemnaSync() {
@@ -21,13 +23,21 @@ export async function runScheduledRemnaSync() {
       let summary: string;
       try {
         const clients = await syncFromRemna();
-        if (!clients.ok) throw new Error(`Импорт клиентов: ${clients.errors.length} ошибок`);
-        const subscriptions = await syncSubscriptionsMirror();
-        if (!subscriptions.ok) throw new Error(`Импорт подписок: ${subscriptions.errors.length} ошибок`);
-        summary = JSON.stringify({ ok: true, finishedAt: new Date().toISOString(), clients, subscriptions });
+        const subscriptions = clients.ok ? await syncSubscriptionsMirror() : null;
+        const failure = !clients.ok
+          ? syncFailureSummary("Импорт клиентов", clients.errors)
+          : subscriptions && !subscriptions.ok ? syncFailureSummary("Импорт подписок", subscriptions.errors) : null;
+        if (failure) console.warn("[remna-sync]", failure.message);
+        summary = JSON.stringify({
+          ok: !failure, finishedAt: new Date().toISOString(),
+          clients: { ...clients, errors: clients.ok ? [] : syncFailureSummary("Импорт клиентов", clients.errors).errors },
+          subscriptions: subscriptions ? { ...subscriptions, errors: subscriptions.ok ? [] : syncFailureSummary("Импорт подписок", subscriptions.errors).errors } : null,
+          ...(failure ? { error: failure.message, errorCount: failure.errorCount } : {}),
+        });
       } catch (error) {
-        console.warn("[remna-sync]", error instanceof Error ? error.message : "Sync failed");
-        summary = JSON.stringify({ ok: false, finishedAt: new Date().toISOString() });
+        const failure = syncFailureSummary("Синхронизация", [error instanceof Error ? error.message : "Неизвестная ошибка"]);
+        console.warn("[remna-sync]", failure.message);
+        summary = JSON.stringify({ ok: false, finishedAt: new Date().toISOString(), error: failure.message });
       }
       for (const [key, value] of [["remna_auto_sync_last_attempt", started], ["remna_auto_sync_last_result", summary]]) {
         await tx.systemSetting.upsert({ where: { key }, create: { key, value }, update: { value } });

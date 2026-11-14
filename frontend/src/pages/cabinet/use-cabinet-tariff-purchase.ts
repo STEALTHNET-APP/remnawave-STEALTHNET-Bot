@@ -391,10 +391,10 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
     : 0;
 
   const totalPrice = basePrice + extrasTotal + extendExtrasCost + convExtendExtrasCost;
-  const personalDiscountPct = Math.max(
+  const personalDiscountPct = Math.min(100, Math.max(
     0,
     (state.client as { personalDiscountPercent?: number | null } | null)?.personalDiscountPercent ?? 0,
-  );
+  ));
   const priceAfterPersonal = personalDiscountPct > 0
     ? Math.floor(Math.max(0, totalPrice - (totalPrice * personalDiscountPct) / 100))
     : totalPrice;
@@ -420,7 +420,7 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
   const pricePerDay = days > 0 ? finalPrice / days : 0;
 
   const balance = state.client?.balance ?? 0;
-  const canPayWithBalance = balance >= finalPrice && totalPrice > 0;
+  const canPayWithBalance = balance >= finalPrice && selectedTariff != null;
 
   const availableMethods = useMemo<PayMethod[]>(() => {
     if (!config) return [];

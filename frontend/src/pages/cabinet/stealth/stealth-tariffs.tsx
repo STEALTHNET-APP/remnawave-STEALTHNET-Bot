@@ -304,7 +304,7 @@ export function StealthTariffs() {
 
         {hasPersonalDiscount && (
           <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] px-3 py-2">
-            <span className="text-xs font-bold text-amber-300">🎰 Скидка рулетки: −{personalDiscountPct}%</span>
+            <span className="text-xs font-bold text-amber-300">🎰 Персональная скидка: −{personalDiscountPct}%</span>
             <span className="text-xs font-bold tabular-nums text-emerald-400">−{formatMoney(personalDiscountAmount, currency, "stealth")}</span>
           </div>
         )}

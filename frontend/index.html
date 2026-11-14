@@ -10,19 +10,16 @@
         try {
           var path = window.location.pathname;
           var isAdmin = path === "/admin" || path.indexOf("/admin/") === 0;
-          var keys = isAdmin
-            ? ["stealthnet-admin-theme", "stealthnet-theme"]
-            : ["stealthnet-client-theme", "stealthnet-server-theme", "stealthnet-public-config", "stealthnet-theme"];
-          var theme = null;
-          for (var i = 0; i < keys.length; i += 1) {
+          function readTheme(key) {
             try {
-              var value = JSON.parse(localStorage.getItem(keys[i]) || "null");
-              if (value && typeof value === "object" && (value.mode || value.themeMode)) {
-                theme = value;
-                break;
-              }
-            } catch (error) {}
+              var value = JSON.parse(localStorage.getItem(key) || "null");
+              return value && typeof value === "object" && !Array.isArray(value) && (value.mode || value.themeMode) ? value : null;
+            } catch (error) { return null; }
           }
+          var server = readTheme("stealthnet-server-theme") || readTheme("stealthnet-public-config");
+          var editable = isAdmin || (server && server.allowUserThemeChange === true);
+          var personal = readTheme(isAdmin ? "stealthnet-admin-theme" : "stealthnet-client-theme") || readTheme("stealthnet-theme");
+          var theme = editable && personal ? personal : server;
           var mode = theme && (theme.mode || theme.themeMode);
           var resolved = mode === "system"
             ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
