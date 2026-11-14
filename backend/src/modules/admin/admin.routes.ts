@@ -704,6 +704,8 @@ const updateSettingsSchema = z.object({
   trialSquadUuid: z.string().uuid().nullable().optional(),
   trialDeviceLimit: z.number().int().min(0).nullable().optional(),
   trialTrafficLimitBytes: z.number().int().min(0).nullable().optional(),
+  trialCleanupEnabled: z.boolean().optional(),
+  trialCleanupDays: z.number().int().min(1).max(3650).optional(),
   serviceName: z.string().max(200).optional(),
   serviceDescription: z.string().max(500).nullable().optional(),
   logo: z.string().max(5_500_000).nullable().optional(),
@@ -1166,6 +1168,22 @@ adminRouter.patch("/settings", async (req, res) => {
     await prisma.systemSetting.upsert({
       where: { key: "trial_traffic_limit" },
       create: { key: "trial_traffic_limit", value: val },
+      update: { value: val },
+    });
+  }
+  if (updates.trialCleanupEnabled !== undefined) {
+    const val = updates.trialCleanupEnabled ? "true" : "false";
+    await prisma.systemSetting.upsert({
+      where: { key: "trial_cleanup_enabled" },
+      create: { key: "trial_cleanup_enabled", value: val },
+      update: { value: val },
+    });
+  }
+  if (updates.trialCleanupDays !== undefined) {
+    const val = String(updates.trialCleanupDays);
+    await prisma.systemSetting.upsert({
+      where: { key: "trial_cleanup_days" },
+      create: { key: "trial_cleanup_days", value: val },
       update: { value: val },
     });
   }

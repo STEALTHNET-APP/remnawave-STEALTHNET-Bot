@@ -107,6 +107,7 @@ export const SYSTEM_CONFIG_KEYS = [
   "default_referral_percent", "referral_percent_level_2", "referral_percent_level_3",
   "referral_reward_mode", "referral_reward_amount", "referral_reward_days", "referral_reward_enabled_at",
   "trial_days", "trial_squad_uuid", "trial_device_limit", "trial_traffic_limit",
+  "trial_cleanup_enabled", "trial_cleanup_days",
   "service_name", "service_description", "logo", "logo_bot", "favicon", "og_image", "remna_client_url",
   // UI design selector for client cabinet/mini app: "classic" (default) | "stealth" | "aurora"
   "cabinet_design",
@@ -647,6 +648,8 @@ async function loadSystemConfigFromDb() {
     trialSquadUuid: map.trial_squad_uuid || null,
     trialDeviceLimit: map.trial_device_limit != null && map.trial_device_limit !== "" ? parseInt(map.trial_device_limit, 10) : null,
     trialTrafficLimitBytes: map.trial_traffic_limit != null && map.trial_traffic_limit !== "" ? parseInt(map.trial_traffic_limit, 10) : null,
+    trialCleanupEnabled: map.trial_cleanup_enabled === "true",
+    trialCleanupDays: Math.max(1, parseInt(map.trial_cleanup_days || "90", 10) || 90),
     serviceName: map.service_name || "STEALTHNET",
     serviceDescription: map.service_description || null,
     logo: map.logo || null,

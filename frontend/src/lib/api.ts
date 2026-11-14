@@ -2133,6 +2133,9 @@ export const api = {
   async deleteTrial(token: string, id: string): Promise<{ success: boolean }> {
     return request(`/admin/trials/${id}`, { method: "DELETE", token });
   },
+  async runTrialCleanup(token: string, dryRun?: boolean): Promise<{ success: boolean; candidateCount: number; deletedCount: number; dryRun: boolean }> {
+    return request("/admin/trials/cleanup-now", { method: "POST", body: JSON.stringify({ dryRun: Boolean(dryRun) }), token });
+  },
 
   // ─── Конструктор уведомлений автосписания ───
   async getAutoRenewNotifications(token: string): Promise<{ items: AutoRenewNotificationRecord[] }> {
@@ -3656,6 +3659,8 @@ export type UpdateSettingsPayload = {
   trialSquadUuid?: string | null;
   trialDeviceLimit?: number | null;
   trialTrafficLimitBytes?: number | null;
+  trialCleanupEnabled?: boolean;
+  trialCleanupDays?: number;
   maintenanceEnabled?: boolean;
   maintenanceMessage?: string;
   serviceName?: string;
@@ -4192,6 +4197,8 @@ export interface AdminSettings {
   trialSquadUuid?: string | null;
   trialDeviceLimit?: number | null;
   trialTrafficLimitBytes?: number | null;
+  trialCleanupEnabled?: boolean;
+  trialCleanupDays?: number;
   maintenanceEnabled?: boolean;
   maintenanceMessage?: string;
   serviceName: string;
