@@ -82,6 +82,7 @@ export const qk = {
     clientRemna: (id: string) => ["admin", "client-remna", id] as const,
     clientRemnaUsage: (id: string) => ["admin", "client-remna-usage", id] as const,
     clientSubscriptionsList: (id: string) => ["admin", "client-subscriptions-list", id] as const,
+    clientPayments: (id: string) => ["admin", "client-payments", id] as const,
     clientDevices: (id: string) => ["admin", "client-devices", id] as const,
     clientSubsOverview: (id: string) => ["admin", "client-subs-overview", id] as const,
     clientAudit: (id: string) => ["admin", "client-audit", id] as const,

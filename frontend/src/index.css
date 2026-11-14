@@ -468,3 +468,14 @@ html[data-tg-miniapp] {
 @media (prefers-reduced-motion: reduce) {
   .ui-collapsible-content[data-state] { animation: none; }
 }
+
+.payment-drawer-panel[data-state="open"] {
+  animation: payment-drawer-in 180ms ease-out;
+}
+@keyframes payment-drawer-in {
+  from { opacity: 0; scale: .98; }
+  to { opacity: 1; scale: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .payment-drawer-panel[data-state] { animation: none; }
+}
