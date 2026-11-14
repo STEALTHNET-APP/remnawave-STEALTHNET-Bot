@@ -3770,6 +3770,7 @@ export type UpdateSettingsPayload = {
   botButtons?: string | null;
   paymentDescription?: string;
   botGroupCabinet?: boolean;
+  botGroupCabinetItems?: string[] | null;
   botMenuMode?: "classic" | "web";
   botButtonsPerRow?: 1 | 2;
   botEmojis?: Record<string, { unicode?: string; tgEmojiId?: string }> | string | null;
@@ -4316,6 +4317,7 @@ export interface AdminSettings {
   botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean; url?: string }[];
   paymentDescription?: string;
   botGroupCabinet?: boolean;
+  botGroupCabinetItems?: string[] | null;
   botMenuMode?: "classic" | "web";
   /** Кнопок в ряд в главном меню: 1 или 2 (по умолчанию 1) */
   botButtonsPerRow?: 1 | 2;
@@ -5784,6 +5786,7 @@ export interface PublicConfig {
   liteMode?: boolean;
   paymentDescription?: string;
   botGroupCabinet?: boolean;
+  botGroupCabinetItems?: string[] | null;
   botMenuMode?: "classic" | "web";
   supportLink?: string | null;
   instructionsLink?: string | null;

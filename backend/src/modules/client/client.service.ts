@@ -147,7 +147,7 @@ export const SYSTEM_CONFIG_KEYS = [
   "lavatop_api_key", "lavatop_default_offer_id",
   "overpay_api_url", "overpay_project_id", "overpay_login", "overpay_password",
   "groq_api_key", "groq_model", "groq_fallback_1", "groq_fallback_2", "groq_fallback_3", "ai_system_prompt",
-  "payment_description", "bot_buttons", "bot_menu_mode", "bot_group_cabinet", "bot_buttons_per_row", "bot_back_label", "bot_menu_texts", "bot_menu_line_visibility", "bot_inner_button_styles",
+  "payment_description", "bot_buttons", "bot_menu_mode", "bot_group_cabinet", "bot_group_cabinet_items", "bot_buttons_per_row", "bot_back_label", "bot_menu_texts", "bot_menu_line_visibility", "bot_inner_button_styles",
   "bot_tariffs_text", "bot_tariffs_fields", "bot_payment_text",
   "bot_emojis", // JSON: { "TRIAL": { "unicode": "🎁", "tgEmojiId": "..." }, "PACKAGE": ... } — эмодзи кнопок/текста, TG ID для премиум
   "category_emojis", // JSON: { "ordinary": "📦", "premium": "⭐" } — эмодзи категорий по коду
@@ -512,6 +512,19 @@ function parseBotMenuLineVisibility(raw: string | undefined): Required<BotMenuLi
 function parseBotButtons(raw: string | undefined): BotButtonConfig[] {
   return parseConfiguredBotButtons(raw, DEFAULT_BOT_BUTTONS);
 }
+
+function parseBotGroupCabinetItems(raw: string | undefined): string[] | null {
+  if (!raw || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((x) => typeof x === "string")) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 function parseBotEmojis(raw: string | undefined): BotEmojisConfig {
   if (!raw || !raw.trim()) return {};
   try {
@@ -842,6 +855,7 @@ async function loadSystemConfigFromDb() {
     botButtons: parseBotButtons(map.bot_buttons),
     paymentDescription: map.payment_description ?? "",
     botGroupCabinet: map.bot_group_cabinet === "true",
+    botGroupCabinetItems: parseBotGroupCabinetItems(map.bot_group_cabinet_items),
     botMenuMode: map.bot_menu_mode === "web" ? "web" as const : "classic" as const,
     botButtonsPerRow: map.bot_buttons_per_row === "2" ? 2 : 1,
     botEmojis: parseBotEmojis(map.bot_emojis),
@@ -1464,6 +1478,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     botButtons: resolvedButtons,
     botMenuMode: full.botMenuMode,
     botGroupCabinet: full.botGroupCabinet,
+    botGroupCabinetItems: full.botGroupCabinetItems,
     botButtonsPerRow: full.botButtonsPerRow ?? 1,
     botBackLabel: full.botBackLabel,
     botMenuTexts: menuTexts,

@@ -178,6 +178,7 @@ export async function getPublicConfig(force = false): Promise<{
   botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; emojiKey?: string; url?: string }[] | null;
   liteMode?: boolean;
   botGroupCabinet?: boolean;
+  botGroupCabinetItems?: string[] | null;
   botMenuMode?: "classic" | "web";
   botButtonsPerRow?: 1 | 2;
   resolvedBotMenuTexts?: Record<string, string>;
@@ -196,6 +197,7 @@ export async function getPublicConfig(force = false): Promise<{
   referralPercentLevel2?: number;
   referralPercentLevel3?: number;
   supportLink?: string | null;
+  referralInstructionsUrl?: string | null;
   agreementLink?: string | null;
   offerLink?: string | null;
   instructionsLink?: string | null;

@@ -1,7 +1,7 @@
 import { NalogTab } from "@/components/admin/settings/tabs/nalog-tab";
 import { isBotButtonUrl } from "@/lib/bot-button-url";
 import { SettingsNavigation, SETTINGS_TABS } from "@/components/admin/settings-navigation";
-import { BotButtonItem, BotTab, DEFAULT_BOT_BUTTONS, DEFAULT_BOT_INNER_STYLES, DEFAULT_BOT_MENU_LINE_VISIBILITY, DEFAULT_BOT_MENU_TEXTS, DEFAULT_BOT_PAYMENT_TEXT, DEFAULT_BOT_TARIFF_FIELDS, DEFAULT_BOT_TARIFFS_TEXT } from "@/components/admin/settings/tabs/bot-tab";
+import { BotButtonItem, BotTab, DEFAULT_BOT_BUTTONS, DEFAULT_BOT_INNER_STYLES, DEFAULT_BOT_MENU_LINE_VISIBILITY, DEFAULT_BOT_MENU_TEXTS, DEFAULT_BOT_PAYMENT_TEXT, DEFAULT_BOT_TARIFF_FIELDS, DEFAULT_BOT_TARIFFS_TEXT, DEFAULT_CABINET_GROUPED_IDS } from "@/components/admin/settings/tabs/bot-tab";
 import { DEFAULT_PLATEGA_METHODS, PaymentsTab } from "@/components/admin/settings/tabs/payments-tab";
 import { useSearchParams } from "react-router-dom";
 import { PanelUpdates } from "@/components/admin/panel-updates";
@@ -249,6 +249,7 @@ export function SettingsPage() {
       })(),
       botMenuMode: data.botMenuMode ?? "classic",
       botGroupCabinet: data.botGroupCabinet ?? false,
+      botGroupCabinetItems: (data as AdminSettings).botGroupCabinetItems ?? DEFAULT_CABINET_GROUPED_IDS,
       botButtonsPerRow: (data as AdminSettings).botButtonsPerRow ?? 1,
       botEmojis: (data as AdminSettings).botEmojis ?? {},
       botBackLabel: (data as AdminSettings).botBackLabel ?? " В меню",
@@ -554,6 +555,7 @@ export function SettingsPage() {
       botCommands: settings.botCommands,
       botMenuMode: settings.botMenuMode ?? "classic",
       botGroupCabinet: settings.botGroupCabinet ?? false,
+      botGroupCabinetItems: settings.botGroupCabinetItems,
       botButtonsPerRow: settings.botButtonsPerRow ?? 1,
       botBackLabel: settings.botBackLabel ?? " В меню",
     });
@@ -716,6 +718,7 @@ export function SettingsPage() {
         botCommands: settings.botCommands,
       botMenuMode: settings.botMenuMode ?? "classic",
       botGroupCabinet: settings.botGroupCabinet ?? false,
+        botGroupCabinetItems: settings.botGroupCabinetItems != null ? settings.botGroupCabinetItems : undefined,
         botButtonsPerRow: settings.botButtonsPerRow ?? 1,
         botEmojis: settings.botEmojis != null ? settings.botEmojis : undefined,
         botBackLabel: settings.botBackLabel ?? null,

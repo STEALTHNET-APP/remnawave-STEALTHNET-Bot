@@ -47,6 +47,27 @@ export const DEFAULT_BOT_BUTTONS: BotButtonItem[] = [
   { id: "site", visible: true, label: " Сайт", order: 10, style: "", onePerRow: true },
 ];
 
+export const DEFAULT_CABINET_GROUPED_IDS: string[] = [
+  "cloudtrial",
+  "autopay",
+  "tariffs",
+  "my_subs",
+  "proxy",
+  "my_proxy",
+  "singbox",
+  "my_singbox",
+  "devices",
+  "topup",
+  "referral",
+  "trial",
+  "vpn",
+  "promocode",
+  "extra_options",
+  "gift",
+  "roulette",
+  "tg_proxy",
+];
+
 const BOT_EMOJI_KEYS = ["HEADER", "MAIN_MENU", "STATUS", "BALANCE", "TARIFFS", "PACKAGE", "PROFILE", "CARD", "TRIAL", "LINK", "SERVERS", "BACK", "BACK_TO_SUB", "BACK_TO_SUBS_LIST", "PUZZLE", "DATE", "TIME", "TRAFFIC", "ACTIVE_GREEN", "ACTIVE_YELLOW", "INACTIVE", "CONNECT", "NOTE", "STAR", "CROWN", "DURATION", "DEVICES", "LOCATION", "CUSTOM_1", "CUSTOM_2", "CUSTOM_3", "CUSTOM_4", "CUSTOM_5"] as const;
 
 export const DEFAULT_BOT_MENU_TEXTS: Record<string, string> = {
@@ -336,10 +357,45 @@ export function BotTab({
                         </select>
                         <p className="text-xs text-muted-foreground">Web-режиму нужен публичный HTTPS-адрес кабинета. Свои ссылки сохраняются. Новое меню появится после /start или возврата в меню; старые кнопки продолжат работать.</p>
                       </div>
-                      <label className="flex items-start gap-3 rounded-xl border border-border p-3">
-                        <input type="checkbox" className="mt-1" checked={settings.botGroupCabinet ?? false} onChange={e => setSettings(s => s ? { ...s, botGroupCabinet: e.target.checked } : s)} />
-                        <span>Разделы внутри личного кабинета<span className="block text-xs text-muted-foreground">Тарифы, подписки, устройства, баланс и бонусы будут внутри «Профиля». Кнопка профиля останется доступной. Web-кабинет и поддержка останутся в главном меню.</span></span>
-                      </label>
+                      <div className="rounded-xl border border-border p-3 space-y-3">
+                        <label className="flex items-start gap-3">
+                          <input type="checkbox" className="mt-1" checked={settings.botGroupCabinet ?? false} onChange={e => setSettings(s => s ? { ...s, botGroupCabinet: e.target.checked } : s)} />
+                          <span>Разделы внутри личного кабинета<span className="block text-xs text-muted-foreground">Тарифы, подписки, устройства, баланс и бонусы будут внутри «Профиля». Кнопка профиля останется доступной. Web-кабинет и поддержка останутся в главном меню.</span></span>
+                        </label>
+                        {settings.botGroupCabinet && (
+                          <div className="space-y-3 rounded-lg border border-border bg-card p-3">
+                            <div>
+                              <h4 className="text-sm font-semibold">Пункты внутри «Профиля»</h4>
+                              <p className="text-xs text-muted-foreground">Отметьте пункты, которые должны находиться внутри меню «Профиль». Неотмеченные пункты останутся на главной странице бота.</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button type="button" variant="outline" size="sm" onClick={() => setSettings(s => s ? { ...s, botGroupCabinetItems: (s.botButtons ?? DEFAULT_BOT_BUTTONS).filter(b => b.id !== "profile").map(b => b.id) } : s)}>Выбрать все</Button>
+                              <Button type="button" variant="outline" size="sm" onClick={() => setSettings(s => s ? { ...s, botGroupCabinetItems: [...DEFAULT_CABINET_GROUPED_IDS] } : s)}>По умолчанию</Button>
+                              <Button type="button" variant="outline" size="sm" onClick={() => setSettings(s => s ? { ...s, botGroupCabinetItems: [] } : s)}>Снять все</Button>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                              {(settings.botButtons ?? DEFAULT_BOT_BUTTONS).filter(b => b.id !== "profile").map(b => {
+                                const selected = (settings.botGroupCabinetItems ?? DEFAULT_CABINET_GROUPED_IDS).includes(b.id);
+                                return (
+                                  <label key={b.id} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={selected}
+                                      onChange={e => setSettings(s => {
+                                        if (!s) return s;
+                                        const current = s.botGroupCabinetItems ?? DEFAULT_CABINET_GROUPED_IDS;
+                                        const next = e.target.checked ? [...current.filter(id => id !== b.id), b.id] : current.filter(id => id !== b.id);
+                                        return { ...s, botGroupCabinetItems: next };
+                                      })}
+                                    />
+                                    <span className="text-sm">{b.label || b.id}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                       <BotButtonsList
                         onSave={saveBotMenu}
                         saving={saving}

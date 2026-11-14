@@ -24,6 +24,27 @@ export type InlineMarkup = { inline_keyboard: (InlineButton | WebAppButton | Url
 
 export type BotButtonConfig = { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; url?: string };
 
+export const DEFAULT_CABINET_GROUPED_IDS: string[] = [
+  "cloudtrial",
+  "autopay",
+  "tariffs",
+  "my_subs",
+  "proxy",
+  "my_proxy",
+  "singbox",
+  "my_singbox",
+  "devices",
+  "topup",
+  "referral",
+  "trial",
+  "vpn",
+  "promocode",
+  "extra_options",
+  "gift",
+  "roulette",
+  "tg_proxy",
+];
+
 type DeviceButtonTheme = {
   botButtons?: (BotButtonConfig & { emojiKey?: string })[] | null;
   botEmojis?: Record<string, { unicode?: string; tgEmojiId?: string }> | null;
@@ -266,6 +287,7 @@ export function mainMenu(opts: {
   showGift?: boolean;
   menuMode?: "classic" | "web";
   groupCabinet?: boolean;
+  groupCabinetItems?: string[] | null;
   section?: "main" | "profile";
   /** Кнопок в ряд: 1 или 2 (по умолчанию 1) */
   buttonsPerRow?: 1 | 2;
@@ -303,7 +325,11 @@ export function mainMenu(opts: {
   if (fromConfig && !!opts.appUrl?.trim() && !list.some((b) => b.id === "site")) {
     list.push({ id: "site", visible: true, label: "🌐 Сайт", order: 10, style: "primary", onePerRow: true });
   }
-  const cabinetIds = new Set(["cloudtrial", "autopay", "tariffs", "my_subs", "proxy", "my_proxy", "singbox", "my_singbox", "devices", "topup", "referral", "trial", "vpn", "promocode", "extra_options", "gift", "roulette", "tg_proxy"]);
+  const cabinetIds = new Set(
+    Array.isArray(opts.groupCabinetItems)
+      ? opts.groupCabinetItems
+      : DEFAULT_CABINET_GROUPED_IDS
+  );
   if (!opts.liteMode && opts.groupCabinet && opts.section !== "profile") {
     const profile = list.find(b => b.id === "profile");
     if (profile) profile.visible = true;
