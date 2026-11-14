@@ -480,7 +480,22 @@
       "admin_password_label": "Пароль администратора для подтверждения",
       "admin_password_placeholder": "Введите ваш пароль администратора",
       "reset_2fa_success": "2FA пользователя успешно сброшена",
-      "reset_2fa_warning": "Внимание: подтвердите действие паролем администратора."
+      "reset_2fa_warning": "Внимание: подтвердите действие паролем администратора.",
+      "payments_tab": "Платежи",
+      "no_payments": "У клиента пока нет платежей",
+      "total_spent": "Всего оплачено",
+      "payments_count": "Платежей",
+      "payments_success": "успешных",
+      "payments_pending": "ожидают",
+      "payments_failed": "неуспешных",
+      "balance_topup": "Пополнение баланса",
+      "provider_balance": "Баланс",
+      "provider_manual": "Ручная выдача",
+      "activation_error": "Сбой активации",
+      "payment_actions": "Действия с платежом",
+      "delete_payment": "Удалить платёж",
+      "delete_payment_confirm": "Удалить запись о платеже? Действие необратимо.",
+      "delete_payment_error": "Не удалось удалить платёж"
     },
     "tariffs": {
       "title": "Тарифы",

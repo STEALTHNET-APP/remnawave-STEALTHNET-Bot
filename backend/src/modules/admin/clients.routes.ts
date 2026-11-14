@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma, createPayment } from "../../db.js";
 import { logAdmin } from "../audit/audit.service.js";
 import { verifyPassword } from "../auth/auth.service.js";
-import { requireAction } from "../auth/middleware.js";
+import { requireAction, type ReqAdmin } from "../auth/middleware.js";
 import {
   disableClient as bulkDisableClient,
   enableClient as bulkEnableClient,
@@ -245,6 +245,63 @@ adminClientsRouter.get("/:id", async (req, res) => {
   if (!client) return res.status(404).json({ message: "Клиент не найден" });
   return res.json(client);
 });
+
+function requireSalesReportAccess(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const admin = req as express.Request & ReqAdmin;
+  if (admin.adminRole === "ADMIN" || admin.adminAllowedSections.includes("sales-report")) return next();
+  return res.status(403).json({ message: "Access denied to this section." });
+}
+
+adminClientsRouter.get("/:id/payments", requireSalesReportAccess, asyncRoute(async (req, res) => {
+  const parsed = clientIdParam.safeParse(req.params);
+  if (!parsed.success) return res.status(400).json({ message: "Invalid client id" });
+  const payments = await prisma.payment.findMany({
+    where: { clientId: parsed.data.id },
+    orderBy: { createdAt: "desc" },
+    include: {
+      tariff: { select: { id: true, name: true } },
+      subscription: { select: { id: true, subscriptionIndex: true } },
+      delivery: { select: { state: true, error: true } },
+    },
+  });
+  return res.json({
+    items: payments.map((p) => {
+      let activationError: string | null = null;
+      let paymentType: string | null = null;
+      if (p.metadata) {
+        try {
+          const meta = JSON.parse(p.metadata) as Record<string, unknown> | null;
+          if (typeof meta?.activationError === "string") activationError = meta.activationError;
+          if (typeof meta?.paymentType === "string") paymentType = meta.paymentType;
+          if (!paymentType && meta?.type === "balance_topup") paymentType = "balance_topup";
+        } catch {
+          activationError = null;
+          paymentType = null;
+        }
+      }
+      return {
+        id: p.id,
+        orderId: p.orderId,
+        amount: p.amount,
+        currency: p.currency,
+        status: p.status,
+        provider: p.provider ?? "unknown",
+        tariffId: p.tariffId,
+        tariffName: p.tariff?.name ?? null,
+        subscriptionId: p.subscriptionId,
+        subscriptionIndex: p.subscription?.subscriptionIndex ?? null,
+        deviceCount: p.deviceCount,
+        hasActivationError:
+          (p.status === "PAID" && !p.subscriptionId && Boolean(activationError)) ||
+          p.delivery?.state === "FAILED",
+        activationError: activationError || p.delivery?.error || null,
+        paymentType: paymentType || null,
+        createdAt: p.createdAt.toISOString(),
+        paidAt: p.paidAt?.toISOString() ?? null,
+      };
+    }),
+  });
+}));
 
 adminClientsRouter.patch("/:id", asyncRoute(async (req, res) => {
   const parsed = clientIdParam.safeParse(req.params);

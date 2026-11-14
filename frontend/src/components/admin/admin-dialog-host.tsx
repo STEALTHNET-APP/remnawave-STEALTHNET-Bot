@@ -18,7 +18,7 @@ export function AdminDialogHost() {
   const confirming = request.kind === "confirm";
   const destructive = confirming && /удал|отозв|отключ|отвяз|забрать|обнул|очист|delete|revoke|remove|reset/i.test(request.message);
   return <Dialog open onOpenChange={open => { if (!open) adminDialogStore.cancel(); }}>
-    <DialogContent className="admin-action-dialog max-w-md" onOpenAutoFocus={event => { event.preventDefault(); (request.kind === "prompt" ? input.current : cancelButton.current)?.focus(); }}>
+    <DialogContent className="admin-action-dialog max-w-md z-[120]" onOpenAutoFocus={event => { event.preventDefault(); (request.kind === "prompt" ? input.current : cancelButton.current)?.focus(); }}>
       <div className="admin-action-heading">{confirming ? <AlertTriangle size={20}/> : <Info size={20}/>}<DialogTitle>{confirming ? "Подтвердите действие" : request.kind === "prompt" ? "Введите значение" : "Сообщение"}</DialogTitle></div>
       <DialogDescription className="whitespace-pre-wrap break-words">{request.message}</DialogDescription>
       <form onSubmit={event => { event.preventDefault(); adminDialogStore.settle(request.kind === "prompt" ? value : true); }}>
