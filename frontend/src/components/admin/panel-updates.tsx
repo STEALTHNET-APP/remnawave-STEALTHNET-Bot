@@ -31,6 +31,20 @@ export function PanelUpdates({ token }: { token: string }) {
   });
   const busy = mutation.isPending || ["checking", "building", "rehearsal", "backup", "installing", "verifying"].includes(data?.status?.phase || "");
   const localChanges = data?.status?.localChanges;
+  const checksFailed = data?.status?.checks?.some(check => !check.ok) === true;
+  const [clock, setClock] = useState(Date.now());
+  useEffect(() => {
+    if (!busy) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [busy]);
+  const stages = ["checking", "building", "rehearsal", "backup", "installing", "verifying", "success"];
+  const events = data?.status?.events ?? [];
+  const lastStage = [...events].reverse().find(event => stages.includes(event.phase))?.phase ?? data?.status?.phase;
+  const stageIndex = stages.indexOf(lastStage ?? "");
+  const startTime = Date.parse(data?.status?.operationStartedAt ?? "");
+  const endTime = data?.status?.operationFinishedAt ? Date.parse(data.status.operationFinishedAt) : clock;
+  const seconds = Number.isFinite(startTime) ? Math.max(0, Math.floor((endTime - startTime) / 1000)) : null;
   const update = (value: Partial<Schedule>) => { if (draft) { setDraft({ ...draft, ...value }); setDirty(true); } };
   if (!data) return <p role="status">{query.error ? "Не удалось получить состояние обновления. Повторяем подключение…" : "Загружаем состояние обновления…"}</p>;
   return (
@@ -52,6 +66,8 @@ export function PanelUpdates({ token }: { token: string }) {
           <div className="rounded-lg border p-4 space-y-2" role="status" aria-live="polite">
             <p className="font-medium">{phases[data.status?.phase || "idle"] || data.status?.phase}</p>
             <p className="text-sm">{data.status?.message}</p>
+            {seconds !== null && <p className="text-xs text-muted-foreground">Время операции: {Math.floor(seconds / 60)} мин {seconds % 60} сек</p>}
+            {data.status?.phase === "failed" && events.length > 0 && !data.status.recoveryRequired && !data.status.rolledBack && !data.status.writesResumed && !events.some(event => ["backup", "installing", "verifying"].includes(event.phase)) && <p>Установка не началась. Текущая версия продолжает работать.</p>}
             {data.status?.available && <p>Доступна версия {data.status.version} · {data.status.target?.slice(0, 7)}</p>}
             {data.status?.localChangesBackup && <p className="text-sm break-all">Копия локальных правок: {data.status.localChangesBackup}</p>}
             {data.status?.blockedReason && <p className="text-amber-600 dark:text-amber-400">{data.status.blockedReason}</p>}
@@ -60,6 +76,17 @@ export function PanelUpdates({ token }: { token: string }) {
             {data.status?.backup && <p className="text-xs text-muted-foreground break-all">Резервная копия на сервере: {data.status.backup}</p>}
             {query.isError && <p>Переподключаемся к панели. Во время установки она может быть временно недоступна.</p>}
           </div>
+          {events.some(event => event.phase === "building") && <ol aria-label="Этапы обновления" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {stages.map((stage, index) => <li key={stage} className={`rounded-lg border px-3 py-2 text-sm ${data.status?.phase === stage ? "border-primary bg-muted font-medium" : "text-muted-foreground"}`} aria-current={data.status?.phase === stage ? "step" : undefined}>
+              <span className="mr-2">{index < stageIndex || data.status?.phase === "success" ? "✓" : index + 1}</span>{phases[stage]}
+            </li>)}
+          </ol>}
+          {!!data.status?.checks?.length && <div className="space-y-2"><p className="font-medium">Готовность сервера</p>
+            {data.status.checks.map(check => <div key={check.name} className="rounded-lg border p-3 text-sm"><p className={check.ok ? "font-medium" : "font-medium text-destructive"}>{check.ok ? "✓" : "!"} {check.name}</p><p className="mt-1 text-muted-foreground break-words">{check.detail}</p></div>)}
+            <p className="text-xs text-muted-foreground">Перед установкой проверки выполнятся повторно. Совместимость хранилищ и миграции проверяются при подготовке новой версии.</p>
+          </div>}
+          {!!events.length && <details><summary className="cursor-pointer">Журнал этапов ({events.length})</summary><ol className="mt-3 max-h-72 overflow-y-auto space-y-2 text-sm" aria-live="off">{events.map((event, index) => <li key={`${event.at}-${index}`} className="border-l-2 pl-3"><time className="text-xs text-muted-foreground">{new Date(event.at).toLocaleTimeString()}</time><p className="whitespace-pre-wrap break-words">{event.message}</p></li>)}</ol></details>}
+          {data.status?.cleanupWarning && <p className="text-sm text-amber-600 dark:text-amber-400">{data.status.cleanupWarning}</p>}
           {localChanges && <div className="rounded-lg border p-4 space-y-2">
             <p className="font-medium">Локальные изменения: {localChanges.count}</p>
             <ul className="text-xs font-mono break-all">{localChanges.files.map(file => <li key={file}>{file}</li>)}</ul>
@@ -70,10 +97,10 @@ export function PanelUpdates({ token }: { token: string }) {
           {data.status?.changes && <details><summary className="cursor-pointer">Что изменилось</summary><pre className="mt-2 whitespace-pre-wrap break-words text-sm">{data.status.changes}</pre></details>}
           <div className="flex flex-wrap gap-3">
             <Button type="button" variant="outline" disabled={busy || dirty} onClick={() => mutation.mutate({ action: "check" })}>Проверить обновления</Button>
-            <Button type="button" disabled={busy || dirty || !data.status?.available || data.status?.recoveryRequired || !!data.status?.blockedReason} onClick={async () => {
+            <Button type="button" disabled={busy || dirty || checksFailed || !data.status?.available || data.status?.recoveryRequired || !!data.status?.blockedReason} onClick={async () => {
               if ((await adminConfirm("Установить обновление? Панель и бот будут временно недоступны. Перед установкой сохраним резервную копию."))) mutation.mutate({ action: "install" });
             }}>Обновить сейчас</Button>
-            {localChanges?.canPreserve && <Button type="button" variant="outline" disabled={busy || dirty || !data.status?.available || data.status?.recoveryRequired} onClick={async () => {
+            {localChanges?.canPreserve && <Button type="button" variant="outline" disabled={busy || dirty || checksFailed || !data.status?.available || data.status?.recoveryRequired} onClick={async () => {
               if ((await adminConfirm("Сохранить локальные изменения отдельно и установить исходники обновления? Панель и бот будут временно недоступны. Локальные правки останутся в резервной копии и Git stash, но не будут применены к новой версии."))) mutation.mutate({ action: "install", body: { localChangesId: localChanges.id } });
             }}>Сохранить правки и обновить</Button>}
           </div>

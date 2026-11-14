@@ -2040,6 +2040,7 @@ export async function groupedProfileMenu(config: Awaited<ReturnType<typeof api.g
   const subscriptions = bootstrap?.allSubscriptions ?? { items: [] };
   const trials = bootstrap?.availableTrials ?? { items: [], hasAnyEnabled: false };
   return mainMenu({
+    showRoulette: config?.rouletteEnabled !== false,
     liteMode: config.liteMode === true,
     section: "profile", groupCabinet: true,
     paidTrial: bootstrap?.cloudTrialAvailable === true && config.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,

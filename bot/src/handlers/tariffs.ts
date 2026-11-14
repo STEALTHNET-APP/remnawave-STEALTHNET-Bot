@@ -1,3 +1,4 @@
+import { purchaseChoiceText } from "../purchase-choice.js";
 import { Composer } from "grammy";
 import { InputFile } from "grammy";
 import type { Context } from "grammy";
@@ -28,7 +29,7 @@ export function createTariffHandlers(): Composer<Context> {
 
     if (data === "menu:tariffs" || data === "menu:tariffs:new") {
       await api.verifyTelegramSubscriptions(userId, ctx.from?.username);
-      if (data === "menu:tariffs") {
+      if (data === "menu:tariffs" && (config?.warnBeforeAdditionalSubscription !== false || config?.multiSubscriptionsEnabled !== true)) {
         try {
           const { items: subscriptions } = await api.getAllSubscriptions(token);
           if (renewableSubscriptions(subscriptions ?? []).length) {
@@ -39,7 +40,7 @@ export function createTariffHandlers(): Composer<Context> {
             if (config?.multiSubscriptionsEnabled === true) rows.push([{ text: "Купить отдельную подписку", callback_data: "menu:tariffs:new" }]);
             rows.push(navRowWithProfileBack([{ text: "Главное меню", callback_data: "menu:main" }], "tariffs", config, innerStyles, innerEmojiIds, getUserLang(userId)));
             await editMessageContent(ctx,
-              "У вас уже есть подписка. Чтобы сохранить подключение в приложении, продлите её. Отдельная подписка создаёт новую ссылку для подключения.",
+              purchaseChoiceText(renewableSubscriptions(subscriptions ?? [])),
               { inline_keyboard: rows });
             return;
           }

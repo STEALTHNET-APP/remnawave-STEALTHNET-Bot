@@ -37,6 +37,32 @@ class UpdaterTests(unittest.TestCase):
         subprocess.run(['git', '-C', str(self.root), 'commit', '-qm', 'fixture'], check=True)
         return subprocess.check_output(['git', '-C', str(self.root), 'rev-parse', 'HEAD']).decode().strip()
 
+    def test_operation_events_are_bounded_and_finish_only_at_terminal_stage(self):
+        self.updater.phase('checking', 'First')
+        self.updater.phase('checking', 'First')
+        self.assertEqual(len(self.updater.status['events']), 1)
+        self.updater.phase('ready', 'Checked')
+        self.assertIsNotNone(self.updater.status['operationFinishedAt'])
+        self.updater.phase('building', 'Build')
+        self.assertIsNone(self.updater.status['operationFinishedAt'])
+        for index in range(70):
+            self.updater.phase('building', str(index))
+        self.updater.phase('failed', 'Failure')
+        saved = json.loads((self.state / 'status.json').read_text())
+        self.assertEqual(len(saved['events']), 60)
+        self.assertEqual(saved['events'][-1]['phase'], 'failed')
+        self.assertIsNotNone(saved['operationFinishedAt'])
+
+    def test_readiness_checks_report_failures_without_installing(self):
+        self.updater.settings['channel'] = 'main'
+        with patch.object(self.updater, 'git', side_effect=['', 'new', 'old', '{"version":"7.1.0"}', 'Changes']), patch('agent.subprocess.run') as run, patch.object(self.updater, 'clean'), patch.object(self.updater, 'local_changes', return_value=None), patch.object(self.updater, 'preflight', side_effect=RuntimeError('Docker unavailable')), patch.object(self.updater, 'check_space'), patch.object(self.updater, 'install') as install:
+            run.return_value.returncode = 0
+            status = self.updater.check()
+        self.assertTrue(status['available'])
+        self.assertEqual(status['checks'][0]['ok'], False)
+        self.assertEqual(status['checks'][1]['ok'], True)
+        install.assert_not_called()
+
     def test_dirty_worktree_blocked(self):
         self.updater.clean()
         (self.root / 'version.json').write_text('{}')

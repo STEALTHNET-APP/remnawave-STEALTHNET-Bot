@@ -1,3 +1,4 @@
+import { BotMenuPreview } from "@/components/admin/bot-menu-preview";
 import { compactBotMenu } from "@/lib/bot-menu-preset";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
@@ -296,7 +297,8 @@ export function BotTab({
                 </div>
               </div>
               <CardContent className="p-4 sm:p-4 space-y-6">
-                <Tabs value={botSubTab} onValueChange={(v) => setBotSubTab(v as typeof botSubTab)}>
+                <div className="grid items-start gap-6 2xl:grid-cols-[minmax(0,1fr)_340px]">
+                <Tabs className="min-w-0" value={botSubTab} onValueChange={(v) => setBotSubTab(v as typeof botSubTab)}>
                   <TabsList className="w-full flex flex-wrap gap-1.5 p-1.5 h-auto bg-muted/40 rounded-xl border">
                     <TabsTrigger value="menu" className="gap-2 py-2.5 px-3 rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:text-white data-[state=active]:shadow-md">
                       <Layers className="h-4 w-4 shrink-0" /><span className="text-xs sm:text-sm">Меню</span>
@@ -1168,6 +1170,8 @@ export function BotTab({
                     </div>
                   </TabsContent>
                 </Tabs>
+                <BotMenuPreview settings={{ ...settings, botButtons: settings.botButtons ?? DEFAULT_BOT_BUTTONS, botMenuTexts: settings.botMenuTexts ?? DEFAULT_BOT_MENU_TEXTS, botMenuLineVisibility: settings.botMenuLineVisibility ?? DEFAULT_BOT_MENU_LINE_VISIBILITY }} />
+                </div>
 
                 {message && <p className="text-sm text-muted-foreground">{message}</p>}
                 <Button type="submit" disabled={saving} className="w-full sm:w-auto h-9 px-6 rounded-xl bg-primary hover:opacity-90 text-white font-semibold shadow-primary/20">

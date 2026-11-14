@@ -22,7 +22,7 @@ const routes: Record<string, string> = {
 };
 
 export function menuWebAppUrl(base: string, buttonId: string): string | null {
-  if (!Object.hasOwn(routes, buttonId)) return null;
+  if (!Object.prototype.hasOwnProperty.call(routes, buttonId)) return null;
   try {
     const url = new URL(base.trim());
     if (url.protocol !== "https:" || url.username || url.password) return null;

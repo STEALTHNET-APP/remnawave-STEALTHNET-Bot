@@ -1,3 +1,4 @@
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { adminAlert, adminConfirm, adminPrompt } from "@/lib/admin-dialogs";
 /**
  * Diagnostics: health checks (postgres/remna/bot/disk/ram/uptime), cron-monitor,
@@ -12,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, RefreshCw, Activity, Clock, FileText, ShieldOff, Play, CheckCircle2, AlertTriangle, XCircle, MinusCircle } from "lucide-react";
+import { Download, Loader2, RefreshCw, Activity, Clock, FileText, ShieldOff, Play, CheckCircle2, AlertTriangle, XCircle, MinusCircle } from "lucide-react";
 import { diagnosticsApi, adminSecurityApi } from "@/lib/admin-extras-api";
 import { ConsoleAccessCard } from "@/components/console-access-card";
 import { fmtMsk } from "@/lib/datetime";
@@ -27,6 +28,23 @@ const STATUS_META = {
 export function AdminDiagnosticsPage() {
   const { state } = useAuth();
   const token = state.accessToken;
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const downloadReport = async () => {
+    if (!token || reportBusy) return;
+    setReportBusy(true); setReportError(null);
+    try {
+      const response = await fetch("/api/admin/diagnostics/report", { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error(response.status === 403 ? "Нужны права администратора" : "Не удалось собрать отчёт. Повторите попытку.");
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a"); link.href = url; link.download = "stealthnet-diagnostics.json.gz";
+      document.body.appendChild(link); link.click(); link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setReportOpen(false);
+    } catch (error) { setReportError(error instanceof Error ? error.message : "Ошибка скачивания"); }
+    finally { setReportBusy(false); }
+  };
 
   const [logsLines, setLogsLines] = useState(200);
   const [logsFilter, setLogsFilter] = useState("");
@@ -100,6 +118,17 @@ export function AdminDiagnosticsPage() {
         </Button>
       </div>
 
+      <div><Button type="button" variant="outline" onClick={() => setReportOpen(true)}><Download className="mr-2 h-4 w-4" />Скачать отчёт для поддержки</Button></div>
+      <Dialog open={reportOpen} onOpenChange={open => { if (!reportBusy) setReportOpen(open); }}>
+        <DialogContent className="max-w-lg">
+          <DialogTitle>Отчёт для поддержки</DialogTitle>
+          <DialogDescription>Архив JSON.gz сохранится на ваше устройство. Отправьте его в поддержку самостоятельно.</DialogDescription>
+          <ul className="list-disc pl-5 text-sm space-y-2"><li>Версия и сборка панели.</li><li>Результаты проверки сервисов и фоновых задач.</li><li>Состояние обновления и отката.</li><li>Сводка последних 200 записей журнала: время, категория и коды ошибок.</li></ul>
+          <p className="text-sm text-muted-foreground">Пароли, токены, настройки, данные клиентов и исходный текст журналов в архив не входят.</p>
+          {reportError && <p role="alert" className="text-destructive">{reportError}</p>}
+          <Button type="button" disabled={reportBusy} onClick={() => void downloadReport()}>{reportBusy ? "Собираем отчёт…" : "Скачать архив"}</Button>
+        </DialogContent>
+      </Dialog>
       <ConsoleAccessCard token={token} />
 
       {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div> : null}

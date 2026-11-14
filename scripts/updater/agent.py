@@ -86,7 +86,16 @@ class Updater(Deployment, LocalChanges, Reliability):
         save(self.state_dir / 'status.json', self.status)
 
     def phase(self, phase, message, **kwargs):
-        self.status.update(phase=phase, message=message, updatedAt=now(), **kwargs)
+        stamp = now()
+        if phase != self.status.get('phase') or message != self.status.get('message'):
+            events = self.status.get('events', [])[-59:]
+            events.append({'at': stamp, 'phase': phase, 'message': message[:1200]})
+            self.status['events'] = events
+        if phase in ACTIVE:
+            self.status['operationFinishedAt'] = None
+        if phase in ('success', 'failed', 'ready', 'interrupted'):
+            self.status['operationFinishedAt'] = stamp
+        self.status.update(phase=phase, message=message, updatedAt=stamp, **kwargs)
         self.persist()
 
     def run(self, args, timeout=120, capture=True, output=None, input=None):
@@ -146,9 +155,17 @@ class Updater(Deployment, LocalChanges, Reliability):
             self.clean()
         except RuntimeError as error:
             blocked = str(error)
+        checks = []
+        if available:
+            for name, action in [('Docker и Compose', self.preflight), ('Место для резервных копий', self.check_space)]:
+                try:
+                    action()
+                    checks.append({'name': name, 'ok': True, 'detail': 'Проверка пройдена'})
+                except Exception as error:
+                    checks.append({'name': name, 'ok': False, 'detail': str(error)[:1200]})
         changes = self.git('log', '--format=%s', '-15', current + '..' + target) if available else ''
         self.phase('ready', message, available=available, target=target, current=current,
-                   version=version, checkedAt=now(), changes=changes, channel=self.settings['channel'], blockedReason=blocked, localChanges=self.local_changes())
+                   version=version, checkedAt=now(), checks=checks, changes=changes, channel=self.settings['channel'], blockedReason=blocked, localChanges=self.local_changes())
         return self.status
 
     def service_images(self):
@@ -189,7 +206,10 @@ class Updater(Deployment, LocalChanges, Reliability):
             raise RuntimeError('После прерванного обновления требуется проверка администратора на сервере')
         if not self.lock.acquire(blocking=False):
             raise RuntimeError('Операция уже выполняется')
-        self.phase('checking', 'Начинаем проверку', rolledBack=False)
+        self.status.update(events=[], operationStartedAt=now(), operationFinishedAt=None, checks=[])
+        if action == 'install':
+            self.status.update(backup=None, localChangesBackup=None, rolledBack=False, writesResumed=False)
+        self.phase('checking', 'Начинаем проверку')
         threading.Thread(target=self.job, args=(action, local_changes_id), daemon=True).start()
 
     def job(self, action, local_changes_id=None):

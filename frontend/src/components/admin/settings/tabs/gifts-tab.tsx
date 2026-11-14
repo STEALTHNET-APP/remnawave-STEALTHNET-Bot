@@ -57,6 +57,14 @@ export function GiftsTab({
                   </p>
                 </div>
               </div>
+              <div className="flex items-start gap-3 rounded-xl border p-3">
+                <Switch id="warn-additional-subscription" checked={settings.warnBeforeAdditionalSubscription !== false}
+                  onCheckedChange={(checked) => setSettings(s => s ? { ...s, warnBeforeAdditionalSubscription: checked } : s)} />
+                <div>
+                  <Label htmlFor="warn-additional-subscription">Предупреждать перед созданием дополнительной подписки</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">В боте, кабинете и Mini App предложим продлить существующую подписку или создать отдельную с новой ссылкой. Прямое продление и переход с триала не меняются. Работает при включённых мульти-подписках.</p>
+                </div>
+              </div>
               <div className="flex items-center gap-3">
                 <Switch
                   id="gift-subscriptions-enabled"

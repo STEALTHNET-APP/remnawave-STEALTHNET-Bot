@@ -138,6 +138,7 @@ function ClassicTariffsPage() {
     payError,
     setPayError,
     doPay,
+    purchaseChoiceDialog,
     setPreviewEnabled,
     extendExtrasFor,
     keepExtrasCost,
@@ -828,6 +829,7 @@ function ClassicTariffsPage() {
 
   return (
     <>
+      {purchaseChoiceDialog}
       <AnimatePresence mode="wait">
         {/* MOBILE VIEW */}
         {isMobileOrMiniapp && payModal ? (

@@ -211,6 +211,7 @@ export const SYSTEM_CONFIG_KEYS = [
   "onboarding_email_required", // Обязательна ли привязка email на онбординге мини-аппа: true/false
   "stealth_accent", // Акцентный цвет stealth-мини-аппа (hex #RRGGBB)
   "stealth_hero_image", // Кастомная картинка вместо щита в hero (base64 data URL / URL)
+  "warn_before_additional_subscription",
   "multi_subscriptions_enabled", // Мульти-подписки: вкл (default) = несколько подписок; выкл = одна подписка (hard replace)
   // Антибот-защита регистраций
   "signup_protection_enabled", // Master switch: включает email-фильтр и rate-limit по IP
@@ -825,6 +826,7 @@ async function loadSystemConfigFromDb() {
     stealthHeroImage: map.stealth_hero_image || null,
     // Default FALSE: по умолчанию одна подписка (hard-replace); мульти — только если явно "true".
     multiSubscriptionsEnabled: parseMultiSubscriptionsEnabled(map.multi_subscriptions_enabled),
+    warnBeforeAdditionalSubscription: map.warn_before_additional_subscription !== "false",
     passwordResetEnabled: map.password_reset_enabled === "true" || map.password_reset_enabled === "1",
     /** Master switch для антибот-фильтра. По умолчанию включён. */
     signupProtectionEnabled: (map.signup_protection_enabled ?? "true").trim() !== "false",
@@ -1474,6 +1476,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     stealthAccent: full.stealthAccent ?? null,
     stealthHeroImage: full.stealthHeroImage ?? null,
     multiSubscriptionsEnabled: isMultiSubscriptionsEnabled(full),
+    warnBeforeAdditionalSubscription: full.warnBeforeAdditionalSubscription,
     passwordResetEnabled: full.passwordResetEnabled ?? false,
     // фронту нужен флаг — настроен ли SMTP.
     // Если SMTP не настроен или skipEmailVerification=true → email привязывается

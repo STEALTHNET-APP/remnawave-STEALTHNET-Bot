@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { shouldShowPurchaseChoice } from "./purchase-choice.js";
+import { shouldShowPurchaseChoice, purchaseChoiceText } from "./purchase-choice.js";
 
 const subscriptions = [
   { tariffId: "tariff-standard" },
@@ -45,4 +45,11 @@ test("does not offer renewal when the client has no subscription with the tariff
     }),
     false,
   );
+});
+
+test("purchase warning explains separate billing and identifies active and expired subscriptions", () => {
+  const text = purchaseChoiceText([{tariffDisplayName:"Active",subscription:{response:{expireAt:"2026-12-31T12:00:00Z"}}},{tariffDisplayName:"Old",subscription:{expireAt:"2026-01-01T12:00:00Z"}}], Date.parse("2026-11-15T12:00:00Z"));
+  assert.ok(text.includes("Active — до 31.12.2026"));
+  assert.ok(text.includes("Old — истекла 01.01.2026"));
+  assert.ok(text.includes("оплачиваться отдельно"));
 });

@@ -5,6 +5,7 @@ WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json* frontend/.npmrc* ./
 RUN npm ci
 COPY frontend/. .
+COPY bot/src/main-menu.ts bot/src/menu-web-app.ts bot/src/button-url.ts bot/src/widget-content.ts /bot/src/
 COPY version.json ../version.json
 COPY scripts/build-version.cjs /tmp/build-version.cjs
 ARG BUILD_COMMIT=unknown

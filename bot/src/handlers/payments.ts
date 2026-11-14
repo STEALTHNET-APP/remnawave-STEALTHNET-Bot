@@ -1,3 +1,4 @@
+import { purchaseChoiceText } from "../purchase-choice.js";
 import { Composer } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
@@ -761,6 +762,7 @@ export function createPaymentHandlers(): Composer<Context> {
       // сразу ведём на экран оплаты, где convNote разложит «подписка будет продлена».
       const isSingleCategory = items?.find((c: TariffCategory) => c.tariffs.some((t) => t.id === tariffId))?.singleSubscriptionMode === true;
       const canOfferNewSubscription = config?.multiSubscriptionsEnabled === true && !isSingleCategory;
+      const warnAdditional = config?.warnBeforeAdditionalSubscription !== false;
       if (methodIdFromBtn == null && !isBypass && config?.multiSubscriptionsEnabled !== true) {
         try {
           const all = await api.getAllSubscriptions(token);
@@ -778,12 +780,12 @@ export function createPaymentHandlers(): Composer<Context> {
         }
       }
 
-      if (methodIdFromBtn == null && !isBypass && canOfferNewSubscription) {
+      if (methodIdFromBtn == null && !isBypass && canOfferNewSubscription && warnAdditional) {
         try {
           const { items: subscriptions } = await api.getAllSubscriptions(token);
           if (renewableSubscriptions(subscriptions ?? []).length && !subscriptions.some(sub => sub.tariffId === tariff.id)) {
             await editMessageContent(ctx,
-              "У вас уже есть подписка. Продлите её, чтобы сохранить подключение. Покупка отдельной подписки создаст новую ссылку.", {
+              purchaseChoiceText(renewableSubscriptions(subscriptions ?? [])), {
                 inline_keyboard: [
                   [{ text: "Продлить существующую", callback_data: "menu:renew" }],
                   [{ text: "Купить отдельную подписку", callback_data: `pay_tariff:${tariff.id}:add` }],
@@ -812,7 +814,7 @@ export function createPaymentHandlers(): Composer<Context> {
           // Сначала явно фиксируем намерение: продлить существующую подписку или
           // оформить новую. Без этого много-срочный тариф сразу открывал длительности,
           // и пользователь мог случайно создать параллельную подписку.
-          if (!isBypass && canOfferNewSubscription) {
+          if (!isBypass && canOfferNewSubscription && warnAdditional) {
             try {
               const all = await api.getAllSubscriptions(token);
               if (shouldShowPurchaseChoice({
@@ -822,8 +824,7 @@ export function createPaymentHandlers(): Composer<Context> {
                 isSingleCategory,
                 multiSubscriptionsEnabled: config?.multiSubscriptionsEnabled === true,
               })) {
-                const desc = ((tariff as TariffItem & { description?: string | null }).description ?? "").trim();
-                await editMessageContent(ctx, `${desc || tariff.name}\n\nУ вас уже есть подписка с этим тарифом. Что хотите сделать?`, {
+                await editMessageContent(ctx, purchaseChoiceText(renewableSubscriptions(all.items ?? [], tariff.id)), {
                   inline_keyboard: [
                     [{ text: "🔌 Продлить текущую", callback_data: `renew_pick:${tariff.id}` }],
                     [{ text: "🛒 Купить новую", callback_data: `pay_tariff:${tariff.id}:add` }],
@@ -872,14 +873,12 @@ export function createPaymentHandlers(): Composer<Context> {
           // single-режим: пропускаем выбор «Продлить / Купить новую» —
           // покупка и так конвертирует/продлит существующую подписку, экран оплаты ниже
           // (showPaymentMethodsForTariff) сам покажет пояснение через convNote.
-          if (!isBypass && canOfferNewSubscription) {
+          if (!isBypass && canOfferNewSubscription && warnAdditional) {
             try {
               const all = await api.getAllSubscriptions(token);
               const hasMine = (all.items ?? []).some((it) => it.tariffId === tariff.id);
               if (hasMine) {
-                const desc = ((tariff as TariffItem & { description?: string | null }).description ?? "").trim();
-                const introText = desc ? desc : tariff.name;
-                await editMessageContent(ctx, `${introText}\n\nУ вас уже есть подписка с этим тарифом. Что хотите сделать?`, {
+                await editMessageContent(ctx, purchaseChoiceText(renewableSubscriptions(all.items ?? [], tariff.id)), {
                   inline_keyboard: [
                     [{ text: "🔌 Продлить подписку", callback_data: `renew_pick:${tariff.id}` }],
                     [{ text: "🛒 Купить новую", callback_data: `pay_tariff:${tariff.id}:add` }],

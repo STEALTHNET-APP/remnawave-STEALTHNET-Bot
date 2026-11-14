@@ -1,3 +1,8 @@
+import { gzipSync } from "node:zlib";
+import { APP_BUILD } from "../../config/app-version.js";
+import { updaterRequest } from "../update/update.routes.js";
+import { reportUpdateStatus, summarizeDiagnosticLog } from "./support-report.js";
+import type { ReqAdmin } from "../auth/middleware.js";
 /**
  * Админские диагностические эндпоинты:
  * - GET /api/admin/diagnostics/health       — агрегированный health-check
@@ -93,3 +98,26 @@ diagnosticsAdminRouter.get(
     });
   }),
 );
+
+diagnosticsAdminRouter.get("/report", asyncRoute(async (req, res) => {
+  if ((req as typeof req & ReqAdmin).adminRole !== "ADMIN") return res.status(403).json({ message: "Отчёт доступен только администратору" });
+  const [health, update] = await Promise.all([
+    aggregateHealth(),
+    updaterRequest("/status").then(result => reportUpdateStatus(result.data)).catch(() => ({ connected: false })),
+  ]);
+  const logs = getLogs({ lines: 200 });
+  const report = {
+    format: "stealthnet-support-v1", createdAt: new Date().toISOString(), build: APP_BUILD,
+    health: { overallStatus: health.overallStatus, checks: health.checks.map(check => ({ name: check.name, status: check.status, durationMs: check.durationMs })) },
+    update,
+    crons: listCronEntries().map(entry => ({ name: entry.name, recent: entry.recent.map(run => ({ ok: run.ok, startedAt: run.startedAt, finishedAt: run.finishedAt })) })),
+    logs: logs.lines.map(summarizeDiagnosticLog),
+    note: "Исходный текст логов, адреса серверов, настройки, учётные записи и содержимое БД не включены. В журнале оставлены время, уровень, категория и распознанные коды ошибок.",
+  };
+  await logAdmin(req, "diagnostics.report", { type: "diagnostics", id: "support-report" });
+  const archive = gzipSync(Buffer.from(JSON.stringify(report, null, 2)));
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Content-Type", "application/gzip");
+  res.setHeader("Content-Disposition", 'attachment; filename="stealthnet-diagnostics.json.gz"');
+  return res.send(archive);
+}));

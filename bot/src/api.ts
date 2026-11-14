@@ -151,6 +151,8 @@ export async function getPublicConfig(force = false): Promise<{
   defaultCurrency?: string;
   trialEnabled?: boolean;
   multiSubscriptionsEnabled?: boolean;
+  warnBeforeAdditionalSubscription?: boolean;
+  rouletteEnabled?: boolean;
   trialDays?: number;
   plategaMethods?: { id: number; label: string }[];
   paymentProviders?: { id: string; label: string; sortOrder: number }[];

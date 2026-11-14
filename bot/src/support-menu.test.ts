@@ -40,3 +40,10 @@ test("main menu exposes support with only tickets configured and respects hidden
   assert.equal(hasSupport(mainMenu({ ...opts, botButtons: [{ id: "support", visible: false, label: "Help", order: 1 }] })), false);
   assert.equal(hasSupport(mainMenu({ ...opts, showTickets: false, hasSupportLinks: true })), true);
 });
+
+test("disabled roulette is absent from both main and grouped profile menus", () => {
+  for (const section of ["main", "profile"] as const) {
+    const rows = mainMenu({showTrial:false, showVpn:true, groupCabinet:true, section, showRoulette:false, appUrl:null}).inline_keyboard;
+    assert.equal(rows.flat().some(button => "callback_data" in button && button.callback_data === "menu:roulette"), false);
+  }
+});

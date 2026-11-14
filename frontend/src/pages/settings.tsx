@@ -784,6 +784,7 @@ export function SettingsPage() {
         giftCodeExpiryHours: settings.giftCodeExpiryHours ?? 72,
         maxAdditionalSubscriptions: settings.maxAdditionalSubscriptions ?? 5,
         multiSubscriptionsEnabled: settings.multiSubscriptionsEnabled ?? false,
+        warnBeforeAdditionalSubscription: settings.warnBeforeAdditionalSubscription !== false,
         giftCodeFormatLength: settings.giftCodeFormatLength ?? 12,
         giftRateLimitPerMinute: settings.giftRateLimitPerMinute ?? 5,
         giftExpiryNotificationDays: settings.giftExpiryNotificationDays ?? 3,

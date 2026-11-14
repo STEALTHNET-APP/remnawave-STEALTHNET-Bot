@@ -885,6 +885,7 @@ const updateSettingsSchema = z.object({
   stealthAccent: z.string().max(20).nullable().optional(),
   stealthHeroImage: z.string().max(8_000_000).nullable().optional(),
   multiSubscriptionsEnabled: z.boolean().optional(),
+  warnBeforeAdditionalSubscription: z.boolean().optional(),
   // заявки на вывод реф. баланса: вкл/выкл + мин. сумма + способы вывода.
   withdrawalsEnabled: z.boolean().optional(),
   withdrawalMinAmount: z.number().int().min(1).max(1e7).optional(),
@@ -1920,6 +1921,14 @@ adminRouter.patch("/settings", async (req, res) => {
       where: { key: "stealth_hero_image" },
       create: { key: "stealth_hero_image", value: val },
       update: { value: val },
+    });
+  }
+  if (updates.warnBeforeAdditionalSubscription !== undefined) {
+    const value = String(updates.warnBeforeAdditionalSubscription);
+    await prisma.systemSetting.upsert({
+      where: { key: "warn_before_additional_subscription" },
+      create: { key: "warn_before_additional_subscription", value },
+      update: { value },
     });
   }
   if (updates.multiSubscriptionsEnabled !== undefined) {

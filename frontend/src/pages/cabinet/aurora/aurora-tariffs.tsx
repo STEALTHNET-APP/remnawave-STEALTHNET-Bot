@@ -59,6 +59,7 @@ export function AuroraTariffs() {
     payError,
     setPayError,
     doPay,
+    purchaseChoiceDialog,
     prepareBalancePayment,
     mySubs,
     refreshSubscriptions,
@@ -413,6 +414,7 @@ export function AuroraTariffs() {
 
   return (
     <div className="space-y-3">
+      {purchaseChoiceDialog}
       <header className="px-1 pb-1">
         <h1 className="text-[26px] font-extrabold leading-tight tracking-tight text-[var(--au-ink)]">{t("aurora.tariffs")}</h1>
         <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">

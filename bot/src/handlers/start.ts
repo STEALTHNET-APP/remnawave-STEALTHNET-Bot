@@ -390,6 +390,7 @@ export async function handleStart(ctx: Context, payload: string) {
     const hasVideoInstructions = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
     const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructions);
     const markup = mainMenu({
+    showRoulette: config?.rouletteEnabled !== false,
       liteMode: config?.liteMode === true,
       showTrial,
       paidTrial: bootstrap?.cloudTrialAvailable === true && config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
@@ -521,6 +522,7 @@ async function showMainMenuScreen(
   const hasVideoInstructionsCb = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
   const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructionsCb);
   const backMarkup = mainMenu({
+    showRoulette: config?.rouletteEnabled !== false,
   liteMode: config?.liteMode === true,
     showTrial,
   paidTrial: bootstrap?.cloudTrialAvailable === true && config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,
@@ -644,6 +646,7 @@ composer.command("link", async (ctx) => {
       const hasVideoInstructions = config?.videoInstructionsEnabled && (config?.videoInstructions?.length ?? 0) > 0;
       const hasSupportLinks = !!(config?.supportLink || config?.agreementLink || config?.offerLink || config?.instructionsLink || hasVideoInstructions);
       const markup = mainMenu({
+    showRoulette: config?.rouletteEnabled !== false,
       liteMode: config?.liteMode === true,
         showTrial,
       paidTrial: bootstrap?.cloudTrialAvailable === true && config?.cloudpaymentsEnabled && config.cloudpaymentsTrialTariffId && (config.cloudpaymentsTrialDays ?? 0) > 0 ? { amount: config.cloudpaymentsTrialAmount ?? 1, days: config.cloudpaymentsTrialDays! } : null,

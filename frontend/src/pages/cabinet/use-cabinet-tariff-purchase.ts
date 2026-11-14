@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PurchaseChoiceDialog, type ExistingPurchaseSubscription } from "@/components/cabinet/purchase-choice-dialog";
+import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Bitcoin, Wallet } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
@@ -87,6 +88,7 @@ export interface CabinetTariffPurchaseOptions {
 
 export interface CabinetTariffPurchaseDoPayOptions {
   method?: PayMethod;
+  confirmedAdditional?: boolean;
   onReadyUrl?: (info: PayReadyInfo) => void;
 }
 
@@ -200,6 +202,8 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const token = state.token;
+  const paymentLock = useRef(false);
+  const [purchaseChoice, setPurchaseChoice] = useState<{ subscriptions: ExistingPurchaseSubscription[]; options: CabinetTariffPurchaseDoPayOptions; tariffId: string } | null>(null);
   const config = usePublicConfig();
 
   const tariffsQuery = usePublicTariffs();
@@ -641,17 +645,35 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
     if (!token || !selectedTariffId) return;
     if (activeOptions.requirePriceOption && !selectedPriceOptionId) return;
     if (activeOptions.requirePreview && !previewReady) return;
-    if (!method) return;
+    if (!method || paymentLock.current) return;
+    paymentLock.current = true;
     setPaying(true);
     setPayError(null);
     try {
+      const singleCategory = categories.some(category => category.singleSubscriptionMode && category.tariffs.some(tariff => tariff.id === selectedTariffId));
+      if (!extendParam && !extendTarget && config?.multiSubscriptionsEnabled === true && config.warnBeforeAdditionalSubscription !== false && !singleCategory && !payOptions.confirmedAdditional) {
+        const fresh = await api.clientAllSubscriptions(token);
+        const existing = fresh.items.filter(sub => !sub.trialId && (sub.tariffId || sub.remnawaveUuid));
+        if (existing.length) {
+          const preview = await api.clientTariffConversionPreview(token, { tariffId: selectedTariffId, priceOptionId: selectedPriceOptionId ?? undefined, ...(selectedTrialSubId ? { replaceTrialSubId: selectedTrialSubId } : {}) });
+          if (!preview.willConvert) {
+            setPurchaseChoice({ tariffId: selectedTariffId, options: { ...payOptions, method }, subscriptions: existing.map(sub => {
+              const raw = sub.subscription as { response?: { expireAt?: string }; expireAt?: string } | null;
+              return { id: sub.id, label: sub.tariffDisplayName || `Подписка #${sub.subscriptionIndex ?? 0}`, expireAt: raw?.response?.expireAt ?? raw?.expireAt ?? null };
+            }) });
+            return;
+          }
+        }
+      }
+      if (extendParam && !extendTarget) throw new Error("Не удалось найти подписку для продления. Обновите страницу и выберите подписку заново.");
       const base: TariffPaymentBase = { tariffId: selectedTariffId };
+      if (payOptions.confirmedAdditional && config?.multiSubscriptionsEnabled === true && !singleCategory && !extendTarget) base.asAdditional = true;
       if (selectedPriceOptionId) base.tariffPriceOptionId = selectedPriceOptionId;
       if (promoApplied) base.promoCode = promoApplied;
       if (activeOptions.deviceCount === "positive" && extraDevices > 0 && !extendTarget) base.deviceCount = extraDevices;
       if (activeOptions.deviceCount === "always") base.deviceCount = extraDevices;
 
-      const convExtend = convPreview?.willConvert && convPreview.mode === "extend" ? convPreview.subscription : undefined;
+      const convExtend = !base.asAdditional && convPreview?.willConvert && convPreview.mode === "extend" ? convPreview.subscription : undefined;
       if (extendTarget) {
         base.extendsSecondarySubId = extendTarget.id;
         if (activeOptions.extrasOnExtendPayload === "always") base.removeExtrasOnActivate = !extKeepExtras;
@@ -659,7 +681,7 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
       } else if (convExtend) {
         base.extendsSecondarySubId = convExtend.id;
         if ((convPreview?.extras?.extraDevices ?? 0) > 0 && !convKeepExtras) base.removeExtrasOnActivate = true;
-      } else if (convPreview?.willConvert && (convPreview.extras?.extraDevices ?? 0) > 0 && !convKeepExtras) {
+      } else if (!base.asAdditional && convPreview?.willConvert && (convPreview.extras?.extraDevices ?? 0) > 0 && !convKeepExtras) {
         base.removeExtrasOnActivate = true;
       }
 
@@ -671,13 +693,13 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
         }
       }
 
-      if (activeOptions.trialReplacement === "convertible") {
+      if (!base.asAdditional && activeOptions.trialReplacement === "convertible") {
         if (!extendTarget && selectedTrialSubId && (!convPreview?.willConvert
           || convPreview?.subscription?.isTrial === true
           || convPreview?.subscription?.trialId != null)) {
           base.replaceTrialSubId = selectedTrialSubId;
         }
-      } else if (!extendTarget && !convPreview?.willConvert) {
+      } else if (!base.asAdditional && !extendTarget && !convPreview?.willConvert) {
         const trialSubId = replaceTrialChoice ?? ownedTrials[0]?.id;
         if (trialSubId) base.replaceTrialSubId = trialSubId;
       }
@@ -783,9 +805,13 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
     } catch (error) {
       setPayError(error instanceof Error ? error.message : activeOptions.payErrorMessage ?? "Ошибка создания платежа");
     } finally {
+      paymentLock.current = false;
       setPaying(false);
     }
   }, [
+    categories,
+    extendParam,
+    config?.warnBeforeAdditionalSubscription,
     token,
     selectedTariffId,
     selectedPriceOptionId,
@@ -811,7 +837,19 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
     navigate,
   ]);
 
+  const purchaseChoiceDialog = createElement(PurchaseChoiceDialog, {
+    subscriptions: purchaseChoice?.tariffId === selectedTariffId ? purchaseChoice.subscriptions : null,
+    onClose: () => setPurchaseChoice(null),
+    onRenew: (id: string) => { setPurchaseChoice(null); navigate(`/cabinet/tariffs?extend=${encodeURIComponent(id)}`); },
+    onNew: () => {
+      const pending = purchaseChoice;
+      setPurchaseChoice(null);
+      if (pending?.tariffId === selectedTariffId) void doPay({ ...pending.options, confirmedAdditional: true });
+    },
+  });
+
   return {
+    purchaseChoiceDialog,
     config,
     categories,
     displayCategories,

@@ -345,7 +345,7 @@ export type PanelUpdateState = {
   installed: { version: string; commit: string | null; builtAt: string | null };
   settings?: { enabled: boolean; channel: "stable" | "main"; hourUtc: number; backupRetentionDays: number };
   backups?: { name: string; createdAt: string; expiresAt: string; protected: boolean; complete: boolean }[];
-  status?: { phase: string; message?: string; available?: boolean; version?: string; target?: string; changes?: string; backup?: string; rolledBack?: boolean; checkedAt?: string; recoveryRequired?: boolean; blockedReason?: string | null; localChanges?: { id: string; files: string[]; count: number; canPreserve: boolean } | null; localChangesBackup?: string };
+  status?: { phase: string; message?: string; updatedAt?: string; operationStartedAt?: string; operationFinishedAt?: string | null; writesResumed?: boolean; cleanupWarning?: string | null; checks?: { name: string; ok: boolean; detail: string }[]; events?: { at: string; phase: string; message: string }[]; available?: boolean; version?: string; target?: string; changes?: string; backup?: string; rolledBack?: boolean; checkedAt?: string; recoveryRequired?: boolean; blockedReason?: string | null; localChanges?: { id: string; files: string[]; count: number; canPreserve: boolean } | null; localChangesBackup?: string };
 };
 
 export const api = {
@@ -3855,6 +3855,7 @@ export type UpdateSettingsPayload = {
   stealthAccent?: string | null;
   stealthHeroImage?: string | null;
   multiSubscriptionsEnabled?: boolean;
+  warnBeforeAdditionalSubscription?: boolean;
   signupProtectionEnabled?: boolean;
   emailDomainBlocklist?: string;
   emailPatternBlocklist?: string;
@@ -4252,6 +4253,7 @@ export interface AdminSettings {
   trialCleanupDays?: number;
   maintenanceEnabled?: boolean;
   maintenanceMessage?: string;
+  rouletteEnabled?: boolean;
   serviceName: string;
   serviceDescription?: string | null;
   logo?: string | null;
@@ -4465,6 +4467,7 @@ export interface AdminSettings {
   stealthAccent?: string | null;
   stealthHeroImage?: string | null;
   multiSubscriptionsEnabled?: boolean;
+  warnBeforeAdditionalSubscription?: boolean;
   /** заявки на вывод реф. баланса: вкл/выкл. */
   withdrawalsEnabled?: boolean;
   /** мин. сумма заявки на вывод (₽). */
@@ -5914,6 +5917,7 @@ export interface PublicConfig {
   stealthAccent?: string | null;
   stealthHeroImage?: string | null;
   multiSubscriptionsEnabled?: boolean;
+  warnBeforeAdditionalSubscription?: boolean;
   /** заявки на вывод реф. баланса: вкл/выкл + мин. сумма. */
   withdrawalsEnabled?: boolean;
   withdrawalMinAmount?: number;

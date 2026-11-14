@@ -63,6 +63,7 @@ export function StealthTariffs() {
     promoBusy,
     applyPromo,
     doPay,
+    purchaseChoiceDialog,
     prepareBalancePayment,
     loading,
   } = useCabinetTariffPurchase({ autoSelectFirst: true, autoSelectExtended: "tariffOnly", requirePriceOption: true });
@@ -136,6 +137,7 @@ export function StealthTariffs() {
 
   return (
     <div className="px-4 pt-2 space-y-4 pb-2">
+      {purchaseChoiceDialog}
       {/* Режим продления: бейдж с подпиской, каталог сужен до её тарифа */}
       {extendTarget && (
         <motion.div
