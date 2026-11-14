@@ -2,10 +2,17 @@ export type SlotCandidate = {
   id: string;
   subscriptionIndex: number;
   giftStatus?: string | null;
+  purchasedAsGift?: boolean;
+  ownerId?: string;
+  giftedToClientId?: string | null;
 };
 
 export function isReservedGiftStatus(giftStatus: string | null | undefined): boolean {
   return giftStatus === "GIFT_RESERVED" || giftStatus === "GIFT_CODE_ACTIVE";
+}
+
+export function isPrimaryEligible(sub: SlotCandidate): boolean {
+  return !isReservedGiftStatus(sub.giftStatus) && !sub.purchasedAsGift && (!sub.giftedToClientId || sub.giftedToClientId === sub.ownerId);
 }
 
 export function planSubscriptionSlotOrder<T extends SlotCandidate>(subs: T[]): {
@@ -13,10 +20,10 @@ export function planSubscriptionSlotOrder<T extends SlotCandidate>(subs: T[]): {
   promotedId: string | null;
   reindexed: boolean;
 } {
-  const usable = subs.filter((sub) => !isReservedGiftStatus(sub.giftStatus));
+  const usable = subs.filter(isPrimaryEligible);
   if (usable.length === 0) return { ordered: [], promotedId: null, reindexed: false };
 
-  const ordered = [...usable, ...subs.filter((sub) => isReservedGiftStatus(sub.giftStatus))];
+  const ordered = [...usable, ...subs.filter((sub) => !isPrimaryEligible(sub))];
 
   return {
     ordered,

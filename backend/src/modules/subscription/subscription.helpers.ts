@@ -12,8 +12,9 @@
  * остаётся, у неё tariffId=null. Следующая покупка продлевает её — снова главная.
  */
 
+import type { Prisma, Subscription } from "@prisma/client";
 import { prisma } from "../../db.js";
-import { isReservedGiftStatus, planSubscriptionSlotOrder } from "./subscription-slots.js";
+import { isPrimaryEligible, planSubscriptionSlotOrder } from "./subscription-slots.js";
 
 export type SubscriptionWithRelations = Awaited<ReturnType<typeof getPrimarySubscription>>;
 
@@ -215,54 +216,102 @@ export type PromoteSubscriptionResult = {
   remnawaveUuid: string | null;
 };
 
+export class SubscriptionEditError extends Error {
+  constructor(message: string, public status = 409) { super(message); }
+}
+
+async function lockOwner(db: Prisma.TransactionClient, ownerId: string) {
+  await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"subscription-owner:" + ownerId}, 0))`;
+  await db.$queryRaw`SELECT id FROM clients WHERE id = ${ownerId} FOR UPDATE`;
+  await db.$queryRaw`SELECT id FROM subscriptions WHERE owner_id = ${ownerId} ORDER BY id FOR UPDATE`;
+}
+
+async function checkUuid(db: Prisma.TransactionClient, ownerId: string, subId: string, uuid: string | null) {
+  if (!uuid) return;
+  await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"subscription-remna:" + uuid}, 0))`;
+  const linked = await db.subscription.findFirst({ where: { remnawaveUuid: uuid, id: { not: subId } } });
+  const legacy = await db.client.findFirst({ where: { remnawaveUuid: uuid, id: { not: ownerId } } });
+  if (linked || legacy) throw new SubscriptionEditError("Этот Remna UUID уже привязан к другой подписке или клиенту");
+}
+
+async function mirrorPrimary(db: Prisma.TransactionClient, sub: Subscription, resetRenewal = false) {
+  await checkUuid(db, sub.ownerId, sub.id, sub.remnawaveUuid);
+  await db.client.update({ where: { id: sub.ownerId }, data: {
+    remnawaveUuid: sub.remnawaveUuid,
+    currentTariffId: sub.tariffId,
+    customPrimaryPrice: sub.customPrice,
+    currentPricePerDay: sub.currentPricePerDay,
+    autoRenewEnabled: sub.autoRenewEnabled,
+    autoRenewTariffId: sub.autoRenewTariffId,
+    autoRenewPriceOptionId: sub.autoRenewPriceOptionId,
+    autoRenewExtraDevices: sub.autoRenewExtraDevices,
+    ...(resetRenewal ? { autoRenewRetryCount: 0, autoRenewNotifiedAt: null, lastArnNotifiedKey: null, autoRenewPromoCode: null } : {}),
+  } });
+}
+
 export async function promoteSubscriptionToPrimary(subId: string): Promise<PromoteSubscriptionResult | null> {
-  return prisma.$transaction(async (db) => {
-    const target = await db.subscription.findUnique({
-      where: { id: subId },
-      select: { id: true, ownerId: true },
-    });
+  return prisma.$transaction(async db => {
+    const target = await db.subscription.findUnique({ where: { id: subId } });
     if (!target) return null;
-
-    await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"subscription-owner:" + target.ownerId}, 0))`;
-
-    const fresh = await db.subscription.findUnique({
-      where: { id: target.id },
-      select: { subscriptionIndex: true, remnawaveUuid: true, tariffId: true },
-    });
+    await lockOwner(db, target.ownerId);
+    const fresh = await db.subscription.findUnique({ where: { id: subId } });
     if (!fresh) return null;
-    if (fresh.subscriptionIndex === 0) {
-      return { id: target.id, ownerId: target.ownerId, previousPrimaryId: null, remnawaveUuid: fresh.remnawaveUuid };
+    if (fresh.ownerId !== target.ownerId) throw new SubscriptionEditError("Владелец подписки изменился. Обновите страницу");
+    if (!isPrimaryEligible(fresh)) throw new SubscriptionEditError("Неактивированный или переданный подарок нельзя сделать основной подпиской");
+    const subs = await db.subscription.findMany({ where: { ownerId: fresh.ownerId } });
+    const owner = await db.client.findUniqueOrThrow({ where: { id: fresh.ownerId } });
+    if (owner.remnawaveUuid && !subs.some(s => s.remnawaveUuid === owner.remnawaveUuid)) {
+      throw new SubscriptionEditError("Сначала восстановите запись существующей основной подписки: у клиента есть отдельная legacy-привязка");
     }
-
-    const currentPrimary = await db.subscription.findUnique({
-      where: { ownerId_subscriptionIndex: { ownerId: target.ownerId, subscriptionIndex: 0 } },
-      select: { id: true },
-    });
-
-    await db.subscription.update({ where: { id: target.id }, data: { subscriptionIndex: -1 } });
-    if (currentPrimary && currentPrimary.id !== target.id) {
-      await db.subscription.update({
-        where: { id: currentPrimary.id },
-        data: { subscriptionIndex: fresh.subscriptionIndex },
-      });
+    const current = subs.find(s => s.subscriptionIndex === 0);
+    if (fresh.subscriptionIndex !== 0) {
+      const temporary = Math.min(0, ...subs.map(s => s.subscriptionIndex)) - 1;
+      await db.subscription.update({ where: { id: subId }, data: { subscriptionIndex: temporary } });
+      if (current) await db.subscription.update({ where: { id: current.id }, data: { subscriptionIndex: fresh.subscriptionIndex } });
+      await db.subscription.update({ where: { id: subId }, data: { subscriptionIndex: 0 } });
     }
-    await db.subscription.update({ where: { id: target.id }, data: { subscriptionIndex: 0 } });
+    await mirrorPrimary(db, fresh, current?.id !== fresh.id);
+    return { id: subId, ownerId: fresh.ownerId, previousPrimaryId: current?.id === subId ? null : current?.id ?? null, remnawaveUuid: fresh.remnawaveUuid };
+  }, { timeout: 20_000 });
+}
 
-    await db.client.update({
-      where: { id: target.ownerId },
-      data: {
-        remnawaveUuid: fresh.remnawaveUuid ?? null,
-        ...(fresh.tariffId ? { currentTariffId: fresh.tariffId } : {}),
-      },
-    });
+export type SubscriptionDbEdit = {
+  customName?: string | null;
+  tariffId?: string | null;
+  remnawaveUuid?: string | null;
+  expireAt?: string | null;
+  customPrice?: number | null;
+  autoRenewEnabled?: boolean;
+  extraDevices?: number;
+  syncToClient?: boolean;
+};
 
-    return {
-      id: target.id,
-      ownerId: target.ownerId,
-      previousPrimaryId: currentPrimary?.id ?? null,
-      remnawaveUuid: fresh.remnawaveUuid,
-    };
-  });
+export async function updateSubscriptionDb(subId: string, input: SubscriptionDbEdit) {
+  return prisma.$transaction(async db => {
+    const target = await db.subscription.findUnique({ where: { id: subId } });
+    if (!target) throw new SubscriptionEditError("Подписка не найдена", 404);
+    await lockOwner(db, target.ownerId);
+    const fresh = await db.subscription.findUnique({ where: { id: subId } });
+    if (!fresh || fresh.ownerId !== target.ownerId) throw new SubscriptionEditError("Подписка изменилась. Обновите страницу");
+    if (input.syncToClient && fresh.subscriptionIndex !== 0) throw new SubscriptionEditError("Сначала сделайте подписку основной отдельной кнопкой");
+    if (input.tariffId && !await db.tariff.findUnique({ where: { id: input.tariffId } })) throw new SubscriptionEditError("Тариф не найден", 404);
+    if (input.remnawaveUuid !== undefined) await checkUuid(db, fresh.ownerId, subId, input.remnawaveUuid);
+    const { syncToClient, expireAt, ...fields } = input;
+    if (Object.keys(fields).length === 0 && expireAt === undefined) throw new SubscriptionEditError("Нет полей для обновления", 400);
+    const updated = await db.subscription.update({ where: { id: subId }, data: {
+      ...fields,
+      ...(input.remnawaveUuid !== undefined && input.remnawaveUuid !== fresh.remnawaveUuid ? {
+        shortUuid: null, remnaStatus: null, trafficUsedBytes: null, trafficLimitBytes: null,
+        remnaSyncedAt: null, lastTrafficResetAt: null, subRevokedAt: null, expireAt: null,
+      } : {}),
+      ...(expireAt !== undefined ? { expireAt: expireAt === null ? null : new Date(expireAt) } : {}),
+    } });
+    if (updated.subscriptionIndex === 0) {
+      if (!isPrimaryEligible(updated)) throw new SubscriptionEditError("Сначала исправьте основной слот подарочной подписки");
+      await mirrorPrimary(db, updated, updated.remnawaveUuid !== fresh.remnawaveUuid || updated.tariffId !== fresh.tariffId);
+    }
+    return updated;
+  }, { timeout: 20_000 });
 }
 
 export type NormalizedSubscriptionSlots = {
@@ -272,84 +321,38 @@ export type NormalizedSubscriptionSlots = {
   reindexed: boolean;
 };
 
-export async function normalizeClientSubscriptionSlots(clientId: string): Promise<NormalizedSubscriptionSlots> {
-  return prisma.$transaction(async (db) => {
-    await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"subscription-owner:" + clientId}, 0))`;
-
-    const subs = await db.subscription.findMany({
-      where: { ownerId: clientId },
-      orderBy: [{ subscriptionIndex: "asc" }, { createdAt: "asc" }],
-      select: { id: true, subscriptionIndex: true, remnawaveUuid: true, tariffId: true, giftStatus: true },
-    });
-
+export async function normalizeClientSubscriptionSlots(clientId: string, removedUuids: string[] = []): Promise<NormalizedSubscriptionSlots> {
+  return prisma.$transaction(async db => {
+    await lockOwner(db, clientId);
+    const owner = await db.client.findUniqueOrThrow({ where: { id: clientId } });
+    const subs = await db.subscription.findMany({ where: { ownerId: clientId }, orderBy: [{ subscriptionIndex: "asc" }, { createdAt: "asc" }] });
+    const untouched = { primaryId: null, primaryRemnawaveUuid: owner.remnawaveUuid, promotedId: null, reindexed: false };
+    if (owner.remnawaveUuid && !removedUuids.includes(owner.remnawaveUuid) && !subs.some(s => s.remnawaveUuid === owner.remnawaveUuid)) return untouched;
     const { ordered, promotedId, reindexed } = planSubscriptionSlotOrder(subs);
-    if (ordered.length === 0) {
-      await db.client.update({
-        where: { id: clientId },
-        data: { remnawaveUuid: null, currentTariffId: null },
-      });
-      return { primaryId: null, primaryRemnawaveUuid: null, promotedId: null, reindexed: false };
+    if (!ordered.length) {
+      if (owner.remnawaveUuid && removedUuids.includes(owner.remnawaveUuid)) {
+        await db.client.update({ where: { id: clientId }, data: { remnawaveUuid: null, currentTariffId: null, autoRenewEnabled: false, autoRenewTariffId: null, autoRenewPriceOptionId: null, autoRenewExtraDevices: 0, customPrimaryPrice: null, currentPricePerDay: null } });
+        return { ...untouched, primaryRemnawaveUuid: null };
+      }
+      return untouched;
     }
-
-    const primary = ordered[0];
     if (reindexed) {
-      for (let i = 0; i < ordered.length; i++) {
-        await db.subscription.update({ where: { id: ordered[i].id }, data: { subscriptionIndex: -(i + 1) } });
-      }
-      for (let i = 0; i < ordered.length; i++) {
-        await db.subscription.update({ where: { id: ordered[i].id }, data: { subscriptionIndex: i } });
-      }
+      const temporary = Math.min(0, ...subs.map(s => s.subscriptionIndex)) - 1;
+      for (let i = 0; i < ordered.length; i++) await db.subscription.update({ where: { id: ordered[i].id }, data: { subscriptionIndex: temporary - i } });
+      for (let i = 0; i < ordered.length; i++) await db.subscription.update({ where: { id: ordered[i].id }, data: { subscriptionIndex: i } });
     }
-
-    await db.client.update({
-      where: { id: clientId },
-      data: {
-        remnawaveUuid: primary.remnawaveUuid ?? null,
-        ...(primary.tariffId ? { currentTariffId: primary.tariffId } : {}),
-      },
-    });
-
-    return {
-      primaryId: primary.id,
-      primaryRemnawaveUuid: primary.remnawaveUuid ?? null,
-      promotedId,
-      reindexed,
-    };
+    await mirrorPrimary(db, ordered[0], ordered[0].subscriptionIndex !== 0);
+    return { primaryId: ordered[0].id, primaryRemnawaveUuid: ordered[0].remnawaveUuid, promotedId, reindexed };
   }, { timeout: 20_000 });
 }
 
 export async function healMissingPrimarySlot(clientId: string): Promise<string | null> {
+  const primary = await getPrimarySubscription(clientId);
+  if (primary && isPrimaryEligible(primary)) return null;
   try {
-    return await prisma.$transaction(async (db) => {
-      await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"subscription-owner:" + clientId}, 0))`;
-
-      const subs = await db.subscription.findMany({
-        where: { ownerId: clientId },
-        orderBy: [{ subscriptionIndex: "asc" }, { createdAt: "asc" }],
-        select: { id: true, subscriptionIndex: true, remnawaveUuid: true, giftStatus: true },
-      });
-      if (subs.length === 0) return null;
-      if (subs.some((sub) => sub.subscriptionIndex === 0)) return null;
-
-      const candidates = subs.filter((sub) => !isReservedGiftStatus(sub.giftStatus));
-      if (candidates.length === 0) return null;
-
-      const target = candidates[0];
-      await db.subscription.update({ where: { id: target.id }, data: { subscriptionIndex: 0 } });
-      if (target.remnawaveUuid) {
-        await db.client.update({
-          where: { id: clientId },
-          data: { remnawaveUuid: target.remnawaveUuid },
-        });
-      }
-
-      console.warn(
-        `[subscription self-heal] Auto-promoted sub ${target.id} to primary slot 0 for client ${clientId}`,
-      );
-      return target.id;
-    });
-  } catch (e) {
-    console.warn("[subscription self-heal] failed:", e instanceof Error ? e.message : e);
+    return (await normalizeClientSubscriptionSlots(clientId)).promotedId;
+  } catch (error) {
+    console.warn("[subscription self-heal] failed:", error instanceof Error ? error.message : error);
     return null;
   }
 }

@@ -256,9 +256,9 @@ function TrialCleanupSettings({
     mutationFn: () => api.runTrialCleanup(token!, false),
     onSuccess: async (result) => {
       setError(null);
-      setNotice(`Найдено пользователей: ${result.candidateCount}. Удалено: ${result.deletedCount}.`);
+      setNotice(`Найдено: ${result.candidateCount}. Удалено: ${result.deletedCount}. Пропущено: ${result.skippedCount}. Ошибок: ${result.failedCount}.`);
       onSaved();
-      await adminAlert(`Очистка завершена.\nНайдено пользователей: ${result.candidateCount}\nУдалено: ${result.deletedCount}`);
+      await adminAlert(`Очистка завершена.\nНайдено пользователей: ${result.candidateCount}\nУдалено: ${result.deletedCount}\nПропущено: ${result.skippedCount}\nОшибок: ${result.failedCount}`);
     },
     onError: (e) => {
       setNotice(null);
@@ -266,10 +266,19 @@ function TrialCleanupSettings({
     },
   });
 
+  const previewMutation = useMutation({
+    mutationFn: () => api.runTrialCleanup(token!, true),
+    onSuccess: result => {
+      setError(null);
+      setNotice(`Предварительно найдено: ${result.candidateCount}. Перед удалением подписки будут проверены повторно, включая Remnawave.`);
+    },
+    onError: error => setError(error instanceof Error ? error.message : "Ошибка проверки"),
+  });
+
   const handleCleanup = async () => {
     if (!token) return;
     const ok = await adminConfirm(
-      "Запустить очистку сейчас? Пользователи с истёкшим триалом без платных покупок будут удалены из базы и Remnawave без возможности восстановления."
+      "Запустить очистку сейчас? Пользователи с подтверждённым истёкшим триалом без платёжных счетов будут удалены из базы и Remnawave без возможности восстановления."
     );
     if (!ok) return;
     cleanupMutation.mutate();
@@ -281,7 +290,7 @@ function TrialCleanupSettings({
         <div className="min-w-0">
           <h2 className="font-semibold">Автоудаление истёкших триалов</h2>
           <p className="text-sm text-muted-foreground">
-            Пользователи, активировавшие пробный период и не совершившие ни одной платной покупки, будут безвозвратно удалены из базы и Remnawave через указанное число дней после окончания триала.
+            Удаляются только подтверждённые истёкшие триалы без платёжных счетов и других услуг. Любой счёт, включая неоплаченный, защищает аккаунт. При неизвестном сроке или ошибке Remnawave клиент сохраняется. Срок отсчитывается от окончания триала.
           </p>
         </div>
         <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Автоудаление истёкших триалов" />
@@ -314,6 +323,10 @@ function TrialCleanupSettings({
         >
           {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
           Сохранить настройки
+        </Button>
+        <Button variant="outline" disabled={!token || previewMutation.isPending || cleanupMutation.isPending} onClick={() => previewMutation.mutate()}>
+          {previewMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          Проверить без удаления
         </Button>
         <Button
           variant="destructive"

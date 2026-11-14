@@ -108,7 +108,7 @@ test("keeps users whose trial expires after the cutoff", () => {
   assert.equal(isTrialCleanupCandidate(client, CUTOFF), false);
 });
 
-test("uses subscription createdAt when expireAt is missing", () => {
+test("keeps subscriptions with unknown expiry", () => {
   const oldTrial = makeClient({
     ownedSubscriptions: [
       {
@@ -121,7 +121,7 @@ test("uses subscription createdAt when expireAt is missing", () => {
       },
     ],
   });
-  assert.equal(isTrialCleanupCandidate(oldTrial, CUTOFF), true);
+  assert.equal(isTrialCleanupCandidate(oldTrial, CUTOFF), false);
 
   const recentTrial = makeClient({
     ownedSubscriptions: [
@@ -138,13 +138,13 @@ test("uses subscription createdAt when expireAt is missing", () => {
   assert.equal(isTrialCleanupCandidate(recentTrial, CUTOFF), false);
 });
 
-test("uses client createdAt when trial usage has no subscription record", () => {
+test("keeps legacy trials without a subscription record", () => {
   const oldClient = makeClient({
     trialUsed: true,
     trialUsages: [{ subscriptionId: null }],
     ownedSubscriptions: [],
   });
-  assert.equal(isTrialCleanupCandidate(oldClient, CUTOFF), true);
+  assert.equal(isTrialCleanupCandidate(oldClient, CUTOFF), false);
 
   const recentClient = makeClient({
     createdAt: RECENT,

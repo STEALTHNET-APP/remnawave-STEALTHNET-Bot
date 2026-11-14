@@ -31,24 +31,13 @@ export function isTrialCleanupCandidate(
   client: TrialCleanupCandidate,
   cutoffDate: Date,
 ): boolean {
-  if (client.role === "ADMIN") return false;
-  if (client.balance > 0) return false;
-  if (client.payments.some((payment) => payment.status === "PAID")) return false;
-  if (client.tickets.some((ticket) => ticket.status === "open" || ticket.status === "pending")) return false;
-
-  const usedTrial =
-    client.trialUsed ||
-    client.trialUsages.length > 0 ||
-    client.ownedSubscriptions.some((subscription) => subscription.trialId !== null);
-  if (!usedTrial) return false;
-
-  for (const subscription of client.ownedSubscriptions) {
-    if (subscription.tariffId !== null && subscription.trialId === null) return false;
-    const endedAt = subscription.expireAt ?? subscription.createdAt;
-    if (endedAt > cutoffDate) return false;
+  if (client.role !== "CLIENT" || !Number.isFinite(client.balance) || client.balance !== 0) return false;
+  if (client.payments.length > 0) return false;
+  if (client.tickets.some(ticket => ticket.status === "open" || ticket.status === "pending")) return false;
+  if (client.ownedSubscriptions.length === 0) return false;
+  if (client.remnawaveUuid && !client.ownedSubscriptions.some(sub => sub.remnawaveUuid === client.remnawaveUuid)) return false;
+  for (const sub of client.ownedSubscriptions) {
+    if (!sub.trialId || !sub.expireAt || !Number.isFinite(sub.expireAt.getTime()) || sub.expireAt > cutoffDate) return false;
   }
-
-  if (client.ownedSubscriptions.length === 0 && client.createdAt > cutoffDate) return false;
-
   return true;
 }

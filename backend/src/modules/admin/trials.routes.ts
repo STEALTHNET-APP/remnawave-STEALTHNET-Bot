@@ -105,18 +105,21 @@ function trialToJson(t: {
 }
 
 const cleanupNowSchema = z.object({
-  dryRun: z.boolean().optional(),
+  dryRun: z.boolean().default(true),
 });
 
 adminTrialsRouter.post("/cleanup-now", async (req, res) => {
+  if ((req as typeof req & { adminRole?: string }).adminRole !== "ADMIN") return res.status(403).json({ message: "Требуются права администратора" });
   const body = cleanupNowSchema.safeParse(req.body ?? {});
   if (!body.success) return res.status(400).json({ message: "Неверные данные", errors: body.error.flatten() });
   try {
-    const result = await runTrialCleanup({ dryRun: body.data.dryRun ?? false });
+    const result = await runTrialCleanup({ dryRun: body.data.dryRun });
     await logAdmin(req, "trials.cleanup_run", undefined, {
       dryRun: result.dryRun,
       candidateCount: result.candidateCount,
       deletedCount: result.deletedCount,
+      skippedCount: result.skippedCount,
+      failedCount: result.failedCount,
     });
     return res.json({ success: true, ...result });
   } catch (error) {

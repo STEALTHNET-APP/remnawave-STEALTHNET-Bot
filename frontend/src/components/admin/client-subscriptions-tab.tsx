@@ -169,7 +169,7 @@ export function ClientSubscriptionsTab({ clientId, token, onChanged }: Props) {
                   )}
                 </div>
               </button>
-              {!sub.isPrimary && (
+              {!sub.isPrimary && !sub.purchasedAsGift && !["GIFT_RESERVED", "GIFT_CODE_ACTIVE"].includes(sub.giftStatus ?? "") && (!sub.giftedToClientId || sub.giftedToClientId === sub.ownerId) && (
                 <div className="flex items-center pr-3 shrink-0">
                   <Button
                     size="sm"

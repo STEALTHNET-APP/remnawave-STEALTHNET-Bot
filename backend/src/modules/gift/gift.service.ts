@@ -569,7 +569,7 @@ export async function deleteSubscription(
     where: { id: subscriptionId },
   });
 
-  await normalizeClientSubscriptionSlots(ownerId).catch((e) => {
+  await normalizeClientSubscriptionSlots(ownerId, sub.remnawaveUuid ? [sub.remnawaveUuid] : []).catch((e) => {
     console.error("[gift] slot normalization failed:", e);
   });
 

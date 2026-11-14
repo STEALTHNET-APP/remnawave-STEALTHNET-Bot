@@ -590,7 +590,7 @@ export function AdminSecondarySubscriptionsPage() {
                             всегда, а не только при hover. Раньше пользователи думали что
                             кнопки удаления нет. */}
                         <div className="flex items-center justify-end gap-2">
-                          {item.subscriptionIndex !== 0 && (
+                          {item.subscriptionIndex !== 0 && !item.purchasedAsGift && !["GIFT_RESERVED", "GIFT_CODE_ACTIVE"].includes(item.giftStatus ?? "") && (
                             <Button variant="ghost" size="icon" aria-label="Сделать подписку основной" title="Сделать подписку основной" className="h-8 w-8 rounded-xl bg-foreground/[0.04] dark:bg-card hover:bg-amber-500/15 hover:text-amber-400 border border-border hover:border-amber-500/30 transition-all shadow-sm" onClick={(e) => { e.stopPropagation(); handleMakePrimary(item.id); }}>
                               <Crown className="h-4 w-4" />
                             </Button>

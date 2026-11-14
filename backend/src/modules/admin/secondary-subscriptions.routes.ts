@@ -358,7 +358,7 @@ adminSecondarySubscriptionsRouter.delete("/:id", asyncRoute(async (req, res) => 
   // Cascade deletes GiftCodes via DB relation
   await prisma.subscription.delete({ where: { id: sub.id } });
 
-  await normalizeClientSubscriptionSlots(sub.ownerId).catch((e) => {
+  await normalizeClientSubscriptionSlots(sub.ownerId, sub.remnawaveUuid ? [sub.remnawaveUuid] : []).catch((e) => {
     console.error("[admin/secondary-subscriptions] slot normalization failed:", e);
   });
 
@@ -397,7 +397,7 @@ adminSecondarySubscriptionsRouter.delete("/bulk", asyncRoute(async (req, res) =>
 
   const ownerIds = Array.from(new Set(subs.map((s) => s.ownerId)));
   for (const ownerId of ownerIds) {
-    await normalizeClientSubscriptionSlots(ownerId).catch((e) => {
+    await normalizeClientSubscriptionSlots(ownerId, subs.filter(s => s.ownerId === ownerId && s.remnawaveUuid).map(s => s.remnawaveUuid!)).catch((e) => {
       console.error("[admin/secondary-subscriptions] slot normalization failed:", e);
     });
   }

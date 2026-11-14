@@ -177,13 +177,12 @@ function SubscriptionDbEditor({
       setMsg("Дополнительные устройства должны быть целым неотрицательным числом");
       return;
     }
-    await saveMutation.mutateAsync({
+    saveMutation.mutate({
       customName: customName.trim() ? customName.trim() : null,
       tariffId: tariffId || null,
       remnawaveUuid: remnawaveUuid.trim() ? remnawaveUuid.trim() : null,
       extraDevices: devices,
       autoRenewEnabled,
-      syncToClient: true,
     });
   }
 

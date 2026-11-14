@@ -2146,7 +2146,7 @@ export const api = {
   async deleteTrial(token: string, id: string): Promise<{ success: boolean }> {
     return request(`/admin/trials/${id}`, { method: "DELETE", token });
   },
-  async runTrialCleanup(token: string, dryRun?: boolean): Promise<{ success: boolean; candidateCount: number; deletedCount: number; dryRun: boolean }> {
+  async runTrialCleanup(token: string, dryRun = true): Promise<{ success: boolean; candidateCount: number; deletedCount: number; dryRun: boolean; skippedCount: number; failedCount: number }> {
     return request("/admin/trials/cleanup-now", { method: "POST", body: JSON.stringify({ dryRun: Boolean(dryRun) }), token });
   },
 
