@@ -11,7 +11,7 @@ import type { DeviceScreen } from "./device-flow.js";
 
 type ButtonStyle = "primary" | "success" | "danger";
 
-interface InlineButton {
+export interface InlineButton {
   text: string;
   callback_data: string;
   style?: ButtonStyle;
@@ -23,6 +23,27 @@ type UrlButton = { text: string; url: string; icon_custom_emoji_id?: string; sty
 export type InlineMarkup = { inline_keyboard: (InlineButton | WebAppButton | UrlButton)[][] };
 
 export type BotButtonConfig = { id: string; visible: boolean; label: string; order: number; style?: string; iconCustomEmojiId?: string; onePerRow?: boolean; url?: string };
+
+export const DEFAULT_CABINET_GROUPED_IDS: string[] = [
+  "cloudtrial",
+  "autopay",
+  "tariffs",
+  "my_subs",
+  "proxy",
+  "my_proxy",
+  "singbox",
+  "my_singbox",
+  "devices",
+  "topup",
+  "referral",
+  "trial",
+  "vpn",
+  "promocode",
+  "extra_options",
+  "gift",
+  "roulette",
+  "tg_proxy",
+];
 
 type DeviceButtonTheme = {
   botButtons?: (BotButtonConfig & { emojiKey?: string })[] | null;
@@ -46,13 +67,17 @@ function deviceButton(data: string, theme?: DeviceButtonTheme | null, label?: st
 }
 
 /** Render internal appearance hints here; only Telegram fields leave this boundary. */
-export function deviceFlowButtons(screen: DeviceScreen, theme?: DeviceButtonTheme | null): InlineMarkup {
+export function deviceFlowButtons(screen: DeviceScreen, theme?: DeviceButtonTheme | null, includeBackToProfile = false): InlineMarkup {
   const emojis = theme?.botEmojis;
   const backStyle = theme?.botInnerButtonStyles?.back;
-  return { inline_keyboard: screen.markup.inline_keyboard.map(row => row.map(button => {
+  return { inline_keyboard: screen.markup.inline_keyboard.map(row => row.flatMap(button => {
     const { text, callback_data: data, appearance } = button;
     if (appearance === "menu") {
-      return backToMenu(theme?.botBackLabel, backStyle, { back: emojis?.BACK?.tgEmojiId }).inline_keyboard[0][0];
+      return backNavRow(theme?.botBackLabel, theme?.botInnerButtonStyles ?? undefined, {
+        back: emojis?.BACK?.tgEmojiId,
+        backProfile: emojis?.BACK_TO_PROFILE?.tgEmojiId,
+        backProfileUnicode: emojis?.BACK_TO_PROFILE?.unicode,
+      }, includeBackToProfile);
     }
     if (appearance === "device") return deviceButton(data, theme, text);
     if (appearance === "back" || appearance === "subscription" || appearance === "subscriptions") {
@@ -235,6 +260,7 @@ export type InnerButtonStyles = {
   trialConfirm?: string;
   lang?: string;
   currency?: string;
+  backProfile?: string;
 };
 
 /** ID премиум-эмодзи для внутренних кнопок (из botEmojis: BACK, CARD, PACKAGE, TRIAL, PUZZLE, SERVERS) */
@@ -245,6 +271,8 @@ export type InnerEmojiIds = {
   trial?: string;
   profile?: string;
   connect?: string;
+  backProfile?: string;
+  backProfileUnicode?: string;
 };
 
 /** Главное меню: кнопки из конфига. Эмодзи в label (Unicode) и/или icon_custom_emoji_id (премиум). Поддержка показывается только если задана хотя бы одна ссылка. Тикеты — Web App при включённой тикет-системе. buttonsPerRow: 1 или 2. */
@@ -266,6 +294,7 @@ export function mainMenu(opts: {
   showGift?: boolean;
   menuMode?: "classic" | "web";
   groupCabinet?: boolean;
+  groupCabinetItems?: string[] | null;
   section?: "main" | "profile";
   /** Кнопок в ряд: 1 или 2 (по умолчанию 1) */
   buttonsPerRow?: 1 | 2;
@@ -303,7 +332,11 @@ export function mainMenu(opts: {
   if (fromConfig && !!opts.appUrl?.trim() && !list.some((b) => b.id === "site")) {
     list.push({ id: "site", visible: true, label: "🌐 Сайт", order: 10, style: "primary", onePerRow: true });
   }
-  const cabinetIds = new Set(["cloudtrial", "autopay", "tariffs", "my_subs", "proxy", "my_proxy", "singbox", "my_singbox", "devices", "topup", "referral", "trial", "vpn", "promocode", "extra_options", "gift", "roulette", "tg_proxy"]);
+  const cabinetIds = new Set(
+    Array.isArray(opts.groupCabinetItems)
+      ? opts.groupCabinetItems
+      : DEFAULT_CABINET_GROUPED_IDS
+  );
   if (!opts.liteMode && opts.groupCabinet && opts.section !== "profile") {
     const profile = list.find(b => b.id === "profile");
     if (profile) profile.visible = true;
@@ -498,12 +531,31 @@ export function supportSubMenu(
   return { inline_keyboard: rows };
 }
 
-export function backToMenu(backLabel?: string | null, backStyle?: string, emojiIds?: InnerEmojiIds, _lang = "ru"): InlineMarkup {
+export function backToMenu(backLabel?: string | null, backStyle?: string, emojiIds?: InnerEmojiIds, includeBackToProfile = false, lang = "ru"): InlineMarkup {
   // callback ВСЕГДА `menu:main` (главное меню).
   // текст берём из настроек админки (config.botBackLabel),
   // fallback на «🏠 Главное меню». Это даёт админу контроль над смайликом/текстом из панели.
-  const label = (backLabel && backLabel.trim()) || "🏠 Главное меню";
-  return { inline_keyboard: [[btn(label, "menu:main", resolveStyle(toStyle(backStyle), "danger"), emojiIds?.back)]] };
+  return { inline_keyboard: [backNavRow(backLabel, { back: backStyle }, emojiIds, includeBackToProfile, lang)] };
+}
+
+export function profileBackButton(innerStyles?: InnerButtonStyles, emojiIds?: InnerEmojiIds, lang = "ru"): InlineButton {
+  const unicode = emojiIds?.backProfileUnicode?.trim() || "◀️";
+  const label = `${unicode} ${_t("back_word", lang)}`;
+  return btn(label, "menu:profile", resolveStyle(toStyle(innerStyles?.backProfile), "danger"), emojiIds?.backProfile);
+}
+
+export function backNavRow(
+  backLabel?: string | null,
+  innerStyles?: InnerButtonStyles,
+  emojiIds?: InnerEmojiIds,
+  includeBackToProfile = false,
+  lang = "ru",
+): InlineButton[] {
+  const mainLabel = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
+  const mainSty = resolveStyle(toStyle(innerStyles?.back), "danger");
+  const mainBtn = btn(mainLabel, "menu:main", mainSty, emojiIds?.back);
+  if (!includeBackToProfile) return [mainBtn];
+  return [profileBackButton(innerStyles, emojiIds, lang), mainBtn];
 }
 
 /** Кнопка «Оплатить» (открывает paymentUrl) + «В меню» */
@@ -548,11 +600,9 @@ export function openSubscribePageMarkup(appUrl: string, backLabel?: string | nul
   };
 }
 
-export function topUpPresets(currency: string, backLabel?: string | null, innerStyles?: InnerButtonStyles, emojiIds?: InnerEmojiIds): InlineMarkup {
+export function topUpPresets(currency: string, backLabel?: string | null, innerStyles?: InnerButtonStyles, emojiIds?: InnerEmojiIds, includeBackToProfile = false): InlineMarkup {
   const sym = currency.toUpperCase() === "RUB" ? "₽" : currency.toUpperCase() === "USD" ? "$" : "₴";
-  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
   const topup = resolveStyle(toStyle(innerStyles?.topup), "primary");
-  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
   const cardId = emojiIds?.card;
   return {
     inline_keyboard: [
@@ -567,7 +617,7 @@ export function topUpPresets(currency: string, backLabel?: string | null, innerS
       ],
       // кнопка для ручного ввода суммы (триггер conversation flow).
       [btn(`✏️ Ввести свою сумму ${sym}`, "topup:custom", topup, cardId)],
-      [btn(back, "menu:main", backSty, emojiIds?.back)],
+      backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile),
     ],
   };
 }
@@ -578,17 +628,16 @@ export function tariffCategoryButtons(
   backLabel?: string | null,
   innerStyles?: InnerButtonStyles,
   emojiIds?: InnerEmojiIds,
-  _prefixEmoji?: string
+  _prefixEmoji?: string,
+  includeBackToProfile = false
 ): InlineMarkup {
   const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
-  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
-  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
   const tariffId = emojiIds?.tariff;
   const rows: InlineButton[][] = categories.map((cat) => {
     const label = ((cat.emoji && cat.emoji.trim()) ? `${cat.emoji} ` : "") + (cat.name || "").trim();
     return [btn(label.slice(0, 64), `cat_tariffs:${cat.id}`, tariffPay, tariffId)];
   });
-  rows.push([btn(back, "menu:main", backSty, emojiIds?.back)]);
+  rows.push(backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile));
   return { inline_keyboard: rows };
 }
 
@@ -602,7 +651,8 @@ export function tariffsOfCategoryButtons(
   _prefixEmoji?: string,
   // тогглы из админки (Настройки → Бот): скрытие сервисных кнопок экрана Тарифов.
   // undefined → показываем (back-compat для старых вызовов).
-  visibility?: { showExtraDevices?: boolean; showBalance?: boolean }
+  visibility?: { showExtraDevices?: boolean; showBalance?: boolean },
+  includeBackToProfile = false
 ): InlineMarkup {
   const rows: InlineButton[][] = [];
   const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
@@ -627,7 +677,8 @@ export function tariffsOfCategoryButtons(
   if (visibility?.showBalance !== false) {
     rows.push([btn("💼 Мой баланс", "menu:balance", undefined, undefined)]);
   }
-  rows.push([btn(back, backData, backSty, emojiIds?.back)]);
+  if (backData === "menu:main") rows.push(backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile));
+  else rows.push([btn(back, backData, backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }
 
@@ -644,17 +695,16 @@ export function tariffPayButtons(
   emojiIds?: InnerEmojiIds,
   prefixEmoji?: string,
   // тогглы скрытия сервисных кнопок экрана Тарифов (см. tariffsOfCategoryButtons).
-  visibility?: { showExtraDevices?: boolean; showBalance?: boolean }
+  visibility?: { showExtraDevices?: boolean; showBalance?: boolean },
+  includeBackToProfile = false
 ): InlineMarkup {
   if (categories.length === 0) {
-    const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
-    const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
-    return { inline_keyboard: [[btn(back, "menu:main", backSty, emojiIds?.back)]] };
+    return { inline_keyboard: [backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile)] };
   }
   if (categories.length === 1) {
-    return tariffsOfCategoryButtons(categories[0]!, backLabel, innerStyles, "menu:main", emojiIds, prefixEmoji, visibility);
+    return tariffsOfCategoryButtons(categories[0]!, backLabel, innerStyles, "menu:main", emojiIds, prefixEmoji, visibility, includeBackToProfile);
   }
-  return tariffCategoryButtons(categories, backLabel, innerStyles, emojiIds, prefixEmoji);
+  return tariffCategoryButtons(categories, backLabel, innerStyles, emojiIds, prefixEmoji, includeBackToProfile);
 }
 
 /**
@@ -723,10 +773,9 @@ export function tariffDevicePickerButtons(
   backLabel?: string | null,
   innerStyles?: InnerButtonStyles,
   emojiIds?: InnerEmojiIds,
+  includeBackToProfile = false,
 ): InlineMarkup {
   const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
-  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
-  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
   const tariffId = emojiIds?.tariff;
   const sym = currencySymbol(currency);
   // По 2 плитки в ряд для удобства на мобиле.
@@ -744,7 +793,7 @@ export function tariffDevicePickerButtons(
     }
   }
   if (row.length > 0) rows.push(row);
-  rows.push([btn(back, "menu:main", backSty, emojiIds?.back)]);
+  rows.push(backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile));
   return { inline_keyboard: rows };
 }
 
@@ -864,17 +913,16 @@ export function proxyCategoryButtons(
   categories: { id: string; name: string; tariffs: { id: string; name: string; price: number; currency: string; hasOptions?: boolean }[] }[],
   backLabel?: string | null,
   innerStyles?: InnerButtonStyles,
-  emojiIds?: InnerEmojiIds
+  emojiIds?: InnerEmojiIds,
+  includeBackToProfile = false
 ): InlineMarkup {
   const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
-  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
-  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
   const tariffId = emojiIds?.tariff;
   const rows: InlineButton[][] = categories.map((cat) => {
     const label = cat.name.slice(0, 64);
     return [btn(label, `cat_proxy:${cat.id}`, tariffPay, tariffId)];
   });
-  rows.push([btn(back, "menu:main", backSty, emojiIds?.back)]);
+  rows.push(backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile));
   return { inline_keyboard: rows };
 }
 
@@ -884,7 +932,8 @@ export function proxyTariffsOfCategoryButtons(
   backLabel?: string | null,
   innerStyles?: InnerButtonStyles,
   backData = "menu:proxy",
-  emojiIds?: InnerEmojiIds
+  emojiIds?: InnerEmojiIds,
+  includeBackToProfile = false
 ): InlineMarkup {
   const rows: InlineButton[][] = [];
   const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
@@ -894,7 +943,8 @@ export function proxyTariffsOfCategoryButtons(
   for (const t of category.tariffs) {
     rows.push([btn(`${t.name} — ${t.price} ${currencySymbol(t.currency)}`.slice(0, 64), `pay_proxy:${t.id}`, tariffPay, tariffId)]);
   }
-  rows.push([btn(back, backData, backSty, emojiIds?.back)]);
+  if (backData === "menu:main") rows.push(backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile));
+  else rows.push([btn(back, backData, backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }
 
@@ -903,15 +953,14 @@ export function proxyTariffPayButtons(
   categories: { id: string; name: string; tariffs: { id: string; name: string; price: number; currency: string; hasOptions?: boolean }[] }[],
   backLabel?: string | null,
   innerStyles?: InnerButtonStyles,
-  emojiIds?: InnerEmojiIds
+  emojiIds?: InnerEmojiIds,
+  includeBackToProfile = false
 ): InlineMarkup {
-  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
-  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
-  if (categories.length === 0) return { inline_keyboard: [[btn(back, "menu:main", backSty, emojiIds?.back)]] };
+  if (categories.length === 0) return { inline_keyboard: [backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile)] };
   if (categories.length === 1 && categories[0]!.tariffs.length <= 5) {
-    return proxyTariffsOfCategoryButtons(categories[0]!, backLabel, innerStyles, "menu:main", emojiIds);
+    return proxyTariffsOfCategoryButtons(categories[0]!, backLabel, innerStyles, "menu:main", emojiIds, includeBackToProfile);
   }
-  return proxyCategoryButtons(categories, backLabel, innerStyles, emojiIds);
+  return proxyCategoryButtons(categories, backLabel, innerStyles, emojiIds, includeBackToProfile);
 }
 
 /** Кнопки способа оплаты для прокси-тарифа */
@@ -963,17 +1012,16 @@ export function singboxCategoryButtons(
   categories: { id: string; name: string; tariffs: { id: string; name: string; price: number; currency: string; hasOptions?: boolean }[] }[],
   backLabel?: string | null,
   innerStyles?: InnerButtonStyles,
-  emojiIds?: InnerEmojiIds
+  emojiIds?: InnerEmojiIds,
+  includeBackToProfile = false
 ): InlineMarkup {
   const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
-  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
-  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
   const tariffId = emojiIds?.tariff;
   const rows: InlineButton[][] = categories.map((cat) => {
     const label = cat.name.slice(0, 64);
     return [btn(label, `cat_singbox:${cat.id}`, tariffPay, tariffId)];
   });
-  rows.push([btn(back, "menu:main", backSty, emojiIds?.back)]);
+  rows.push(backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile));
   return { inline_keyboard: rows };
 }
 
@@ -983,7 +1031,8 @@ export function singboxTariffsOfCategoryButtons(
   backLabel?: string | null,
   innerStyles?: InnerButtonStyles,
   backData = "menu:singbox",
-  emojiIds?: InnerEmojiIds
+  emojiIds?: InnerEmojiIds,
+  includeBackToProfile = false
 ): InlineMarkup {
   const rows: InlineButton[][] = [];
   const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
@@ -993,7 +1042,8 @@ export function singboxTariffsOfCategoryButtons(
   for (const t of category.tariffs) {
     rows.push([btn(`${t.name} — ${t.price} ${currencySymbol(t.currency)}`.slice(0, 64), `pay_singbox:${t.id}`, tariffPay, tariffId)]);
   }
-  rows.push([btn(back, backData, backSty, emojiIds?.back)]);
+  if (backData === "menu:main") rows.push(backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile));
+  else rows.push([btn(back, backData, backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
 }
 
@@ -1002,15 +1052,14 @@ export function singboxTariffPayButtons(
   categories: { id: string; name: string; tariffs: { id: string; name: string; price: number; currency: string; hasOptions?: boolean }[] }[],
   backLabel?: string | null,
   innerStyles?: InnerButtonStyles,
-  emojiIds?: InnerEmojiIds
+  emojiIds?: InnerEmojiIds,
+  includeBackToProfile = false
 ): InlineMarkup {
-  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
-  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
-  if (categories.length === 0) return { inline_keyboard: [[btn(back, "menu:main", backSty, emojiIds?.back)]] };
+  if (categories.length === 0) return { inline_keyboard: [backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile)] };
   if (categories.length === 1 && categories[0]!.tariffs.length <= 5) {
-    return singboxTariffsOfCategoryButtons(categories[0]!, backLabel, innerStyles, "menu:main", emojiIds);
+    return singboxTariffsOfCategoryButtons(categories[0]!, backLabel, innerStyles, "menu:main", emojiIds, includeBackToProfile);
   }
-  return singboxCategoryButtons(categories, backLabel, innerStyles, emojiIds);
+  return singboxCategoryButtons(categories, backLabel, innerStyles, emojiIds, includeBackToProfile);
 }
 
 /** Кнопки способа оплаты для тарифа Sing-box */
@@ -1131,9 +1180,8 @@ export function extraOptionsButtons(
   emojiIds?: InnerEmojiIds,
   // bot_emojis для backButton (unicode + premium tgEmojiId).
   botEmojis?: Record<string, { unicode?: string | null; tgEmojiId?: string | null }> | null,
+  includeBackToProfile = false,
 ): InlineMarkup {
-  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
-  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
   const cardId = emojiIds?.card;
   // кнопки опций ведут на промежуточный picker подписки
   // `extra_opt_pick:<kind>:<id>` (вместо direct `pay_option:`). Pick handler ставит
@@ -1149,7 +1197,7 @@ export function extraOptionsButtons(
   // «← Назад» в menu:tariffs (раздел покупки подписок).
   const bk = backButton(botEmojis);
   rows.push([btn(bk.text, "menu:tariffs", undefined, bk.iconCustomEmojiId)]);
-  rows.push([btn(back, "menu:main", backSty, emojiIds?.back)]);
+  rows.push(backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile));
   return { inline_keyboard: rows };
 }
 
@@ -1258,14 +1306,13 @@ export function mySubsListButtons(
   backLabel?: string | null,
   innerStyles?: InnerButtonStyles,
   emojiIds?: InnerEmojiIds,
+  includeBackToProfile = false,
 ): InlineMarkup {
-  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
-  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
   const rows: InlineButton[][] = [];
   for (const it of items) {
     rows.push([btn(it.label.slice(0, 64), `sub:detail:${it.type}:${it.id}`, "primary")]);
   }
-  rows.push([btn(back, "menu:main", backSty, emojiIds?.back)]);
+  rows.push(backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile));
   return { inline_keyboard: rows };
 }
 
@@ -1373,11 +1420,10 @@ export function subDetailButtons(
 export function giftMenuButtons(
   backLabel?: string | null,
   innerStyles?: InnerButtonStyles,
-  emojiIds?: InnerEmojiIds
+  emojiIds?: InnerEmojiIds,
+  includeBackToProfile = false,
 ): InlineMarkup {
   const tariffPay = resolveStyle(toStyle(innerStyles?.tariffPay), "success");
-  const back = (backLabel && backLabel.trim()) || DEFAULT_BACK_LABEL;
-  const backSty = resolveStyle(toStyle(innerStyles?.back), "danger");
   // кнопка явно называется «Купить подписку для подарка» —
   // чтобы юзеры не путались. Подписка купленная отсюда → попадает В «🎁 Мои подарки»,
   // НЕ в «📋 Мои подписки». Если хочешь себе — иди в главное меню → Тарифы.
@@ -1389,7 +1435,7 @@ export function giftMenuButtons(
       [btn("🎁 Мои подарки", "gift:subscriptions", undefined, emojiIds?.connect)],
       [btn("🎟️ Активировать подарок", "gift:redeem", undefined, emojiIds?.trial)],
       [btn("🎟️ Мои коды подарков", "gift:codes", undefined, emojiIds?.card)],
-      [btn(back, "menu:main", backSty, emojiIds?.back)],
+      backNavRow(backLabel, innerStyles, emojiIds, includeBackToProfile),
     ],
   };
 }

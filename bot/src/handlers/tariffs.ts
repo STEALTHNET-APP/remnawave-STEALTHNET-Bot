@@ -3,7 +3,7 @@ import { InputFile } from "grammy";
 import type { Context } from "grammy";
 import * as api from "../api.js";
 import { addsubPending, convDropExtras, extendingSecondaryPending, extraOptionPending, extraOptionTargetSub, pendingDropExtras, selectedTariffOption, tariffOptionsCache, trialConvertPickCache, trialReplaceChoice } from "../state-store.js";
-import { DEFAULT_EMOJI_UNICODE, DEFAULT_TARIFFS_TEXT, DEFAULT_TARIFF_LINE_FIELDS, _t, applyExtraDevicesPriceBot, backToMenu, bestPricePerDayOptionId, blockUnsubscribedCallback, callbackUi, checkoutExtraDeviceCap, currencySymbol, editMessageContent, extraOptionsButtons, formatRuDays, formatTariffLine, getMenuEmojiKey, getOrRestoreToken, getUserLang, hasExtraDevices, markHasOptions, proxyTariffPayButtons, proxyTariffsOfCategoryButtons, renderTariffsText, renewableSubscriptions, setTranslations, showPaymentMethodsForTariff, singboxTariffPayButtons, singboxTariffsOfCategoryButtons, sortedPriceOptions, t, tariffCategoryButtons, tariffDevicePickerButtons, tariffErrMarkup, tariffOptionPickerButtons, tariffPayButtons, tariffsOfCategoryButtons, titleWithEmoji, titleWithOptionalEmoji } from "./shared.js";
+import { DEFAULT_EMOJI_UNICODE, DEFAULT_TARIFFS_TEXT, DEFAULT_TARIFF_LINE_FIELDS, _t, applyExtraDevicesPriceBot, backToMenu, bestPricePerDayOptionId, blockUnsubscribedCallback, callbackUi, checkoutExtraDeviceCap, currencySymbol, editMessageContent, extraOptionsButtons, formatRuDays, formatTariffLine, getMenuEmojiKey, getOrRestoreToken, getUserLang, hasExtraDevices, isCabinetGrouped, markHasOptions, navRowWithProfileBack, proxyTariffPayButtons, proxyTariffsOfCategoryButtons, renderTariffsText, renewableSubscriptions, sectionBackToMenu, setTranslations, showPaymentMethodsForTariff, singboxTariffPayButtons, singboxTariffsOfCategoryButtons, sortedPriceOptions, t, tariffCategoryButtons, tariffDevicePickerButtons, tariffErrMarkup, tariffOptionPickerButtons, tariffPayButtons, tariffsOfCategoryButtons, titleWithEmoji, titleWithOptionalEmoji } from "./shared.js";
 import type { TariffCategory, TariffItem } from "./shared.js";
 import { resolveCallbackDomain } from "./routing.js";
 
@@ -37,7 +37,7 @@ export function createTariffHandlers(): Composer<Context> {
               [{ text: "Мои подписки", callback_data: "menu:my_subs" }],
             ];
             if (config?.multiSubscriptionsEnabled === true) rows.push([{ text: "Купить отдельную подписку", callback_data: "menu:tariffs:new" }]);
-            rows.push([{ text: "Главное меню", callback_data: "menu:main" }]);
+            rows.push(navRowWithProfileBack([{ text: "Главное меню", callback_data: "menu:main" }], "tariffs", config, innerStyles, innerEmojiIds, getUserLang(userId)));
             await editMessageContent(ctx,
               "У вас уже есть подписка. Чтобы сохранить подключение в приложении, продлите её. Отдельная подписка создаёт новую ссылку для подключения.",
               { inline_keyboard: rows });
@@ -47,13 +47,13 @@ export function createTariffHandlers(): Composer<Context> {
             [{ text: "Выбрать тариф", callback_data: "menu:tariffs:new" }],
           ];
           if (appUrl) rows.unshift([{ text: "Войти в аккаунт на сайте", url: `${appUrl}/cabinet/login` }]);
-          rows.push([{ text: "Главное меню", callback_data: "menu:main" }]);
+          rows.push(navRowWithProfileBack([{ text: "Главное меню", callback_data: "menu:main" }], "tariffs", config, innerStyles, innerEmojiIds, getUserLang(userId)));
           await editMessageContent(ctx,
             "Не найдена подписка, доступная для продления. Уже покупали на сайте? Войдите в тот аккаунт и привяжите Telegram в профиле, затем отправьте /start. Если подписки ещё нет, выберите тариф.",
             { inline_keyboard: rows });
           return;
         } catch {
-          await editMessageContent(ctx, "Не удалось проверить подписки. Повторите попытку — покупка не создана.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+          await editMessageContent(ctx, "Не удалось проверить подписки. Повторите попытку — покупка не создана.", sectionBackToMenu("tariffs", config, innerStyles, innerEmojiIds, getUserLang(userId)));
           return;
         }
       }
@@ -76,7 +76,7 @@ export function createTariffHandlers(): Composer<Context> {
       }
       const { items } = tariffsRes;
       if (!items?.length) {
-        await editMessageContent(ctx, _t("tariffs.not_configured", getUserLang(userId)), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        await editMessageContent(ctx, _t("tariffs.not_configured", getUserLang(userId)), sectionBackToMenu("tariffs", config, innerStyles, innerEmojiIds, getUserLang(userId)));
         return;
       }
       const tariffsEmojiKey = getMenuEmojiKey(config, "tariffs");
@@ -105,6 +105,8 @@ export function createTariffHandlers(): Composer<Context> {
             config?.botBackLabel ?? null,
             innerStyles,
             tariffsEmojiIds,
+            undefined,
+            isCabinetGrouped("tariffs", config),
           ),
           entities,
         );
@@ -130,7 +132,7 @@ export function createTariffHandlers(): Composer<Context> {
       await editMessageContent(ctx, text, tariffPayButtons(markHasOptions(items), config?.botBackLabel ?? null, innerStyles, tariffsEmojiIds, tariffsEmojiUnicode, {
         showExtraDevices: config?.botTariffsShowExtraDevicesButton !== false,
         showBalance: config?.botTariffsShowBalanceButton !== false,
-      }), entities);
+      }, isCabinetGrouped("tariffs", config)), entities);
       return;
     }
 
@@ -168,16 +170,16 @@ export function createTariffHandlers(): Composer<Context> {
     if (data === "menu:proxy") {
       const { items } = await api.getPublicProxyTariffs();
       if (!items?.length || items.every((c: { tariffs: unknown[] }) => !c.tariffs?.length)) {
-        await editMessageContent(ctx, "Тарифы прокси пока не настроены.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        await editMessageContent(ctx, "Тарифы прокси пока не настроены.", sectionBackToMenu("proxy", config, innerStyles, innerEmojiIds, getUserLang(userId)));
         return;
       }
       const cats = items.filter((c: { tariffs: unknown[] }) => c.tariffs?.length > 0);
       if (cats.length === 1 && cats[0]!.tariffs.length <= 5) {
         const head = cats[0]!.name;
         const lines = cats[0]!.tariffs.map((t: { name: string; price: number; currency: string }) => `• ${t.name} — ${t.price} ${currencySymbol(t.currency)}`).join("\n");
-        await editMessageContent(ctx, `🌐 Прокси\n\n${head}\n${lines}\n\nВыберите тариф:`, proxyTariffPayButtons(cats, config?.botBackLabel ?? null, innerStyles, innerEmojiIds));
+        await editMessageContent(ctx, `🌐 Прокси\n\n${head}\n${lines}\n\nВыберите тариф:`, proxyTariffPayButtons(cats, config?.botBackLabel ?? null, innerStyles, innerEmojiIds, isCabinetGrouped("proxy", config)));
       } else {
-        await editMessageContent(ctx, "🌐 Прокси\n\nВыберите категорию:", proxyTariffPayButtons(cats, config?.botBackLabel ?? null, innerStyles, innerEmojiIds));
+        await editMessageContent(ctx, "🌐 Прокси\n\nВыберите категорию:", proxyTariffPayButtons(cats, config?.botBackLabel ?? null, innerStyles, innerEmojiIds, isCabinetGrouped("proxy", config)));
       }
       return;
     }
@@ -199,16 +201,16 @@ export function createTariffHandlers(): Composer<Context> {
     if (data === "menu:singbox") {
       const { items } = await api.getPublicSingboxTariffs();
       if (!items?.length || items.every((c: { tariffs: unknown[] }) => !c.tariffs?.length)) {
-        await editMessageContent(ctx, "Тарифы доступов пока не настроены.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        await editMessageContent(ctx, "Тарифы доступов пока не настроены.", sectionBackToMenu("singbox", config, innerStyles, innerEmojiIds, getUserLang(userId)));
         return;
       }
       const cats = items.filter((c: { tariffs: unknown[] }) => c.tariffs?.length > 0);
       if (cats.length === 1 && cats[0]!.tariffs.length <= 5) {
         const head = cats[0]!.name;
         const lines = cats[0]!.tariffs.map((t: { name: string; price: number; currency: string }) => `• ${t.name} — ${t.price} ${currencySymbol(t.currency)}`).join("\n");
-        await editMessageContent(ctx, `🔑 Доступы\n\n${head}\n${lines}\n\nВыберите тариф:`, singboxTariffPayButtons(cats, config?.botBackLabel ?? null, innerStyles, innerEmojiIds));
+        await editMessageContent(ctx, `🔑 Доступы\n\n${head}\n${lines}\n\nВыберите тариф:`, singboxTariffPayButtons(cats, config?.botBackLabel ?? null, innerStyles, innerEmojiIds, isCabinetGrouped("singbox", config)));
       } else {
-        await editMessageContent(ctx, "🔑 Доступы\n\nВыберите категорию:", singboxTariffPayButtons(cats, config?.botBackLabel ?? null, innerStyles, innerEmojiIds));
+        await editMessageContent(ctx, "🔑 Доступы\n\nВыберите категорию:", singboxTariffPayButtons(cats, config?.botBackLabel ?? null, innerStyles, innerEmojiIds, isCabinetGrouped("singbox", config)));
       }
       return;
     }
@@ -231,7 +233,7 @@ export function createTariffHandlers(): Composer<Context> {
       const slotsRes = await api.getSingboxSlots(token);
       const slots = slotsRes.slots ?? [];
       if (slots.length === 0) {
-        const keyboard = backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
+        const keyboard = sectionBackToMenu("my_singbox", config, innerStyles, innerEmojiIds, getUserLang(userId));
         const renewUrl = config?.publicAppUrl?.replace(/\/$/, "");
         if (renewUrl) keyboard.inline_keyboard.unshift([{ text: "Посмотреть и продлить доступы", web_app: { url: `${renewUrl}/cabinet/singbox?tab=my` } }]);
         await editMessageContent(ctx, "Активных доступов нет. Истёкшие доступы можно продлить в кабинете.", keyboard);
@@ -242,7 +244,7 @@ export function createTariffHandlers(): Composer<Context> {
         return `${s.protocol} — до ${exp}${["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(s.protocol) ? "" : `\n${s.subscriptionLink}`}`;
       }).join("\n\n");
       const msg = `📋 Мои доступы (${slots.length})\n\nСкопируйте ссылку в приложение. Для AmneziaWG скачайте .conf кнопкой ниже или в кабинете:\n\n${lines}`;
-      const keyboard = backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds);
+      const keyboard = sectionBackToMenu("my_singbox", config, innerStyles, innerEmojiIds, getUserLang(userId));
       for (const slot of slots.filter(s => ["AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD"].includes(s.protocol)).slice(0, 20)) keyboard.inline_keyboard.unshift([{ text: `📄 AmneziaWG · ${slot.id.slice(-8)}`, callback_data: `singbox:conf:${slot.id}` }]);
       const renewUrl = config?.publicAppUrl?.replace(/\/$/, "");
       if (renewUrl) keyboard.inline_keyboard.unshift([{ text: "Продлить доступ / все доступы", web_app: { url: `${renewUrl}/cabinet/singbox?tab=my` } }]);
@@ -253,7 +255,7 @@ export function createTariffHandlers(): Composer<Context> {
     if (data === "menu:my_proxy") {
       const { slots } = await api.getProxySlots(token);
       if (!slots?.length) {
-        await editMessageContent(ctx, "📋 Мои прокси\n\nУ вас пока нет активных прокси. Купите тариф в разделе «Прокси».", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        await editMessageContent(ctx, "📋 Мои прокси\n\nУ вас пока нет активных прокси. Купите тариф в разделе «Прокси».", sectionBackToMenu("my_proxy", config, innerStyles, innerEmojiIds, getUserLang(userId)));
         return;
       }
       let text = "📋 Мои прокси\n\n";
@@ -263,14 +265,14 @@ export function createTariffHandlers(): Composer<Context> {
         text += `  До: ${new Date(s.expiresAt).toLocaleString("ru-RU")}\n\n`;
       }
       text += "Скопируйте строку в настройки прокси приложения.";
-      await editMessageContent(ctx, text.slice(0, 4096), backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+      await editMessageContent(ctx, text.slice(0, 4096), sectionBackToMenu("my_proxy", config, innerStyles, innerEmojiIds, getUserLang(userId)));
       return;
     }
 
     if (data === "menu:extra_options") {
       const options = config?.sellOptions ?? [];
       if (!options.length) {
-        await editMessageContent(ctx, "Доп. опции пока не доступны. Оформите подписку в разделе «Тарифы».", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
+        await editMessageContent(ctx, "Доп. опции пока не доступны. Оформите подписку в разделе «Тарифы».", sectionBackToMenu("extra_options", config, innerStyles, innerEmojiIds, getUserLang(userId)));
         return;
       }
       // новый текст по эталону клиента.
@@ -290,7 +292,7 @@ export function createTariffHandlers(): Composer<Context> {
         "Чтобы докупить устройство, нажмите кнопку:",
       ].join("\n");
       const { text, entities } = titleWithEmoji("PACKAGE", optsText, config?.botEmojis);
-      await editMessageContent(ctx, text, extraOptionsButtons(options, config?.botBackLabel ?? null, innerStyles, innerEmojiIds, config?.botEmojis ?? null), entities);
+      await editMessageContent(ctx, text, extraOptionsButtons(options, config?.botBackLabel ?? null, innerStyles, innerEmojiIds, config?.botEmojis ?? null, isCabinetGrouped("extra_options", config)), entities);
       return;
     }
 

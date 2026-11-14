@@ -819,6 +819,7 @@ const updateSettingsSchema = z.object({
   botButtons: botButtonsJsonSchema.nullable().optional(),
   paymentDescription: z.string().trim().max(128).optional(),
   botGroupCabinet: z.boolean().optional(),
+  botGroupCabinetItems: z.union([z.string().max(5000), z.array(z.string().max(100))]).nullable().optional(),
   botMenuMode: z.enum(["classic", "web"]).optional(),
   botButtonsPerRow: z.union([z.literal(1), z.literal(2), z.number().int().min(1).max(2)]).optional(),
   botEmojis: z.union([z.string().max(15000), z.record(z.object({ unicode: z.string().max(20).optional(), tgEmojiId: z.string().max(50).optional() }))]).nullable().optional(),
@@ -1632,6 +1633,15 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.botGroupCabinet !== undefined) {
     const value = String(updates.botGroupCabinet);
     await prisma.systemSetting.upsert({ where: { key: "bot_group_cabinet" }, create: { key: "bot_group_cabinet", value }, update: { value } });
+  }
+  if (updates.botGroupCabinetItems !== undefined) {
+    const raw = updates.botGroupCabinetItems;
+    const val = typeof raw === "string" ? raw : Array.isArray(raw) ? JSON.stringify(raw) : "";
+    await prisma.systemSetting.upsert({
+      where: { key: "bot_group_cabinet_items" },
+      create: { key: "bot_group_cabinet_items", value: val },
+      update: { value: val },
+    });
   }
   if (updates.botMenuMode !== undefined) {
     const value = updates.botMenuMode;

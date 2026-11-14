@@ -7,6 +7,7 @@
 export const RU: Record<string, string> = {
   "back_to_menu": "🏠 Главное меню",
   "back": "◀️ Назад",
+  "back_word": "Назад",
   "cancel": "Отмена",
   "cancel_button": "◀️ Отмена",
   "error_generic": "Ошибка",
@@ -194,6 +195,7 @@ export const RU: Record<string, string> = {
 const EN: Record<string, string> = {
   "back_to_menu": "◀️ Back to menu",
   "back": "◀️ Back",
+  "back_word": "Back",
   "cancel": "Cancel",
   "cancel_button": "◀️ Cancel",
   "error_generic": "Error",
