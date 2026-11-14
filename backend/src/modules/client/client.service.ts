@@ -191,6 +191,7 @@ export const SYSTEM_CONFIG_KEYS = [
   // Применять выбранный дизайн (Stealth) и в обычном браузере, не только в Telegram Mini App
   "cabinet_design_apply_in_browser",
   "roulette_enabled",
+  "tour_enabled",
   "tickets_enabled", // Тикет-система: true/false
   "admin_front_notifications_enabled", // Всплывающие уведомления в админке: true/false
   "theme_accent", // Глобальная цветовая тема: default, blue, violet, rose, orange, green, emerald, cyan, amber, red, pink, indigo
@@ -934,6 +935,7 @@ async function loadSystemConfigFromDb() {
       try { return JSON.parse(map.video_instructions || "[]") as { id: string; title: string; telegramFileId: string; sortOrder: number }[]; } catch { return []; }
     })(),
     rouletteEnabled: map.roulette_enabled !== "false",
+    tourEnabled: map.tour_enabled !== "false",
     ticketsEnabled: map.tickets_enabled === "true" || map.tickets_enabled === "1",
     themeAccent: (map.theme_accent ?? "").trim() || "default",
     themeMode: map.theme_mode === "light" || map.theme_mode === "system" ? map.theme_mode : "dark",
