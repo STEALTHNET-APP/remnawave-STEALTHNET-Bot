@@ -16,9 +16,9 @@ export function AuroraHelp() {
   const hours = hoursFrom && hoursTo ? `${hoursFrom}–${hoursTo}` : null;
 
   const documents = [
-    { key: "offer", label: t("aurora.help_offer"), url: config?.offerLink?.trim() },
-    { key: "privacy", label: t("aurora.help_privacy"), url: config?.agreementLink?.trim() },
-    { key: "refund", label: t("aurora.help_refund"), url: config?.refundLink?.trim() },
+    { key: "offer", label: config?.offerTitle?.trim() || t("aurora.help_offer"), url: config?.offerLink?.trim() },
+    { key: "privacy", label: config?.agreementTitle?.trim() || t("aurora.help_privacy"), url: config?.agreementLink?.trim() },
+    { key: "refund", label: config?.refundTitle?.trim() || t("aurora.help_refund"), url: config?.refundLink?.trim() },
   ].filter((item) => item.url);
 
   const proxies = (config?.tgProxyServers ?? []).filter((server) => server.url?.trim());

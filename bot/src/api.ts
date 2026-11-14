@@ -200,8 +200,11 @@ export async function getPublicConfig(force = false): Promise<{
   referralInstructionsUrl?: string | null;
   agreementLink?: string | null;
   offerLink?: string | null;
+  agreementTitle?: string | null;
+  offerTitle?: string | null;
   instructionsLink?: string | null;
   refundLink?: string | null;
+  refundTitle?: string | null;
   supportHoursFrom?: string | null;
   supportHoursTo?: string | null;
   tgProxyText?: string | null;
@@ -1271,10 +1274,12 @@ export async function checkSubscriptionsCooldownBatch(
   return fetchJson("/api/client/subscriptions/cooldown-check", { token, method: "POST", body: { ids } });
 }
 
+export type BotTermsDocument = { kind: string; url: string; title?: string | null };
+
 export type BotTermsStatus = {
   required: boolean;
   accepted: boolean;
-  documents: { kind: string; url: string }[];
+  documents: BotTermsDocument[];
   version: string;
   completed: boolean;
   pendingStart: string | null;

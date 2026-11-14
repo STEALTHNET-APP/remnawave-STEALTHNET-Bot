@@ -94,6 +94,8 @@ export function StealthProfile() {
     // Если ссылка пустая — пункт меню не показываем.
     const agreementUrl = (config as { agreementLink?: string | null })?.agreementLink?.trim() || null;
     const offerUrl = (config as { offerLink?: string | null })?.offerLink?.trim() || null;
+    const agreementTitle = config?.agreementTitle?.trim() || "Пользовательское соглашение";
+    const offerTitle = config?.offerTitle?.trim() || "Публичная оферта";
     const instructionsUrl = (config as { instructionsLink?: string | null })?.instructionsLink?.trim() || null;
     const out: MenuSection[] = [
       {
@@ -117,13 +119,13 @@ export function StealthProfile() {
           { id: "payments", label: "История платежей", icon: CreditCard, onClick: () => setShowPayments(true) },
           ...(agreementUrl ? [{
             id: "tos",
-            label: "Пользовательское соглашение",
+            label: agreementTitle,
             icon: FileText,
             onClick: () => window.open(agreementUrl, "_blank", "noopener,noreferrer"),
           }] : []),
           ...(offerUrl ? [{
             id: "offer",
-            label: "Публичная оферта",
+            label: offerTitle,
             icon: Lock,
             onClick: () => window.open(offerUrl, "_blank", "noopener,noreferrer"),
           }] : []),

@@ -2,11 +2,12 @@ import { createHash } from "node:crypto";
 import { prisma } from "../../db.js";
 
 const documentKeys = ["agreement_link", "offer_link", "refund_link"] as const;
+const titleKeys = documentKeys.map((key) => key.replace("_link", "_title"));
 
 export async function botTerms(telegramId: string, input: { pendingStart?: string; acceptVersion?: string }) {
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(${BigInt(telegramId)})::text`;
-    const settings = await tx.systemSetting.findMany({ where: { key: { in: [...documentKeys] } } });
+    const settings = await tx.systemSetting.findMany({ where: { key: { in: [...documentKeys, ...titleKeys] } } });
     const documents = documentKeys.flatMap((key) => {
       const url = settings.find((item) => item.key === key)?.value.trim();
       if (!url) return [];
@@ -14,10 +15,11 @@ export async function botTerms(telegramId: string, input: { pendingStart?: strin
         const parsed = new URL(url);
         if (!["https:", "http:"].includes(parsed.protocol) || parsed.username || parsed.password) return [];
       } catch { return []; }
-      return [{ kind: key.replace("_link", ""), url }];
+      const title = settings.find((item) => item.key === `${key}_title`)?.value.trim() || null;
+      return [{ kind: key.replace("_link", ""), url, title }];
     });
     if (!documents.length) return { required: false, accepted: true, documents, version: "", completed: false, pendingStart: null };
-    const version = createHash("sha256").update(JSON.stringify(documents)).digest("hex").slice(0, 32);
+    const version = createHash("sha256").update(JSON.stringify(documents.map(({ kind, url }) => ({ kind, url })))).digest("hex").slice(0, 32);
     const existing = await tx.telegramConsent.findUnique({ where: { telegramId } });
     const accepted = existing?.acceptedVersion === version;
     if (input.acceptVersion !== undefined) {
