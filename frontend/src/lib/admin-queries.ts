@@ -503,6 +503,14 @@ export function useAdminClientSubscriptionsList(token: string | null, id: string
   });
 }
 
+export function useAdminClientPayments(token: string | null, clientId: string | null) {
+  return useQuery({
+    queryKey: qk.admin.clientPayments(clientId ?? ""),
+    queryFn: () => api.getClientPayments(token!, clientId!).catch(() => ({ items: [] })),
+    enabled: !!token && !!clientId,
+  });
+}
+
 /** Полный пользователь Remnawave для карточки клиента. */
 export function useAdminClientRemna(token: string | null, id: string | null, enabled = true) {
   return useQuery({

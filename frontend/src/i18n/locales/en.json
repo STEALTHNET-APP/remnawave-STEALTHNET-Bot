@@ -480,7 +480,22 @@
       "admin_password_label": "Admin password to confirm",
       "admin_password_placeholder": "Enter your admin password",
       "reset_2fa_success": "User 2FA has been successfully reset",
-      "reset_2fa_warning": "Warning: confirm action with your admin password."
+      "reset_2fa_warning": "Warning: confirm action with your admin password.",
+      "payments_tab": "Payments",
+      "no_payments": "This client has no payments yet",
+      "total_spent": "Total spent",
+      "payments_count": "Payments",
+      "payments_success": "successful",
+      "payments_pending": "pending",
+      "payments_failed": "failed",
+      "balance_topup": "Balance top-up",
+      "provider_balance": "Balance",
+      "provider_manual": "Manual grant",
+      "activation_error": "Activation failed",
+      "payment_actions": "Payment actions",
+      "delete_payment": "Delete payment",
+      "delete_payment_confirm": "Delete this payment record? This action cannot be undone.",
+      "delete_payment_error": "Failed to delete payment"
     },
     "tariffs": {
       "title": "Tariffs",
