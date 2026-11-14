@@ -30,6 +30,10 @@ export function StealthTariffs() {
     selectedPriceOptionId,
     setSelectedPriceOptionId,
     days,
+    totalPrice,
+    personalDiscountPct,
+    personalDiscountAmount,
+    hasPersonalDiscount,
     finalPrice,
     pricePerDay,
     currency,
@@ -278,18 +282,32 @@ export function StealthTariffs() {
           </div>
         </div>
 
-        <div className="border-t border-white/[0.06] pt-3 flex items-center justify-between">
+        <div className="border-t border-white/[0.06] pt-3 flex items-center justify-between gap-3">
           <span className="text-sm text-zinc-400">Итого:</span>
-          <motion.span
-            key={finalPrice}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            className="text-2xl font-bold tabular-nums bg-gradient-to-r from-saccent-400 via-saccent-300 to-fuchsia-400 bg-clip-text text-transparent drop-shadow-[0_0_18px_rgb(var(--stealth-accent)_/_0.35)]"
-          >
-            {formatMoney(finalPrice, currency, "stealth")}
-          </motion.span>
+          <div className="flex items-baseline gap-2">
+            {hasPersonalDiscount && (
+              <span className="text-sm font-medium tabular-nums text-zinc-500 line-through decoration-zinc-600">
+                {formatMoney(totalPrice, currency, "stealth")}
+              </span>
+            )}
+            <motion.span
+              key={finalPrice}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="text-2xl font-bold tabular-nums bg-gradient-to-r from-saccent-400 via-saccent-300 to-fuchsia-400 bg-clip-text text-transparent drop-shadow-[0_0_18px_rgb(var(--stealth-accent)_/_0.35)]"
+            >
+              {formatMoney(finalPrice, currency, "stealth")}
+            </motion.span>
+          </div>
         </div>
+
+        {hasPersonalDiscount && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] px-3 py-2">
+            <span className="text-xs font-bold text-amber-300">🎰 Скидка рулетки: −{personalDiscountPct}%</span>
+            <span className="text-xs font-bold tabular-nums text-emerald-400">−{formatMoney(personalDiscountAmount, currency, "stealth")}</span>
+          </div>
+        )}
       </motion.div>
 
       {/* покупка заменяет активный триал (выбор при нескольких). */}

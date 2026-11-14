@@ -391,30 +391,36 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
     : 0;
 
   const totalPrice = basePrice + extrasTotal + extendExtrasCost + convExtendExtrasCost;
-  const promoMode = options.promoDiscount ?? "none";
-  const promoDiscount = useMemo(() => {
-    if (promoMode === "none" || !promoInfo) return 0;
-    if (promoMode === "total") {
-      let discounted = totalPrice;
-      if (promoInfo.percent > 0) discounted -= (discounted * promoInfo.percent) / 100;
-      if (promoInfo.fixed > 0) discounted -= promoInfo.fixed;
-      return round2(totalPrice - Math.max(0, round2(discounted)));
-    }
-    const gross = basePrice + extrasTotal;
-    const raw = promoInfo.percent > 0 ? (gross * promoInfo.percent) / 100 : promoInfo.fixed;
-    return Math.min(gross, Math.max(0, round2(raw)));
-  }, [promoMode, promoInfo, totalPrice, basePrice, extrasTotal]);
-  const finalPrice = promoMode === "none" || !promoInfo
-    ? totalPrice
-    : Math.max(0, round2(totalPrice - promoDiscount));
-  const pricePerDay = days > 0 ? finalPrice / days : 0;
-
-  const balance = state.client?.balance ?? 0;
-  const canPayWithBalance = balance >= finalPrice && totalPrice > 0;
   const personalDiscountPct = Math.max(
     0,
     (state.client as { personalDiscountPercent?: number | null } | null)?.personalDiscountPercent ?? 0,
   );
+  const priceAfterPersonal = personalDiscountPct > 0
+    ? Math.floor(Math.max(0, totalPrice - (totalPrice * personalDiscountPct) / 100))
+    : totalPrice;
+  const personalDiscountAmount = totalPrice - priceAfterPersonal;
+  const hasPersonalDiscount = personalDiscountPct > 0;
+  const promoMode = options.promoDiscount ?? "none";
+  const promoDiscount = useMemo(() => {
+    if (promoMode === "none" || !promoInfo) return 0;
+    if (promoMode === "total") {
+      let discounted = priceAfterPersonal;
+      if (promoInfo.percent > 0) discounted -= (discounted * promoInfo.percent) / 100;
+      if (promoInfo.fixed > 0) discounted -= promoInfo.fixed;
+      return round2(priceAfterPersonal - Math.max(0, round2(discounted)));
+    }
+    const gross = basePrice + extrasTotal;
+    const grossAfterPersonal = personalDiscountPct > 0
+      ? Math.floor(Math.max(0, gross - (gross * personalDiscountPct) / 100))
+      : gross;
+    const raw = promoInfo.percent > 0 ? (grossAfterPersonal * promoInfo.percent) / 100 : promoInfo.fixed;
+    return Math.min(grossAfterPersonal, Math.max(0, round2(raw)));
+  }, [promoMode, promoInfo, priceAfterPersonal, basePrice, extrasTotal, personalDiscountPct]);
+  const finalPrice = Math.max(0, round2(priceAfterPersonal - promoDiscount));
+  const pricePerDay = days > 0 ? finalPrice / days : 0;
+
+  const balance = state.client?.balance ?? 0;
+  const canPayWithBalance = balance >= finalPrice && totalPrice > 0;
 
   const availableMethods = useMemo<PayMethod[]>(() => {
     if (!config) return [];
@@ -835,6 +841,8 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
     extendExtrasFor,
     promoDiscount,
     personalDiscountPct,
+    personalDiscountAmount,
+    hasPersonalDiscount,
     totalPrice,
     finalPrice,
     pricePerDay,
