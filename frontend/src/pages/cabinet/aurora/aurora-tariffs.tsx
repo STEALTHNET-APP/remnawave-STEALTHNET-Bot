@@ -43,6 +43,10 @@ export function AuroraTariffs() {
     keepExtrasCost,
     convExtendExtrasCost,
     promoDiscount,
+    personalDiscountPct,
+    personalDiscountAmount,
+    hasPersonalDiscount,
+    totalPrice,
     finalPrice,
     pricePerDay,
     currency,
@@ -560,8 +564,18 @@ export function AuroraTariffs() {
             <div className="shrink-0 text-right">
               <p className="text-[12px] text-[var(--au-muted)]">{t("aurora.checkout_total")}</p>
               <p className="mt-0.5 text-[24px] font-extrabold tabular-nums text-[var(--au-ink)]">{fmtPrice(finalPrice, currency)}</p>
+              {(hasPersonalDiscount || promoDiscount > 0) && (
+                <p className="mt-0.5 text-[12px] font-semibold tabular-nums text-[var(--au-muted)] line-through">{fmtPrice(totalPrice, currency)}</p>
+              )}
             </div>
           </div>
+
+          {hasPersonalDiscount && (
+            <div className="flex items-center justify-between gap-3 rounded-[16px] bg-[color-mix(in_srgb,#f59e0b_10%,var(--au-bg))] px-4 py-2.5">
+              <span className="text-[13px] font-bold text-[var(--au-ink)]">🎰 {t("aurora.personal_discount_badge", { percent: personalDiscountPct })}</span>
+              <span className="text-[13px] font-extrabold tabular-nums text-emerald-600 dark:text-emerald-400">−{fmtPrice(personalDiscountAmount, currency)}</span>
+            </div>
+          )}
 
           {currentTariff && <dl className="au-tariff-checkout-facts">
             <div><dt>{t("aurora.checkout_devices_in_plan")}</dt><dd>{auroraDevices(currentTariff, t)}</dd></div>
@@ -585,6 +599,7 @@ export function AuroraTariffs() {
           <dl className="au-tariff-checkout-breakdown">
             <div><dt>{t("aurora.checkout_plan_line", { period: auroraPeriodLabel(days, t) })}</dt><dd>{fmtPrice(basePrice, currency)}</dd></div>
             {extrasTotal > 0 && <div><dt>{t("aurora.checkout_extra_line")}</dt><dd>+{fmtPrice(extrasTotal, currency)}</dd></div>}
+            {personalDiscountAmount > 0 && <div><dt>{t("aurora.checkout_personal_discount_line")}</dt><dd>−{fmtPrice(personalDiscountAmount, currency)}</dd></div>}
             {promoDiscount > 0 && <div><dt>{t("aurora.checkout_promo_line")}</dt><dd>−{fmtPrice(promoDiscount, currency)}</dd></div>}
             {(extendExtrasCost + convExtendExtrasCost) > 0 && <div><dt>{t("aurora.checkout_saved_line")}</dt><dd>+{fmtPrice(extendExtrasCost + convExtendExtrasCost, currency)}</dd></div>}
           </dl>
