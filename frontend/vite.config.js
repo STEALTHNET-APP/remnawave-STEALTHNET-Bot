@@ -51,32 +51,7 @@ export default defineConfig({
                 ],
             },
             workbox: {
-                globIgnores: [
-                    "**/assets/admin-*",
-                    "**/assets/settings-*",
-                    "**/assets/recharts-*",
-                    "**/assets/force-graph-*",
-                    "**/assets/tour-constructor-*",
-                    "**/assets/marketing-*",
-                    "**/assets/broadcast-*",
-                    "**/assets/auto-broadcast-*",
-                    "**/assets/backup-*",
-                    "**/assets/analytics-*",
-                    "**/assets/anti-abuse-*",
-                    "**/assets/api-docs-*",
-                    "**/assets/api-keys-*",
-                    "**/assets/clients-*",
-                    "**/assets/contests-*",
-                    "**/assets/dashboard-layout-*",
-                    "**/assets/gramads-promo-*",
-                    "**/assets/landing-editor-*",
-                    "**/assets/promo-*",
-                    "**/assets/proxy-*",
-                    "**/assets/remna-*",
-                    "**/assets/singbox-*",
-                    "**/assets/tariffs-*",
-                    "**/assets/traffic-abuse-*",
-                ],
+                // Оболочка и её статические зависимости кешируются вместе — проверяет scripts/check-precache-graph.mjs
                 // SPA-роутинг: любой не-API путь отдаём index.html из кеша
                 navigateFallback: "/index.html",
                 navigateFallbackDenylist: [
