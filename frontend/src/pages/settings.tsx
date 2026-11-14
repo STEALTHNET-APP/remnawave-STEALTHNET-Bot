@@ -15,6 +15,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/auth";
 import { api, type AdminSettings, type SshConfig, type UpdateSettingsPayload } from "@/lib/api";
 import { SubscriptionPageEditor } from "@/components/subscription-page-editor";
+import { ModelCombobox } from "@/components/model-combobox";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1088,19 +1089,12 @@ export function SettingsPage() {
                         {t("admin.settings.ai_load_models")}
                       </Button>
                     </div>
-                    <Input
-                      type="text"
-                      list="groq-models-datalist"
-                      className="h-10 w-full"
-                      value={settings.groqModel ?? ""}
-                      onChange={(e) => setSettings((s) => (s ? { ...s, groqModel: e.target.value || null } : s))}
+                    <ModelCombobox
+                      options={availableModels}
+                      value={settings.groqModel}
+                      onChange={(model) => setSettings((s) => (s ? { ...s, groqModel: model } : s))}
                       placeholder="llama-3.3-70b-versatile"
                     />
-                    <datalist id="groq-models-datalist">
-                      {availableModels.map((model) => (
-                        <option key={model} value={model} />
-                      ))}
-                    </datalist>
                     <p className="text-xs text-muted-foreground">{t("admin.settings.ai_model_hint")}</p>
                     {groqModelsMessage && <p className="text-xs text-muted-foreground">{groqModelsMessage}</p>}
                   </div>
@@ -1113,35 +1107,35 @@ export function SettingsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1">
                       <span className="text-xs text-muted-foreground">{t("admin.settings.ai_no_fallback")} 1</span>
-                      <Input
-                        type="text"
-                        list="groq-models-datalist"
-                        className="h-10 w-full"
-                        value={settings.groqFallback1 ?? ""}
-                        onChange={(e) => setSettings((s) => (s ? { ...s, groqFallback1: e.target.value || null } : s))}
+                      <ModelCombobox
+                        options={availableModels}
+                        value={settings.groqFallback1}
+                        onChange={(model) => setSettings((s) => (s ? { ...s, groqFallback1: model } : s))}
                         placeholder="llama-3.1-8b-instant"
+                        allowEmpty
+                        emptyLabel={t("admin.settings.ai_no_fallback")}
                       />
                     </div>
                     <div className="space-y-1">
                       <span className="text-xs text-muted-foreground">{t("admin.settings.ai_no_fallback")} 2</span>
-                      <Input
-                        type="text"
-                        list="groq-models-datalist"
-                        className="h-10 w-full"
-                        value={settings.groqFallback2 ?? ""}
-                        onChange={(e) => setSettings((s) => (s ? { ...s, groqFallback2: e.target.value || null } : s))}
+                      <ModelCombobox
+                        options={availableModels}
+                        value={settings.groqFallback2}
+                        onChange={(model) => setSettings((s) => (s ? { ...s, groqFallback2: model } : s))}
                         placeholder="deepseek-r1-distill-llama-70b"
+                        allowEmpty
+                        emptyLabel={t("admin.settings.ai_no_fallback")}
                       />
                     </div>
                     <div className="space-y-1">
                       <span className="text-xs text-muted-foreground">{t("admin.settings.ai_no_fallback")} 3</span>
-                      <Input
-                        type="text"
-                        list="groq-models-datalist"
-                        className="h-10 w-full"
-                        value={settings.groqFallback3 ?? ""}
-                        onChange={(e) => setSettings((s) => (s ? { ...s, groqFallback3: e.target.value || null } : s))}
+                      <ModelCombobox
+                        options={availableModels}
+                        value={settings.groqFallback3}
+                        onChange={(model) => setSettings((s) => (s ? { ...s, groqFallback3: model } : s))}
                         placeholder=""
+                        allowEmpty
+                        emptyLabel={t("admin.settings.ai_no_fallback")}
                       />
                     </div>
                   </div>
