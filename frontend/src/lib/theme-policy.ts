@@ -27,6 +27,8 @@ export function isAdminThemePath(pathname: string): boolean {
 
 export function resolveThemePolicy(pathname: string, personal: ThemeConfig | null, server: unknown) {
   const controlled = normalizeTheme(server);
-  const editable = isAdminThemePath(pathname);
+  const serverObj = server && typeof server === "object" ? (server as Record<string, unknown>) : {};
+  const allowUserThemeChange = serverObj.allowUserThemeChange === true;
+  const editable = isAdminThemePath(pathname) || allowUserThemeChange;
   return { editable, config: editable && personal ? normalizeTheme(personal) : controlled };
 }
