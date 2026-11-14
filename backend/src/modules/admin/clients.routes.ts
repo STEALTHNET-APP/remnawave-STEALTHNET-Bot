@@ -246,6 +246,57 @@ adminClientsRouter.get("/:id", async (req, res) => {
   return res.json(client);
 });
 
+adminClientsRouter.get("/:id/payments", asyncRoute(async (req, res) => {
+  const parsed = clientIdParam.safeParse(req.params);
+  if (!parsed.success) return res.status(400).json({ message: "Invalid client id" });
+  const payments = await prisma.payment.findMany({
+    where: { clientId: parsed.data.id },
+    orderBy: { createdAt: "desc" },
+    include: {
+      tariff: { select: { id: true, name: true } },
+      subscription: { select: { id: true, subscriptionIndex: true } },
+      delivery: { select: { state: true, error: true } },
+    },
+  });
+  return res.json({
+    items: payments.map((p) => {
+      let activationError: string | null = null;
+      let paymentType: string | null = null;
+      if (p.metadata) {
+        try {
+          const meta = JSON.parse(p.metadata) as Record<string, unknown> | null;
+          if (typeof meta?.activationError === "string") activationError = meta.activationError;
+          if (typeof meta?.paymentType === "string") paymentType = meta.paymentType;
+          if (!paymentType && meta?.type === "balance_topup") paymentType = "balance_topup";
+        } catch {
+          activationError = null;
+          paymentType = null;
+        }
+      }
+      return {
+        id: p.id,
+        orderId: p.orderId,
+        amount: p.amount,
+        currency: p.currency,
+        status: p.status,
+        provider: p.provider ?? "unknown",
+        tariffId: p.tariffId,
+        tariffName: p.tariff?.name ?? null,
+        subscriptionId: p.subscriptionId,
+        subscriptionIndex: p.subscription?.subscriptionIndex ?? null,
+        deviceCount: p.deviceCount,
+        hasActivationError:
+          (p.status === "PAID" && !p.subscriptionId && Boolean(activationError)) ||
+          p.delivery?.state === "FAILED",
+        activationError: activationError || p.delivery?.error || null,
+        paymentType: paymentType || null,
+        createdAt: p.createdAt.toISOString(),
+        paidAt: p.paidAt?.toISOString() ?? null,
+      };
+    }),
+  });
+}));
+
 adminClientsRouter.patch("/:id", asyncRoute(async (req, res) => {
   const parsed = clientIdParam.safeParse(req.params);
   if (!parsed.success) return res.status(400).json({ message: "Invalid client id" });
