@@ -37,13 +37,12 @@ import { ReferralsTab } from "@/components/admin/settings/tabs/referrals-tab";
 import { GiftsTab } from "@/components/admin/settings/tabs/gifts-tab";
 
 const DEFAULT_GROQ_MODELS = [
-  "openai/gpt-oss-120b",
-  "openai/gpt-oss-20b",
-  "qwen/qwen3.8-27b",
-];
-const ENTERPRISE_GROQ_MODELS = [
   "llama-3.3-70b-versatile",
   "llama-3.1-8b-instant",
+  "deepseek-r1-distill-llama-70b",
+  "deepseek-r1-distill-qwen-32b",
+  "mixtral-8x7b-32768",
+  "gemma2-9b-it",
 ];
 
 export function SettingsPage() {
@@ -184,7 +183,6 @@ export function SettingsPage() {
   const availableModels = Array.from(new Set([
     ...groqModels,
     ...DEFAULT_GROQ_MODELS,
-    ...ENTERPRISE_GROQ_MODELS,
     ...(settings?.groqModel ? [settings.groqModel] : []),
     ...(settings?.groqFallback1 ? [settings.groqFallback1] : []),
     ...(settings?.groqFallback2 ? [settings.groqFallback2] : []),
@@ -295,6 +293,7 @@ export function SettingsPage() {
       })(),
       ticketsEnabled: (data as AdminSettings).ticketsEnabled ?? false,
       aiChatEnabled: (data as AdminSettings).aiChatEnabled !== false,
+      groqModel: (data as AdminSettings).groqModel ?? "llama-3.3-70b-versatile",
       sellOptionsEnabled: (data as AdminSettings).sellOptionsEnabled ?? false,
       sellOptionsTrafficEnabled: (data as AdminSettings).sellOptionsTrafficEnabled ?? false,
       sellOptionsTrafficProducts: (data as AdminSettings).sellOptionsTrafficProducts ?? [],
@@ -1085,15 +1084,19 @@ export function SettingsPage() {
                         {t("admin.settings.ai_load_models")}
                       </Button>
                     </div>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      value={settings.groqModel ?? "openai/gpt-oss-120b"}
-                      onChange={(e) => setSettings((s) => (s ? { ...s, groqModel: e.target.value } : s))}
-                    >
+                    <Input
+                      type="text"
+                      list="groq-models-datalist"
+                      className="h-10 w-full"
+                      value={settings.groqModel ?? ""}
+                      onChange={(e) => setSettings((s) => (s ? { ...s, groqModel: e.target.value || null } : s))}
+                      placeholder="llama-3.3-70b-versatile"
+                    />
+                    <datalist id="groq-models-datalist">
                       {availableModels.map((model) => (
-                        <option key={model} value={model}>{model}</option>
+                        <option key={model} value={model} />
                       ))}
-                    </select>
+                    </datalist>
                     <p className="text-xs text-muted-foreground">{t("admin.settings.ai_model_hint")}</p>
                     {groqModelsMessage && <p className="text-xs text-muted-foreground">{groqModelsMessage}</p>}
                   </div>
@@ -1104,36 +1107,39 @@ export function SettingsPage() {
                     {t("admin.settings.ai_fallback_hint")}
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background disabled:opacity-50"
-                      value={settings.groqFallback1 ?? ""}
-                      onChange={(e) => setSettings((s) => (s ? { ...s, groqFallback1: e.target.value || null } : s))}
-                    >
-                      <option value="">{t("admin.settings.ai_no_fallback")} 1</option>
-                      {availableModels.map((model) => (
-                        <option key={model} value={model}>{model}</option>
-                      ))}
-                    </select>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background disabled:opacity-50"
-                      value={settings.groqFallback2 ?? ""}
-                      onChange={(e) => setSettings((s) => (s ? { ...s, groqFallback2: e.target.value || null } : s))}
-                    >
-                      <option value="">{t("admin.settings.ai_no_fallback")} 2</option>
-                      {availableModels.map((model) => (
-                        <option key={model} value={model}>{model}</option>
-                      ))}
-                    </select>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background disabled:opacity-50"
-                      value={settings.groqFallback3 ?? ""}
-                      onChange={(e) => setSettings((s) => (s ? { ...s, groqFallback3: e.target.value || null } : s))}
-                    >
-                      <option value="">{t("admin.settings.ai_no_fallback")} 3</option>
-                      {availableModels.map((model) => (
-                        <option key={model} value={model}>{model}</option>
-                      ))}
-                    </select>
+                    <div className="space-y-1">
+                      <span className="text-xs text-muted-foreground">{t("admin.settings.ai_no_fallback")} 1</span>
+                      <Input
+                        type="text"
+                        list="groq-models-datalist"
+                        className="h-10 w-full"
+                        value={settings.groqFallback1 ?? ""}
+                        onChange={(e) => setSettings((s) => (s ? { ...s, groqFallback1: e.target.value || null } : s))}
+                        placeholder="llama-3.1-8b-instant"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-xs text-muted-foreground">{t("admin.settings.ai_no_fallback")} 2</span>
+                      <Input
+                        type="text"
+                        list="groq-models-datalist"
+                        className="h-10 w-full"
+                        value={settings.groqFallback2 ?? ""}
+                        onChange={(e) => setSettings((s) => (s ? { ...s, groqFallback2: e.target.value || null } : s))}
+                        placeholder="deepseek-r1-distill-llama-70b"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-xs text-muted-foreground">{t("admin.settings.ai_no_fallback")} 3</span>
+                      <Input
+                        type="text"
+                        list="groq-models-datalist"
+                        className="h-10 w-full"
+                        value={settings.groqFallback3 ?? ""}
+                        onChange={(e) => setSettings((s) => (s ? { ...s, groqFallback3: e.target.value || null } : s))}
+                        placeholder=""
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2">

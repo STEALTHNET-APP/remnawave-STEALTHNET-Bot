@@ -1602,7 +1602,7 @@ adminRouter.patch("/settings", async (req, res) => {
     await prisma.systemSetting.upsert({ where: { key: "groq_api_key" }, create: { key: "groq_api_key", value: val }, update: { value: val } });
   }
   if (updates.groqModel !== undefined) {
-    const val = updates.groqModel ?? "openai/gpt-oss-120b";
+    const val = updates.groqModel ?? "llama-3.3-70b-versatile";
     await prisma.systemSetting.upsert({ where: { key: "groq_model" }, create: { key: "groq_model", value: val }, update: { value: val } });
   }
   if (updates.groqFallback1 !== undefined) {
