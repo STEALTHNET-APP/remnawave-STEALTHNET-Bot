@@ -10,12 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { toast } from "@/components/ui/toast";
 import { Loader2, GripVertical, Trash2, Sparkles, Save, X, Upload, Film, ImagePlus, Eye, Map, Layers, Zap, ArrowRight, PlayCircle, Navigation, EyeOff, BookOpen, ArrowLeft, Pencil } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { getPublicConfigCached } from "@/lib/public-config";
+
+type TourStepsCache = { items: TourStepRecord[]; enabled: boolean };
 
 const CABINET_ROUTES = [
   { value: "", label: "Текущая страница" },
@@ -295,6 +298,7 @@ export function TourConstructorPage() {
   const mascotsQ = useAdminTourMascots(token);
   const steps = stepsQ.data?.items ?? [];
   const mascots = mascotsQ.data?.items ?? [];
+  const tourEnabled = stepsQ.data?.enabled ?? true;
   const loading = (stepsQ.isLoading || mascotsQ.isLoading) && !stepsQ.isError;
 
   // Отдельная ошибка мутаций/реордера — тост поверх страницы (как прежний setError).
@@ -356,7 +360,7 @@ export function TourConstructorPage() {
   const reorderMutation = useMutation({
     mutationFn: async ({ items, reordered }: { items: { id: string; sortOrder: number }[]; reordered: TourStepRecord[] }) => {
       // Оптимистично кладём переставленный список в кеш (как прежний setSteps).
-      queryClient.setQueryData(qk.admin.tourSteps(), { items: reordered });
+      queryClient.setQueryData<TourStepsCache>(qk.admin.tourSteps(), (prev) => ({ items: reordered, enabled: prev?.enabled ?? true }));
       await api.reorderTourSteps(token!, items);
       return reordered;
     },
@@ -566,6 +570,19 @@ export function TourConstructorPage() {
     onError: (e) => setError(e instanceof Error ? e.message : "Ошибка удаления персонажа"),
   });
 
+  const toggleTourMutation = useMutation({
+    mutationFn: (enabled: boolean) => api.updateTourStatus(token!, enabled),
+    onSuccess: (data) => {
+      queryClient.setQueryData<TourStepsCache>(qk.admin.tourSteps(), (prev) => ({
+        items: prev?.items ?? [],
+        enabled: data.enabled,
+      }));
+      toast.success(data.enabled ? "Тур включён" : "Тур отключён");
+      void queryClient.invalidateQueries({ queryKey: qk.admin.tourSteps(), exact: false });
+    },
+    onError: (e) => setError(e instanceof Error ? e.message : "Ошибка переключения тура"),
+  });
+
   const handleDeleteMascot = async (mascotId: string) => {
     if (!token || !(await adminConfirm("Удалить этого персонажа?"))) return;
     deleteMascotMutation.mutate(mascotId);
@@ -626,6 +643,18 @@ export function TourConstructorPage() {
         </div>
         
         <div className="relative z-10 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3 px-4 py-2 rounded-xl border border-border bg-card shadow-sm">
+            <div className="flex flex-col text-left">
+              <span className="text-xs font-bold text-foreground">Тур в кабинете</span>
+              <span className="text-[11px] text-muted-foreground">{tourEnabled ? "Включён для клиентов" : "Отключён"}</span>
+            </div>
+            <Switch
+              checked={tourEnabled}
+              onCheckedChange={(val) => toggleTourMutation.mutate(val)}
+              disabled={toggleTourMutation.isPending}
+              className="data-[state=checked]:bg-emerald-500"
+            />
+          </div>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
             <Button
               onClick={() => setView("library")}

@@ -325,7 +325,7 @@ function CabinetShell() {
   const brand = <Link to="/cabinet/dashboard" className="cabinet-brand">{config?.logo && !logoError ? <img src={config.logo} alt="" onError={() => setLogoError(true)} /> : <Shield size={24} />}<span>{config?.serviceName || "STEALTHNET"}</span></Link>;
   const navigation = (mobile: boolean) => <nav aria-label={t("cabinet.workspace.navigation")} className="cabinet-navigation">{groups.map(group => {
     const links = items.filter(item => group.paths.includes(item.to.split("/").pop()!));
-    return links.length > 0 && <div className="cabinet-nav-group" key={group.label}><p>{group.label}</p>{links.map(({ to, label, icon: Icon }) => <Link key={to} to={to} onClick={() => setMenuOpen(false)} aria-label={label} title={!mobile && !railExpanded ? label : undefined} aria-current={section === to ? "page" : undefined} data-tour={mobile ? undefined : ROUTE_TOUR_MAP[to]}><Icon size={18} /><span>{label}</span></Link>)}</div>;
+    return links.length > 0 && <div className="cabinet-nav-group" key={group.label}><p>{group.label}</p>{links.map(({ to, label, icon: Icon }) => <Link key={to} to={to} onClick={() => setMenuOpen(false)} aria-label={label} title={!mobile && !railExpanded ? label : undefined} aria-current={section === to ? "page" : undefined} data-tour={ROUTE_TOUR_MAP[to]}><Icon size={18} /><span>{label}</span></Link>)}</div>;
   })}</nav>;
   return <div className="classic-cabinet cabinet-workspace" data-menu-pinned={railPinned}>
     <a className="cabinet-skip" href="#cabinet-content">{t("cabinet.workspace.skip")}</a>
@@ -348,7 +348,7 @@ function CabinetShell() {
       <main id="cabinet-content" tabIndex={-1} className="cabinet-content"><div key={location.pathname} className="cabinet-route-enter"><Outlet /></div></main>
       <footer className="cabinet-footer"><span>{config?.serviceName || "STEALTHNET"}</span><Link to="/cabinet/help">{t("cabinet.workspace.help")}</Link><Link to="/cabinet/documents/offer">{t("cabinet.workspace.terms")}</Link><Link to="/cabinet/documents/privacy">{t("cabinet.workspace.privacy")}</Link></footer>
     </div>
-    <nav className="cabinet-bottom-nav" aria-label={t("cabinet.workspace.quick_navigation")}>{primary.map(({ to, label, icon: Icon }) => <Link key={to} to={to} aria-current={section === to ? "page" : undefined}><Icon size={21} /><span>{label}</span></Link>)}<button aria-expanded={menuOpen} aria-label={t("cabinet.nav.menu")} onClick={() => setMenuOpen(true)}><MoreHorizontal size={21} /><span>{t("cabinet.nav.more")}</span></button></nav>
+    <nav className="cabinet-bottom-nav" aria-label={t("cabinet.workspace.quick_navigation")}>{primary.map(({ to, label, icon: Icon }) => <Link key={to} to={to} aria-current={section === to ? "page" : undefined} data-tour={ROUTE_TOUR_MAP[to]}><Icon size={21} /><span>{label}</span></Link>)}<button aria-expanded={menuOpen} aria-label={t("cabinet.nav.menu")} onClick={() => setMenuOpen(true)}><MoreHorizontal size={21} /><span>{t("cabinet.nav.more")}</span></button></nav>
     <Dialog open={menuOpen} onOpenChange={setMenuOpen}><DialogContent className="cabinet-menu-dialog"><DialogHeader><DialogTitle>{t("cabinet.nav.menu")}</DialogTitle></DialogHeader>{navigation(true)}</DialogContent></Dialog>
   </div>;
 }

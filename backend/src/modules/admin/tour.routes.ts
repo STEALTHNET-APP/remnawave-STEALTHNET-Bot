@@ -2,6 +2,7 @@ import express, { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../db.js";
 import { uploadMascotImage, uploadVideo, mascotUrl, videoUploadUrl, removeUploadedFile } from "../../lib/upload.js";
+import { getSystemConfig, invalidateSystemConfigCache } from "../client/client.service.js";
 
 export const adminTourStepsRouter = Router();
 export const adminTourMascotsRouter = Router();
@@ -86,7 +87,24 @@ adminTourStepsRouter.get("/", asyncRoute(async (_req, res) => {
     include: { mascot: { include: { emotions: true } } },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   });
-  return res.json({ items: steps.map(tourStepToJson) });
+  const config = await getSystemConfig();
+  return res.json({ items: steps.map(tourStepToJson), enabled: config.tourEnabled !== false });
+}));
+
+const tourStatusSchema = z.object({ enabled: z.boolean() });
+
+adminTourStepsRouter.put("/status", asyncRoute(async (req, res) => {
+  const body = tourStatusSchema.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ message: "Неверные данные", errors: body.error.flatten() });
+
+  const value = String(body.data.enabled);
+  await prisma.systemSetting.upsert({
+    where: { key: "tour_enabled" },
+    update: { value },
+    create: { key: "tour_enabled", value },
+  });
+  invalidateSystemConfigCache();
+  return res.json({ enabled: body.data.enabled });
 }));
 
 adminTourStepsRouter.post("/", asyncRoute(async (req, res) => {

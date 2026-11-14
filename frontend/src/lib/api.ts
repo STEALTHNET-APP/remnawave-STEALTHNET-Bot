@@ -2004,8 +2004,12 @@ export const api = {
   },
 
   // Tour Steps (admin)
-  async getTourSteps(token: string): Promise<{ items: TourStepRecord[] }> {
+  async getTourSteps(token: string): Promise<{ items: TourStepRecord[]; enabled: boolean }> {
     return request("/admin/tour-steps", { token });
+  },
+
+  async updateTourStatus(token: string, enabled: boolean): Promise<{ enabled: boolean }> {
+    return request("/admin/tour-steps/status", { method: "PUT", body: JSON.stringify({ enabled }), token });
   },
 
   async createTourStep(token: string, payload: CreateTourStepPayload): Promise<TourStepRecord> {

@@ -4,6 +4,7 @@ import { prisma } from "../../db.js";
 import { requireClientAuth, requireRemnaOnline, requireRemnaPaymentOnline } from "./client.middleware.js";
 export { requireRemnaOnline };
 export { requireRemnaPaymentOnline };
+import { getSystemConfig } from "./client.service.js";
 
 import { clientAuthRouter } from "./client-auth.routes.js";
 import { clientProfileRouter } from "./client-profile.routes.js";
@@ -28,6 +29,10 @@ clientRouter.get("/yoomoney/callback", handleYoomoneyCallback);
 // ——— Tour Steps (публичные, без авторизации — ПЕРЕД requireClientAuth!) ———
 clientRouter.get("/tour-steps", async (_req, res) => {
   try {
+    const config = await getSystemConfig();
+    if (config.tourEnabled === false) {
+      return res.json({ items: [] });
+    }
     const steps = await prisma.tourStep.findMany({
       where: { isActive: true },
       include: { mascot: { include: { emotions: true } } },
