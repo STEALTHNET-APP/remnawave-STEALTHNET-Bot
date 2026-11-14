@@ -120,7 +120,7 @@ function ensureFloatingChatOpen(step: TourStepWithRoute): number {
 
 interface OverflowHintProps {
   navAttr: string;
-  onNavigated: () => void;
+  onNavigated: (stuck?: boolean) => void;
 }
 
 function OverflowHint({ navAttr, onNavigated }: OverflowHintProps) {
@@ -155,6 +155,17 @@ function OverflowHint({ navAttr, onNavigated }: OverflowHintProps) {
       clearTimeout(t3);
     };
   }, [selector]);
+
+  // Safety net: if the target never appears (module disabled, slow render),
+  // release the tour instead of leaving it paused forever.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!pos) {
+        onNavigated(true);
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [pos, onNavigated]);
 
   // Listen for click on the element  navigation will happen via Link
   useEffect(() => {
@@ -339,11 +350,51 @@ export function DashboardTour({ run, onComplete }: DashboardTourProps) {
   //  Handle overflow hint navigation 
   // When user clicks a nav item in overflow menu, the route changes.
   // We detect that here and resume the tour.
-  const handleOverflowNavigated = useCallback(() => {
-    setOverflowHint(null);
+  const resumeAfterOverflow = useCallback(
+    (pendingIndex: number | null) => {
+      const nextIndex = (pendingIndex ?? stepIndex) + 1;
+      setOverflowHint(null);
+      navigatingRef.current = false;
+      pendingStepRef.current = null;
+      if (nextIndex < 0 || nextIndex >= steps.length) {
+        window.dispatchEvent(new Event("tour:hide-gift-mocks"));
+        setIsRunning(false);
+        onComplete();
+        return;
+      }
+      const nextStep = steps[nextIndex];
+      if (nextStep.route && nextStep.route !== location.pathname) {
+        navigatingRef.current = true;
+        pendingStepRef.current = nextIndex;
+        navigate(nextStep.route);
+        return;
+      }
+      setStepIndex(nextIndex);
+      setIsRunning(true);
+    },
+    [steps, stepIndex, location.pathname, navigate, onComplete],
+  );
+
+  const handleOverflowNavigated = useCallback((stuck?: boolean) => {
     // navigatingRef + pendingStepRef are already set in tryOverflowNavigation.
-    // The location.pathname effect handles resuming the tour.
-  }, []);
+    // On a successful click the location.pathname effect resumes the tour.
+    if (stuck) {
+      resumeAfterOverflow(overflowHint?.pendingStepIndex ?? null);
+      return;
+    }
+    setOverflowHint(null);
+  }, [overflowHint, resumeAfterOverflow]);
+
+  // Emergency resume: the overflow menu or its target never materialized,
+  // so the route never changed and the tour would stay paused forever.
+  useEffect(() => {
+    if (!overflowHint) return;
+    const timer = setTimeout(() => {
+      if (!navigatingRef.current) return;
+      resumeAfterOverflow(overflowHint.pendingStepIndex);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [overflowHint, resumeAfterOverflow]);
 
   /**
    * Try to navigate to a step via the overflow menu.

@@ -187,6 +187,7 @@ function ClassicTariffsPage() {
       setPayModal(null);
       toast.success("Оплата прошла ✨", result.message);
       void loadUserSubs();
+      navigate("/cabinet/dashboard");
     },
   });
 
@@ -292,6 +293,7 @@ function ClassicTariffsPage() {
     if (!payModal) return null;
     const tariff = payModal.tariff;
     const price = finalPrice;
+    const isFree = price <= 0;
     const hasBalance = canPayWithBalance;
     const balanceMethod: PayMethod = { kind: "balance", label: t("cabinet.tariffs.pay_balance"), icon: Wallet };
 
@@ -727,7 +729,7 @@ function ClassicTariffsPage() {
               <Button
                 size="lg"
                 onClick={() => void doPay({ method: balanceMethod })}
-                disabled={payLoading || !hasBalance}
+                disabled={payLoading || (!hasBalance && !isFree)}
                 className={cn("w-full shadow-lg border-0 group relative overflow-hidden", isMobileOrMiniapp ? "justify-between px-6 h-16 rounded-2xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400" : "classic-payment-balance gap-2 rounded-xl bg-gradient-to-r from-primary to-primary/80 hover:shadow-xl transition-all duration-300")}
               >
                 {!isMobileOrMiniapp && <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />}
@@ -736,25 +738,25 @@ function ClassicTariffsPage() {
                   <>
                     <div className="flex items-center gap-3">
                       {payLoading ? <Loader2 className="h-6 w-6 text-white animate-spin" /> : <Wallet className="h-6 w-6 text-white" />}
-                      <span className="text-base font-bold text-white">{t("cabinet.tariffs.pay_balance")}</span>
+                      <span className="text-base font-bold text-white">{isFree ? "Получить бесплатно" : t("cabinet.tariffs.pay_balance")}</span>
                     </div>
                     <span className="text-white/80 font-mono font-medium bg-black/20 px-2 py-1 rounded-lg">
-                      {formatMoney(client.balance, tariff.currency)}
+                      {formatMoney(isFree ? 0 : client.balance, tariff.currency)}
                     </span>
                   </>
                 ) : (
                   <>
                     {payLoading ? <Loader2 className="h-5 w-5 animate-spin relative z-10" /> : <Wallet className="h-5 w-5 relative z-10" />}
-                    <span className="text-base font-semibold relative z-10">{t("cabinet.tariffs.pay_balance")}</span>
+                    <span className="text-base font-semibold relative z-10">{isFree ? "Получить бесплатно" : t("cabinet.tariffs.pay_balance")}</span>
                     <span className="opacity-90 font-medium ml-1 bg-black/10 px-2 py-0.5 rounded-md relative z-10">
-                      ({formatMoney(client.balance, payModal.tariff.currency)})
+                      ({formatMoney(isFree ? 0 : client.balance, payModal.tariff.currency)})
                     </span>
                   </>
                 )}
               </Button>
             )}
 
-            {(() => {
+            {!isFree && (() => {
               const btnCls = cn("w-full", isMobileOrMiniapp ? "justify-start gap-4 px-6 h-16 rounded-2xl border-white/5 bg-card/40 hover:bg-card/60" : "classic-payment-method gap-3 hover:bg-background/80 hover:shadow-md transition-all duration-300 rounded-xl border-border/50 group justify-start relative");
 
               const colorMap: Record<string, { bg10: string; bg20: string; text: string }> = {
