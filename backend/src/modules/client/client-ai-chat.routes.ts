@@ -37,7 +37,7 @@ clientAiChatRouter.post("/ai/chat", async (req, res) => {
       });
     }
 
-    const primaryModel = (config as { groqModel?: string | null }).groqModel?.trim() || "openai/gpt-oss-120b";
+    const primaryModel = (config as { groqModel?: string | null }).groqModel?.trim() || "llama-3.3-70b-versatile";
     const fallback1 = (config as { groqFallback1?: string | null }).groqFallback1?.trim();
     const fallback2 = (config as { groqFallback2?: string | null }).groqFallback2?.trim();
     const fallback3 = (config as { groqFallback3?: string | null }).groqFallback3?.trim();
