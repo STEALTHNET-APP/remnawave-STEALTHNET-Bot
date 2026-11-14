@@ -1353,7 +1353,7 @@
       "ai_system_prompt": "System Prompt",
       "ai_integration_hint": "Integration works via Groq API, providing access to open models at the highest speed.",
       "ai_key_hint": "Key from the Groq console. If not specified, the chat will work in stub (test) mode.",
-      "ai_model_hint": "Select a model. Recommended: openai/gpt-oss-120b or qwen/qwen3.8-27b.",
+      "ai_model_hint": "Enter a model name manually or choose from suggestions. Recommended: llama-3.3-70b-versatile or openai/gpt-oss-120b.",
       "ai_fallback_hint": "With a free Groq account, there are strict rate limits. If the main model doesn't respond due to limits, we'll automatically switch to the next model in the list.",
       "ai_no_fallback": "-- No fallback --",
       "ai_prompt_hint": "This instruction sets the role, tone, and behavior of the bot. Describe here how it should respond to clients.",
