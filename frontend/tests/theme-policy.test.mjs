@@ -11,6 +11,14 @@ test('client and gift routes ignore old personal appearance choices', () => {
   }
 });
 
+test('client personal appearance applies only when user theme changes are allowed', () => {
+  const personal = { mode: 'light', accent: 'rose' };
+  const allowed = resolveThemePolicy('/cabinet/dashboard', personal, { mode: 'dark', accent: 'blue', allowUserThemeChange: true });
+  assert.deepEqual(allowed, { editable: true, config: personal });
+  const denied = resolveThemePolicy('/cabinet/dashboard', personal, { mode: 'dark', accent: 'blue', allowUserThemeChange: false });
+  assert.deepEqual(denied, { editable: false, config: { mode: 'dark', accent: 'blue' } });
+});
+
 test('admin personal appearance survives visiting the controlled cabinet', () => {
   const personal = { mode: 'light', accent: 'emerald' };
   const server = { mode: 'dark', accent: 'red' };

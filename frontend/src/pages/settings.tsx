@@ -762,7 +762,7 @@ export function SettingsPage() {
         botTariffsShowBalanceButton: settings.botTariffsShowBalanceButton !== false,
         botHtmlBubblesTest: settings.botHtmlBubblesTest === true,
         botShowTariffCategories: settings.botShowTariffCategories !== false,
-        allowUserThemeChange: false,
+        allowUserThemeChange: settings.allowUserThemeChange ?? true,
         sellOptionsEnabled: settings.sellOptionsEnabled ?? false,
         sellOptionsTrafficEnabled: settings.sellOptionsTrafficEnabled ?? false,
         sellOptionsTrafficProducts: settings.sellOptionsTrafficProducts?.length ? JSON.stringify(settings.sellOptionsTrafficProducts) : null,
@@ -1182,6 +1182,13 @@ export function SettingsPage() {
               </div>
             </div>
             <CardContent className="space-y-6 p-4 sm:p-4">
+              <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+                <div className="min-w-0">
+                  <Label htmlFor="allow-user-theme-change" className="text-sm font-medium">{t("admin.settings.theme_user_choice")}</Label>
+                  <p className="text-xs text-muted-foreground mt-1">{t("admin.settings.theme_user_choice_hint")}</p>
+                </div>
+                <Switch id="allow-user-theme-change" checked={settings.allowUserThemeChange !== false} onCheckedChange={(checked: boolean) => setSettings({ ...settings, allowUserThemeChange: checked })} />
+              </div>
               <div className="space-y-3">
                 <Label className="text-sm font-medium">{t("admin.settings.theme_mode")}</Label>
                 <div className="grid grid-cols-3 gap-2">
@@ -1236,7 +1243,7 @@ export function SettingsPage() {
                   onClick={() => {
                     setMessage("");
                     saveSettingsMut.mutate(
-                      { themeAccent: settings.themeAccent ?? "default", themeMode: settings.themeMode ?? "dark", allowUserThemeChange: false },
+                      { themeAccent: settings.themeAccent ?? "default", themeMode: settings.themeMode ?? "dark", allowUserThemeChange: settings.allowUserThemeChange ?? true },
                       { onSuccess: () => setMessage(t("admin.settings.theme_saved")) }
                     );
                   }}
