@@ -1,0 +1,160 @@
+import { startPaymentDeliveryScheduler } from "./modules/payment/payment-delivery.service.js";
+import { startCloudPaymentsScheduler } from "./modules/cloudpayments/cloudpayments.worker.js";
+import { reconcileWebPanels } from "./modules/amnezia-web/service.js";
+import { reconcileStarsPayments } from "./modules/telegram-stars/stars.service.js";
+import { startRemnaSyncScheduler, stopRemnaSyncScheduler } from "./modules/sync/sync.scheduler.js";
+import { startReferralRewardsScheduler, stopReferralRewardsScheduler } from "./modules/referral/referral-rewards.scheduler.js";
+// Установить захват логов в кольцевой буфер ДО первого console.log в импортах.
+// Это даёт нам логи всех последующих вызовов в /api/admin/diagnostics/logs.
+import { installLogCapture } from "./modules/diagnostics/log-buffer.js";
+installLogCapture();
+
+import app from "./app.js";
+import { APP_VERSION } from "./config/app-version.js";
+import { env } from "./config/index.js";
+import { prisma } from "./db.js";
+import { ensureFirstAdmin } from "./modules/auth/auth.service.js";
+import { ensureConsoleAccess } from "./modules/console/console.service.js";
+import { ensureSystemSettings } from "./scripts/seed-system-settings.js";
+import { migrateLegacyEmailVerificationSubject } from "./modules/email-templates/email-templates.service.js";
+import { startAutoBroadcastScheduler, stopAutoBroadcastScheduler } from "./modules/auto-broadcast/auto-broadcast-scheduler.js";
+import { startContestDailyReminderScheduler, stopContestDailyReminderScheduler } from "./modules/contest/contest-daily-reminder-scheduler.js";
+import { startAutoRenewScheduler } from "./modules/payment/auto-renew.cron.js";
+import { startAutoBackupScheduler, stopAutoBackupScheduler } from "./modules/backup/auto-backup.scheduler.js";
+import { startTicketCleanupScheduler, stopTicketCleanupScheduler } from "./modules/ticket/ticket-cleanup.scheduler.js";
+import { startGiftExpiryCron } from "./modules/gift/gift-expiry.cron.js";
+import { startMarketplaceScheduler, stopMarketplaceScheduler } from "./modules/marketplace/marketplace.scheduler.js";
+import { startAntiAbuseScheduler, stopAntiAbuseScheduler } from "./modules/anti-abuse/anti-abuse.scheduler.js";
+import { startBroadcastStaleScheduler, stopBroadcastStaleScheduler } from "./modules/broadcast/broadcast-stale.scheduler.js";
+import { ensureTheme, seedDefaultsToEmptyBlocks } from "./modules/landing/landing.service.js";
+import { migrateLandingToBlocks } from "./scripts/migrate-landing-to-blocks.js";
+import { migrateRemnaIds } from "./scripts/migrate-remna-ids.js";
+import { registerCron } from "./modules/diagnostics/cron-registry.js";
+import { runContestDailyReminder } from "./modules/contest/contest-daily-reminder.service.js";
+
+import { verifyUpdateDatabase } from "./modules/update/verify-database.js";
+
+async function main() {
+  await prisma.$connect();
+  if (process.env.UPDATER_VERIFY_ONLY === "1") {
+    await verifyUpdateDatabase();
+    const server = app.listen(env.PORT, "0.0.0.0");
+    const shutdown = async () => { server.close(); await prisma.$disconnect(); process.exit(0); };
+    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
+    return;
+  }
+
+  await ensureFirstAdmin(env);
+  await ensureSystemSettings();
+  await ensureConsoleAccess();
+  await ensureTheme();
+  try {
+    const fixed = await migrateLegacyEmailVerificationSubject();
+    if (fixed) console.log("[email-templates] legacy email verification subject migrated");
+  } catch (e) {
+    console.error("[email-templates] legacy subject migration failed:", e);
+  }
+  try {
+    const { syncExistingTrialUsagesFlag } = await import("./modules/trial/trial.service.js");
+    const fixed = await syncExistingTrialUsagesFlag();
+    if (fixed > 0) {
+      console.log(`[trial-sync] Synchronized trial_used=true for ${fixed} clients with trial usages`);
+    }
+  } catch (e) {
+    console.error("[trial-sync] syncExistingTrialUsagesFlag failed:", e);
+  }
+  try {
+    const result = await migrateLandingToBlocks();
+    if (result.migrated) {
+      console.log(`[landing-editor] seeded ${result.created} blocks from legacy settings`);
+    }
+  } catch (e) {
+    console.error("[landing-editor] migrate-landing-to-blocks failed:", e);
+  }
+  try {
+    const result = await seedDefaultsToEmptyBlocks();
+    if (result.filled > 0) {
+      console.log(`[landing-editor] auto-filled defaults into ${result.filled}/${result.total} empty blocks`);
+    }
+  } catch (e) {
+    console.error("[landing-editor] seedDefaultsToEmptyBlocks failed:", e);
+  }
+
+  try {
+    const result = await migrateRemnaIds();
+    if (result.ran) {
+      console.log(
+        `[remna-ids] Remnawave 3.x: перепривязано ${result.fixed}/${result.scanned} подписок` +
+          (result.unresolved > 0 ? `, не сопоставлено ${result.unresolved} — разобрать вручную` : ""),
+      );
+    }
+  } catch (e) {
+    console.error("[remna-ids] migrateRemnaIds failed:", e);
+  }
+
+  void reconcileWebPanels().catch(() => console.error("[Amnezia Web Panel] Ошибка синхронизации"));
+  setInterval(() => { void reconcileWebPanels().catch(() => console.error("[Amnezia Web Panel] Ошибка синхронизации")); }, 60000).unref();
+  await startAutoBroadcastScheduler();
+  startContestDailyReminderScheduler(env.CONTEST_REMINDER_CRON ?? undefined);
+  startAutoRenewScheduler();
+  startCloudPaymentsScheduler();
+  startPaymentDeliveryScheduler();
+  setInterval(() => { void reconcileStarsPayments().catch(() => console.error("[Stars] Не удалось сверить оплаты Telegram")); }, 60000).unref();
+  startReferralRewardsScheduler();
+  startRemnaSyncScheduler();
+  startGiftExpiryCron();
+  // крон удаления «заброшенных» аккаунтов УДАЛЁН.
+  // Он удалял всех с onboardingCompleted=false старше 30 мин — а теперь этот флаг ставится
+  // TG-юзерам для запуска онбординга (см. /telegram-login-check, /register). Крон бы их стирал.
+  await startAutoBackupScheduler();
+  startTicketCleanupScheduler();
+  startMarketplaceScheduler();
+  await startAntiAbuseScheduler();
+  startBroadcastStaleScheduler();
+
+  // Регистрация cron-задач в реестре для UI /admin/diagnostics → Cron monitor.
+  // Имена/cron-выражения зашиты — должны соответствовать defaults в каждом scheduler.
+  // Trigger подключён только там где безопасный manual run (контест-реминдер). Для
+  // остальных — UI покажет «Run now» серой (canTrigger=false).
+  registerCron({ name: "auto-broadcast", cron: "0 9 * * *", description: "Авто-рассылки сегментам пользователей" });
+  registerCron({
+    name: "contest-daily-reminder",
+    cron: env.CONTEST_REMINDER_CRON || "0 * * * *",
+    description: "Напоминания о конкурсах + auto-status transitions",
+    trigger: () => runContestDailyReminder(),
+  });
+  registerCron({ name: "auto-renew", cron: "*/15 * * * *", description: "Авто-продление подписок с баланса/yookassa" });
+  registerCron({ name: "gift-expiry", cron: "*/30 * * * *", description: "Истёкшие gift-коды → освобождаем зарезервированные подписки" });
+  registerCron({ name: "remna-sync", cron: "* * * * *", description: "Автоматический импорт из Remnawave по настройкам панели" });
+  registerCron({ name: "referral-days", cron: "* * * * *", description: "Начисление бонусных дней за рефералов" });
+  registerCron({ name: "auto-backup", cron: "0 4 * * *", description: "Автоматический бэкап БД" });
+  registerCron({ name: "ticket-cleanup", cron: "*/5 * * * *", description: "Очистка закрытых тикетов по сроку хранения" });
+  registerCron({ name: "marketplace-heartbeat", cron: "*/10 * * * *", description: "Heartbeat в маркетплейс-хаб" });
+
+  const server = app.listen(env.PORT, "0.0.0.0", () => {
+    console.log(`API v${APP_VERSION} listening on port ${env.PORT}`);
+  });
+
+  const shutdown = async () => {
+    stopAutoBroadcastScheduler();
+    stopReferralRewardsScheduler();
+    stopRemnaSyncScheduler();
+    stopBroadcastStaleScheduler();
+    stopContestDailyReminderScheduler();
+    stopAutoBackupScheduler();
+    stopTicketCleanupScheduler();
+    stopMarketplaceScheduler();
+    stopAntiAbuseScheduler();
+    server.close();
+    await prisma.$disconnect();
+    process.exit(0);
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

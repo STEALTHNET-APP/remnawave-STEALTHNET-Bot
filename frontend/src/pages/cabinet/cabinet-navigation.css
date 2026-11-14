@@ -1,0 +1,32 @@
+@media (min-width: 768px) {
+  body[data-cabinet-ui="minimal"] .cabinet-workspace { --cabinet-sidebar: 100px; }
+  body[data-cabinet-ui="minimal"] .cabinet-workspace[data-menu-pinned="true"] { --cabinet-sidebar: 272px; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar { inset: 12px auto 12px 12px; width: 76px; padding: 18px 12px 12px; z-index: 70; border: 1px solid hsl(var(--border)); border-radius: 22px; background: hsl(var(--card)); overflow: hidden; transition: width .32s cubic-bezier(.22,1,.36,1),border-radius .32s cubic-bezier(.22,1,.36,1),box-shadow .25s; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar[data-expanded="true"] { width: 248px; border-radius: 18px; box-shadow: 8px 0 28px #00000012 !important; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-brand { flex-shrink: 0; height: 36px; padding-left: 12px; gap: 13px; margin-bottom: 20px; width: 220px; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-brand > svg,body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-brand > img { flex-shrink: 0; width: 24px; height: 24px; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-navigation { gap: 18px; padding-block: 2px; overflow-x: hidden; scrollbar-width: none; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-nav-group { position: relative; gap: 5px; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-nav-group > p { height: 18px; line-height: 18px; margin: 0 12px 5px; font-size: 11px; white-space: nowrap; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-nav-group > a { position: relative; min-height: 44px; height: 44px; gap: 14px; padding: 10px 14px; border-radius: 10px; overflow: hidden; flex-shrink: 0; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-nav-group > a > svg { flex-shrink: 0; width: 20px; height: 20px; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-nav-group > a[aria-current]::before { content: ""; position: absolute; top: 12px; bottom: 12px; left: 0; width: 3px; border-radius: 0 3px 3px 0; background: hsl(var(--primary)); }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar :is(.cabinet-brand > span,.cabinet-nav-group > p,.cabinet-nav-group > a > span,.cabinet-identity > span:last-child,.cabinet-rail-toggle > span) { opacity: 0; translate: -5px 0; transition: opacity .16s,translate .25s cubic-bezier(.22,1,.36,1); white-space: nowrap; pointer-events: none; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar[data-expanded="true"] :is(.cabinet-brand > span,.cabinet-nav-group > p,.cabinet-nav-group > a > span,.cabinet-identity > span:last-child,.cabinet-rail-toggle > span) { opacity: 1; translate: 0 0; transition-delay: .06s; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-identity { gap: 12px; padding: 18px 10px 12px; width: 220px; flex-shrink: 0; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-identity > span:last-child { width: 168px; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-avatar { width: 28px; height: 28px; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-rail-toggle { display: flex; align-items: center; gap: 14px; height: 44px; min-height: 44px; padding: 10px 14px; color: hsl(var(--muted-foreground)) !important; border: 0 !important; border-radius: 10px; flex-shrink: 0; font-size: 12px; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-rail-toggle > svg { flex-shrink: 0; width: 20px; }
+  body[data-cabinet-ui="minimal"] .cabinet-sidebar .cabinet-rail-toggle:hover { background: hsl(var(--muted)) !important; }
+  body[data-cabinet-ui="minimal"] .cabinet-workspace-body { margin-left: var(--cabinet-sidebar); transition: margin-left .32s cubic-bezier(.22,1,.36,1); }
+  body[data-cabinet-ui="minimal"] .cabinet-content { padding-top: 20px; }
+}
+@media (max-width: 767px) {
+  .cabinet-rail-toggle { display: none; }
+  body[data-cabinet-ui="minimal"] .cabinet-menu-dialog { width: calc(100vw - 24px); max-width: 480px; max-height: calc(100dvh - 32px); border-radius: 18px; padding: 22px; }
+  .cabinet-menu-dialog .cabinet-navigation { gap: 18px; }
+  .cabinet-menu-dialog .cabinet-nav-group { gap: 6px; }
+  .cabinet-menu-dialog .cabinet-nav-group > a { min-height: 46px; }
+  .cabinet-menu-dialog .cabinet-nav-group > a > svg { flex-shrink: 0; }
+}

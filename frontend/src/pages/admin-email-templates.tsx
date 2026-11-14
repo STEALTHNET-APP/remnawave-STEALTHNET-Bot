@@ -1,0 +1,259 @@
+/**
+ * Email template editor.
+ *
+ * Слева — список шаблонов. Справа — редактор subject + body, превью с
+ * подстановкой переменных, кнопка Send test.
+ */
+
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Loader2, RefreshCw, Save, Eye, Send, AlertCircle, Check } from "lucide-react";
+import { useAuth } from "@/contexts/auth";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+import { emailTemplatesApi, type EmailTemplate } from "@/lib/admin-extras-api";
+
+export function AdminEmailTemplatesPage() {
+  const { state } = useAuth();
+  const token = state.accessToken;
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const templatesQuery = useQuery({
+    queryKey: ["admin", "email-templates"] as const,
+    queryFn: () => emailTemplatesApi.list(token!).catch(() => null),
+    enabled: !!token,
+  });
+  const items = templatesQuery.data?.items ?? [];
+  const loading = templatesQuery.isFetching;
+
+  const [previewSubject, setPreviewSubject] = useState("");
+  const [previewBody, setPreviewBody] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
+  const [vars, setVars] = useState<Record<string, string>>({});
+  const [saved, setSaved] = useState(false);
+
+  const [testEmail, setTestEmail] = useState("");
+  const err = [
+    templatesQuery.error ? (templatesQuery.error instanceof Error ? templatesQuery.error.message : "load error") : null,
+    saveErr,
+  ].find(Boolean) ?? null;
+
+  function selectTemplate(t: EmailTemplate) {
+    setActiveKey(t.key);
+    setSubject(t.subject);
+    setBody(t.body);
+    const initial: Record<string, string> = {};
+    for (const v of t.variables) initial[v.name] = v.example;
+    setVars(initial);
+    setShowPreview(false);
+    setSaved(false);
+  }
+
+  const active = items.find((t) => t.key === activeKey);
+
+  const [busy, setBusy] = useState<"save" | "send" | null>(null);
+
+  const saveMutation = useMutation({
+    mutationFn: () => emailTemplatesApi.update(token!, active!.key, subject, body),
+    onSuccess: () => {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+      // refresh list to update isDefault flag
+      void templatesQuery.refetch();
+    },
+    onError: (e) => setSaveErr(e instanceof Error ? e.message : "save error"),
+    onSettled: () => setBusy(null),
+  });
+
+  const sendTestMutation = useMutation({
+    mutationFn: async () => {
+      // сохраняем перед отправкой если что-то изменено
+      await emailTemplatesApi.update(token!, active!.key, subject, body);
+      await emailTemplatesApi.sendTest(token!, active!.key, testEmail, vars);
+    },
+    onSuccess: () => {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    },
+    onError: (e) => setSaveErr(e instanceof Error ? e.message : "send error"),
+    onSettled: () => setBusy(null),
+  });
+
+  function preview() {
+    if (!active) return;
+    // используем текущие subject/body, а не сохранённые
+    // Здесь делаем offline-preview: сами подставляем vars
+    const render = (tpl: string) => tpl.replace(/\{\{(\w+)\}\}/g, (_m, name) => vars[name] ?? `{{${name}}}`);
+    setPreviewSubject(render(subject));
+    setPreviewBody(render(body));
+    setShowPreview(true);
+  }
+
+  function save() {
+    if (!token || !active || busy) return;
+    setSaveErr(null);
+    setBusy("save");
+    saveMutation.mutate();
+  }
+
+  function sendTest() {
+    if (!token || !active || !testEmail) return;
+    setSaveErr(null);
+    setBusy("send");
+    sendTestMutation.mutate();
+  }
+
+  return (
+    <div className="w-full space-y-4 px-4 sm:px-6 md:px-8 pt-6 pb-10">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between !bg-transparent !border-0 ! !shadow-none">
+        <div className="flex items-start gap-3">
+          <div>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Email-шаблоны</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Системные транзакционные письма (приветствие, оплата, истечение и т.п.)</p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => void templatesQuery.refetch()} disabled={loading} className="rounded-xl gap-2">
+          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+          Обновить
+        </Button>
+      </div>
+
+      {err && (
+        <Card className="p-3 bg-rose-500/10 border-rose-500/30 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-rose-500 shrink-0" />
+          <p className="text-xs text-rose-500">{err}</p>
+        </Card>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
+        {/* LEFT: list */}
+        <Card className="bg-card border-border rounded-xl p-2 admin-split-sidebar lg:self-start lg:max-h-[calc(100vh-7rem)] overflow-y-auto">
+          {loading && items.length === 0 ? (
+            <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+          ) : (
+            <div className="space-y-1">
+              {items.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => selectTemplate(t)}
+                  className={cn(
+                    "w-full text-left rounded-xl px-3 py-2 text-sm transition",
+                    t.key === activeKey
+                      ? "bg-primary/15 text-foreground font-medium border border-border"
+                      : "hover:bg-foreground/[0.04] text-muted-foreground border border-transparent",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="truncate">{t.label}</span>
+                    <span className="ml-auto flex items-center gap-1">
+                      {t.wired === false && (
+                        <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-500/90 border border-amber-500/20">
+                          скоро
+                        </span>
+                      )}
+                      {t.isDefault && <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60">default</span>}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/80 mt-0.5 truncate">{t.description}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* RIGHT: editor */}
+        {active ? (
+          <div className="space-y-4">
+            {active.wired === false && (
+              <Card className="p-3 bg-amber-500/[0.07] border-amber-500/20 flex items-center gap-2 rounded-xl">
+                <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                <p className="text-xs text-amber-500/90">
+                  Этот шаблон пока не отправляется автоматически — правки сохранятся и применятся, когда соответствующая рассылка появится. «Send test» работает уже сейчас.
+                </p>
+              </Card>
+            )}
+            <Card className="bg-card border-border rounded-xl p-4 space-y-3">
+              <div>
+                <Label className="text-xs">Тема (subject)</Label>
+                <Input value={subject} onChange={(e) => { setSubject(e.target.value); setSaved(false); }} className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Тело (HTML)</Label>
+                <textarea
+                  value={body}
+                  onChange={(e) => { setBody(e.target.value); setSaved(false); }}
+                  className="w-full min-h-[280px] mt-1 rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-border p-3 font-mono text-xs"
+                  spellCheck={false}
+                />
+              </div>
+
+              {active.variables.length > 0 && (
+                <div>
+                  <Label className="text-xs">Переменные (для preview/test)</Label>
+                  <div className="mt-1.5 grid sm:grid-cols-2 gap-2">
+                    {active.variables.map((v) => (
+                      <div key={v.name}>
+                        <span className="text-[10px] font-mono text-muted-foreground">{`{{${v.name}}}`}</span>
+                        <Input
+                          value={vars[v.name] ?? ""}
+                          onChange={(e) => setVars((p) => ({ ...p, [v.name]: e.target.value }))}
+                          placeholder={v.example}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border">
+                <Button onClick={save} disabled={busy !== null} className="gap-2">
+                  {busy === "save" ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+                  {saved ? "Сохранено" : "Сохранить"}
+                </Button>
+                <Button onClick={preview} variant="outline" disabled={busy !== null} className="gap-2">
+                  <Eye className="h-4 w-4" />
+                  Превью
+                </Button>
+                <div className="flex items-center gap-2 ml-auto">
+                  <Input
+                    type="email"
+                    value={testEmail}
+                    onChange={(e) => setTestEmail(e.target.value)}
+                    placeholder="test@example.com"
+                    className="h-9 w-[220px] text-xs"
+                  />
+                  <Button onClick={sendTest} variant="outline" disabled={busy !== null || !testEmail.includes("@")} className="gap-2">
+                    {busy === "send" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    Send test
+                  </Button>
+                </div>
+              </div>
+            </Card>
+
+            {showPreview && (
+              <Card className="bg-card border-border rounded-xl p-4">
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Subject preview</div>
+                <div className="rounded-lg bg-foreground/[0.03] dark:bg-white/[0.02] border border-border p-3 font-medium mb-4">{previewSubject}</div>
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Body preview (rendered)</div>
+                <div
+                  className="rounded-lg bg-white text-black border border-border p-4 prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: previewBody }}
+                />
+              </Card>
+            )}
+          </div>
+        ) : (
+          <Card className="bg-card border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
+            Выберите шаблон слева
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}

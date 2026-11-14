@@ -1,0 +1,241 @@
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
+/**
+ * Webhook inbox: входящие webhook'и от Platega/YooKassa/Lava/Crypto/Heleket/YooMoney/Overpay.
+ * Фильтр по провайдеру и outcome. Drawer с raw body + headers + кнопкой replay.
+ */
+
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/auth";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  webhookInboxApi,
+  type WebhookEventListItem,
+} from "@/lib/admin-extras-api";
+import { Loader2, RefreshCw, ChevronRight, Repeat2, Search, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { fmtMsk } from "@/lib/datetime";
+
+const OUTCOME_META: Record<string, { label: string; cls: string; icon: typeof CheckCircle2 }> = {
+  accepted: { label: "Принят", cls: "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30", icon: CheckCircle2 },
+  rejected_signature: { label: "Подпись неверна", cls: "text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/30", icon: XCircle },
+  rejected_payload: { label: "Невалидный payload", cls: "text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/30", icon: XCircle },
+  payment_not_found: { label: "Платёж не найден", cls: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30", icon: AlertTriangle },
+  payment_already_paid: { label: "Уже оплачен", cls: "text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/30", icon: CheckCircle2 },
+  payment_failed: { label: "FAILED от провайдера", cls: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30", icon: AlertTriangle },
+  ignored_event: { label: "Игнор", cls: "text-slate-600 dark:text-slate-400 bg-slate-500/10 border-slate-500/30", icon: AlertTriangle },
+  error: { label: "Ошибка обработки", cls: "text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/30", icon: XCircle },
+};
+
+const PROVIDERS = ["platega", "yookassa", "yoomoney", "cryptopay", "heleket", "lava", "lavatop", "overpay", "paritypay", "rollypay", "cispay"];
+
+export function AdminWebhookInboxPage() {
+  const { state } = useAuth();
+  const token = state.accessToken;
+  const qc = useQueryClient();
+
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [prevItems, setPrevItems] = useState<WebhookEventListItem[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const [provider, setProvider] = useState("");
+  const [outcome, setOutcome] = useState("");
+  const [q, setQ] = useState("");
+  const [appliedQ, setAppliedQ] = useState("");
+
+  const listQuery = useQuery({
+    queryKey: ["admin", "webhook-inbox", provider, outcome, appliedQ, cursor ?? ""] as const,
+    queryFn: () =>
+      webhookInboxApi.list(token!, {
+        provider: provider || undefined,
+        outcome: outcome || undefined,
+        q: appliedQ || undefined,
+        cursor: cursor ?? undefined,
+        limit: 50,
+      }),
+    enabled: !!token,
+  });
+  const items = useMemo(
+    () => [...prevItems, ...(listQuery.data?.items ?? [])],
+    [prevItems, listQuery.data],
+  );
+  const loading = listQuery.isFetching;
+  const error = listQuery.error ? String(listQuery.error) : null;
+  const nextCursor = listQuery.data?.nextCursor ?? null;
+
+  // смена фильтров — сброс пагинации (аналог load(true))
+  useEffect(() => {
+    setPrevItems([]);
+    setCursor(null);
+  }, [provider, outcome, appliedQ]);
+
+  const detailQuery = useQuery({
+    queryKey: ["admin", "webhook-inbox-detail", selectedId] as const,
+    queryFn: () => webhookInboxApi.get(token!, selectedId!),
+    enabled: !!token && !!selectedId,
+  });
+  const selectedDetail = detailQuery.data ?? null;
+
+  const replayMutation = useMutation({
+    mutationFn: () => webhookInboxApi.replay(token!, selectedId!),
+    onSuccess: async (res) => {
+      (await adminAlert(`Replay выполнен. HTTP ${res.replayedHttpStatus ?? "?"}.`));
+      void qc.invalidateQueries({ queryKey: ["admin", "webhook-inbox"], exact: false });
+    },
+    onError: async (e) => (await adminAlert(`Ошибка replay: ${e}`)),
+  });
+  const replaying = replayMutation.isPending;
+
+  const loadReset = () => {
+    setPrevItems([]);
+    setCursor(null);
+    void listQuery.refetch();
+  };
+  const loadMore = () => {
+    if (!nextCursor) return;
+    setPrevItems(items);
+    setCursor(nextCursor);
+  };
+
+  const handleReplay = async () => {
+    if (!selectedId || !token) return;
+    if (!(await adminConfirm("Повторно отправить этот webhook нашему серверу? Создастся новая запись WebhookEvent с replay-меткой."))) return;
+    replayMutation.mutate();
+  };
+  return (
+    <div className="flex flex-col gap-3.5 relative">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between !bg-transparent !border-0 ! !shadow-none">
+        <div className="flex items-start gap-3">
+          <div>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Webhook inbox</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Входящие вебхуки платёжных провайдеров: статус обработки и replay.</p>
+          </div>
+        </div>
+        <Button onClick={loadReset} variant="outline" size="sm" disabled={loading} className="gap-1.5 rounded-xl">
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          Обновить
+        </Button>
+      </div>
+
+      <Card className="bg-card border-border rounded-2xl">
+        <CardContent className="p-4 grid gap-3 md:grid-cols-3">
+          <div>
+            <Label className="text-xs">Провайдер</Label>
+            <select value={provider} onChange={(e) => setProvider(e.target.value)} className="mt-1.5 flex h-9 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+              <option value="">Все</option>
+              {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label className="text-xs">Результат</Label>
+            <select value={outcome} onChange={(e) => setOutcome(e.target.value)} className="mt-1.5 flex h-9 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
+              <option value="">Все</option>
+              {Object.entries(OUTCOME_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label className="text-xs">Поиск (paymentId / error / body)</Label>
+            <div className="mt-1.5 relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && setAppliedQ(q)} className="pl-8" placeholder="…" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {error ? <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{error}</div> : null}
+
+      <Card className="bg-card border-border rounded-2xl overflow-hidden">
+        <CardContent className="p-0">
+          {items.length === 0 && !loading ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              Нет webhook'ов. Входящие вебхуки от платёжных провайдеров появятся здесь.
+            </div>
+          ) : (
+            <div className="divide-y">
+              {items.map((ev) => {
+                const meta = OUTCOME_META[ev.outcome] ?? OUTCOME_META.ignored_event;
+                const Icon = meta.icon;
+                return (
+                  <button key={ev.id} onClick={() => setSelectedId(ev.id)} className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-accent">
+                    <div className="text-xs text-muted-foreground font-mono w-32 shrink-0">{fmtMsk(ev.createdAt)}</div>
+                    <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase w-24 shrink-0 justify-center bg-muted">{ev.provider}</span>
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${meta.cls}`}>
+                      <Icon className="h-3 w-3" />
+                      {meta.label}
+                    </span>
+                    <div className="text-xs text-muted-foreground flex-1 truncate">
+                      {ev.paymentId ? <span className="font-mono">{ev.paymentId.slice(0, 16)}…</span> : null}
+                      {ev.errorMessage ? <span className="ml-2">· {ev.errorMessage.slice(0, 80)}</span> : null}
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground">{ev.responseStatus} · {ev.durationMs ?? "—"}ms</span>
+                    {ev.replayOfId ? <span className="text-[10px] inline-flex items-center gap-0.5 text-cyan-600 dark:text-cyan-400"><Repeat2 className="h-3 w-3" /></span> : null}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                );
+              })}
+              {nextCursor ? (
+                <div className="p-3 text-center">
+                  <Button onClick={loadMore} variant="outline" size="sm" disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Загрузить ещё"}</Button>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)}>
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[15px] font-bold">
+              {selectedDetail?.provider}
+              <span className="text-xs text-muted-foreground font-mono">{selectedDetail?.id.slice(0, 12)}…</span>
+            </DialogTitle>
+          </DialogHeader>
+          {selectedDetail ? (
+            <div className="space-y-4 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${(OUTCOME_META[selectedDetail.outcome] ?? OUTCOME_META.ignored_event).cls}`}>
+                  {(OUTCOME_META[selectedDetail.outcome] ?? OUTCOME_META.ignored_event).label}
+                </span>
+                <span className="text-xs text-muted-foreground">HTTP {selectedDetail.responseStatus}</span>
+                <span className="text-xs text-muted-foreground">{selectedDetail.durationMs ?? "?"} ms</span>
+                <span className="text-xs text-muted-foreground">{fmtMsk(selectedDetail.createdAt)}</span>
+                <span className="text-xs text-muted-foreground font-mono">IP {selectedDetail.remoteIp ?? "—"}</span>
+              </div>
+              {selectedDetail.errorMessage ? (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-50 dark:bg-amber-950/30 p-3 text-sm text-amber-800 dark:text-amber-200">
+                  <strong>Error:</strong> {selectedDetail.errorMessage}
+                </div>
+              ) : null}
+              <div>
+                <Label className="text-xs text-muted-foreground">Headers</Label>
+                <pre className="mt-1 max-h-40 overflow-auto rounded-lg border bg-muted/50 p-3 text-xs font-mono">{JSON.stringify(selectedDetail.headers, null, 2)}</pre>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Raw body</Label>
+                <pre className="mt-1 max-h-96 overflow-auto rounded-lg border bg-muted/50 p-3 text-xs font-mono whitespace-pre-wrap break-all">{selectedDetail.rawBody}</pre>
+              </div>
+              <div className="flex gap-2 border-t pt-3">
+                <Button onClick={handleReplay} disabled={replaying} className="gap-1.5 bg-cyan-600 hover:bg-cyan-700 text-white">
+                  {replaying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Repeat2 className="h-4 w-4" />}
+                  Повторить webhook
+                </Button>
+                {selectedDetail.replayOfId ? (
+                  <Button onClick={() => setSelectedId(selectedDetail.replayOfId)} variant="outline" size="sm" className="gap-1.5">
+                    Перейти к оригиналу
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-32 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

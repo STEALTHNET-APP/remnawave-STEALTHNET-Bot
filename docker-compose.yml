@@ -1,0 +1,250 @@
+###############################################################################
+#  STEALTHNET 3.2.7 — Docker Compose
+#  Репозиторий: https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot
+#  Запуск: docker compose up -d
+###############################################################################
+name: stealthnet
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: stealthnet-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-stealthnet}
+      POSTGRES_USER: ${POSTGRES_USER:-stealthnet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stealthnet_change_me}
+      # T-msk (14.05.2026, WolfVPN): session timezone в МСК. NOW()/CURRENT_TIMESTAMP
+      # отдаёт +03. Существующие timestamp-литералы заранее сдвинуты +3h миграцией
+      # migrate-tz-msk.sql, так что абсолютное UTC-время сохранено.
+      TZ: Europe/Moscow
+      PGTZ: Europe/Moscow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - stealthnet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stealthnet} -d ${POSTGRES_DB:-stealthnet}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend API ─────────────────────────────────────────────────
+  # Порт 5000 на хосте нужен только когда nginx снаружи (USE_BUILTIN_NGINX=false):
+  # хост-nginx проксирует на 127.0.0.1:5000. Бинд только на localhost — чтобы
+  # API не был доступен с внешних интерфейсов.
+  api:
+    image: stealthnet-api:latest
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        BUILD_COMMIT: ${STEALTHNET_BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${STEALTHNET_BUILD_DATE:-}
+    container_name: stealthnet-api
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:5000:5000"
+    environment:
+      # T-msk (14.05.2026, WolfVPN): TZ=Europe/Moscow → Node Date/cron-логи/console
+      # в МСК. Прописываем для api, bot и postgres единообразно.
+      TZ: Europe/Moscow
+      NODE_ENV: production
+      PORT: "5000"
+      # 24.05.2026, WolfVPN — connection_limit=30 для запаса под массовую рассылку
+      # (30k мигрированных юзеров). Default 9 при 30k одновременных /start может
+      # ставить запросы в очередь и плодить timeouts.
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-stealthnet}:${POSTGRES_PASSWORD:-stealthnet_change_me}@postgres:5432/${POSTGRES_DB:-stealthnet}?connection_limit=30"
+      JWT_SECRET: "${JWT_SECRET}"
+      JWT_ACCESS_EXPIRES_IN: "${JWT_ACCESS_EXPIRES_IN:-15m}"
+      JWT_REFRESH_EXPIRES_IN: "${JWT_REFRESH_EXPIRES_IN:-7d}"
+      CORS_ORIGIN: "https://${DOMAIN:-localhost}"
+      REMNA_API_URL: "${REMNA_API_URL:-}"
+      REMNA_ADMIN_TOKEN: "${REMNA_ADMIN_TOKEN:-}"
+      REMNA_SECRET_KEY: "${REMNA_SECRET_KEY:-}"
+      INIT_ADMIN_EMAIL: "${INIT_ADMIN_EMAIL:-admin@stealthnet.local}"
+      INIT_ADMIN_PASSWORD: "${INIT_ADMIN_PASSWORD:-}"
+      BOT_TOKEN: "${BOT_TOKEN:-}"
+    volumes:
+      - /run/stealthnet-updater:/run/stealthnet-updater:ro
+      - /etc/ssh:/host-etc/ssh
+      - /proc:/host-proc:ro
+      - uploads_data:/app/uploads
+      # Бэкапы БД — ОБЯЗАТЕЛЬНО на томе: без него /app/backups живёт
+      # внутри контейнера и стирается при каждой пересборке образа.
+      - backups_data:/app/backups
+      # 25.05.2026, WolfVPN — shared с broadcast-worker: api сохраняет файлы рассылок сюда,
+      # worker читает.
+      - broadcast_attachments:/data/broadcast-attachments
+      # Read-only frontend bundle: модуль branding/spa-html.ts читает index.html
+      # отсюда чтобы инжектить per-bot брендинг в SPA-shell перед отдачей через nginx /_spa.
+      - frontend_dist:/var/www/stealthnet:ro
+      # Базовый конфиг страницы подписки (приложения по платформам).
+      # Bind-mount с хоста: редактируешь файл — изменения видны контейнеру мгновенно
+      # (один inode). В админке Settings → Страница подписки жми «Перезагрузить
+      # с сервера» → «Подмёрж новые» → «Сохранить». Без перезапуска контейнера.
+      # Read-only: контейнер не должен модифицировать конфиг.
+      - ./backend/subpage-00000000-0000-0000-0000-000000000000.json:/app/subpage-00000000-0000-0000-0000-000000000000.json:ro
+    pid: host
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Первый старт: Prisma migrate / greenfield может занимать минуты — без этого nginx
+    # поднимается раньше Node и отдаёт 502 (upstream connection refused).
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "require(\"http\").get(\"http://127.0.0.1:5000/api/health\",(r)=>{r.resume();r.on(\"end\",()=>process.exit(r.statusCode===200?0:1));}).on(\"error\",()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 600s
+    networks:
+      - stealthnet
+    # 25.05.2026, WolfVPN — добавили shared volume для broadcast attachments
+    # (api сохраняет файл, broadcast-worker читает).
+
+  # ── Broadcast Worker (25.05.2026, WolfVPN) ─────────────────────
+  # Отдельный процесс обработки рассылок: polls broadcast_history
+  # WHERE status='pending', запускает runBroadcast в своём event-loop.
+  # API стек освобождается полностью — bot/UI не лагают во время рассылки.
+  broadcast-worker:
+    image: stealthnet-api:latest    # тот же image что и api (build выше)
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        BUILD_COMMIT: ${STEALTHNET_BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${STEALTHNET_BUILD_DATE:-}
+    container_name: stealthnet-broadcast-worker
+    restart: unless-stopped
+    # 25.05.2026, WolfVPN — env_file тот же что у api: import цепочка
+    # broadcast.service → client.service → config валидирует JWT_SECRET и др.
+    env_file: .env
+    environment:
+      TZ: Europe/Moscow
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-stealthnet}:${POSTGRES_PASSWORD:-stealthnet_change_me}@postgres:5432/${POSTGRES_DB:-stealthnet}?connection_limit=10"
+      BROADCAST_ATTACHMENT_DIR: "/data/broadcast-attachments"
+    entrypoint: ["node", "dist/worker/broadcast-worker.js"]
+    volumes:
+      - broadcast_attachments:/data/broadcast-attachments
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy   # API подняла миграции — worker присоединяется к схеме
+    networks:
+      - stealthnet
+
+  # ── Telegram Bot ────────────────────────────────────────────────
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    container_name: stealthnet-bot
+    restart: unless-stopped
+    environment:
+      # T-msk (14.05.2026, WolfVPN): Grammy/Node логи в МСК.
+      TZ: Europe/Moscow
+      BOT_TOKEN: "${BOT_TOKEN:-}"
+      API_URL: "http://api:5000"
+      # Rich-меню (Bot API 10.1+). Код читает process.env.BOT_RICH_MENU, но
+      # переменную сюда не пробрасывали — флаг был невозможно включить.
+      BOT_RICH_MENU: "${BOT_RICH_MENU:-}"
+      BOT_WIDGET_PREFERENCES_DIR: "/data/widget-preferences"
+    volumes:
+      - bot_preferences:/data/widget-preferences
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - stealthnet
+
+  # ── Frontend Build ──────────────────────────────────────────────
+  # Одноразовый контейнер для сборки фронтенда в volume
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        BUILD_COMMIT: ${STEALTHNET_BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${STEALTHNET_BUILD_DATE:-}
+    container_name: stealthnet-frontend-build
+    volumes:
+      - frontend_dist:/out
+    entrypoint: ["sh", "-c", "rm -rf /out/* && cp -r /dist/* /out/ && echo 'Frontend copied to volume'"]
+
+  # ── Nginx (встроенный) ─────────────────────────────────────────
+  # Включается когда USE_BUILTIN_NGINX=true
+  nginx:
+    image: nginx:1.28-alpine
+    container_name: stealthnet-nginx
+    restart: unless-stopped
+    profiles:
+      - builtin-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - frontend_dist:/var/www/stealthnet:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/40-watch-certificates.sh:/docker-entrypoint.d/40-watch-certificates.sh:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_certs:/etc/nginx/ssl:ro
+    depends_on:
+      frontend:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    networks:
+      - stealthnet
+
+  # ── Certbot (авто-SSL) ─────────────────────────────────────────
+  certbot:
+    image: ${CERTBOT_IMAGE:-certbot/certbot:latest}
+    container_name: stealthnet-certbot
+    restart: unless-stopped
+    profiles:
+      - builtin-nginx
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+      - ./nginx/renew-certificates.sh:/opt/renew-certificates.sh:ro
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do /bin/sh /opt/renew-certificates.sh; sleep 12h & wait $${!}; done;'"
+    networks:
+      - stealthnet
+
+  console:
+    build: ./console
+    image: stealthnet-console
+    container_name: stealthnet-console
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      API_URL: "http://127.0.0.1:5000"
+      INTERNAL_KEY: "${JWT_SECRET}"
+      CONSOLE_HOSTKEY: "/data/host_ed25519"
+    volumes:
+      - console_data:/data
+    depends_on:
+      - api
+
+volumes:
+  bot_preferences:
+  backups_data:
+  postgres_data:
+  frontend_dist:
+  uploads_data:
+  certbot_www:
+  certbot_certs:
+  # 25.05.2026, WolfVPN — shared между api и broadcast-worker.
+  broadcast_attachments:
+  console_data:
+
+networks:
+  stealthnet:
+    driver: bridge

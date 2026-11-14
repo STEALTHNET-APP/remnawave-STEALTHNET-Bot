@@ -1,0 +1,880 @@
+import { adminConfirm, adminAlert } from "@/lib/admin-dialogs";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/auth";
+import {
+  type AutoBroadcastRule,
+  type AutoBroadcastRulePayload,
+  type AutoBroadcastTriggerType,
+} from "@/lib/api";
+import { api } from "@/lib/api";
+import { useAdminAutoBroadcastRules, useAdminAutoBroadcastEligibleCounts, type AdminSettings } from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { motion } from "framer-motion";
+import {
+  Plus,
+  Play,
+  Trash2,
+  Pencil,
+  Loader2,
+  MousePointerClick,
+  Send,
+  Users,
+  AlertTriangle,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const BUTTON_ACTIONS = [
+  { value: "", label: "Без кнопки" },
+  { value: "menu:my_subs", label: " Мои подписки" },
+  { value: "menu:tariffs", label: " Тарифы" },
+  { value: "menu:topup", label: " Пополнить баланс" },
+  { value: "menu:profile", label: " Профиль" },
+  { value: "menu:trial", label: " Бесплатный триал" },
+  { value: "menu:referral", label: " Реферальная программа" },
+  { value: "menu:promocode", label: " Промокод" },
+  { value: "menu:support", label: " Поддержка" },
+  { value: "menu:vpn", label: " VPN подключение" },
+  { value: "menu:devices", label: " Устройства" },
+  { value: "menu:extra_options", label: " Доп. опции" },
+  { value: "menu:main", label: " Главное меню" },
+  { value: "webapp:/cabinet", label: " Web кабинет" },
+  { value: "webapp:/cabinet/subscribe", label: " Страница подключения" },
+  { value: "webapp:/cabinet/tickets", label: " Тикеты" },
+  { value: "__custom_url__", label: " Своя ссылка (URL)" },
+];
+
+const TRIGGER_LABELS: Record<AutoBroadcastTriggerType, string> = {
+  after_registration: "После регистрации",
+  inactivity: "Неактивность (нет оплат)",
+  no_payment: "Ни разу не платил",
+  trial_not_connected: "Не подключил триал",
+  trial_used_never_paid: "Пользовался триалом, но не оплатил",
+  no_traffic: "Подключён к VPN (напоминание)",
+  subscription_expired: "Подписка истекла",
+  subscription_ending_soon: "Подписка заканчивается скоро (за N дней)",
+  subscription_ending_minutes: "Подписка заканчивается скоро (за N минут)",
+  // пассивные (не брал триал + не платил).
+  inactive_no_subscription: "Без действий и без подписки",
+  inactive_with_subscription: "Без действий, но с подпиской",
+};
+
+/**
+ * триггеры для которых в форме показывается
+ * чекбокс «event-driven». Если флаг включён — поля «delay_days» и «cron_expression»
+ * скрываются (правило вызывается событием из бота, а не по крону).
+ */
+const TRIGGERS_SUPPORTING_EVENT_MODE: ReadonlySet<AutoBroadcastTriggerType> = new Set([
+  "after_registration",
+]);
+
+const CHANNEL_LABELS: Record<string, string> = {
+  telegram: "Telegram",
+  email: "Email",
+  both: "Telegram и Email",
+};
+
+export function AutoBroadcastPage() {
+  const { state } = useAuth();
+  const token = state.accessToken ?? "";
+  const queryClient = useQueryClient();
+  const { data: rulesData, isLoading: loading } = useAdminAutoBroadcastRules(token || null);
+  const rules = rulesData ?? [];
+  const { data: eligibleCounts } = useAdminAutoBroadcastEligibleCounts(token || null, rules.map((r) => r.id));
+  const [runAllLoading, setRunAllLoading] = useState(false);
+  const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<AutoBroadcastRulePayload>({
+    name: "",
+    triggerType: "after_registration",
+    delayDays: 1,
+    channel: "telegram",
+    subject: "",
+    message: "",
+    buttonText: "",
+    buttonUrl: "",
+    button2Text: "",
+    button2Url: "",
+    enabled: true,
+    promoCodeId: null,
+    personalDiscountPercent: null,
+    personalDiscountIsOneTime: true,
+    maxRecipients: null,
+    cronExpression: null,
+    eventDriven: false,
+  });
+  const [formSaving, setFormSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  // Черновик ввода cron; пока не тронут — показываем сохранённое значение из settings.
+  const [scheduleCronDraft, setScheduleCronDraft] = useState<string | null>(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+
+  const invalidateRules = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin", "auto-broadcast-rules"], exact: false });
+    queryClient.invalidateQueries({ queryKey: ["admin", "auto-broadcast-eligible-counts"], exact: false });
+  };
+
+  // Расписание авто-рассылки — часть admin settings; берём из кеша (settings.tsx владеет ключом).
+  const { data: settings } = useQuery<AdminSettings>({
+    queryKey: qk.admin.settings(),
+    queryFn: () => api.getSettings(token),
+    enabled: !!token,
+  });
+  // Ввод cron: черновик, пока не тронут — показываем сохранённое значение из settings.
+  const scheduleCron = scheduleCronDraft ?? (settings?.autoBroadcastCron ?? "");
+  const saveScheduleMutation = useMutation({
+    mutationFn: (cron: string) => api.updateSettings(token, { autoBroadcastCron: cron.trim() || null }),
+    onSuccess: () => {
+      setScheduleSaving(false);
+      queryClient.invalidateQueries({ queryKey: ["admin", "settings"], exact: false });
+    },
+    onError: () => setScheduleSaving(false),
+  });
+
+  async function handleSaveSchedule(e: React.FormEvent) {
+    e.preventDefault();
+    setScheduleSaving(true);
+    saveScheduleMutation.mutate(scheduleCron);
+  }
+
+
+  const [buttonAction, setButtonAction] = useState("");
+  const [buttonCustomUrl, setButtonCustomUrl] = useState("");
+
+  function resolveActionFromUrl(url: string | null): { action: string; customUrl: string } {
+    if (!url) return { action: "", customUrl: "" };
+    if (BUTTON_ACTIONS.some((a) => a.value === url && a.value !== "__custom_url__")) {
+      return { action: url, customUrl: "" };
+    }
+    return { action: "__custom_url__", customUrl: url };
+  }
+
+  function openCreate() {
+    setEditingId(null);
+    setForm({
+      name: "",
+      triggerType: "after_registration",
+      delayDays: 1,
+      channel: "telegram",
+      subject: "",
+      message: "",
+      buttonText: "",
+      buttonUrl: "",
+      button2Text: "",
+      button2Url: "",
+      enabled: true,
+      promoCodeId: null,
+      personalDiscountPercent: null,
+      personalDiscountIsOneTime: true,
+      maxRecipients: null,
+      cronExpression: null,
+      eventDriven: false,
+    });
+    setButtonAction("");
+    setButtonCustomUrl("");
+    setFormError(null);
+    setShowForm(true);
+  }
+
+  function openEdit(rule: AutoBroadcastRule) {
+    setEditingId(rule.id);
+    const { action, customUrl } = resolveActionFromUrl(rule.buttonUrl);
+    setForm({
+      name: rule.name,
+      triggerType: rule.triggerType,
+      delayDays: rule.delayDays,
+      channel: rule.channel,
+      subject: rule.subject ?? "",
+      message: rule.message,
+      buttonText: rule.buttonText ?? "",
+      buttonUrl: rule.buttonUrl ?? "",
+      button2Text: rule.button2Text ?? "",
+      button2Url: rule.button2Url ?? "",
+      enabled: rule.enabled,
+      promoCodeId: rule.promoCodeId ?? null,
+      personalDiscountPercent: rule.personalDiscountPercent ?? null,
+      personalDiscountIsOneTime: rule.personalDiscountIsOneTime ?? true,
+      maxRecipients: rule.maxRecipients ?? null,
+      cronExpression: rule.cronExpression ?? null,
+      eventDriven: rule.eventDriven ?? false,
+    });
+    setButtonAction(action);
+    setButtonCustomUrl(customUrl);
+    setFormError(null);
+    setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingId(null);
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    const resolvedUrl = buttonAction === "__custom_url__" ? buttonCustomUrl.trim() : buttonAction;
+    const payload: AutoBroadcastRulePayload = {
+      ...form,
+      subject: form.subject?.trim() || null,
+      buttonText: form.buttonText?.trim() || null,
+      buttonUrl: resolvedUrl || null,
+      button2Text: form.button2Text?.trim() || null,
+      button2Url: form.button2Url?.trim() || null,
+      promoCodeId: form.promoCodeId || null,
+      personalDiscountPercent: form.personalDiscountPercent ?? null,
+      personalDiscountIsOneTime: form.personalDiscountIsOneTime ?? true,
+      maxRecipients: form.maxRecipients ?? null,
+      cronExpression: form.cronExpression?.trim() || null,
+      eventDriven: form.eventDriven ?? false,
+    };
+    if (!payload.name.trim()) {
+      setFormError("Укажите название правила");
+      return;
+    }
+    if (!payload.message.trim()) {
+      setFormError("Укажите текст сообщения");
+      return;
+    }
+    setFormSaving(true);
+    try {
+      if (editingId) {
+        await api.updateAutoBroadcastRule(token, editingId, payload);
+      } else {
+        await api.createAutoBroadcastRule(token, payload);
+      }
+      closeForm();
+      invalidateRules();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Ошибка сохранения");
+    } finally {
+      setFormSaving(false);
+    }
+  }
+
+  async function handleDelete(ruleId: string) {
+    if (!(await adminConfirm("Удалить правило?"))) return;
+    try {
+      await api.deleteAutoBroadcastRule(token, ruleId);
+      invalidateRules();
+    } catch {
+      // ignore
+    }
+  }
+
+  function formatRunResult(r: { sent: number; skipped: number; errors: string[] }): string {
+    const parts: string[] = [];
+    if (r.sent > 0) parts.push(` Отправлено: ${r.sent}`);
+    if (r.skipped > 0) parts.push(` Пропущено (бот заблокирован): ${r.skipped}`);
+    if (r.errors.length > 0) parts.push(` Ошибки: ${r.errors.join("; ")}`);
+    if (parts.length === 0) parts.push("Нет подходящих получателей");
+    return parts.join("\n");
+  }
+
+  async function handleRunAll() {
+    setRunAllLoading(true);
+    try {
+      const { results } = await api.runAutoBroadcastAll(token);
+      const totalSent = results.reduce((s, r) => s + r.sent, 0);
+      const totalSkipped = results.reduce((s, r) => s + r.skipped, 0);
+      const totalErrors = results.reduce((s, r) => s + r.errors.length, 0);
+      invalidateRules();
+      (await adminAlert(`Отправлено: ${totalSent}, пропущено: ${totalSkipped}${totalErrors > 0 ? `, ошибок: ${totalErrors}` : ""}`));
+    } catch (err) {
+      (await adminAlert(err instanceof Error ? err.message : "Ошибка запуска"));
+    } finally {
+      setRunAllLoading(false);
+    }
+  }
+
+  async function handleRunOne(ruleId: string) {
+    setRunningRuleId(ruleId);
+    try {
+      const result = await api.runAutoBroadcastRule(token, ruleId);
+      invalidateRules();
+      (await adminAlert(formatRunResult(result)));
+    } catch (err) {
+      (await adminAlert(err instanceof Error ? err.message : "Ошибка запуска"));
+    } finally {
+      setRunningRuleId(null);
+    }
+  }
+
+  const isDaysSoon = form.triggerType === "subscription_ending_soon";
+  const isMinutesSoon = form.triggerType === "subscription_ending_minutes";
+  const min = isDaysSoon || isMinutesSoon ? 1 : 0;
+  const max = isDaysSoon ? 30 : isMinutesSoon ? 10080 : 365;
+
+  return (
+    <div className="flex flex-col gap-3.5 relative">
+
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+      >
+        <div className="flex items-start gap-3">
+          <div>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
+              Авто-рассылка
+            </h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
+              Настраиваемые правила: после регистрации, неактивность, без платежа — чтобы не терять клиентов
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRunAll}
+            disabled={runAllLoading || rules.length === 0}
+            className="gap-1.5 rounded-xl"
+          >
+            {runAllLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            Запустить все
+          </Button>
+          <Button onClick={openCreate} className="gap-1.5 rounded-xl">
+            <Plus className="h-4 w-4" />
+            Добавить правило
+          </Button>
+        </div>
+      </motion.div>
+
+      {/* Schedule card */}
+      <Card className="bg-card border-border rounded-2xl p-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div>
+            <h3 className="text-sm font-bold tracking-tight">Расписание</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Cron: минута час день месяц день_недели. Например{" "}
+              <code className="rounded-md bg-foreground/[0.05] dark:bg-white/[0.05] border border-border px-1.5 py-0.5 text-[11px]">
+                0 9 * * *
+              </code>{" "}
+              — каждый день в 9:00. Пусто = по умолчанию 9:00.
+            </p>
+          </div>
+        </div>
+        <form onSubmit={handleSaveSchedule} className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[200px] flex-1 space-y-1.5">
+            <Label htmlFor="schedule-cron" className="text-xs text-muted-foreground">
+              Выражение cron
+            </Label>
+            <Input
+              id="schedule-cron"
+              value={scheduleCron}
+              onChange={(e) => setScheduleCronDraft(e.target.value)}
+              placeholder="0 9 * * *"
+              className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
+            />
+          </div>
+          <Button type="submit" disabled={scheduleSaving} className="gap-2 rounded-xl">
+            {scheduleSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Сохранить расписание
+          </Button>
+        </form>
+      </Card>
+
+      {/* Rules card */}
+      <Card className="bg-card border-border rounded-2xl p-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div>
+            <h3 className="text-sm font-bold tracking-tight">Правила</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Все настроенные сценарии авто-рассылки
+            </p>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Загружаем правила…</p>
+          </div>
+        ) : rules.length === 0 ? (
+          <div className="flex flex-col items-center text-center py-12">
+            <p className="text-muted-foreground">Правил пока нет</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">Добавьте первое правило, чтобы начать</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {rules.map((rule, idx) => (
+              <motion.div
+                key={rule.id}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.03 }}
+                whileHover={{ y: -2 }}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 transition-all hover:border-border"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm">{rule.name}</span>
+                    {rule.enabled ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-medium">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                        Активно
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/40 text-muted-foreground border border-border px-2.5 py-0.5 text-[11px] font-medium">
+                        Выключено
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    <span className="text-foreground/80">{TRIGGER_LABELS[rule.triggerType]}</span>
+                    {rule.eventDriven
+                      ? " ·  event-driven"
+                      : rule.triggerType === "subscription_ending_soon"
+                        ? ` · за ${rule.delayDays} дн. до окончания`
+                        : rule.triggerType === "subscription_ending_minutes"
+                          ? ` · за ${rule.delayDays} мин. до окончания`
+                          : rule.triggerType === "trial_used_never_paid"
+                            ? ` · через ${rule.delayDays} дн. после окончания триала`
+                            : ` · через ${rule.delayDays} дн.`}{" "}
+                    · <span className="text-cyan-500 dark:text-cyan-400">{CHANNEL_LABELS[rule.channel]}</span>
+                  </p>
+                  <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground">
+                    <span className="inline-flex items-center gap-1">
+                      <Send className="h-3 w-3" />
+                      Отправлено: <span className="text-foreground font-medium">{rule.sentCount ?? 0}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Users className="h-3 w-3" />
+                      Подходят сейчас:{" "}
+                      <span className="text-foreground font-medium">{eligibleCounts?.[rule.id] ?? "—"}</span>
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleRunOne(rule.id)}
+                    disabled={runningRuleId !== null}
+                    className="gap-1.5 rounded-xl"
+                  >
+                    {runningRuleId === rule.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5" />
+                    )}
+                    Запустить
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-lg"
+                    onClick={() => openEdit(rule)}
+                    title="Редактировать"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-lg text-red-500 dark:text-red-400 hover:bg-red-500/10"
+                    onClick={() => handleDelete(rule.id)}
+                    title="Удалить"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Dialog open={showForm} onOpenChange={(open) => !open && closeForm()}>
+        <DialogContent className="bg-card border-border rounded-2xl max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[13.5px] font-bold tracking-tight">
+              {editingId ? "Редактировать правило" : "Новое правило"}
+            </DialogTitle>
+            <DialogDescription className="sr-only">Форма правила авторассылки</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSave} className="space-y-4 pt-2">
+            {formError && (
+              <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <p>{formError}</p>
+              </div>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Название</Label>
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Например: Напоминание через 3 дня"
+                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Триггер</Label>
+                <select
+                  className="flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  value={form.triggerType}
+                  onChange={(e) => {
+                    const t = e.target.value as AutoBroadcastTriggerType;
+                    setForm((f) => ({
+                      ...f,
+                      triggerType: t,
+                      delayDays:
+                        t === "subscription_ending_soon"
+                          ? Math.max(1, Math.min(30, f.delayDays))
+                          : t === "subscription_ending_minutes"
+                            ? Math.max(1, Math.min(10080, f.delayDays || 15))
+                            : f.delayDays,
+                      // T-event-driven: если новый триггер не поддерживает event-mode — сбрасываем флаг.
+                      eventDriven: TRIGGERS_SUPPORTING_EVENT_MODE.has(t) ? f.eventDriven : false,
+                    }));
+                  }}
+                >
+                  {(Object.keys(TRIGGER_LABELS) as AutoBroadcastTriggerType[]).map((t) => (
+                    <option key={t} value={t}>
+                      {TRIGGER_LABELS[t]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {/* чекбокс выбора режима — только для
+                триггеров которые поддерживают event-driven (см. TRIGGERS_SUPPORTING_EVENT_MODE).
+                Если включено — правило срабатывает мгновенно из бота (без крона). */}
+            {TRIGGERS_SUPPORTING_EVENT_MODE.has(form.triggerType) && (
+              <div className="rounded-xl border border-border bg-foreground/[0.02] dark:bg-white/[0.02] px-4 py-3">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.eventDriven ?? false}
+                    onChange={(e) => setForm((f) => ({ ...f, eventDriven: e.target.checked }))}
+                    className="mt-0.5 h-4 w-4 rounded border-border bg-foreground/[0.05] dark:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-primary/50 cursor-pointer"
+                  />
+                  <span className="space-y-0.5">
+                    <span className="block text-sm font-medium text-foreground/90"> Event-driven (мгновенно при /start в боте)</span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      Если включено — правило срабатывает <strong>сразу</strong> при регистрации нового клиента
+                      (бот вызывает event-endpoint). Поля «через сколько дней» и «расписание» игнорируются.
+                      Если выключено — обычное крон-правило: «через N дней после регистрации,
+                      если клиент не пробовал триал / не оплачивал / не подключался».
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              {form.eventDriven ? (
+                /* T-event-driven: если правило event-driven, «delay_days» и «cron» не нужны.
+                   Плашка объясняет админу что правило срабатывает мгновенно. */
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Когда отправляется</Label>
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2.5 text-sm text-emerald-200">
+                     Мгновенно при событии (например, при /start в боте). Поля «через сколько дней» и «расписание» не применяются.
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">
+                    {form.triggerType === "subscription_ending_soon"
+                      ? "За сколько дней до окончания (1–30)"
+                      : form.triggerType === "subscription_ending_minutes"
+                        ? "За сколько минут до окончания (1–10080)"
+                        : form.triggerType === "trial_used_never_paid"
+                          ? "Через сколько дней после окончания триала (0–365)"
+                          : "Через сколько дней (0–365)"}
+                  </Label>
+                  <Input
+                    type="number"
+                    min={min}
+                    max={max}
+                    value={form.delayDays}
+                    onChange={(e) => {
+                      const v = Number(e.target.value) || 0;
+                      setForm((f) => ({ ...f, delayDays: Math.max(min, Math.min(max, v)) }));
+                    }}
+                    className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
+                  />
+                  {form.triggerType === "subscription_ending_soon" && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Создайте несколько правил (например, за 7, за 3, за 1 день) — рассылка будет с нужным текстом.
+                    </p>
+                  )}
+                  {form.triggerType === "subscription_ending_minutes" && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Создайте несколько правил (например, за 60, за 15 минут) — рассылка сработает точно за указанное время до окончания подписки.
+                    </p>
+                  )}
+                  {form.triggerType === "trial_used_never_paid" && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Отсчёт ведётся от даты окончания пробного периода. Рассылка сработает только для тех, кто не совершил платных покупок и не имеет активной подписки.
+                    </p>
+                  )}
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Канал</Label>
+                <select
+                  className="flex h-10 w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  value={form.channel}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, channel: e.target.value as "telegram" | "email" | "both" }))
+                  }
+                >
+                  <option value="telegram">Telegram</option>
+                  <option value="email">Email</option>
+                  <option value="both">Telegram и Email</option>
+                </select>
+              </div>
+            </div>
+            {(form.channel === "email" || form.channel === "both") && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Тема письма (для email)</Label>
+                <Input
+                  value={form.subject ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
+                  placeholder="Тема письма"
+                  className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border-border focus-visible:ring-primary/50"
+                />
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Текст сообщения</Label>
+              <textarea
+                className="flex min-h-[140px] w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 resize-y"
+                value={form.message}
+                onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
+                placeholder="Текст для Telegram / email (до 4096 символов)"
+                maxLength={4096}
+              />
+              <p className="text-[11px] text-muted-foreground">{form.message.length} / 4096</p>
+            </div>
+            {(form.channel === "telegram" || form.channel === "both") && (
+              <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <MousePointerClick className="h-4 w-4 text-primary" />
+                  Кнопка под сообщением (только Telegram)
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Действие кнопки</Label>
+                    <select
+                      className="flex h-10 w-full rounded-xl border border-border bg-card px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                      value={buttonAction}
+                      onChange={(e) => setButtonAction(e.target.value)}
+                    >
+                      {BUTTON_ACTIONS.map((a) => (
+                        <option key={a.value} value={a.value}>
+                          {a.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {buttonAction && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Текст кнопки</Label>
+                      <Input
+                        value={form.buttonText ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, buttonText: e.target.value }))}
+                        placeholder="Открыть тарифы"
+                        maxLength={64}
+                        className="h-10 rounded-xl bg-card border-border focus-visible:ring-primary/50"
+                      />
+                    </div>
+                  )}
+                </div>
+                {buttonAction === "__custom_url__" && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Ссылка (URL)</Label>
+                    <Input
+                      value={buttonCustomUrl}
+                      onChange={(e) => setButtonCustomUrl(e.target.value)}
+                      placeholder="https://example.com/tariffs"
+                      maxLength={500}
+                      className="h-10 rounded-xl bg-card border-border focus-visible:ring-primary/50"
+                    />
+                  </div>
+                )}
+                <p className="text-[11px] text-muted-foreground">
+                  Выберите действие — под сообщением появится inline-кнопка, открывающая выбранный раздел бота.
+                </p>
+
+                {/* вторая кнопка */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-border">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Кнопка #2 — текст</Label>
+                    <Input
+                      value={form.button2Text ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, button2Text: e.target.value }))}
+                      placeholder=" Главное меню"
+                      maxLength={64}
+                      className="h-10 rounded-xl bg-card border-border"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Кнопка #2 — действие / URL</Label>
+                    <Input
+                      value={form.button2Url ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, button2Url: e.target.value }))}
+                      placeholder="menu:main или https://..."
+                      maxLength={500}
+                      className="h-10 rounded-xl bg-card border-border"
+                    />
+                  </div>
+                </div>
+
+                {/* T-promo: индивидуальная скидка / промокод / лимит получателей */}
+                <div className="space-y-3 pt-3 border-t border-border">
+                  <h4 className="text-xs uppercase tracking-wider text-muted-foreground"> Промо / скидка</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">ID промокода (если шлёшь код)</Label>
+                      <Input
+                        value={form.promoCodeId ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, promoCodeId: e.target.value.trim() || null }))}
+                        placeholder="cuid из /admin/promo-codes"
+                        className="h-10 rounded-xl bg-card border-border font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Индивидуальная скидка %</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={form.personalDiscountPercent ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setForm((f) => ({ ...f, personalDiscountPercent: v ? parseFloat(v) : null }));
+                        }}
+                        placeholder="например 20"
+                        className="h-10 rounded-xl bg-card border-border"
+                      />
+                    </div>
+                  </div>
+                  {/* чекбокс одноразовости скидки. */}
+                  <label className="flex items-start gap-2.5 cursor-pointer rounded-xl p-3 -mx-1 hover:bg-white/[0.03] transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={form.personalDiscountIsOneTime ?? true}
+                      onChange={(e) => setForm((f) => ({ ...f, personalDiscountIsOneTime: e.target.checked }))}
+                      className="mt-0.5 h-4 w-4 rounded border-border bg-card accent-primary"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium"> Скидка одноразовая</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Сгорает после первой продуктовой покупки клиента. Если выключено — действует
+                        бессрочно (пока админ не уберёт вручную в карточке клиента).
+                      </div>
+                    </div>
+                  </label>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Лимит получателей (стоп если достигли)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={form.maxRecipients ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setForm((f) => ({ ...f, maxRecipients: v ? parseInt(v, 10) : null }));
+                      }}
+                      placeholder="нет лимита"
+                      className="h-10 rounded-xl bg-card border-border"
+                    />
+                  </div>
+
+                  {/* индивидуальное расписание правила.
+                      для event-driven правил блок скрыт —
+                      они вызываются по событию из бота, а не по крону. */}
+                  {!form.eventDriven && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">
+                         Расписание (cron) <span className="text-[10px] opacity-60">— пусто = дефолт по типу триггера</span>
+                      </Label>
+                      <Input
+                        value={form.cronExpression ?? ""}
+                        onChange={(e) => setForm((f) => ({ ...f, cronExpression: e.target.value || null }))}
+                        placeholder={
+                          form.triggerType === "subscription_ending_minutes" ? "* * * * *  (каждую минуту)" :
+                          form.triggerType === "subscription_expired" ? "0 * * * *  (каждый час)" :
+                          "0 9 * * *  (раз в день в 9:00)"
+                        }
+                        className="h-10 rounded-xl bg-card border-border font-mono text-sm"
+                      />
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: "* * * * *" }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-border text-[10px] transition"> Каждую минуту</button>
+                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: "*/5 * * * *" }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-border text-[10px] transition"> Каждые 5 мин</button>
+                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: "0 * * * *" }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-border text-[10px] transition"> Каждый час</button>
+                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: "0 9 * * *" }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-border text-[10px] transition"> Раз в день 9:00</button>
+                        <button type="button" onClick={() => setForm((f) => ({ ...f, cronExpression: null }))} className="px-2 py-1 rounded-md bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08] dark:hover:bg-white/[0.08] border border-border text-[10px] transition"> Сбросить</button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Формат: <code className="text-foreground/70">minute hour day month weekday</code>.
+                        Для <code>subscription_ending_minutes</code> рекомендуется <code className="text-foreground/70">* * * * *</code> (узкое окно ±1 мин).
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl bg-foreground/[0.03] dark:bg-white/[0.02] border border-border px-3 py-2.5 space-y-1">
+                    <p className="text-[11px] font-bold text-foreground/80">Плейсхолдеры в тексте/URL кнопки:</p>
+                    <p className="text-[11px] text-muted-foreground"><code className="text-foreground/70">{`{{TARIFF}}`}</code> — название тарифа клиента</p>
+                    <p className="text-[11px] text-muted-foreground"><code className="text-foreground/70">{`{{SUBSCRIPTION_ID}}`}</code> — id подписки (для кнопки «Продлить»)</p>
+                    <p className="text-[11px] text-muted-foreground"><code className="text-foreground/70">{`{{PROMOCODE}}`}</code> — код привязанного PromoCode</p>
+                    <p className="text-[11px] text-muted-foreground"><code className="text-foreground/70">{`{{DISCOUNT}}`}</code> — процент скидки</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">Для прямого продления подписки используй URL: <code className="text-foreground/70">{`https://t.me/<bot>?start=renew_{{SUBSCRIPTION_ID}}`}</code></p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] px-4 py-3">
+              <div>
+                <Label htmlFor="form-enabled" className="text-sm font-semibold cursor-pointer">
+                  Включено
+                </Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Участвует в запуске «Запустить все»
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, enabled: !f.enabled }))}
+                className={cn(
+                  "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+                  form.enabled ? "bg-emerald-500" : "bg-muted-foreground/30"
+                )}
+              >
+                <span
+                  className={cn(
+                    "pointer-events-none inline-block h-5 w-5 rounded-full bg-white ring-0 transition-transform",
+                    form.enabled ? "translate-x-5" : "translate-x-0"
+                  )}
+                />
+              </button>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={closeForm} className="rounded-xl">
+                Отмена
+              </Button>
+              <Button type="submit" disabled={formSaving} className="gap-2 rounded-xl">
+                {formSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {editingId ? "Сохранить" : "Создать"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

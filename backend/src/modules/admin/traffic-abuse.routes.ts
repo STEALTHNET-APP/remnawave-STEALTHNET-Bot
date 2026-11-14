@@ -1,0 +1,378 @@
+import { z } from "zod";
+import { getTrafficExclusions, filterExcludedTraffic, trafficExclusionKey } from "./traffic-exclusions.js";
+import { logAdmin } from "../audit/audit.service.js";
+import type { ReqAdmin } from "../auth/middleware.js";
+import { Router, Request, Response } from "express";
+import { requireAuth, requireAdminSection } from "../auth/middleware.js";
+import { prisma } from "../../db.js";
+import {
+  remnaGetUsers,
+  remnaGetUser,
+  extractRemnaUuid,
+  remnaGetNodes,
+  remnaGetNodeUsersUsage,
+  isRemnaConfigured,
+} from "../remna/remna.client.js";
+
+export const trafficAbuseRouter = Router();
+trafficAbuseRouter.use(requireAuth);
+trafficAbuseRouter.use(requireAdminSection);
+
+trafficAbuseRouter.get("/exclusions", async (_req, res, next) => {
+  try { res.json({ items: await getTrafficExclusions() }); } catch (error) { next(error); }
+});
+
+trafficAbuseRouter.use("/exclusions", (req, res, next) => {
+  if ((req as typeof req & ReqAdmin).adminRole !== "ADMIN") return res.status(403).json({ message: "Изменять исключения может только администратор" });
+  next();
+});
+
+trafficAbuseRouter.put("/exclusions/:uuid", async (req, res, next) => {
+  const uuid = z.union([z.string().uuid(), z.string().regex(/^[1-9]\d{0,18}$/)]).transform(value => value.toLowerCase()).safeParse(req.params.uuid);
+  if (!uuid.success) return res.status(400).json({ message: "Укажите ID или UUID пользователя Remnawave" });
+  try {
+    const result = await remnaGetUser(uuid.data);
+    if (result.error || !result.data) return res.status(result.status === 404 ? 404 : 502).json({ message: "Не удалось найти пользователя в Remnawave" });
+    const payload = result.data as { response?: { uuid?: string; username?: string } };
+    const user = payload.response;
+    if (extractRemnaUuid(user) !== uuid.data || !user?.username) return res.status(502).json({ message: "Некорректный ответ Remnawave" });
+    await prisma.systemSetting.upsert({ where: { key: trafficExclusionKey(uuid.data) }, create: { key: trafficExclusionKey(uuid.data), value: user.username }, update: { value: user.username } });
+    await logAdmin(req, "traffic.exclude", { type: "remna_user", id: uuid.data });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
+trafficAbuseRouter.delete("/exclusions/:uuid", async (req, res, next) => {
+  const uuid = z.union([z.string().uuid(), z.string().regex(/^[1-9]\d{0,18}$/)]).transform(value => value.toLowerCase()).safeParse(req.params.uuid);
+  if (!uuid.success) return res.status(400).json({ message: "Некорректный ID пользователя" });
+  try {
+    await prisma.systemSetting.deleteMany({ where: { key: trafficExclusionKey(uuid.data) } });
+    await logAdmin(req, "traffic.include", { type: "remna_user", id: uuid.data });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
+
+interface RemnaUser {
+  uuid: string;
+  username: string;
+  status: string;
+  email?: string | null;
+  telegramId?: number | null;
+  trafficLimitBytes: number;
+  trafficLimitStrategy: string;
+  expireAt: string;
+  createdAt: string;
+  userTraffic?: {
+    usedTrafficBytes: number;
+    lifetimeUsedTrafficBytes: number;
+    onlineAt?: string | null;
+    lastConnectedNodeUuid?: string | null;
+  };
+}
+
+interface RemnaNode {
+  uuid: string;
+  name: string;
+  countryCode?: string;
+  isConnected?: boolean;
+  isDisabled?: boolean;
+}
+
+function formatDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+const PAGE_SIZE = 500;
+const MAX_PAGES = 100;
+
+async function fetchAllUsers(): Promise<{ users: RemnaUser[]; total: number }> {
+  const firstPage = await remnaGetUsers({ size: PAGE_SIZE, start: 0 });
+  if (firstPage.error || !firstPage.data) {
+    console.error("[traffic-abuse] Failed to fetch users page 0:", firstPage.error);
+    return { users: [], total: 0 };
+  }
+
+  const data = firstPage.data as { response?: { users?: RemnaUser[]; total?: number } };
+  const users: RemnaUser[] = data.response?.users ?? [];
+  const total = data.response?.total ?? users.length;
+
+  if (total <= PAGE_SIZE) return { users, total };
+
+  const pages = Math.ceil(total / PAGE_SIZE);
+  const remaining = Math.min(pages - 1, MAX_PAGES - 1);
+  const promises = [];
+  for (let i = 1; i <= remaining; i++) {
+    promises.push(remnaGetUsers({ size: PAGE_SIZE, start: i * PAGE_SIZE }));
+  }
+
+  const results = await Promise.allSettled(promises);
+  for (const r of results) {
+    if (r.status !== "fulfilled" || r.value.error || !r.value.data) continue;
+    const d = r.value.data as { response?: { users?: RemnaUser[] } };
+    const pageUsers = d.response?.users;
+    if (Array.isArray(pageUsers)) users.push(...pageUsers);
+  }
+
+  return { users, total };
+}
+
+interface AbuserEntry {
+  uuid: string;
+  username: string;
+  email: string | null;
+  telegramId: number | null;
+  status: string;
+  trafficLimitBytes: number;
+  trafficLimitStrategy: string;
+  usedTrafficBytes: number;
+  lifetimeUsedTrafficBytes: number;
+  periodUsageBytes: number;
+  usagePercent: number;
+  perNodeUsage: { nodeName: string; bytes: number }[];
+  onlineAt: string | null;
+  lastConnectedNodeUuid: string | null;
+  createdAt: string;
+  expireAt: string;
+  abuseScore: number;
+  /** Имена internal squads, к которым относится пользователь (для фильтра по squad/тарифу). */
+  squadNames: string[];
+}
+
+/**
+ * GET /api/admin/traffic-abuse/analytics
+ *
+ * Query params:
+ *   days — lookback period (default 7, max 90)
+ *   threshold — abuse threshold multiplier (default 0.8 = 80% of limit)
+ *   minBytes — minimum bytes used to be considered (default 1GB)
+ */
+trafficAbuseRouter.get("/analytics", async (req: Request, res: Response) => {
+  if (!isRemnaConfigured()) {
+    return res.status(503).json({ message: "Remna API not configured" });
+  }
+
+  const days = Math.min(Math.max(parseInt(req.query.days as string) || 7, 1), 90);
+  const threshold = parseFloat(req.query.threshold as string) || 0.7;
+  const minBytes = parseInt(req.query.minBytes as string) || 100_000_000;
+
+  try {
+    const nodesResult = await remnaGetNodes();
+    if (nodesResult.error || !nodesResult.data) {
+      console.error("[traffic-abuse] Remna nodes error:", nodesResult.error, "status:", nodesResult.status);
+      return res.status(502).json({
+        message: `Не удалось получить список нод: ${nodesResult.error || "unknown"}`,
+      });
+    }
+
+    const nodesData = nodesResult.data as { response?: RemnaNode[] };
+    const nodes: RemnaNode[] = nodesData.response ?? [];
+    const activeNodes = nodes.filter((n) => !n.isDisabled);
+
+    if (activeNodes.length === 0) {
+      return res.json({
+        abusers: [],
+        stats: {
+          totalUsers: 0,
+          activeNodes: 0,
+          periodDays: days,
+          periodStart: formatDate(new Date()),
+          periodEnd: formatDate(new Date()),
+          totalTrafficPeriod: 0,
+          abusersCount: 0,
+          abuserTrafficTotal: 0,
+          abuserTrafficPercent: 0,
+          threshold,
+          minBytes,
+        },
+      });
+    }
+
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - days);
+    const startStr = formatDate(start);
+    const endStr = formatDate(end);
+
+    const nodeUsageResults = await Promise.allSettled(
+      activeNodes.map((node) =>
+        remnaGetNodeUsersUsage(node.uuid, startStr, endStr, 500).catch((e) => {
+          console.error(`[traffic-abuse] Failed bandwidth-stats for node ${node.name} (${node.uuid}):`, e);
+          return { data: undefined, error: String(e), status: 500 };
+        })
+      )
+    );
+
+    const usernameToNodeUsage = new Map<string, { nodeName: string; bytes: number }[]>();
+    let nodesWithData = 0;
+
+    activeNodes.forEach((node, i) => {
+      const result = nodeUsageResults[i];
+      if (result.status !== "fulfilled") return;
+
+      const val = result.value as { data?: { response?: { topUsers?: { username: string; total: number }[] } }; error?: string };
+      if (val.error || !val.data) return;
+
+      const topUsers = val.data.response?.topUsers ?? [];
+      if (topUsers.length > 0) nodesWithData++;
+
+      for (const u of topUsers) {
+        if (!u.username || typeof u.total !== "number") continue;
+        if (!usernameToNodeUsage.has(u.username)) {
+          usernameToNodeUsage.set(u.username, []);
+        }
+        usernameToNodeUsage.get(u.username)!.push({
+          nodeName: node.name,
+          bytes: u.total,
+        });
+      }
+    });
+
+    const fetched = await fetchAllUsers();
+    const users = fetched.users.map(user => ({ ...user, uuid: extractRemnaUuid(user) ?? "" }));
+    const totalUsersCount = fetched.total;
+    const excludedUsers = filterExcludedTraffic(usernameToNodeUsage, users, await getTrafficExclusions());
+
+    const userMap = new Map<string, RemnaUser>();
+    for (const u of users) {
+      userMap.set(u.username, u);
+    }
+
+    const abusers: AbuserEntry[] = [];
+    const allUsersAvgDaily = computeGlobalAvg(usernameToNodeUsage, days);
+
+    for (const [username, nodeUsages] of usernameToNodeUsage) {
+      const totalPeriod = nodeUsages.reduce((s, e) => s + e.bytes, 0);
+      if (totalPeriod < minBytes) continue;
+
+      const user = userMap.get(username);
+      const usedTraffic = user?.userTraffic?.usedTrafficBytes ?? 0;
+      const lifetimeTraffic = user?.userTraffic?.lifetimeUsedTrafficBytes ?? 0;
+      const limit = Number(user?.trafficLimitBytes ?? 0);
+
+      let usagePercent = 0;
+      let abuseScore = 0;
+
+      if (limit > 0) {
+        usagePercent = (totalPeriod / limit) * 100;
+        abuseScore = usagePercent;
+      } else {
+        const avgDailyBytes = totalPeriod / days;
+        if (allUsersAvgDaily > 0) {
+          abuseScore = (avgDailyBytes / allUsersAvgDaily) * 100;
+        } else {
+          abuseScore = 100;
+        }
+        usagePercent = abuseScore;
+      }
+
+      if (limit > 0 && usagePercent < threshold * 100) continue;
+      if (limit === 0 && abuseScore < 150) continue;
+
+      // Remnawave возвращает activeInternalSquads как массив объектов {uuid, name}
+      // (см. GET /api/users response). Если поле отсутствует или формат старый — пустой массив.
+      const rawSquads = (user as unknown as { activeInternalSquads?: unknown })?.activeInternalSquads;
+      const squadNames: string[] = Array.isArray(rawSquads)
+        ? rawSquads
+            .map((s: unknown) => {
+              if (typeof s === "object" && s !== null && "name" in s) {
+                const n = (s as { name?: unknown }).name;
+                return typeof n === "string" ? n.trim() : "";
+              }
+              return "";
+            })
+            .filter((n) => n.length > 0)
+        : [];
+
+      abusers.push({
+        uuid: user?.uuid ?? "",
+        username,
+        email: user?.email ?? null,
+        telegramId: user?.telegramId ?? null,
+        status: user?.status ?? "UNKNOWN",
+        trafficLimitBytes: limit,
+        trafficLimitStrategy: user?.trafficLimitStrategy ?? "NO_RESET",
+        usedTrafficBytes: usedTraffic,
+        lifetimeUsedTrafficBytes: lifetimeTraffic,
+        periodUsageBytes: totalPeriod,
+        usagePercent: Math.round(usagePercent * 100) / 100,
+        perNodeUsage: nodeUsages.sort((a, b) => b.bytes - a.bytes),
+        onlineAt: user?.userTraffic?.onlineAt ?? null,
+        lastConnectedNodeUuid: user?.userTraffic?.lastConnectedNodeUuid ?? null,
+        createdAt: user?.createdAt ?? "",
+        expireAt: user?.expireAt ?? "",
+        abuseScore: Math.round(abuseScore * 100) / 100,
+        squadNames,
+      });
+    }
+
+    abusers.sort((a, b) => b.abuseScore - a.abuseScore);
+
+    // T-traffic-abuse-id (портировано из WolfVPN): дорезолвить telegramId из НАШЕЙ БД для тех,
+    // у кого Remna его не отдал (Remna хранит TG не у всех). Резолв по subscription.remnawaveUuid → owner.telegramId.
+    const needTg = abusers.filter((a) => a.telegramId == null && a.uuid);
+    if (needTg.length > 0) {
+      const subs = await prisma.subscription.findMany({
+        where: { remnawaveUuid: { in: needTg.map((a) => a.uuid) } },
+        select: { remnawaveUuid: true, owner: { select: { telegramId: true } } },
+      });
+      const uuidToTg = new Map<string, number>();
+      for (const s of subs) {
+        if (s.remnawaveUuid && s.owner?.telegramId) {
+          const n = Number(s.owner.telegramId);
+          if (Number.isFinite(n)) uuidToTg.set(s.remnawaveUuid, n);
+        }
+      }
+      for (const a of abusers) {
+        if (a.telegramId == null && uuidToTg.has(a.uuid)) a.telegramId = uuidToTg.get(a.uuid)!;
+      }
+    }
+
+    const totalTrafficPeriod = Array.from(usernameToNodeUsage.values()).reduce(
+      (sum, entries) => sum + entries.reduce((s, e) => s + e.bytes, 0),
+      0
+    );
+    const abuserTrafficTotal = abusers.reduce((s, a) => s + a.periodUsageBytes, 0);
+
+    res.json({
+      abusers,
+      stats: {
+        totalUsers: Math.max(0, (totalUsersCount || users.length) - excludedUsers),
+        excludedUsers,
+        activeNodes: activeNodes.length,
+        nodesWithData,
+        periodDays: days,
+        periodStart: startStr,
+        periodEnd: endStr,
+        totalTrafficPeriod,
+        abusersCount: abusers.length,
+        abuserTrafficTotal,
+        abuserTrafficPercent:
+          totalTrafficPeriod > 0
+            ? Math.round((abuserTrafficTotal / totalTrafficPeriod) * 10000) / 100
+            : 0,
+        threshold,
+        minBytes,
+      },
+    });
+  } catch (err) {
+    console.error("[traffic-abuse] Unhandled error:", err);
+    return res.status(500).json({
+      message: err instanceof Error ? err.message : "Internal error computing traffic abuse analytics",
+    });
+  }
+});
+
+function computeGlobalAvg(
+  map: Map<string, { nodeName: string; bytes: number }[]>,
+  days: number
+): number {
+  let totalBytes = 0;
+  let count = 0;
+  for (const entries of map.values()) {
+    totalBytes += entries.reduce((s, e) => s + e.bytes, 0);
+    count++;
+  }
+  if (count === 0) return 0;
+  return totalBytes / count / days;
+}

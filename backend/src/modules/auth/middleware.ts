@@ -1,0 +1,165 @@
+import { Request, Response, NextFunction } from "express";
+import { verifyToken } from "./auth.service.js";
+import { env } from "../../config/index.js";
+import { prisma } from "../../db.js";
+
+const AUTH_HEADER = "authorization";
+const BEARER = "Bearer ";
+
+export type AdminRole = "ADMIN" | "MANAGER";
+
+export interface ReqAdmin {
+  adminId: string;
+  adminEmail: string;
+  adminRole: AdminRole;
+  adminAllowedSections: string[];
+}
+
+function parseAllowedSections(raw: string | null): string[] {
+  const s = (raw ?? "").trim();
+  if (!s) return [];
+  try {
+    const parsed = JSON.parse(s) as unknown;
+    if (Array.isArray(parsed)) return parsed.filter((x): x is string => typeof x === "string");
+  } catch {
+    /* fall through */
+  }
+  // legacy CSV-формат от старого PUT /admin-permissions.
+  return s.split(",").map((x) => x.trim()).filter(Boolean);
+}
+
+/** Нормализует путь запроса до пути относительно /api/admin (без ведущего слэша). */
+function normaliseAdminPath(req: Request): string {
+  let path = (req.originalUrl || req.path || "").split("?")[0].replace(/^\//, "");
+  if (path.startsWith("api/admin/")) path = path.slice("api/admin/".length);
+  else if (path === "api/admin" || path.startsWith("api/admin")) path = path.slice("api/admin".length).replace(/^\//, "");
+  return path;
+}
+
+/** Путь API admin -> раздел доступа (первый сегмент пути с маппингом). */
+function getSectionFromPath(normalisedPath: string): string | null {
+  const segments = normalisedPath.split("/").filter(Boolean);
+  const first = segments[0];
+  if (!first || first === "me") return null;
+  if (first === "bot" && ["test-token", "reset-token", "webhook"].includes(segments[1])) return "settings";
+  if (first === "remna") {
+    if (["test-connection", "reset-config"].includes(segments[1])) return "settings";
+    if (segments[1] === "nodes") return "remna-nodes";
+    return "dashboard";
+  }
+  if (first === "payments") return "sales-report";
+  // доступ защищён через action,
+  // не через секцию — возвращаем null чтобы requireAdminSection пропустил.
+  if (first === "balance-sales") return null;
+  if (first === "tariff-categories") return "tariffs";
+  if (first === "default-subscription-page-config") return "settings";
+  if (first === "sync") return "settings";
+  if (first === "promo-groups") return "promo";
+  // «Рефералка» — собственная секция (есть в ADMIN_ALLOWED_SECTIONS / MANAGER_SECTIONS);
+  // обратная совместимость с прежним маппингом на clients — в requireAdminSection.
+  if (first === "referrals") return "referrals";
+  if (first === "traffic-abuse") return "analytics";
+  if (first === "api-keys" || first === "roulette") return "settings";
+  if (first === "gramads") return "promo-vpn";
+  // Антибот: и фильтры регистраций, и bulk-purge — все работают через /api/admin/clients/...
+  if (first === "clients" && (segments[1] === "antibot" || segments[1] === "bulk")) return "clients";
+  // T-perms (портировано из WolfVPN): action-защищённые пути → null, иначе section-guard блокирует
+  // до action-проверки («Access denied to section»). Защита через requireAction внутри handler.
+  if (first === "subscriptions" && segments[2] === "remna") return null; // change_device_limit/expire/traffic
+  if (first === "clients" && segments[2] === "services") return null;    // manage_services (вкладка «Услуги»)
+  // Создание подарка из админки (POST /admin/gift-codes/create) = операция над клиентом.
+  // Без этого менеджеры (есть section clients, НЕТ gift-codes) ловят 403 «крестик».
+  if (first === "gift-codes") return "clients";
+  return first;
+}
+
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const raw = req.headers[AUTH_HEADER];
+  const token = typeof raw === "string" && raw.startsWith(BEARER) ? raw.slice(BEARER.length) : null;
+
+  if (!token) {
+    return res.status(401).json({ message: "Missing or invalid Authorization header" });
+  }
+
+  const payload = verifyToken(token, env.JWT_SECRET);
+  if (!payload || payload.type !== "access") {
+    return res.status(401).json({ message: "Invalid or expired token" });
+  }
+
+  try {
+    const admin = await prisma.admin.findUnique({
+      where: { id: payload.adminId },
+      select: { id: true, email: true, role: true, allowedSections: true },
+    });
+    if (!admin) {
+      return res.status(401).json({ message: "User not found" });
+    }
+    const ext = req as Request & ReqAdmin;
+    ext.adminId = admin.id;
+    ext.adminEmail = admin.email;
+    ext.adminRole = (admin.role === "MANAGER" ? "MANAGER" : "ADMIN") as AdminRole;
+    ext.adminAllowedSections = parseAllowedSections(admin.allowedSections);
+    next();
+  } catch (e) {
+    console.error("requireAuth prisma error:", e);
+    return res.status(503).json({
+      message: "Database error. Check DATABASE_URL and run: npx prisma db push",
+    });
+  }
+}
+
+/** После requireAuth: запрещает доступ менеджеру, если у него нет доступа к разделу текущего пути. */
+export function requireAdminSection(req: Request, res: Response, next: NextFunction) {
+  const ext = req as Request & ReqAdmin;
+  const path = normaliseAdminPath(req);
+  const section = getSectionFromPath(path);
+  if (!section) return next();
+  if (ext.adminRole === "ADMIN") return next();
+  if (section === "admins") {
+    return res.status(403).json({ message: "Access denied. Only full admin can manage managers." });
+  }
+  if (ext.adminAllowedSections.includes(section)) return next();
+  // обратная совместимость: /admin/referrals/* исторически гейтился секцией clients —
+  // менеджеры со старым набором прав (только «Клиенты») не теряют доступ к рефералке.
+  if (section === "referrals" && ext.adminAllowedSections.includes("clients")) return next();
+  return res.status(403).json({ message: "Access denied to this section." });
+}
+
+/**
+ * фабрика middleware «требуется action».
+ * ADMIN всегда проходит. MANAGER должен иметь `action:<key>` в allowedSections.
+ * Хранение в общем поле allowedSections с префиксом — см. admin-permissions.routes.ts.
+ */
+export function requireAction(actionKey: string) {
+  return function (req: Request, res: Response, next: NextFunction) {
+    const ext = req as Request & ReqAdmin;
+    if (ext.adminRole === "ADMIN") return next();
+    const needle = `action:${actionKey}`;
+    if (ext.adminAllowedSections.includes(needle)) return next();
+    return res.status(403).json({ message: `Access denied: требуется право «${actionKey}»` });
+  };
+}
+
+/** Если токен есть и валиден — добавляет adminId в req, иначе не блокирует (для опционального auth). */
+export async function optionalAuth(req: Request, res: Response, next: NextFunction) {
+  const raw = req.headers[AUTH_HEADER];
+  const token = typeof raw === "string" && raw.startsWith(BEARER) ? raw.slice(BEARER.length) : null;
+
+  if (!token) return next();
+
+  const payload = verifyToken(token, env.JWT_SECRET);
+  if (!payload || payload.type !== "access") return next();
+
+  try {
+    const admin = await prisma.admin.findUnique({
+      where: { id: payload.adminId },
+      select: { id: true },
+    });
+    if (admin) {
+      (req as Request & { adminId?: string }).adminId = admin.id;
+    }
+  } catch (e) {
+    console.error("optionalAuth prisma error:", e);
+  }
+  next();
+}

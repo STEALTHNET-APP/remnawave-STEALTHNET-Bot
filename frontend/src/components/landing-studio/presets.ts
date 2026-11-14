@@ -1,0 +1,5 @@
+export const STUDIO_PRESETS = [
+ {id:"nocturne",name:"Nocturne",description:"Глубокий синий, стекло и лавандовый свет",theme:{primaryColor:"#a3a2ff",accentColor:"#6ed7e7",backgroundColor:"#080c16",textColor:"#edf0fa",fontFamily:"Manrope",borderRadius:"16px",containerWidth:"1360px"},scene:{sceneColor:"#a0a3ff",sceneMaterial:"glass",sceneType:"spatial",sceneMotion:true,spatialDepth:1,layout:"split"}},
+ {id:"emerald",name:"Emerald",description:"Графит и изумрудные световые грани",theme:{primaryColor:"#8de3c1",accentColor:"#7aaca6",backgroundColor:"#081411",textColor:"#eff7f4",fontFamily:"Manrope",borderRadius:"16px",containerWidth:"1360px"},scene:{sceneColor:"#8de3c1",sceneMaterial:"glass",sceneType:"spatial",sceneMotion:true,spatialDepth:1,layout:"split"}},
+ {id:"platinum",name:"Platinum",description:"Серебряные слои и ледяной синий",theme:{primaryColor:"#3655b1",accentColor:"#b7c9fa",backgroundColor:"#e9edf5",textColor:"#1a2440",fontFamily:"Manrope",borderRadius:"16px",containerWidth:"1360px"},scene:{sceneColor:"#87a7ff",sceneMaterial:"chrome",sceneType:"spatial",sceneMotion:true,spatialDepth:1,layout:"split"}},
+];

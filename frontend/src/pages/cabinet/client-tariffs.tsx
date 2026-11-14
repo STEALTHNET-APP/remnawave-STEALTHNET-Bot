@@ -1,0 +1,1332 @@
+import { AnimatedMoney } from "@/components/animated-money";
+import { ClassicTariffCatalog } from "./classic-tariff-catalog";
+import "./classic-payment.css";
+import { AuroraTariffs } from "./aurora/aurora-tariffs";
+import { useEffect, useState } from "react";
+import { useSearchParams, Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { motion, AnimatePresence } from "framer-motion";
+import { Package, Calendar, Wifi, Smartphone, CreditCard, Loader2, Gift, Tag, Check, Wallet, Shield, Zap, ArrowLeft, Sparkles, RefreshCw } from "lucide-react";
+import { useClientAuth } from "@/contexts/client-auth";
+import { useCabinetDesign } from "@/lib/use-cabinet-design";
+import { StealthTariffs } from "@/pages/cabinet/stealth/stealth-tariffs";
+import { api } from "@/lib/api";
+import { formatRuDays } from "@/lib/i18n";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "@/components/ui/toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
+} from "@/components/ui/dialog";
+import { useCabinetMiniapp } from "@/pages/cabinet/cabinet-layout";
+import { PayNowPanel } from "@/components/payment/pay-now-panel";
+import { ExtendSubscriptionDialog } from "@/components/payment/extend-subscription-dialog";
+import { cn } from "@/lib/utils";
+import {
+  applyExtrasPrice,
+  formatMoney,
+  formatMoneyPerDay,
+  useCabinetTariffPurchase,
+  type PayMethod,
+} from "./use-cabinet-tariff-purchase";
+
+type TariffPriceOption = { id: string; durationDays: number; price: number; sortOrder: number };
+type DeviceDiscountTier = { minExtraDevices: number; discountPercent: number };
+type TariffForPay = {
+  id: string;
+  name: string;
+  price: number;
+  currency: string;
+  description?: string | null;
+  durationDays?: number;
+  trafficLimitBytes?: number | null;
+  trafficResetMode?: string;
+  deviceLimit?: number | null;
+  includedDevices?: number;
+  pricePerExtraDevice?: number;
+  maxExtraDevices?: number;
+  deviceDiscountTiers?: DeviceDiscountTier[];
+  priceOptions?: TariffPriceOption[];
+};
+
+const EXTRA_DEVICE_BASE_DAYS = 30;
+
+const READY_PROVIDER_NAMES: Record<string, string> = {
+  platega: "Platega",
+  yoomoney: "ЮMoney",
+  yookassa: "ЮKassa",
+  telegram_stars: "Telegram Stars",
+  cryptopay: "Crypto Bot",
+  heleket: "Heleket",
+  rollypay: "RollyPay",
+  cispay: "CisPay",
+  paritypay: "ParityPay",
+  cloudpayments: "CloudPayments",
+  lava: "LAVA",
+  lavatop: "Lava.top",
+  overpay: "Overpay",
+};
+
+function hasExtras(t: TariffForPay): boolean {
+  return (t.pricePerExtraDevice ?? 0) > 0 && (t.maxExtraDevices ?? 0) > 0;
+}
+
+export function ClientTariffsPage() {
+  const design = useCabinetDesign();
+  if (design === "aurora") return <AuroraTariffs />;
+  if (design === "stealth") return <StealthTariffs />;
+  return <ClassicTariffsPage />;
+}
+
+function ClassicTariffsPage() {
+  const { t } = useTranslation();
+  const { state, refreshProfile } = useClientAuth();
+  const token = state.token;
+  const client = state.client;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const isMobileOrMiniapp = useCabinetMiniapp();
+
+  const [payModal, setPayModal] = useState<{ tariff: TariffForPay } | null>(null);
+  const [readyUrl, setReadyUrl] = useState<{ url: string; provider: string; paymentId?: string } | null>(null);
+  const [trialLoading, setTrialLoading] = useState(false);
+  const [trialError, setTrialError] = useState<string | null>(null);
+
+  const [activeSubInfo, setActiveSubInfo] = useState<{ hasActive: boolean; expireAt: string | null; tariffName: string | null; currentPricePerDay: number | null }>({ hasActive: false, expireAt: null, tariffName: null, currentPricePerDay: null });
+  const [purchaseModal, setPurchaseModal] = useState<{ tariff: TariffForPay } | null>(null);
+  const [extendDialogSubId, setExtendDialogSubId] = useState<string | null>(null);
+
+  const {
+    config,
+    displayCategories: displayTariffs,
+    loading,
+    catalogError,
+    remnaAvailable,
+    refetchCatalog,
+    setSelectedTariffId,
+    selectedPriceOptionId,
+    setSelectedPriceOptionId,
+    extraDevices: selectedExtraDevices,
+    setExtraDevices: setSelectedExtraDevices,
+    extKeepExtras,
+    setExtKeepExtras,
+    convPreview,
+    convKeepExtras,
+    setConvKeepExtras,
+    replaceTrialChoice,
+    setReplaceTrialChoice,
+    refreshSubscriptions: loadUserSubs,
+    ownedTrials,
+    duplicateSubscription,
+    extendTarget,
+    totalPrice,
+    finalPrice,
+    canPayWithBalance,
+    availableMethods,
+    paying: payLoading,
+    payError,
+    setPayError,
+    doPay,
+    setPreviewEnabled,
+    extendExtrasFor,
+    keepExtrasCost,
+    promoInput,
+    setPromoInput,
+    promoApplied,
+    promoInfo,
+    promoMsg,
+    promoBusy,
+    applyPromo,
+    clearPromo,
+  } = useCabinetTariffPurchase({
+    autoSelectExtended: false,
+    catalogFallbackToAll: false,
+    extras: true,
+    extrasDuringExtend: true,
+    convExtendExtras: false,
+    promoDiscount: "total",
+    promoAppliedMessage: null,
+    promoInvalidMessage: t("cabinet.tariffs.error_promo"),
+    clearPromoOnCheck: true,
+    promoActivateOnNonDiscount: async (code) => {
+      if (!token) return;
+      const activateRes = await api.clientActivatePromoCode(token, code);
+      toast.success("Промокод активирован 🎉", activateRes.message);
+      setPayModal(null);
+      await refreshProfile();
+    },
+    additional: "whenSubscriptions",
+    extrasOnExtendPayload: "always",
+    deviceCount: "always",
+    trialReplacement: "owned",
+    preview: "manual",
+    resetTrialChoiceOnPreview: true,
+    refreshProfileOnMount: false,
+    extraProviders: ["lavatop", "overpay"],
+    rubOnlyKinds: ["yookassa", "yoomoney", "lava"],
+    fallbackOrder: ["telegram_stars", "cryptopay", "heleket", "rollypay", "cispay", "paritypay", "cloudpayments", "yookassa", "yoomoney", "lava", "lavatop", "overpay", "platega"],
+    orderByConfigArray: true,
+    sendAmount: true,
+    payErrorMessage: t("cabinet.tariffs.error_payment"),
+    providerLabels: {
+      yookassa: t("cabinet.tariffs.sbp_cards_ru"),
+      yoomoney: t("cabinet.tariffs.yoomoney_cards"),
+      lava: "LAVA",
+      cryptopay: "Crypto Bot",
+    },
+    beforeBalancePay: () => (remnaAvailable ? null : "Панель VPN временно недоступна. Повторите покупку позже."),
+    onBalancePaid: (result) => {
+      setPayModal(null);
+      toast.success("Оплата прошла ✨", result.message);
+      void loadUserSubs();
+    },
+  });
+
+  const trialConfig = { trialEnabled: Boolean(config?.trialEnabled), trialDays: config?.trialDays ?? 0 };
+  const showTrial = trialConfig.trialEnabled && !client?.trialUsed && !activeSubInfo.hasActive;
+  const promoResult = promoApplied && promoInfo
+    ? { type: "DISCOUNT", discountPercent: promoInfo.percent, discountFixed: promoInfo.fixed, name: promoInfo.name }
+    : null;
+  const promoError = promoApplied ? null : promoMsg;
+
+  useEffect(() => {
+    if (!token) return;
+    api.clientSubscription(token).then((res) => {
+      const sub = res?.subscription as Record<string, unknown> | null;
+      const payload = (sub && typeof sub === "object" && sub.response && typeof sub.response === "object")
+        ? (sub.response as Record<string, unknown>)
+        : (sub ?? null);
+      const expireRaw = payload && typeof payload.expireAt === "string" ? payload.expireAt : null;
+      let hasActive = false;
+      let expireAt: string | null = null;
+      if (expireRaw) {
+        try {
+          const d = new Date(expireRaw);
+          if (!Number.isNaN(d.getTime()) && d.getTime() > Date.now()) {
+            hasActive = true;
+            expireAt = expireRaw;
+          }
+        } catch { /* ignore */ }
+      }
+      setActiveSubInfo({
+        hasActive,
+        expireAt,
+        tariffName: res?.tariffDisplayName ?? null,
+        currentPricePerDay: res?.currentPricePerDay ?? null,
+      });
+    }).catch(() => { /* not critical */ });
+  }, [token]);
+
+  useEffect(() => {
+    setPreviewEnabled(Boolean(payModal) && !extendTarget);
+  }, [payModal, extendTarget, setPreviewEnabled]);
+
+  function requestBuy(tariff: TariffForPay, preferredOptionId?: string) {
+    const opts = tariff.priceOptions ?? [];
+    const defaultOpt = opts.find((option) => option.id === preferredOptionId) ?? opts[0] ?? null;
+    setSelectedTariffId(tariff.id);
+    setSelectedPriceOptionId(defaultOpt?.id ?? null);
+    setSelectedExtraDevices(0);
+    setPurchaseModal({ tariff });
+  }
+
+  function confirmPurchase() {
+    if (!purchaseModal) return;
+    const baseTariff = purchaseModal.tariff;
+    const opts = baseTariff.priceOptions ?? [];
+    const opt = opts.find((o) => o.id === selectedPriceOptionId) ?? opts[0];
+    setSelectedPriceOptionId(opt?.id ?? null);
+    setPurchaseModal(null);
+    setPayModal({
+      tariff: {
+        ...baseTariff,
+        durationDays: opt?.durationDays ?? baseTariff.durationDays,
+        price: totalPrice,
+      },
+    });
+  }
+
+  async function activateTrial() {
+    if (!token) return;
+    setTrialError(null);
+    setTrialLoading(true);
+    try {
+      await api.clientActivateTrial(token);
+      await refreshProfile();
+    } catch (e) {
+      setTrialError(e instanceof Error ? e.message : t("cabinet.tariffs.error_trial"));
+    } finally {
+      setTrialLoading(false);
+    }
+  }
+
+  const closePayment = () => {
+    setPayModal(null);
+    clearPromo();
+    setPayError(null);
+    setReadyUrl(null);
+    setReplaceTrialChoice(null);
+  };
+
+  const startPayment = (method: PayMethod) => {
+    void doPay({
+      method,
+      onReadyUrl: ({ url, paymentId, kind }) => setReadyUrl({
+        url,
+        provider: READY_PROVIDER_NAMES[kind] ?? method.label,
+        paymentId,
+      }),
+    });
+  };
+
+  // === КОНТЕНТ ОПЛАТЫ (ОБЩИЙ ДЛЯ MOBILE VIEW И DESKTOP DIALOG) ===
+  const PaymentContent = () => {
+    if (!payModal) return null;
+    const tariff = payModal.tariff;
+    const price = finalPrice;
+    const hasBalance = canPayWithBalance;
+    const balanceMethod: PayMethod = { kind: "balance", label: t("cabinet.tariffs.pay_balance"), icon: Wallet };
+
+    if (readyUrl) {
+      return (
+        <PayNowPanel
+          url={readyUrl.url}
+          provider={readyUrl.provider}
+          onBack={() => setReadyUrl(null)}
+          onPaid={() => {
+            const pid = readyUrl.paymentId;
+            const u = readyUrl.url, prov = readyUrl.provider;
+            closePayment();
+            if (pid) {
+              // T-pay-wait: ведём на страницу ожидания оплаты (polling статуса + анимация успеха).
+              navigate(`/cabinet/payment-wait?id=${encodeURIComponent(pid)}`, { state: { url: u, provider: prov } });
+            } else {
+              toast.info("Ожидаем подтверждение оплаты 💳", "После успешной оплаты подписка активируется автоматически в течение минуты.");
+              window.setTimeout(() => { refreshProfile(); loadUserSubs(); }, 5000);
+            }
+          }}
+          compact={isMobileOrMiniapp}
+        />
+      );
+    }
+
+    return (
+      <div className={isMobileOrMiniapp ? "space-y-6" : "classic-payment-layout"}>
+        <div className={isMobileOrMiniapp ? "space-y-6" : "classic-payment-summary"}>
+        {/* Карточка с инфой о тарифе */}
+        <div className={cn("rounded-2xl relative overflow-hidden", isMobileOrMiniapp ? "bg-card/40 border border-white/5 p-5" : "bg-background/50 border border-border/50 p-4")}>
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="flex justify-between items-start gap-4 relative z-10">
+            <div className="space-y-1.5">
+              <p className={cn("font-medium", isMobileOrMiniapp ? "text-sm text-muted-foreground" : "text-muted-foreground")}>
+                {isMobileOrMiniapp ? t("cabinet.tariffs.total") : t("cabinet.tariffs.tariff_label")}
+              </p>
+              {!isMobileOrMiniapp && <p className="font-bold text-foreground">{tariff.name}</p>}
+              
+              {isMobileOrMiniapp && (
+                <div className="flex items-baseline gap-2">
+                  {promoResult ? (
+                    <>
+                      <span className="text-3xl font-black text-primary">{formatMoney(price, tariff.currency)}</span>
+                      <span className="text-lg line-through text-muted-foreground decoration-2">{formatMoney(totalPrice, tariff.currency)}</span>
+                    </>
+                  ) : (
+                    <span className="text-3xl font-black text-primary">{formatMoney(totalPrice, tariff.currency)}</span>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {!isMobileOrMiniapp && (
+              <div className="text-right">
+                {promoResult ? (
+                  <div className="flex flex-col items-end">
+                    <span className="line-through text-muted-foreground/70 text-sm decoration-2">{formatMoney(totalPrice, tariff.currency)}</span>
+                    <span className="font-bold text-xl text-primary">{formatMoney(price, tariff.currency)}</span>
+                  </div>
+                ) : (
+                  <span className="font-bold text-xl text-primary">{formatMoney(totalPrice, tariff.currency)}</span>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {isMobileOrMiniapp && (
+            <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-3 relative z-10">
+              <div className="bg-background/40 rounded-2xl p-3 border border-white/5">
+                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">{t("cabinet.tariffs.duration_label")}</p>
+                <div className="flex items-center gap-1.5 font-bold text-sm">
+                  <Calendar className="h-4 w-4 text-primary" />
+                  {tariff.durationDays} {t("cabinet.tariffs.days_short")}
+                </div>
+              </div>
+              <div className="bg-background/40 rounded-2xl p-3 border border-white/5">
+                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">{t("cabinet.tariffs.traffic_label")}</p>
+                <div className="flex items-center gap-1.5 font-bold text-sm">
+                  <Wifi className="h-4 w-4 text-primary" />
+                  {tariff.trafficLimitBytes != null && tariff.trafficLimitBytes > 0 ? `${(tariff.trafficLimitBytes / 1024 / 1024 / 1024).toFixed(1)} ${t("cabinet.tariffs.gb_unit")}${tariff.trafficResetMode === "monthly" || tariff.trafficResetMode === "monthly_rolling" ? t("cabinet.tariffs.per_month") : ""}` : "∞"}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* переход с триала на другой тариф: сквады/трафик заменятся. */}
+        {extendTarget?.isTrial && extendTarget.tariffId && tariff.id !== extendTarget.tariffId && (
+          <div className={cn(
+            "relative overflow-hidden border rounded-2xl p-4",
+            "bg-violet-500/[0.06] border-violet-500/20",
+          )}>
+            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-transparent to-fuchsia-500/5 pointer-events-none" />
+            <div className="relative z-10 flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-violet-500/15 shrink-0">
+                <RefreshCw className="h-4 w-4 text-violet-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold">Переход с пробного тарифа</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Пробная подписка станет платной «<b>{tariff.name}</b>»: сервера и лимит
+                  трафика обновятся под новый тариф, отсчёт срока начнётся с момента оплаты.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* покупка заменяет активный триал (с удалением).
+            Несколько триалов — выбор, какой заменить. */}
+        {!extendTarget && !convPreview?.willConvert && (() => {
+          const trialsOwned = ownedTrials;
+          if (trialsOwned.length === 0) return null;
+          const chosen = replaceTrialChoice ?? trialsOwned[0].id;
+          return (
+            <div className="relative overflow-hidden border rounded-2xl p-4 bg-amber-500/[0.07] border-amber-500/25">
+              <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 to-transparent pointer-events-none" />
+              <div className="relative z-10 space-y-2">
+                <p className="text-sm font-bold">
+                  {trialsOwned.length === 1
+                    ? "Пробная подписка будет заменена этой покупкой"
+                    : "Покупка заменит один из ваших пробных периодов"}
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Триал удалится полностью (дни и трафик пробного периода не переносятся) —
+                  его место займёт новая подписка.
+                </p>
+                {trialsOwned.length > 1 && (
+                  <div className="space-y-1.5 pt-0.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Какой триал заменить:</p>
+                    {trialsOwned.map((tr) => (
+                      <button
+                        key={tr.id}
+                        type="button"
+                        onClick={() => setReplaceTrialChoice(tr.id)}
+                        className={cn(
+                          "w-full text-left rounded-xl border px-3 py-2 text-xs transition-all",
+                          chosen === tr.id
+                            ? "border-amber-500/50 bg-amber-500/10 font-bold"
+                            : "border-white/10 bg-white/[0.03] hover:border-white/25",
+                        )}
+                      >
+                        🎁 {tr.trialName ?? tr.label}
+                        {tr.expireAt ? <span className="text-muted-foreground"> — до {new Date(tr.expireAt).toLocaleDateString("ru-RU")}</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* без single-режима: подписка с этим тарифом уже есть —
+            предлагаем продлить её вместо покупки второй (но не блокируем покупку). */}
+        {!extendTarget && !convPreview?.willConvert && (() => {
+          // среди ВСЕХ подписок с этим тарифом предлагаем «самую живую»
+          // (max expireAt) — а не первую по индексу. Триалы исключены:
+          // их «продление» — это конвертация, а покупка их заменяет.
+          const dupSub = duplicateSubscription;
+          if (!dupSub) return null;
+          return (
+            <div className="relative overflow-hidden border rounded-2xl p-4 bg-indigo-500/[0.06] border-indigo-500/20">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-violet-500/5 pointer-events-none" />
+              <div className="relative z-10 flex items-start gap-3">
+                <div className="p-2 rounded-xl bg-indigo-500/15 shrink-0">
+                  <RefreshCw className="h-4 w-4 text-indigo-400" />
+                </div>
+                <div className="min-w-0 space-y-2">
+                  <p className="text-sm font-bold">У вас уже есть подписка с этим тарифом</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    «<b>{dupSub.label}</b>»{dupSub.expireAt ? <> — до {new Date(dupSub.expireAt).toLocaleDateString("ru-RU")}</> : null}.
+                    Можно <b>продлить её</b> (дни сложатся) — или продолжить ниже и купить ещё одну отдельную подписку.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => { setPayModal(null); setExtendDialogSubId(dupSub.id); }}
+                    className="gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-500 text-white border-0 hover:opacity-90"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Продлить «{dupSub.label}»
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Конвертация (режим «одна подписка из категории»): покупка обновит
+            существующую подписку, а не создаст вторую. Показываем расчёт. */}
+        <AnimatePresence>
+          {convPreview?.willConvert && convPreview.subscription && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className={cn(
+                "relative overflow-hidden border",
+                isMobileOrMiniapp ? "rounded-2xl p-4 bg-violet-500/[0.08] border-violet-500/20" : "rounded-2xl p-4 bg-violet-500/[0.06] border-violet-500/20",
+              )}>
+                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 via-transparent to-fuchsia-500/5 pointer-events-none" />
+                <div className="relative z-10 flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-violet-500/15 shrink-0">
+                    <RefreshCw className="h-4 w-4 text-violet-400" />
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-sm font-bold">
+                      {convPreview.mode === "extend"
+                        ? "Этот тариф у вас уже есть — подписка будет продлена"
+                        : convPreview.mode === "replace"
+                          ? "Текущая подписка будет заменена новым тарифом"
+                          : convPreview.subscription.isTrial
+                            ? "Пробная подписка станет платной"
+                            : `Подписка #${convPreview.subscription.index} будет обновлена`}
+                    </p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {convPreview.mode === "extend" ? (
+                        <>Вторая подписка не создастся — дни просто сложатся: остаток{" "}
+                        <b>{formatRuDays(convPreview.remainingDays ?? 0)}</b> + покупка{" "}
+                        <b>{formatRuDays(convPreview.purchasedDays ?? 0)}</b> ={" "}
+                        <b className="text-violet-400">{formatRuDays(convPreview.totalDays ?? 0)}</b>.
+                        Устройства и серверы останутся как есть.</>
+                      ) : convPreview.mode === "replace" ? (
+                      <>Старая подписка{convPreview.subscription.tariffName ? <> «<b>{convPreview.subscription.tariffName}</b>»</> : " (текущая)"} удалится, остаток <b>{formatRuDays(convPreview.remainingDays ?? 0)}</b> сгорит. Создастся новая на выбранный тариф — <b className="text-violet-400">{formatRuDays(convPreview.purchasedDays ?? 0)}</b> с нуля (VPN-ссылка сохранится).</>
+                      ) : (
+                      <>Покупка не создаст вторую подписку — она обновит
+                      {convPreview.subscription.tariffName ? <> «<b>{convPreview.subscription.tariffName}</b>»</> : " текущую"}
+                      {" "}до нового тарифа.
+                      {(convPreview.convertedDays ?? 0) > 0 && (convPreview.remainingDays ?? 0) > 0 && !(convPreview.extras && convPreview.extras.extraDevices > 0) ? (
+                        <> Остаток <b>{formatRuDays(convPreview.remainingDays ?? 0)}</b> превратится в{" "}
+                        <b className="text-violet-400">{formatRuDays(convPreview.convertedDays ?? 0)}</b> по цене нового тарифа.</>
+                      ) : null}</>
+                      )}
+                    </p>
+                    {(convPreview.othersToRemove ?? 0) > 0 && (
+                      <p className="text-xs font-bold text-amber-400">⚠️ Остальные {convPreview.othersToRemove} ваши подписки будут удалены — останется одна.</p>
+                    )}
+                    {convPreview.mode !== "extend" && (convPreview.extras?.extraDevices ?? 0) === 0 && (convPreview.totalDays ?? 0) > 0 && (
+                      <p className="text-xs font-bold text-violet-400">
+                        Итого: {formatRuDays(convPreview.totalDays ?? 0)} нового тарифа
+                      </p>
+                    )}
+
+                    {/* same-tariff продление: выбор судьбы ПРЕЖНИХ доп. устройств.
+                        учитываем и НОВЫЕ устройства, выбранные в этой
+                        покупке (selectedExtraDevices) — они уже включены в totalPrice,
+                        поэтому итоги и количества показываем честно с ними. */}
+                    {convPreview.mode === "extend" && convPreview.extras && convPreview.extras.extraDevices > 0 && (
+                      <div className="space-y-2 pt-1.5">
+                        <p className="text-xs font-bold">
+                          У вас докуплено +{convPreview.extras.extraDevices} доп. устройств — что с ними сделать?
+                        </p>
+                        {selectedExtraDevices > 0 && (
+                          <p className="text-[11px] text-violet-300/90 leading-relaxed">
+                            + {selectedExtraDevices} нов{selectedExtraDevices === 1 ? "ое" : "ых"} устройств{selectedExtraDevices === 1 ? "о" : ""} из этой покупки — уже в цене и добавятся в любом случае.
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setConvKeepExtras(true)}
+                          className={cn(
+                            "w-full text-left rounded-xl border p-3 transition-all",
+                            convKeepExtras ? "border-violet-500/50 bg-violet-500/10" : "border-white/10 bg-white/[0.03] hover:border-white/25",
+                          )}
+                        >
+                          <p className="text-xs font-bold flex items-center gap-1.5">
+                            <Smartphone className="h-3.5 w-3.5 text-violet-400" />
+                            Сохранить прежние (+{formatMoney(convPreview.extras.keep.extraCost ?? 0, tariff.currency)})
+                          </p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                            Всего будет <b>{convPreview.extras.keep.totalDevices + selectedExtraDevices} устройств</b>
+                            {selectedExtraDevices > 0 && <> ({convPreview.extras.keep.totalDevices} прежних + {selectedExtraDevices} новых)</>}.
+                            Доплата за прежние на новый период — итого спишется {formatMoney(totalPrice + (convPreview.extras.keep.extraCost ?? 0), tariff.currency)}.
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConvKeepExtras(false)}
+                          className={cn(
+                            "w-full text-left rounded-xl border p-3 transition-all",
+                            !convKeepExtras ? "border-violet-500/50 bg-violet-500/10" : "border-white/10 bg-white/[0.03] hover:border-white/25",
+                          )}
+                        >
+                          <p className="text-xs font-bold flex items-center gap-1.5">
+                            <Zap className="h-3.5 w-3.5 text-violet-400" />
+                            Убрать прежние — без доплаты за них
+                          </p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                            Останется <b>{convPreview.extras.drop.totalDevices + selectedExtraDevices} устройств</b>
+                            {selectedExtraDevices > 0
+                              ? <> ({convPreview.extras.drop.totalDevices} из тарифа + {selectedExtraDevices} новых)</>
+                              : <> (только из тарифа)</>}.
+                            Спишется ровно {formatMoney(totalPrice, tariff.currency)}.
+                          </p>
+                        </button>
+                        {selectedExtraDevices > 0 && !convKeepExtras && selectedExtraDevices >= convPreview.extras.extraDevices && (
+                          <p className="text-[11px] leading-relaxed rounded-lg border border-amber-500/25 bg-amber-500/10 text-amber-300/90 px-2.5 py-2">
+                            ⚠️ Вы убираете {convPreview.extras.extraDevices} прежних и добавляете {selectedExtraDevices} новых — устройств меньше не станет,
+                            а за новые вы платите. Если хотели просто оставить как есть — выберите «Сохранить прежние» и уберите новые устройства из покупки.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* выбор судьбы докупленных доп. устройств. */}
+                    {convPreview.mode !== "extend" && convPreview.extras && convPreview.extras.extraDevices > 0 && (
+                      <div className="space-y-2 pt-1.5">
+                        <p className="text-xs font-bold">
+                          У вас докуплено +{convPreview.extras.extraDevices} доп. устройств — что с ними сделать?
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setConvKeepExtras(true)}
+                          className={cn(
+                            "w-full text-left rounded-xl border p-3 transition-all",
+                            convKeepExtras
+                              ? "border-violet-500/50 bg-violet-500/10"
+                              : "border-white/10 bg-white/[0.03] hover:border-white/25",
+                          )}
+                        >
+                          <p className="text-xs font-bold flex items-center gap-1.5">
+                            <Smartphone className="h-3.5 w-3.5 text-violet-400" />
+                            Оставить устройства
+                          </p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                            Всего будет <b>{convPreview.extras.keep.totalDevices + selectedExtraDevices} устройств</b>{" "}
+                            ({convPreview.extras.newIncludedDevices} в тарифе + {convPreview.extras.extraDevices} доп.{selectedExtraDevices > 0 && <> + {selectedExtraDevices} новых</>}).
+                            Остаток конвертируется в <b className="text-violet-400">{formatRuDays(convPreview.extras.keep.convertedDays)}</b> —
+                            итого {formatRuDays(convPreview.extras.keep.totalDays)}.
+                          </p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConvKeepExtras(false)}
+                          className={cn(
+                            "w-full text-left rounded-xl border p-3 transition-all",
+                            !convKeepExtras
+                              ? "border-violet-500/50 bg-violet-500/10"
+                              : "border-white/10 bg-white/[0.03] hover:border-white/25",
+                          )}
+                        >
+                          <p className="text-xs font-bold flex items-center gap-1.5">
+                            <Zap className="h-3.5 w-3.5 text-violet-400" />
+                            Убрать устройства — больше дней
+                          </p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                            Останется <b>{convPreview.extras.drop.totalDevices + selectedExtraDevices} устройств</b>{" "}
+                            {selectedExtraDevices > 0 ? <>({convPreview.extras.drop.totalDevices} из тарифа + {selectedExtraDevices} новых)</> : <>(только из тарифа)</>}.
+                            Стоимость прежних устройств превратится в дни: остаток конвертируется в{" "}
+                            <b className="text-violet-400">{formatRuDays(convPreview.extras.drop.convertedDays)}</b> —
+                            итого {formatRuDays(convPreview.extras.drop.totalDays)}.
+                          </p>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Промокод */}
+        <div className={cn("space-y-3", !isMobileOrMiniapp && "bg-background/40 border border-border/50 rounded-2xl p-4 focus-within:border-primary/50 focus-within:bg-background/60 hover:border-primary/30 transition-all duration-300 relative overflow-hidden group")}>
+          {!isMobileOrMiniapp && <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />}
+          <div className="flex items-center gap-2 text-sm font-bold text-foreground pl-1 relative z-10">
+            {isMobileOrMiniapp ? <Tag className="h-4 w-4 text-primary" /> : <div className="p-1.5 bg-primary/10 rounded-lg"><Tag className="h-4 w-4 text-primary" /></div>}
+            {t("cabinet.tariffs.promo_code")}
+          </div>
+          <div className="flex gap-2 relative z-10">
+            <Input
+              name="promo_code"
+              autoComplete="off"
+              inputMode="text"
+              value={promoInput}
+              onChange={(e) => setPromoInput(e.target.value)}
+              placeholder={t("cabinet.tariffs.promo_placeholder")}
+              className={cn("font-mono font-medium focus-visible:ring-primary/50", isMobileOrMiniapp ? "text-base bg-card/40 border-white/5 h-14 rounded-2xl" : "text-sm bg-background border-border/50 h-12 rounded-xl shadow-sm")}
+              disabled={payLoading || promoBusy}
+            />
+            <Button
+              variant={isMobileOrMiniapp ? "default" : "secondary"}
+              onClick={applyPromo}
+              disabled={!promoInput.trim() || payLoading || promoBusy}
+              className={cn("shrink-0 font-bold bg-primary text-primary-foreground shadow-md transition-all hover:scale-105 active:scale-95", isMobileOrMiniapp ? "h-14 px-6 rounded-2xl text-base" : "h-12 px-5 rounded-xl text-sm border-0 hover:bg-primary/90")}
+            >
+              {promoBusy ? <Loader2 className="h-5 w-5 animate-spin" /> : t("cabinet.tariffs.promo_apply")}
+            </Button>
+          </div>
+          <AnimatePresence>
+            {promoResult && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden relative z-10">
+                <div className={cn("flex items-center gap-2 px-4 py-3 bg-green-500/10 border border-green-500/20", isMobileOrMiniapp ? "rounded-2xl" : "rounded-lg")}>
+                  <Check className={cn("text-green-500", isMobileOrMiniapp ? "h-5 w-5" : "h-4 w-4")} />
+                  <span className={cn("font-bold text-green-500", isMobileOrMiniapp ? "text-sm" : "text-sm")}>
+                    {promoResult.name}: -{promoResult.discountPercent ? `${promoResult.discountPercent}%` : ""}{promoResult.discountFixed ? ` ${promoResult.discountFixed}` : ""}
+                  </span>
+                </div>
+              </motion.div>
+            )}
+            {promoError && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden relative z-10">
+                <div className={cn("flex items-center gap-2 px-4 py-3 bg-destructive/10 border border-destructive/20", isMobileOrMiniapp ? "rounded-2xl" : "rounded-lg")}>
+                  <span className={cn("font-bold text-destructive", isMobileOrMiniapp ? "text-sm" : "text-sm")}>
+                    {promoError}
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        </div>
+
+        {/* Способы оплаты */}
+        <div className={cn("space-y-3", !isMobileOrMiniapp && "classic-payment-methods")}>
+          <div className="flex items-center gap-2 pt-2 pb-1">
+            <Wallet className={cn("text-primary", isMobileOrMiniapp ? "h-5 w-5" : "h-4 w-4")} />
+            <span className={cn("font-bold", isMobileOrMiniapp ? "text-lg" : "text-sm")}>{t("cabinet.tariffs.payment_method")}</span>
+          </div>
+
+          {payError && (
+            <div className={cn("p-4 bg-destructive/10 border border-destructive/20 text-destructive text-center font-bold", isMobileOrMiniapp ? "rounded-2xl text-sm" : "rounded-xl text-sm mb-4")}>
+              {payError}
+            </div>
+          )}
+
+          <div className={isMobileOrMiniapp ? "space-y-3" : "classic-payment-method-grid"}>
+            {client && (
+              <Button
+                size="lg"
+                onClick={() => void doPay({ method: balanceMethod })}
+                disabled={payLoading || !hasBalance}
+                className={cn("w-full shadow-lg border-0 group relative overflow-hidden", isMobileOrMiniapp ? "justify-between px-6 h-16 rounded-2xl bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-500 hover:to-orange-400" : "classic-payment-balance gap-2 rounded-xl bg-gradient-to-r from-primary to-primary/80 hover:shadow-xl transition-all duration-300")}
+              >
+                {!isMobileOrMiniapp && <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />}
+                
+                {isMobileOrMiniapp ? (
+                  <>
+                    <div className="flex items-center gap-3">
+                      {payLoading ? <Loader2 className="h-6 w-6 text-white animate-spin" /> : <Wallet className="h-6 w-6 text-white" />}
+                      <span className="text-base font-bold text-white">{t("cabinet.tariffs.pay_balance")}</span>
+                    </div>
+                    <span className="text-white/80 font-mono font-medium bg-black/20 px-2 py-1 rounded-lg">
+                      {formatMoney(client.balance, tariff.currency)}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    {payLoading ? <Loader2 className="h-5 w-5 animate-spin relative z-10" /> : <Wallet className="h-5 w-5 relative z-10" />}
+                    <span className="text-base font-semibold relative z-10">{t("cabinet.tariffs.pay_balance")}</span>
+                    <span className="opacity-90 font-medium ml-1 bg-black/10 px-2 py-0.5 rounded-md relative z-10">
+                      ({formatMoney(client.balance, payModal.tariff.currency)})
+                    </span>
+                  </>
+                )}
+              </Button>
+            )}
+
+            {(() => {
+              const btnCls = cn("w-full", isMobileOrMiniapp ? "justify-start gap-4 px-6 h-16 rounded-2xl border-white/5 bg-card/40 hover:bg-card/60" : "classic-payment-method gap-3 hover:bg-background/80 hover:shadow-md transition-all duration-300 rounded-xl border-border/50 group justify-start relative");
+
+              const colorMap: Record<string, { bg10: string; bg20: string; text: string }> = {
+                cryptopay: { bg10: "bg-yellow-500/10", bg20: "group-hover:bg-yellow-500/20", text: "text-yellow-500" },
+                heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
+                rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                cispay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                paritypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                cloudpayments: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                yookassa: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
+                yoomoney: { bg10: "bg-green-500/10", bg20: "group-hover:bg-green-500/20", text: "text-green-500" },
+                lava: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                overpay: { bg10: "bg-indigo-500/10", bg20: "group-hover:bg-indigo-500/20", text: "text-indigo-500" },
+              };
+
+              return (
+                <>
+                  {availableMethods.map((method) => {
+                    const id = method.kind === "platega" ? `platega_${method.id}` : method.kind;
+                    const c = colorMap[id] ?? colorMap.yookassa;
+                    const label = method.kind === "telegram_stars" ? "⭐ Telegram Stars" : method.label;
+                    const crypto = method.kind === "cryptopay" || method.kind === "heleket" || method.kind === "telegram_stars";
+                    return (
+                      <Button key={id} size="lg" variant="outline" onClick={() => startPayment(method)} disabled={payLoading} className={btnCls}>
+                        {isMobileOrMiniapp ? (
+                          <>
+                            <div className={cn("p-2 rounded-xl", c.bg10)}>
+                              {payLoading ? <Loader2 className={cn("h-6 w-6 animate-spin", c.text)} /> : crypto ? <Zap className={cn("h-6 w-6", c.text)} /> : <CreditCard className={cn("h-6 w-6", c.text)} />}
+                            </div>
+                            <span className="text-base font-bold">{label}</span>
+                          </>
+                        ) : (
+                          <>
+                            <div className={cn("shrink-0 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20)}>
+                              {payLoading ? <Loader2 className={cn("h-5 w-5 animate-spin", c.text)} /> : crypto ? <Zap className={cn("h-5 w-5", c.text)} /> : <CreditCard className={cn("h-5 w-5", c.text)} />}
+                            </div>
+                            <span className="text-sm font-medium">{label}</span>
+                          </>
+                        )}
+                      </Button>
+                    );
+                  })}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      <AnimatePresence mode="wait">
+        {/* MOBILE VIEW */}
+        {isMobileOrMiniapp && payModal ? (
+          <motion.div
+            key="payment-view"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.2 }}
+            className="flex flex-col w-full rounded-[2.5rem] border border-white/10 dark:border-white/5 bg-slate-50/60 dark:bg-slate-950/60 backdrop-blur-[32px] shadow-2xl relative"
+          >
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border/50 bg-background/30 backdrop-blur-md z-10 transition-colors rounded-t-[2.5rem]">
+              <div className="flex items-center gap-3 min-w-0">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="shrink-0 h-9 w-9 rounded-full bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" 
+                  onClick={closePayment}
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-sm sm:text-base font-bold truncate text-foreground">{t("cabinet.tariffs.payment_title")}</h2>
+                  <p className="text-[11px] font-medium text-muted-foreground truncate">{payModal.tariff.name}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6 pb-8">
+               {PaymentContent()}
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="tariffs-list"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-8 max-w-7xl mx-auto"
+          >
+            <div className="flex flex-col gap-2">
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">{t("cabinet.tariffs.title")}</h1>
+              <p className="text-muted-foreground text-[15px] font-medium max-w-2xl">
+                {t("cabinet.tariffs.catalog.subtitle")}
+              </p>
+            </div>
+
+            {/* T-unify-cabinet (30.05.2026, WolfVPN): контекст продления (пришли с кнопки «Продлить» из дашборда) */}
+            {extendTarget && (
+              <Card className="rounded-3xl border border-primary/30 bg-primary/5 backdrop-blur-xl shadow-lg">
+                <CardContent className="flex flex-col gap-4 pt-6">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/20 text-primary shadow-inner shrink-0">
+                        <RefreshCw className="h-6 w-6" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-lg text-foreground truncate">
+                          Продление: Подписка #{extendTarget.subscriptionIndex}
+                        </p>
+                        <p className="text-sm text-muted-foreground font-medium">
+                          Выбранный тариф продлит именно эту подписку{extendTarget.label ? ` · ${extendTarget.label}` : ""}. Трафик сохранится.
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="w-full sm:w-auto rounded-xl shrink-0 gap-2"
+                      onClick={() => { const p = new URLSearchParams(searchParams); p.delete("extend"); setSearchParams(p, { replace: true }); }}
+                    >
+                      Отменить продление
+                    </Button>
+                  </div>
+                  {extendTarget.extraDevices > 0 && (
+                    <div className="space-y-2 border-t border-primary/20 pt-3">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        На подписке докуплено доп. устройств: <span className="font-bold text-foreground">{extendTarget.extraDevices}</span>. Что делаем при продлении?
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setExtKeepExtras(true)}
+                          className={`rounded-xl border px-3 py-2.5 text-left transition-all ${extKeepExtras ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border/50 hover:bg-muted/30"}`}
+                        >
+                          <p className="text-sm font-semibold text-foreground">✓ Сохранить устройства</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">Цена выше — с учётом {extendTarget.extraDevices} доп. устройств</p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setExtKeepExtras(false)}
+                          className={`rounded-xl border px-3 py-2.5 text-left transition-all ${!extKeepExtras ? "border-primary bg-primary/10 ring-1 ring-primary/30" : "border-border/50 hover:bg-muted/30"}`}
+                        >
+                          <p className="text-sm font-semibold text-foreground">Удалить устройства</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">Стандартная цена тарифа</p>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {showTrial && (
+              <Card className="rounded-3xl border border-green-500/30 bg-green-500/5 backdrop-blur-xl shadow-lg hover:shadow-xl transition-all duration-300">
+                <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-6">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-500/20 text-green-500 shadow-inner shrink-0">
+                      <Gift className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-lg text-foreground">{t("cabinet.tariffs.free_trial")}</p>
+                      <p className="text-sm text-muted-foreground font-medium">
+                        {trialConfig.trialDays > 0
+                          ? `${formatRuDays(trialConfig.trialDays)} ${t("cabinet.tariffs.free_access")}`
+                          : t("cabinet.tariffs.free_access_0")}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white shadow-lg h-12 rounded-xl text-md hover:scale-[1.02] transition-transform duration-300 shrink-0 gap-2"
+                    onClick={activateTrial}
+                    disabled={trialLoading}
+                  >
+                    {trialLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Gift className="h-5 w-5" />}
+                    {t("cabinet.tariffs.free_trial")}
+                  </Button>
+                </CardContent>
+                {trialError && <p className="text-sm text-destructive px-6 pb-4 font-medium">{trialError}</p>}
+              </Card>
+            )}
+
+            <div data-tour="tariff-list">
+              {!remnaAvailable && (
+                <div className="mb-4 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-sm flex items-start gap-3">
+                  <span className="text-xl shrink-0 mt-0.5">⚠️</span>
+                  <div>
+                    <div className="font-semibold text-amber-900 dark:text-amber-300">Панель VPN временно недоступна</div>
+                    <div className="text-xs text-amber-900/90 dark:text-amber-200/90 mt-1">
+                      Покупка и продление тарифов Remnawave временно недоступны. Попробуйте позже.
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={refetchCatalog} disabled={loading} className="mt-2">Проверить снова</Button>
+                  </div>
+                </div>
+              )}
+              {loading ? (
+                <div className="flex justify-center py-20" role="status">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
+                  <span className="sr-only">{t("cabinet.tariffs.catalog.loading")}</span>
+                </div>
+              ) : catalogError ? (
+                <Card className="p-8 text-center" role="alert">
+                  <p className="mb-4 text-muted-foreground">{t("cabinet.tariffs.catalog.load_error")}</p>
+                  <Button variant="outline" onClick={refetchCatalog}><RefreshCw className="h-4 w-4" />{t("cabinet.tariffs.catalog.retry")}</Button>
+                </Card>
+              ) : !displayTariffs.some((category) => category.tariffs.length > 0) ? (
+                <Card className="p-12 text-center">
+                  <Package className="mx-auto mb-4 h-8 w-8 text-muted-foreground" aria-hidden="true" />
+                  <p className="whitespace-pre-line text-muted-foreground">{t("cabinet.tariffs.empty")}</p>
+                </Card>
+              ) : (
+                <ClassicTariffCatalog categories={displayTariffs} canBuy={!!token} onChoose={requestBuy} getExtraCost={extendExtrasFor} />
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Desktop checkout keeps its controls visible while the body scrolls. */}
+      {!isMobileOrMiniapp && (
+        <Dialog open={!!payModal} onOpenChange={(open) => { if (!open && !payLoading) closePayment(); }}>
+          <DialogContent className={cn("classic-payment-dialog border-border/50 bg-card/60 shadow-2xl", readyUrl && "classic-payment-dialog-ready")} showCloseButton={!payLoading} onOpenAutoFocus={(e) => e.preventDefault()}>
+            <DialogHeader className="classic-payment-header text-left">
+              <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-xl">
+                  <Shield className="h-6 w-6 text-primary" />
+                </div>
+                {t("cabinet.tariffs.payment_title")}
+              </DialogTitle>
+              <DialogDescription className="hidden" />
+            </DialogHeader>
+
+            <div className="classic-payment-body">
+              {PaymentContent()}
+            </div>
+
+            <DialogFooter className="classic-payment-footer border-t border-border/50">
+              <Button variant="ghost" onClick={closePayment} disabled={payLoading} className="rounded-xl hover:bg-background/50 hover:text-foreground text-muted-foreground transition-colors">
+                {t("cabinet.tariffs.cancel")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Унифицированная модалка покупки: длительность + ДОП. устройства + total */}
+      <UnifiedPurchaseModal
+        modal={purchaseModal}
+        selectedPriceOptionId={selectedPriceOptionId}
+        setSelectedPriceOptionId={setSelectedPriceOptionId}
+        selectedExtraDevices={selectedExtraDevices}
+        setSelectedExtraDevices={setSelectedExtraDevices}
+        onClose={() => setPurchaseModal(null)}
+        onConfirm={confirmPurchase}
+        extendKeepDevices={(extendTarget && extKeepExtras) ? (extendTarget.extraDevices ?? 0) : 0}
+        extendDevicesCost={extKeepExtras ? keepExtrasCost : 0}
+      />
+
+      {/* модалка продления существующей подписки — открывается
+          из подсказки «у вас уже есть подписка с этим тарифом». */}
+      {extendDialogSubId && (
+        <ExtendSubscriptionDialog
+          subId={extendDialogSubId}
+          open
+          onClose={() => setExtendDialogSubId(null)}
+          onPaidByBalance={() => { loadUserSubs(); }}
+        />
+      )}
+    </>
+  );
+}
+
+// ─────────────── Унифицированная модалка покупки тарифа ───────────────
+// Длительность (chips) → Устройства (плитки со скидкой) → итог + кнопка дальше.
+function UnifiedPurchaseModal({
+  modal,
+  selectedPriceOptionId,
+  setSelectedPriceOptionId,
+  selectedExtraDevices,
+  setSelectedExtraDevices,
+  onClose,
+  onConfirm,
+  extendKeepDevices,
+  extendDevicesCost,
+}: {
+  modal: { tariff: TariffForPay } | null;
+  selectedPriceOptionId: string | null;
+  setSelectedPriceOptionId: (v: string | null) => void;
+  selectedExtraDevices: number;
+  setSelectedExtraDevices: (v: number) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+  /** T-extend-devices: сохраняемые доп.устройства при продлении (0 если удаляем/не продление). */
+  extendKeepDevices?: number;
+  extendDevicesCost?: number;
+}) {
+  const [agree, setAgree] = useState(false);
+  const tariff = modal?.tariff;
+  // Сброс галочки согласия при открытии модалки под новый тариф.
+  useEffect(() => { setAgree(false); }, [modal]);
+  if (!tariff) return null;
+
+  const opts = [...(tariff.priceOptions ?? [])].sort((a, b) =>
+    a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.durationDays - b.durationDays
+  );
+  const selectedOpt = opts.find((o) => o.id === selectedPriceOptionId) ?? opts[0] ?? null;
+  const unitPrice = selectedOpt?.price ?? tariff.price;
+  const includedDevices = tariff.includedDevices ?? 1;
+  const pricePerExtra = tariff.pricePerExtraDevice ?? 0;
+  const maxExtras = tariff.maxExtraDevices ?? 0;
+  const extrasEnabled = hasExtras(tariff);
+  const tiers = tariff.deviceDiscountTiers ?? [];
+
+  // Best-deal по длительности (минимальная цена за день).
+  let bestDurationId: string | null = null;
+  if (opts.length > 1) {
+    let bestRatio = Infinity;
+    for (const o of opts) {
+      if (o.durationDays <= 0) continue;
+      const ratio = o.price / o.durationDays;
+      if (ratio < bestRatio) {
+        bestRatio = ratio;
+        bestDurationId = o.id;
+      }
+    }
+  }
+
+  // Длительность выбранной опции — нужна для масштаба цены доп. устройств.
+  const selectedDays = selectedOpt?.durationDays ?? tariff.durationDays ?? 30;
+
+  // Плитки доп. устройств: +0..+maxExtras.
+  const deviceTiles = Array.from({ length: maxExtras + 1 }, (_, i) => {
+    const extras = i;
+    const { extrasTotal, pct } = applyExtrasPrice(pricePerExtra, extras, tiers, selectedDays);
+    return { extras, total: unitPrice + extrasTotal, pct, totalDevices: includedDevices + extras };
+  });
+  const bestExtra = deviceTiles.slice(1).reduce((best, cur) => {
+    const perDev = cur.totalDevices > 0 ? cur.total / cur.totalDevices : Infinity;
+    if (best == null || perDev < best.perDev) return { extras: cur.extras, perDev };
+    return best;
+  }, null as { extras: number; perDev: number } | null);
+
+  const { extrasTotal: appliedExtras, pct: appliedPct } = applyExtrasPrice(pricePerExtra, selectedExtraDevices, tiers, selectedDays);
+  const finalTotal = unitPrice + appliedExtras + (extendDevicesCost ?? 0);
+  // Базовая сумма без скидки = pricePerExtra × extras × коэффициент длительности (для отображения «сэкономлено»).
+  const baseExtrasNoDiscount = pricePerExtra * selectedExtraDevices * (selectedDays / EXTRA_DEVICE_BASE_DAYS);
+  const savedAmount = baseExtrasNoDiscount - appliedExtras;
+
+  return (
+    <Dialog open={!!modal} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="cabinet-tariff-config bg-background/85 backdrop-blur-3xl border-white/10 rounded-[2rem] sm:max-w-lg max-h-[92vh] overflow-y-auto overflow-x-hidden">
+        <div className="absolute -top-20 -right-20 h-56 w-56 rounded-full bg-gradient-to-br from-primary/30 via-fuchsia-500/15 to-purple-500/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-16 h-52 w-52 rounded-full bg-gradient-to-tr from-cyan-500/15 to-primary/15 blur-3xl pointer-events-none" />
+
+        <DialogHeader className="relative">
+          <div className="flex items-center gap-3">
+            <motion.div
+              animate={{ rotate: [0, -6, 6, 0] }}
+              transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 4 }}
+              className="h-14 w-14 rounded-3xl bg-gradient-to-br from-primary/30 via-fuchsia-500/20 to-purple-500/30 border border-white/15 flex items-center justify-center shadow-xl shrink-0"
+            >
+              <Package className="h-7 w-7 text-primary" />
+            </motion.div>
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary via-fuchsia-500 to-purple-500">
+                {tariff.name}
+              </DialogTitle>
+              {tariff.description && (
+                <DialogDescription className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                  {tariff.description}
+                </DialogDescription>
+              )}
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="relative space-y-5 mt-2">
+          {/* ── 1. Длительность ── */}
+          {opts.length > 0 && (
+            <section>
+              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2.5 block">
+                <Calendar className="inline h-3 w-3 mr-1" /> Длительность
+              </Label>
+              <div className={cn(
+                "grid gap-2",
+                opts.length === 1 ? "grid-cols-1" : opts.length === 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3"
+              )}>
+                {opts.map((opt) => {
+                  const isActive = (selectedOpt?.id ?? opts[0]?.id) === opt.id;
+                  const isBest = opt.id === bestDurationId;
+                  const perDay = opt.durationDays > 0 ? opt.price / opt.durationDays : 0;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => setSelectedPriceOptionId(opt.id)}
+                      className={cn(
+                        "relative overflow-hidden rounded-2xl border p-3 transition-all text-center",
+                        "hover:scale-[1.03] hover:shadow-lg",
+                        isActive
+                          ? "bg-gradient-to-br from-primary/25 via-fuchsia-500/10 to-purple-500/15 border-primary/50 ring-2 ring-primary/40 shadow-lg shadow-primary/20"
+                          : "bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 hover:border-white/20"
+                      )}
+                    >
+                      {isBest && (
+                        <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 rounded-md bg-amber-500 text-white text-[9px] font-black shadow">
+                          ★
+                        </span>
+                      )}
+                      <p className={cn("text-sm font-bold", isActive && "text-primary")}>
+                        {opt.durationDays} {formatRuDays(opt.durationDays).replace(/^\d+\s/, "")}
+                      </p>
+                      {/* T-unify-cabinet (30.05.2026, WolfVPN): полная стоимость подписки за период */}
+                      <p className={cn("text-[13px] font-extrabold tabular-nums mt-0.5", isActive ? "text-primary" : "text-foreground")}>
+                        {formatMoney(opt.price, tariff.currency)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground tabular-nums">
+                        {formatMoneyPerDay(perDay, tariff.currency)}/день
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ── 2. Доп. устройства (только если включены в тарифе) ── */}
+          {extrasEnabled && (
+            <section>
+              <div className="flex items-center justify-between mb-2.5">
+                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  <Smartphone className="inline h-3 w-3 mr-1" /> Доп. устройства
+                </Label>
+                <span className="text-[10px] text-muted-foreground tabular-nums">
+                  В тарифе: <strong className="text-foreground">{includedDevices}</strong>
+                </span>
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {deviceTiles.map((tile) => {
+                  const isActive = tile.extras === selectedExtraDevices;
+                  const isBest = bestExtra?.extras === tile.extras && tile.extras > 0 && tile.pct === 0;
+                  return (
+                    <motion.button
+                      key={tile.extras}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => setSelectedExtraDevices(tile.extras)}
+                      whileTap={{ scale: 0.96 }}
+                      className={cn(
+                        "relative overflow-hidden rounded-2xl border p-3 transition-all",
+                        "hover:scale-[1.04] hover:shadow-lg",
+                        isActive
+                          ? "bg-gradient-to-br from-primary/25 via-fuchsia-500/15 to-purple-500/20 border-primary/50 ring-2 ring-primary/40 shadow-lg shadow-primary/20"
+                          : tile.pct > 0
+                            ? "bg-gradient-to-br from-emerald-500/[0.06] to-cyan-500/[0.04] border-emerald-500/25 hover:border-emerald-500/40"
+                            : "bg-foreground/[0.03] dark:bg-white/[0.02] border-white/10 hover:border-white/20"
+                      )}
+                    >
+                      {tile.pct > 0 && (
+                        <div className={cn(
+                          "absolute -top-1 -right-1 px-1.5 py-0.5 rounded-md text-[9px] font-black shadow z-10",
+                          isActive ? "bg-fuchsia-500 text-white" : "bg-emerald-500 text-white"
+                        )}>
+                          −{tile.pct}%
+                        </div>
+                      )}
+                      {isBest && (
+                        <Sparkles className="absolute top-1.5 right-1.5 h-3 w-3 text-fuchsia-500" />
+                      )}
+                      <div className="flex items-center justify-center gap-1 mb-1">
+                        <Smartphone className={cn("h-3.5 w-3.5", isActive ? "text-primary" : "text-muted-foreground")} />
+                        <span className={cn("text-sm font-bold", isActive && "text-primary")}>
+                          {tile.extras === 0 ? "Без доп." : `+${tile.extras}`}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-bold text-foreground/90 tabular-nums text-center">
+                        {formatMoney(tile.total, tariff.currency)}
+                      </p>
+                      <p className="text-[9px] text-muted-foreground/80 text-center mt-0.5">
+                        {tile.totalDevices} устр
+                      </p>
+                      {isBest && (
+                        <p className="text-[9px] font-medium text-fuchsia-500 dark:text-fuchsia-400 text-center mt-0.5">
+                          выгоднее всего
+                        </p>
+                      )}
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* ── 3. Итог ── */}
+          <section className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/[0.08] via-fuchsia-500/[0.04] to-purple-500/[0.06] p-4">
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-xs text-muted-foreground">Длительность</span>
+              <span className="text-xs font-medium tabular-nums">
+                {selectedOpt?.durationDays ?? 0} {formatRuDays(selectedOpt?.durationDays ?? 0).replace(/^\d+\s/, "")}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-xs text-muted-foreground">Тариф ({includedDevices} устр)</span>
+              <span className="text-xs font-medium tabular-nums">
+                {formatMoney(unitPrice, tariff.currency)}
+              </span>
+            </div>
+            {extrasEnabled && selectedExtraDevices > 0 && (
+              <div className="flex items-baseline justify-between mb-1">
+                <span className="text-xs text-muted-foreground">+{selectedExtraDevices} доп. устр</span>
+                <span className="text-xs font-medium tabular-nums">
+                  {formatMoney(pricePerExtra * (selectedDays / EXTRA_DEVICE_BASE_DAYS), tariff.currency)} × {selectedExtraDevices}
+                </span>
+              </div>
+            )}
+            {(extendDevicesCost ?? 0) > 0 && (
+              <div className="flex items-baseline justify-between mb-1">
+                <span className="text-xs text-muted-foreground">Сохранение {extendKeepDevices} доп. устр</span>
+                <span className="text-xs font-medium tabular-nums">+{formatMoney(extendDevicesCost ?? 0, tariff.currency)}</span>
+              </div>
+            )}
+            {savedAmount > 0 && (
+              <div className="flex items-baseline justify-between mb-1 text-emerald-500 dark:text-emerald-400">
+                <span className="text-xs flex items-center gap-1">
+                  <Sparkles className="h-3 w-3" /> Скидка {appliedPct}%
+                </span>
+                <span className="text-xs font-bold tabular-nums">
+                  −{formatMoney(savedAmount, tariff.currency)}
+                </span>
+              </div>
+            )}
+            <div className="border-t border-primary/20 mt-2 pt-2 flex items-baseline justify-between">
+              <span className="text-sm font-medium">К оплате</span>
+              <span className="text-2xl font-semibold tabular-nums"><AnimatedMoney amount={finalTotal} currency={tariff.currency} /></span>
+            </div>
+          </section>
+        </div>
+
+        {/* ── Согласие с документами (обязательно перед оплатой) ── */}
+        <div className="relative mt-4 flex items-start gap-2.5 rounded-2xl border border-white/10 bg-foreground/[0.03] dark:bg-white/[0.02] p-3.5">
+          <Checkbox
+            id="agree-pay"
+            checked={agree}
+            onCheckedChange={(v) => setAgree(v === true)}
+            className="mt-0.5 shrink-0 border-white/50 bg-white/10 data-[state=checked]:bg-fuchsia-500 data-[state=checked]:border-fuchsia-500 data-[state=checked]:text-white"
+          />
+          <Label htmlFor="agree-pay" className="text-xs font-normal leading-relaxed text-muted-foreground cursor-pointer">
+            Нажимая кнопку «К оплате», я подтверждаю, что ознакомился и согласен с условиями{" "}
+            <Link to="/cabinet/documents/offer" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">Публичной оферты</Link>,{" "}
+            <Link to="/cabinet/documents/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">Политикой обработки персональных данных</Link>{" "}и{" "}
+            <Link to="/cabinet/documents/refund" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">Политикой возврата</Link>.
+          </Label>
+        </div>
+
+        <DialogFooter className="relative mt-3 gap-2 sm:gap-2 flex-col sm:flex-row">
+          <Button variant="outline" onClick={onClose} className="rounded-xl">
+            Отмена
+          </Button>
+          <Button
+            onClick={onConfirm}
+            disabled={!selectedOpt || !agree}
+            className="rounded-xl gap-2 h-11 px-6 text-base font-bold bg-gradient-to-r from-primary via-fuchsia-500 to-purple-500 hover:from-primary/90 hover:via-fuchsia-500/90 hover:to-purple-500/90 shadow-lg shadow-primary/30"
+          >
+            <CreditCard className="h-4 w-4" />
+            К оплате
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

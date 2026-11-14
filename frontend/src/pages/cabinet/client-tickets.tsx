@@ -1,0 +1,632 @@
+import { SupportMessage } from "@/components/support-message";
+import "./cabinet-support.css";
+import { AuroraTickets } from "./aurora/aurora-tickets";
+import { useEffect, useRef, useState } from "react";
+import { MessageSquarePlus, Inbox, Loader2, Send, ArrowLeft, CircleDot, CircleCheck, Paperclip, X as XIcon, ImageIcon, CheckCircle2, RotateCcw, History } from "lucide-react";
+import { askConfirm } from "@/lib/confirm";
+import { useClientAuth } from "@/contexts/client-auth";
+import { api, type TicketAttachmentDto, type TicketMessageDto } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { useCabinetDesign } from "@/lib/use-cabinet-design";
+import { StealthTickets } from "@/pages/cabinet/stealth/stealth-tickets";
+
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+
+type TicketItem = { id: string; subject: string; status: string; createdAt: string; updatedAt: string; closedAt?: string | null };
+type TicketMessage = TicketMessageDto;
+
+// Лимиты должны совпадать с backend (uploadTicketAttachment).
+const MAX_FILES = 5;
+const MAX_FILE_MB = 10;
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+/** Мелкий компонент-галерея: превью вложений внутри bubble сообщения. */
+function AttachmentsGallery({ items, align }: { items: TicketAttachmentDto[]; align: "left" | "right" }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className={cn("mt-2 grid gap-1.5", items.length > 1 ? "grid-cols-2" : "grid-cols-1")}>
+      {items.map((a, i) => (
+        <a
+          key={`${a.url}-${i}`}
+          href={a.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(
+            "block overflow-hidden rounded-xl border border-white/10 bg-black/5 hover:opacity-90 transition-opacity",
+            align === "right" ? "" : "",
+          )}
+        >
+          <img src={a.url} alt={a.name ?? "attachment"} className="w-full h-36 object-cover" loading="lazy" />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+export function ClientTicketsPage() {
+  const design = useCabinetDesign();
+  if (design === "aurora") return <AuroraTickets />;
+  if (design === "stealth") return <StealthTickets />;
+  return <ClassicTicketsPage />;
+}
+
+function ClassicTicketsPage() {
+  const { state } = useClientAuth();
+  const token = state.token ?? null;
+
+  const [list, setList] = useState<TicketItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<{
+    id: string;
+    subject: string;
+    status: string;
+    messages: TicketMessage[];
+    createdAt: string;
+    updatedAt: string;
+    closedAt?: string | null;
+  } | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [tab, setTab] = useState<"active" | "history">("active");
+  const [statusSending, setStatusSending] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [replySending, setReplySending] = useState(false);
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const replyInputRef = useRef<HTMLInputElement>(null);
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [newSubject, setNewSubject] = useState("");
+  const [newMessage, setNewMessage] = useState("");
+  const [newFiles, setNewFiles] = useState<File[]>([]);
+  const [createSending, setCreateSending] = useState(false);
+  const newInputRef = useRef<HTMLInputElement>(null);
+
+  /** Добавить файлы, отфильтровав только изображения и ограничив размер/количество. */
+  const addFiles = (
+    setList: (files: File[]) => void,
+    current: File[],
+    incoming: FileList | null,
+  ) => {
+    if (!incoming) return;
+    setUploadError(null);
+    const next: File[] = [...current];
+    for (const f of Array.from(incoming)) {
+      if (next.length >= MAX_FILES) {
+        setUploadError(`Не больше ${MAX_FILES} файлов`);
+        break;
+      }
+      if (!ALLOWED_IMAGE_TYPES.has(f.type)) {
+        setUploadError("Можно прикладывать только PNG, JPG, WEBP или GIF");
+        continue;
+      }
+      if (f.size > MAX_FILE_BYTES) {
+        setUploadError(`Файл больше ${MAX_FILE_MB} MB`);
+        continue;
+      }
+      next.push(f);
+    }
+    setList(next);
+  };
+
+  const loadList = () => {
+    if (!token) return;
+    setError(null);
+    api
+      .getTickets(token)
+      .then((r) => {
+        setList(r.items);
+        setLoading(false);
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "Ошибка загрузки");
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    if (!token) return;
+    setLoading(true);
+    loadList();
+    const intervalId = window.setInterval(loadList, 10000);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  useEffect(() => {
+    if (!detailId || !token) {
+      setDetail(null);
+      return;
+    }
+    const loadDetail = () => {
+      setDetailLoading(true);
+      api
+        .getTicket(token, detailId)
+        .then((t) => setDetail({ ...t, messages: t.messages }))
+        .catch(() => setDetail(null))
+        .finally(() => setDetailLoading(false));
+    };
+    loadDetail();
+    const intervalId = window.setInterval(loadDetail, 10000);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [detailId, token]);
+
+  const sendReply = () => {
+    if (!token || !detailId || replySending) return;
+    if (!replyText.trim() && replyFiles.length === 0) return;
+    setReplySending(true);
+    setUploadError(null);
+    api
+      .replyTicket(token, detailId, { content: replyText.trim(), files: replyFiles })
+      .then((msg) => {
+        setDetail((d) => (d ? { ...d, messages: [...d.messages, msg] } : d));
+        setReplyText("");
+        setReplyFiles([]);
+        if (replyInputRef.current) replyInputRef.current.value = "";
+      })
+      .catch((e) => setUploadError(e instanceof Error ? e.message : "Не удалось отправить"))
+      .finally(() => setReplySending(false));
+  };
+
+  const createTicket = () => {
+    if (!token || !newSubject.trim()) return;
+    if (!newMessage.trim() && newFiles.length === 0) return;
+    setCreateSending(true);
+    setUploadError(null);
+    api
+      .createTicket(token, { subject: newSubject.trim(), message: newMessage.trim(), files: newFiles })
+      .then((t) => {
+        setList((prev) => [{ id: t.id, subject: t.subject, status: t.status, createdAt: t.createdAt, updatedAt: t.updatedAt, closedAt: t.closedAt ?? null }, ...prev]);
+        setDetailId(t.id);
+        setDetail({ id: t.id, subject: t.subject, status: t.status, messages: t.messages, createdAt: t.createdAt, updatedAt: t.updatedAt, closedAt: t.closedAt ?? null });
+        setShowNewForm(false);
+        setNewSubject("");
+        setNewMessage("");
+        setNewFiles([]);
+        if (newInputRef.current) newInputRef.current.value = "";
+      })
+      .catch((e) => setUploadError(e instanceof Error ? e.message : "Не удалось создать тикет"))
+      .finally(() => setCreateSending(false));
+  };
+
+  const changeTicketStatus = async (status: "open" | "closed") => {
+    if (!token || !detail || statusSending) return;
+    if (status === "closed") {
+      const ok = await askConfirm("Закрыть это обращение? Диалог будет завершён и перемещён в историю. При необходимости вы сможете возобновить его.");
+      if (!ok) return;
+    }
+    setStatusSending(true);
+    setUploadError(null);
+    try {
+      const updated = await api.updateTicketStatus(token, detail.id, status);
+      setList((prev) =>
+        prev.map((t) =>
+          t.id === updated.id
+            ? { ...t, status: updated.status, closedAt: updated.closedAt ?? null, updatedAt: updated.updatedAt }
+            : t,
+        ),
+      );
+      setDetail((d) =>
+        d && d.id === updated.id
+          ? { ...d, status: updated.status, closedAt: updated.closedAt ?? null, updatedAt: updated.updatedAt }
+          : d,
+      );
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Не удалось изменить статус обращения");
+    } finally {
+      setStatusSending(false);
+    }
+  };
+
+  const formatDate = (s: string) => {
+    try {
+      const d = new Date(s);
+      const isToday = new Date().toDateString() === d.toDateString();
+      if (isToday) {
+        return "Сегодня, " + d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+      }
+      return d.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return s;
+    }
+  };
+
+  const openTickets = list.filter((t) => t.status === "open");
+  const closedTickets = list.filter((t) => t.status !== "open");
+  const visibleTickets = tab === "active" ? openTickets : closedTickets;
+
+  if (loading && list.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary/60" />
+        <p className="text-sm font-medium text-muted-foreground animate-pulse">Загрузка обращений…</p>
+      </div>
+    );
+  }
+
+  if (error && list.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-destructive/10 text-destructive mb-2 shadow-inner">
+          <MessageSquarePlus className="h-6 w-6 opacity-80" />
+        </div>
+        <p className="text-sm font-medium text-destructive">{error}</p>
+        <Button variant="outline" onClick={loadList} className="mt-2 rounded-xl">Повторить попытку</Button>
+      </div>
+    );
+  }
+
+  if (detailId && detail) {
+    return (
+      <div className="cabinet-ticket-conversation flex flex-col h-[max(320px,calc(var(--app-viewport-height,100dvh)-var(--app-safe-top)-10rem))] min-h-0 max-h-[800px] w-full rounded-[2.5rem] border border-white/10 dark:border-white/5 bg-slate-50/60 dark:bg-slate-950/60 backdrop-blur-[32px] shadow-2xl overflow-hidden relative">
+        <div className="support-conversation-header flex items-center justify-between px-4 sm:px-6 py-4 border-b border-border/50 bg-background/30 backdrop-blur-md shrink-0 z-10 transition-colors">
+          <div className="flex items-center gap-3 min-w-0">
+            <Button aria-label="К списку обращений" variant="ghost" size="icon" className="shrink-0 h-9 w-9 rounded-full bg-background/50 hover:bg-background/80 transition-transform hover:scale-105" onClick={() => { setDetailId(null); setDetail(null); }}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm sm:text-base font-bold break-words text-foreground">{detail.subject}</h2>
+              <div className="cabinet-ticket-meta flex items-center gap-2 mt-0.5">
+                <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider", detail.status === "open" ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>
+                  {detail.status === "open" ? <CircleDot className="h-3 w-3" /> : <CircleCheck className="h-3 w-3" />}
+                  {detail.status === "open" ? "Открыт" : "Закрыт"}
+                </span>
+                <span className="text-[10px] text-muted-foreground font-medium">Обновлён: {formatDate(detail.updatedAt)}</span>
+              </div>
+            </div>
+          </div>
+          {detail.status === "open" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => changeTicketStatus("closed")}
+              disabled={statusSending}
+              className="shrink-0 rounded-xl border-border bg-background/50 hover:bg-muted text-xs font-semibold gap-1.5"
+            >
+              {statusSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              <span className="hidden sm:inline">Закрыть обращение</span>
+              <span className="sm:hidden">Закрыть</span>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => changeTicketStatus("open")}
+              disabled={statusSending}
+              className="shrink-0 rounded-xl border-border bg-background/50 hover:bg-muted text-xs font-semibold gap-1.5"
+            >
+              {statusSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+              <span className="hidden sm:inline">Возобновить обращение</span>
+              <span className="sm:hidden">Возобновить</span>
+            </Button>
+          )}
+        </div>
+
+        <div className="support-message-list flex-1 overflow-y-auto">
+          {detail.messages.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-muted-foreground text-sm font-medium">Нет сообщений</div>
+          ) : (
+            detail.messages.map(m => <SupportMessage key={m.id} support={m.authorType === "support"} content={m.content} date={m.createdAt}><AttachmentsGallery items={m.attachments ?? []} align={m.authorType === "support" ? "left" : "right"} /></SupportMessage>)
+          )}
+        </div>
+
+        {detail.status === "open" && (
+          <div className="support-composer-wrapper shrink-0">
+            {replyFiles.length > 0 && (
+              <div className="max-w-4xl mx-auto mb-2.5 flex flex-wrap gap-2">
+                {replyFiles.map((f, i) => (
+                  <div
+                    key={`${f.name}-${i}`}
+                    className="relative group flex items-center gap-2 rounded-xl border border-white/10 bg-background/60 px-2 py-1.5 backdrop-blur-md"
+                  >
+                    <img
+                      src={URL.createObjectURL(f)}
+                      alt={f.name}
+                      className="h-10 w-10 rounded-lg object-cover"
+                      onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                    />
+                    <span className="text-[11px] text-muted-foreground max-w-[140px] truncate font-medium">{f.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setReplyFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
+                      aria-label="Удалить"
+                    >
+                      <XIcon className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {uploadError && (
+              <p className="max-w-4xl mx-auto mb-2 text-[11px] text-destructive font-semibold text-center">{uploadError}</p>
+            )}
+            <div className="support-composer">
+              <input
+                ref={replyInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                multiple
+                className="hidden"
+                onChange={(e) => addFiles(setReplyFiles, replyFiles, e.target.files)}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => replyInputRef.current?.click()}
+                disabled={replyFiles.length >= MAX_FILES}
+                className="h-[50px] w-[50px] rounded-[1.2rem] shrink-0 bg-background/60 hover:bg-background/80 text-muted-foreground"
+                aria-label="Прикрепить фото"
+                title="Прикрепить фото"
+              >
+                <Paperclip className="h-5 w-5" />
+              </Button>
+              <Textarea
+                aria-label="Сообщение в поддержку"
+                placeholder="Напишите сообщение…"
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                className="resize-none min-h-[50px] max-h-[120px] rounded-[1.5rem] bg-background/60 border-white/10 dark:border-white/5 focus-visible:ring-1 focus-visible:ring-primary shadow-inner text-sm font-medium py-3.5 px-4"
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    sendReply();
+                  }
+                }}
+              />
+              <Button
+                onClick={sendReply}
+                aria-label="Отправить сообщение"
+                disabled={replySending || (!replyText.trim() && replyFiles.length === 0)}
+                className="h-[50px] w-[50px] rounded-[1.2rem] shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95"
+                size="icon"
+              >
+                {replySending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5 ml-1" />}
+              </Button>
+            </div>
+            <p className="hidden sm:block text-center text-[10px] text-muted-foreground mt-2 font-medium">Enter — отправить · Shift+Enter — перенос · 📎 — до {MAX_FILES} фото</p>
+          </div>
+        )}
+
+        {detail.status === "closed" && (
+          <div className="shrink-0 border-t border-border/50 bg-background/30 backdrop-blur-md px-4 sm:px-6 py-4">
+            {uploadError && (
+              <p className="mb-2 text-[11px] text-destructive font-semibold text-center">{uploadError}</p>
+            )}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <p className="text-xs font-medium text-muted-foreground text-center">Обращение закрыто. Чтобы продолжить переписку, возобновите его.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => changeTicketStatus("open")}
+                disabled={statusSending}
+                className="rounded-xl gap-1.5 text-xs font-semibold shrink-0"
+              >
+                {statusSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                Возобновить обращение
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (detailId && detailLoading) {
+    return (
+      <div className="flex flex-col h-[500px] items-center justify-center w-full rounded-[2.5rem] border border-white/10 dark:border-white/5 bg-slate-50/60 dark:bg-slate-950/60 backdrop-blur-[32px] gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary/60" />
+        <Button variant="ghost" className="rounded-xl" onClick={() => setDetailId(null)}>Отменить загрузку</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cabinet-tickets space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">Поддержка</h2>
+          <p className="text-sm text-muted-foreground mt-1 font-medium">Ваши обращения и ответы команды поддержки.</p>
+        </div>
+        {!showNewForm && (
+          <Button
+            onClick={() => setShowNewForm(true)}
+            className="rounded-xl shadow-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-all hover:scale-105 h-11 px-5"
+          >
+            <MessageSquarePlus className="h-4 w-4 mr-2" />
+            <span className="font-semibold text-[13px] tracking-wide">Написать в поддержку</span>
+          </Button>
+        )}
+      </div>
+
+      {showNewForm && (
+        <div className="support-new-form rounded-[2.5rem] border border-white/20 dark:border-white/10 bg-slate-100/60 dark:bg-slate-950/60 backdrop-blur-[32px] shadow-[0_10px_60px_rgba(0,0,0,0.15)]  overflow-hidden p-1 relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none" />
+          <div className="p-5 sm:p-7 relative z-10">
+            <h3 className="text-lg font-bold mb-5 flex items-center gap-2">
+              <MessageSquarePlus className="h-5 w-5 text-primary" />
+              Новое обращение
+            </h3>
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="new-subject" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Заголовок проблемы</Label>
+                <Input
+                  id="new-subject"
+                  placeholder="О чем пойдет речь?"
+                  value={newSubject}
+                  onChange={(e) => setNewSubject(e.target.value)}
+                  maxLength={200}
+                  className="rounded-2xl h-12 bg-background/50 border-white/10 dark:border-white/5 shadow-inner font-medium text-sm px-4"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-message" className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Детальное описание</Label>
+                <Textarea
+                  id="new-message"
+                  placeholder="Опишите проблему или задайте вопрос..."
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  rows={5}
+                  maxLength={5000}
+                  className="resize-none rounded-2xl bg-background/50 border-white/10 dark:border-white/5 shadow-inner p-4 font-medium text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Вложения</Label>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <input
+                    ref={newInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => addFiles(setNewFiles, newFiles, e.target.files)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => newInputRef.current?.click()}
+                    disabled={newFiles.length >= MAX_FILES}
+                    className="rounded-xl h-10 gap-2 px-4 text-xs font-semibold"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                    Добавить фото ({newFiles.length}/{MAX_FILES})
+                  </Button>
+                  {newFiles.map((f, i) => (
+                    <div
+                      key={`${f.name}-${i}`}
+                      className="relative group flex items-center gap-2 rounded-xl border border-white/10 bg-background/60 px-2 py-1.5 backdrop-blur-md"
+                    >
+                      <img
+                        src={URL.createObjectURL(f)}
+                        alt={f.name}
+                        className="h-10 w-10 rounded-lg object-cover"
+                        onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                      />
+                      <span className="text-[11px] text-muted-foreground max-w-[140px] truncate font-medium">{f.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setNewFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="flex h-5 w-5 items-center justify-center rounded-full bg-background/80 text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
+                        aria-label="Удалить"
+                      >
+                        <XIcon className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground ml-1 font-medium">До {MAX_FILES} изображений, каждое не больше {MAX_FILE_MB} MB</p>
+              </div>
+              {uploadError && (
+                <p className="text-[11px] text-destructive font-semibold ml-1">{uploadError}</p>
+              )}
+              <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                <Button
+                  onClick={createTicket}
+                  disabled={createSending || !newSubject.trim() || (!newMessage.trim() && newFiles.length === 0)}
+                  className="rounded-xl h-11 w-full sm:w-auto px-8 font-semibold tracking-wide"
+                >
+                  {createSending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                  Отправить
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => { setShowNewForm(false); setNewSubject(""); setNewMessage(""); setNewFiles([]); }}
+                  className="rounded-xl h-11 w-full sm:w-auto bg-background/30 hover:bg-background/50 font-semibold"
+                >
+                  Отмена
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!showNewForm && (
+        <div className="inline-flex items-center gap-1 rounded-2xl border border-white/10 dark:border-white/5 bg-background/40 p-1 backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => setTab("active")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-colors",
+              tab === "active" ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <CircleDot className="h-3.5 w-3.5" />
+            Активные ({openTickets.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("history")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold transition-colors",
+              tab === "history" ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <History className="h-3.5 w-3.5" />
+            История ({closedTickets.length})
+          </button>
+        </div>
+      )}
+
+      {!showNewForm && visibleTickets.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 px-4 rounded-[2.5rem] border border-dashed border-border/60 bg-card/20 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-[1.5rem] bg-primary/10 text-primary mb-4 border border-primary/20">
+            <Inbox className="h-8 w-8 opacity-80" />
+          </div>
+          <h3 className="text-lg font-bold text-foreground">
+            {tab === "active" ? "Нет активных обращений" : "История обращений пуста"}
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1 max-w-sm font-medium">
+            {tab === "active"
+              ? "Если что-то не работает или есть вопрос — напишите нам, поможем."
+              : "Здесь появятся закрытые обращения."}
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
+            {tab === "active" ? (
+              <Button onClick={() => setShowNewForm(true)} className="rounded-xl shadow-lg bg-primary hover:bg-primary/90 text-primary-foreground h-10 px-5">
+                <MessageSquarePlus className="h-4 w-4 mr-2" />
+                Новое обращение
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => setTab("active")} className="rounded-xl h-10 px-5">
+                <CircleDot className="h-4 w-4 mr-2" />
+                Активные обращения
+              </Button>
+            )}
+            {tab === "active" && closedTickets.length > 0 && (
+              <Button variant="ghost" onClick={() => setTab("history")} className="rounded-xl h-10 px-5 text-muted-foreground">
+                <History className="h-4 w-4 mr-2" />
+                История обращений ({closedTickets.length})
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : !showNewForm ? (
+        <div className="grid gap-3 sm:gap-4">
+          {visibleTickets.map((t) => {
+            const isOpen = t.status === "open";
+            return (
+              <div key={t.id} className="cabinet-ticket-row">
+                <button className="cabinet-ticket-open" onClick={()=>setDetailId(t.id)}>
+                  <strong>{t.subject}</strong>
+                  <span><span data-open={isOpen}>{isOpen ? "Открыт" : "Закрыт"}</span> · {formatDate(isOpen ? t.updatedAt : (t.closedAt ?? t.updatedAt))}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}

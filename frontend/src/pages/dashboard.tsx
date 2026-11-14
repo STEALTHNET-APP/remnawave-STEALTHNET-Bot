@@ -1,0 +1,975 @@
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { motion } from "framer-motion";
+import {
+  Shield,
+  Users,
+  Server,
+  UserPlus,
+  Activity,
+  Loader2,
+  Power,
+  PowerOff,
+  RotateCw,
+  Globe,
+  Wifi,
+  Zap,
+  Cpu,
+  Gift,
+  Send,
+  CheckCircle,
+  TrendingUp,
+  RefreshCw,
+} from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { RemnaNode, ServerStats } from "@/lib/api";
+import { useTranslation } from "react-i18next";
+import { useAuth } from "@/contexts/auth";
+import { cn } from "@/lib/utils";
+import {
+  useAdminAnalytics,
+  useAdminDashboardStats,
+  useAdminGiftAnalytics,
+  useAdminServerStats,
+  useAdminSettings,
+  useRemnaNodes,
+} from "@/lib/admin-queries";
+import { qk } from "@/lib/query-client";
+import {
+  AreaChart,
+  Area,
+  ComposedChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+
+/*  Animation variants  */
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 16, scale: 0.98 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      delay: i * 0.05,
+      duration: 0.5,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  }),
+};
+
+const staggerContainer = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.06 } },
+};
+
+/*  Utilities  */
+
+function formatMoney(amount: number, currency = "USD") {
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+function formatBytes(bytes: number | null | undefined): string {
+  if (bytes == null || bytes === 0) return "—";
+  if (bytes >= 1024 ** 3) return (bytes / 1024 ** 3).toFixed(2) + " GB";
+  if (bytes >= 1024 ** 2) return (bytes / 1024 ** 2).toFixed(2) + " MB";
+  if (bytes >= 1024) return (bytes / 1024).toFixed(2) + " KB";
+  return bytes + " B";
+}
+
+function formatNodeCpuRam(node: { cpuCount?: number | null; totalRam?: string | null; system?: { info?: { cpus?: number; memoryTotal?: number } | null } | null }): string {
+  const cpuCores = node.system?.info?.cpus ?? node.cpuCount;
+  const cpu = cpuCores != null ? `${cpuCores} cores` : "—";
+  const memTotal = node.system?.info?.memoryTotal;
+  const ram = memTotal != null ? formatBytes(memTotal) : (node.totalRam?.trim() || "—");
+  return `${cpu} / ${ram}`;
+}
+
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}д ${hours}ч ${mins}м`;
+  if (hours > 0) return `${hours}ч ${mins}м`;
+  return `${mins}м`;
+}
+
+function formatGb(bytes: number): string {
+  return (bytes / 1024 ** 3).toFixed(1) + " GB";
+}
+
+function canAccessRemnaNodes(role: string, allowedSections: string[] | undefined): boolean {
+  if (role === "ADMIN") return true;
+  return Array.isArray(allowedSections) && allowedSections.includes("remna-nodes");
+}
+
+/*  CountUp Hook & Components  */
+
+function useCountUp(target: number, duration = 1200): number {
+  const [value, setValue] = useState(0);
+  const rafRef = useRef<number>(0);
+  const startRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (target === 0) {
+      setValue(0);
+      return;
+    }
+    startRef.current = null;
+    const animate = (timestamp: number) => {
+      if (startRef.current === null) startRef.current = timestamp;
+      const elapsed = timestamp - startRef.current;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.round(target * eased));
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(animate);
+      }
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [target, duration]);
+
+  return value;
+}
+
+function CountUpMoney({ value, currency, className }: { value: number; currency: string; className?: string }) {
+  const animated = useCountUp(value);
+  return <span className={className}>{formatMoney(animated, currency)}</span>;
+}
+
+function CountUpNumber({ value, className }: { value: number; className?: string }) {
+  const animated = useCountUp(value);
+  return <span className={className}>{animated.toLocaleString()}</span>;
+}
+
+/*  Sparkline  */
+
+function Sparkline({
+  data,
+  color,
+  height = 40,
+  width = 100,
+}: {
+  data: { v: number }[];
+  color: string;
+  height?: number;
+  width?: number;
+}) {
+  const gradientId = `spark-${color.replace("#", "")}`;
+  return (
+    <ResponsiveContainer width={width} height={height}>
+      <AreaChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.4} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <Area
+          type="monotone"
+          dataKey="v"
+          stroke={color}
+          strokeWidth={2}
+          fill={`url(#${gradientId})`}
+          dot={false}
+          isAnimationActive
+          animationDuration={1000}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+/*  Section Header (glass)  */
+
+function SectionHeader({
+  icon: Icon,
+  title,
+  subtitle,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <motion.div
+      className="flex items-center gap-2 mb-3"
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <Icon className="h-4 w-4 text-primary shrink-0" />
+      <div>
+        <h2 className="text-[13.5px] font-bold tracking-tight text-foreground">
+          {title}
+        </h2>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+    </motion.div>
+  );
+}
+
+/*  Stat Card (glass)  */
+
+const ACCENT_MAP = {
+  primary: { iconText: "text-primary", spark: "hsl(var(--primary))", glow: "hsl(var(--primary)/0.35)", iconBg: "bg-muted", bar: "bg-primary" },
+  emerald: { iconText: "text-muted-foreground dark:text-muted-foreground", spark: "#10b981", glow: "rgba(16,185,129,0.35)", iconBg: "bg-muted", bar: "bg-primary" },
+  amber: { iconText: "text-muted-foreground dark:text-muted-foreground", spark: "#f59e0b", glow: "rgba(245,158,11,0.35)", iconBg: "bg-muted", bar: "bg-primary" },
+  red: { iconText: "text-muted-foreground dark:text-muted-foreground", spark: "#ef4444", glow: "rgba(239,68,68,0.35)", iconBg: "bg-muted", bar: "bg-primary" },
+  violet: { iconText: "text-muted-foreground dark:text-muted-foreground", spark: "#a78bfa", glow: "rgba(167,139,250,0.35)", iconBg: "bg-muted", bar: "bg-primary" },
+  cyan: { iconText: "text-muted-foreground dark:text-muted-foreground", spark: "#22d3ee", glow: "rgba(34,211,238,0.35)", iconBg: "bg-muted", bar: "bg-primary" },
+} as const;
+
+function StatCard({
+  index,
+  icon: Icon,
+  title,
+  value,
+  subtitle,
+  sparkData,
+  accentColor = "primary",
+}: {
+  index: number;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  value: React.ReactNode;
+  subtitle: string;
+  sparkData?: { v: number }[];
+  accentColor?: keyof typeof ACCENT_MAP;
+}) {
+  const accent = ACCENT_MAP[accentColor];
+  return (
+    <motion.div
+      custom={index}
+      variants={cardVariants}
+      initial="hidden"
+      animate="visible"
+      transition={{ duration: 0.25 }}
+    >
+      <Card
+        className="admin-metric group relative overflow-hidden bg-card border-border rounded-xl px-[15px] py-[13px] transition-colors"
+        style={{ ["--card-glow" as string]: accent.glow }}
+      >
+        {/* Accent gradient orb in top-right */}
+        <div
+          className="pointer-events-none absolute -top-12 -right-12 h-32 w-32 rounded-full opacity-0 group-hover:opacity-60 blur-3xl transition-opacity duration-500"
+          style={{ background: `radial-gradient(circle, ${accent.glow}, transparent 70%)` }}
+        />
+        {/* Left accent bar */}
+        
+        <div className="relative flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">{title}</p>
+            <div className="mt-2 text-[13.5px] font-bold tracking-tight tabular-nums text-foreground">
+              {value}
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground/80">{subtitle}</p>
+          </div>
+          <div className={cn(
+            "h-10 w-10 rounded-xl  border border-border flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 group-hover:rotate-3",
+            accent.iconBg,
+          )}>
+            <Icon className={cn("h-5 w-5", accent.iconText)} />
+          </div>
+        </div>
+        {sparkData && sparkData.length > 0 && (
+          <div className="relative mt-3 -mx-1 opacity-80 group-hover:opacity-100 transition-opacity">
+            <Sparkline data={sparkData} color={accent.spark} height={36} width={120} />
+          </div>
+        )}
+      </Card>
+    </motion.div>
+  );
+}
+
+/*  Smooth Progress Bar  */
+
+function ProgressBar({
+  percent,
+  label,
+  value,
+  tone = "primary",
+}: {
+  percent: number;
+  label: string;
+  value: string;
+  tone?: "primary" | "emerald" | "amber" | "red" | "violet";
+}) {
+  const toneClass = {
+    primary: "bg-primary",
+    emerald: "bg-primary",
+    amber: "bg-primary",
+    red: "bg-primary",
+    violet: "bg-primary",
+  }[tone];
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between items-end text-xs">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-semibold tabular-nums text-foreground">
+          {value}
+          <span className="ml-2 text-[10px] text-muted-foreground/70">{percent.toFixed(1)}%</span>
+        </span>
+      </div>
+      <div className="h-2 bg-foreground/[0.06] dark:bg-card border border-border rounded-full overflow-hidden">
+        <motion.div
+          className={cn("h-full  rounded-full", toneClass)}
+          initial={{ width: 0 }}
+          animate={{ width: `${Math.min(percent, 100)}%` }}
+          transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/*  Server Stats Card  */
+
+function ServerStatsCard({ serverStats }: { serverStats: ServerStats }) {
+  const pickTone = (p: number): "primary" | "emerald" | "amber" | "red" | "violet" =>
+    p > 80 ? "red" : p > 60 ? "amber" : "primary";
+
+  return (
+    <Card className="relative overflow-hidden bg-card border-border rounded-xl px-[17px] py-[15px]">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Resources */}
+        <div className="xl:col-span-2 space-y-4">
+          <ProgressBar
+            label={`CPU · ${serverStats.cpu.cores} cores`}
+            percent={serverStats.cpu.usagePercent}
+            value={`${serverStats.cpu.usagePercent.toFixed(1)}%`}
+            tone={pickTone(serverStats.cpu.usagePercent)}
+          />
+          <ProgressBar
+            label="Память"
+            percent={serverStats.memory.usagePercent}
+            value={`${formatGb(serverStats.memory.usedBytes)} / ${formatGb(serverStats.memory.totalBytes)}`}
+            tone={pickTone(serverStats.memory.usagePercent) === "primary" ? "violet" : pickTone(serverStats.memory.usagePercent)}
+          />
+          {serverStats.disk && (
+            <ProgressBar
+              label="Диск"
+              percent={serverStats.disk.usagePercent}
+              value={`${formatGb(serverStats.disk.usedBytes)} / ${formatGb(serverStats.disk.totalBytes)}`}
+              tone={pickTone(serverStats.disk.usagePercent) === "primary" ? "emerald" : pickTone(serverStats.disk.usagePercent)}
+            />
+          )}
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Hostname</p>
+              <p className="mt-1 font-semibold text-sm truncate">{serverStats.hostname}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Платформа</p>
+              <p className="mt-1 font-semibold text-sm truncate">{serverStats.platform} · {serverStats.arch}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3 col-span-2">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Load average</p>
+              <p className="mt-1 font-semibold text-sm tabular-nums">
+                {serverStats.loadAvg.map((l) => l.toFixed(2)).join(" / ")}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Uptime */}
+        <div className="flex flex-col gap-3">
+          <div className="relative overflow-hidden rounded-xl border border-border bg-transparent p-5 flex flex-col items-center justify-center text-center h-full min-h-[180px]">
+            <motion.div
+              animate={{ opacity: [0.25, 0.5, 0.25] }}
+              transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute inset-0 bg-[radial-gradient(circle_at_center,hsl(var(--primary)/0.2)_0%,transparent_60%)] pointer-events-none"
+            />
+            <p className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">Аптайм</p>
+            <p className="text-2xl sm:text-3xl font-extrabold tabular-nums tracking-tight text-foreground">
+              {formatUptime(serverStats.uptimeSeconds)}
+            </p>
+            <div className="mt-4 flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border-border border border-border text-muted-foreground dark:text-muted-foreground px-3 py-1 text-[10px] font-medium">
+                <span className="h-1.5 w-1.5 rounded-full border-border" />
+                Online
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-card border border-border text-muted-foreground px-2.5 py-1 text-[10px]">
+                <Zap className="h-3 w-3" /> сеть
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/*  Node Card  */
+
+function NodeCard({
+  index,
+  node,
+  isBusy,
+  onAction,
+  t,
+}: {
+  index: number;
+  node: RemnaNode;
+  isBusy: boolean;
+  onAction: (uuid: string, action: "enable" | "disable" | "restart") => void;
+  t: (key: string) => string;
+}) {
+  const statusLabel = node.isDisabled
+    ? t("admin.dashboard.node_disabled")
+    : node.isConnecting
+      ? t("admin.dashboard.node_connecting")
+      : node.isConnected
+        ? t("admin.dashboard.node_online")
+        : t("admin.dashboard.node_offline");
+
+  const statusBadge = node.isDisabled
+    ? "bg-gray-500/10 text-gray-400 border-gray-500/20"
+    : node.isConnecting
+      ? "border-border text-muted-foreground dark:text-muted-foreground border-border"
+      : node.isConnected
+        ? "border-border text-muted-foreground dark:text-muted-foreground border-border"
+        : "border-border text-muted-foreground dark:text-muted-foreground border-border";
+
+  const dotColor = node.isDisabled
+    ? "bg-gray-400"
+    : node.isConnecting
+      ? "border-border"
+      : node.isConnected
+        ? "border-border"
+        : "border-border";
+
+  const limit = node.trafficLimitBytes ?? 0;
+  const usedVal = node.trafficUsedBytes ?? 0;
+  const percent = limit > 0 ? Math.min((usedVal / limit) * 100, 100) : 0;
+  const tone: "primary" | "amber" | "red" = percent >= 90 ? "red" : percent >= 70 ? "amber" : "primary";
+  const valueStr = limit > 0 ? `${formatBytes(usedVal)} / ${formatBytes(limit)}` : `${formatBytes(usedVal)}`;
+
+  return (
+    <motion.div custom={index} variants={cardVariants}>
+      <Card className="relative overflow-hidden glass-card glass-card-hover rounded-2xl p-5 hover:border-border transition-all">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="min-w-0">
+              <p className="font-semibold truncate">{node.name || String(node.uuid ?? "").substring(0, 8) || "—"}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {node.address}
+                {node.port != null ? `:${node.port}` : ""}
+              </p>
+            </div>
+          </div>
+          <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium shrink-0", statusBadge)}>
+            <span className={cn("h-1.5 w-1.5 rounded-full", dotColor)} />
+            {statusLabel}
+          </span>
+        </div>
+
+        {/* Bandwidth */}
+        <div className="mb-4">
+          <ProgressBar label="Трафик" percent={percent} value={valueStr} tone={tone} />
+        </div>
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Cpu className="h-3 w-3" /> CPU / RAM
+            </span>
+            <p className="mt-1 font-semibold text-sm tabular-nums">{formatNodeCpuRam(node)}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Wifi className="h-3 w-3" /> Подключено
+            </span>
+            <p className="mt-1 font-semibold text-sm flex items-center gap-2 tabular-nums">
+              {node.usersOnline != null ? (
+                <>
+                  <span className="h-2 w-2 rounded-full border-border" />
+                  {node.usersOnline} онлайн
+                </>
+              ) : (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-slate-500/50" />
+                  Нет данных
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-wrap gap-2">
+          {node.isDisabled ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 gap-2 border-border text-muted-foreground dark:text-muted-foreground hover:border-border hover:border-border bg-white/[0.02]"
+              disabled={isBusy}
+              onClick={() => onAction(node.uuid, "enable")}
+            >
+              {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+              Включить
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 gap-2 border-border text-muted-foreground dark:text-muted-foreground hover:border-border hover:border-border bg-white/[0.02]"
+              disabled={isBusy}
+              onClick={() => onAction(node.uuid, "disable")}
+            >
+              {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <PowerOff className="h-4 w-4" />}
+              Отключить
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            className="flex-1 gap-2 border-border text-primary hover:bg-primary/10 hover:border-border bg-white/[0.02]"
+            disabled={isBusy}
+            onClick={() => onAction(node.uuid, "restart")}
+          >
+            <RotateCw className="h-4 w-4" />
+            Рестарт
+          </Button>
+        </div>
+      </Card>
+    </motion.div>
+  );
+}
+
+/*  */
+/*                       MAIN COMPONENT                              */
+/*  */
+
+export function DashboardPage() {
+  const { t } = useTranslation();
+  const { state } = useAuth();
+  const token = state.accessToken ?? null;
+  const admin = state.admin;
+  const hasRemnaNodesAccess = admin ? canAccessRemnaNodes(admin.role, admin.allowedSections) : false;
+
+  const [chartPeriod, setChartPeriod] = useState(30);
+  const [nodeActionUuid, setNodeActionUuid] = useState<string | null>(null);
+
+  const queryClient = useQueryClient();
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const statsQ = useAdminDashboardStats(token);
+  const serverStatsQ = useAdminServerStats(token);
+  const analyticsQ = useAdminAnalytics(token);
+  const giftAnalyticsQ = useAdminGiftAnalytics(token);
+  const nodesQ = useRemnaNodes(token, hasRemnaNodesAccess);
+  const settingsQ = useAdminSettings(token);
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  const stats = statsQ.data ?? null;
+  const serverStats = serverStatsQ.data ?? null;
+  const analyticsData = analyticsQ.data ?? null;
+  const giftAnalytics = giftAnalyticsQ.data ?? null;
+  const nodes: RemnaNode[] = nodesQ.data?.response ?? [];
+  const defaultCurrency = useMemo(
+    () => (settingsQ.data?.defaultCurrency ? String(settingsQ.data.defaultCurrency).toUpperCase() : "USD"),
+    [settingsQ.data?.defaultCurrency]
+  );
+
+  const loading = statsQ.isLoading;
+  const refreshing = statsQ.isFetching && !statsQ.isLoading;
+
+  const nodeAction = useMutation({
+    mutationFn: async ({ action, nodeUuid }: { action: "enable" | "disable" | "restart"; nodeUuid: string }) => {
+      if (action === "enable") await api.remnaNodeEnable(token!, nodeUuid);
+      else if (action === "disable") await api.remnaNodeDisable(token!, nodeUuid);
+      else await api.remnaNodeRestart(token!, nodeUuid);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: qk.admin.remnaNodes() });
+    },
+  });
+
+
+  const handleNodeAction = useCallback(
+    async (nodeUuid: string, action: "enable" | "disable" | "restart") => {
+      if (!token || !hasRemnaNodesAccess) return;
+      setNodeActionUuid(nodeUuid);
+      try {
+        await nodeAction.mutateAsync({ action, nodeUuid });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : t("admin.dashboard.node_error");
+        // eslint-disable-next-line no-console
+        console.warn(msg);
+      } finally {
+        setNodeActionUuid(null);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [token, hasRemnaNodesAccess, nodeAction.mutateAsync, t]
+  );
+
+  const refreshAll = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["admin"], exact: false });
+  }, [queryClient]);
+
+
+  const chartData = useMemo(() => {
+    const revenueSeries = analyticsData?.revenueSeries ?? [];
+    const clientsSeries = analyticsData?.clientsSeries ?? [];
+    const period = Math.max(chartPeriod, 1);
+
+    const revenueSlice = revenueSeries.slice(-period);
+    const clientsSlice = clientsSeries.slice(-period);
+    const maxLen = Math.max(revenueSlice.length, clientsSlice.length);
+
+    return Array.from({ length: maxLen }).map((_, index) => {
+      const revenuePoint = revenueSlice[index];
+      const clientsPoint = clientsSlice[index];
+      const dateRaw = revenuePoint?.date ?? clientsPoint?.date ?? "";
+      const date = dateRaw
+        ? new Date(dateRaw)
+            .toLocaleDateString("ru-RU", { day: "2-digit", month: "short", timeZone: "Europe/Moscow" })
+            .replace(".", "")
+        : "";
+
+      return {
+        date,
+        revenue: revenuePoint?.value ?? 0,
+        users: clientsPoint?.value ?? 0,
+      };
+    });
+  }, [analyticsData, chartPeriod]);
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const sales90d = analyticsData?.revenueSeries?.reduce((acc: any, curr: any) => acc + curr.value, 0) || 0;
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  /*  Loading  */
+  if (loading && !stats) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <Loader2 className="h-8 w-8 text-primary animate-spin" />
+        <p className="text-sm text-muted-foreground">{t("admin.dashboard.initializing")}</p>
+      </div>
+    );
+  }
+
+  /*  Nodes online/total  */
+  const nodesOnline = nodes.filter((n) => n.isConnected && !n.isDisabled).length;
+  const nodesTotal = nodes.length;
+
+  return (
+    <div className="admin-overview w-full flex flex-col gap-3.5 relative">
+      {/* Background ambient orbs */}
+      
+      
+
+      {/* Page header */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+      >
+        <div className="flex items-start gap-3">
+          <div>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
+              {t("admin.dashboard.title")}
+            </h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">{t("admin.dashboard.subtitle")}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border-border border border-border text-muted-foreground dark:text-muted-foreground px-3 py-1 text-[11px] font-medium">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full border-border opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full border-border" />
+            </span>
+            Live
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={refreshAll}
+            disabled={loading || refreshing}
+            className="h-9 w-9 rounded-full hover:bg-card"
+            title="Обновить"
+          >
+            <RefreshCw className={cn("h-4 w-4 text-muted-foreground", refreshing && "animate-spin text-primary")} />
+          </Button>
+        </div>
+      </motion.div>
+
+      {/* Manager warning */}
+      {admin?.role === "MANAGER" && (!admin.allowedSections || admin.allowedSections.length === 0) && (
+        <motion.div
+          className="rounded-xl border border-border border-border px-4 py-3 text-sm text-muted-foreground dark:text-muted-foreground"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          {t("admin.dashboard.no_access_warning")}
+        </motion.div>
+      )}
+
+      {/* Error display */}
+      {statsQ.isError && statsQ.error instanceof Error && (
+        <motion.div
+          className="rounded-xl border border-border border-border px-4 py-3 text-sm text-muted-foreground dark:text-muted-foreground"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          {statsQ.error.message || t("admin.dashboard.loading_error")}
+        </motion.div>
+      )}
+
+      {/* Users Section */}
+      <section className="flex flex-col">
+        <SectionHeader icon={Users} title={t("admin.dashboard.users_title")} subtitle={t("admin.dashboard.users_subtitle")} />
+        <motion.div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3" variants={staggerContainer} initial="hidden" animate="visible">
+          <StatCard
+            index={0}
+            icon={Users}
+            title={t("admin.dashboard.total_users")}
+            value={stats ? <CountUpNumber value={stats.users.total} /> : "—"}
+            subtitle={t("admin.dashboard.panel_clients")}
+            accentColor="primary"
+          />
+          <StatCard
+            index={1}
+            icon={Shield}
+            title={t("admin.dashboard.bound_to_remna")}
+            value={stats ? <CountUpNumber value={stats.users.withRemna} /> : "—"}
+            subtitle={t("admin.dashboard.with_remna_uuid")}
+            accentColor="cyan"
+          />
+          <StatCard
+            index={2}
+            icon={UserPlus}
+            title={t("admin.dashboard.new_today")}
+            value={stats ? <CountUpNumber value={stats.users.newToday} /> : "—"}
+            subtitle={t("admin.dashboard.registrations_today")}
+            accentColor="emerald"
+          />
+        </motion.div>
+      </section>
+
+      {/* Analytics Section */}
+      <section className="flex flex-col">
+        <SectionHeader icon={Activity} title={t("admin.dashboard.micro_analytics")} subtitle={t("admin.dashboard.key_metrics")} />
+        <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={0}>
+          <Card className="relative overflow-hidden bg-card border-border rounded-xl px-[17px] py-[15px]">
+            <div className="admin-revenue-summary grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+              {[
+                { label: t("admin.dashboard.total"), amount: stats?.sales.totalAmount ?? 0, count: stats?.sales.totalCount ?? 0, gradient: "bg-muted", textColor: "text-primary" },
+                { label: t("admin.dashboard.today"), amount: stats?.sales.todayAmount ?? 0, count: stats?.sales.todayCount ?? 0, gradient: "bg-muted", textColor: "text-muted-foreground dark:text-muted-foreground" },
+                { label: t("admin.dashboard.7_days"), amount: stats?.sales.last7DaysAmount ?? 0, count: stats?.sales.last7DaysCount ?? 0, gradient: "bg-muted", textColor: "text-muted-foreground dark:text-muted-foreground" },
+                { label: t("admin.dashboard.30_days"), amount: stats?.sales.last30DaysAmount ?? 0, count: stats?.sales.last30DaysCount ?? 0, gradient: "bg-muted", textColor: "text-muted-foreground dark:text-muted-foreground" },
+                { label: t("admin.dashboard.90_days"), amount: sales90d as number, count: 0, isLast90: true, gradient: "bg-muted", textColor: "text-muted-foreground dark:text-muted-foreground" },
+              ].map((item, i) => (
+                <motion.div
+                  key={i}
+                  whileHover={{ y: -2, scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  className={cn("relative overflow-hidden rounded-xl border border-border  p-3 shadow-sm", item.gradient)}
+                >
+                  <p className={cn("text-[11px] font-medium", item.textColor)}>{item.label}</p>
+                  <p className="mt-1.5 text-lg font-extrabold tabular-nums tracking-tight text-foreground">
+                    {stats || analyticsData ? <CountUpMoney value={item.amount} currency={defaultCurrency} /> : "—"}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground/80 mt-0.5">
+                    {item.isLast90 ? "За последние 90 дней" : `Платежи: ${item.count}`}
+                  </p>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">{t("admin.dashboard.analytics_period")}</p>
+                <h3 className="text-base font-bold tracking-tight">Доход / новые пользователи</h3>
+              </div>
+              <div className="flex items-center gap-1 bg-foreground/[0.03] dark:bg-white/[0.02] p-1 rounded-xl border border-border">
+                {[7, 30, 90].map((period) => {
+                  const isActive = chartPeriod === period;
+                  return (
+                    <button
+                      key={period}
+                      onClick={() => setChartPeriod(period)}
+                      className={cn(
+                        "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:text-foreground hover:bg-card"
+                      )}
+                    >
+                      {period}d
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="admin-revenue-chart mt-4 h-[320px] w-full rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="dashRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-white/10" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} className="text-muted-foreground" />
+                  <YAxis
+                    yAxisId="left"
+                    tick={{ fontSize: 11 }}
+                    className="text-muted-foreground"
+                    tickFormatter={(value) => formatMoney(Number(value ?? 0), defaultCurrency)}
+                  />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} className="text-muted-foreground" allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{
+                      background: "rgba(10,10,20,0.85)",
+                      border: "1px solid rgba(255,255,255,0.15)",
+                      borderRadius: "12px",
+                      color: "white",
+                      fontSize: "12px",
+                    }}
+                    formatter={(value, name) => {
+                      if (name === "Доход") return [formatMoney(Number(value ?? 0), defaultCurrency), "Доход"];
+                      return [Number(value ?? 0).toLocaleString(), "Новые"];
+                    }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: "11px", color: "rgba(148,163,184,0.9)" }} />
+                  <Area
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="revenue"
+                    name="Доход"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    fill="url(#dashRevenue)"
+                    dot={false}
+                    isAnimationActive
+                    animationDuration={1000}
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="users"
+                    name="Новые"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    dot={false}
+                    isAnimationActive
+                    animationDuration={1000}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </motion.div>
+      </section>
+
+      {/* Gift Analytics */}
+      {giftAnalytics && (giftAnalytics.totalSubscriptions > 0 || giftAnalytics.pendingCodes > 0) && (
+        <section className="flex flex-col">
+          <SectionHeader icon={Gift} title="Подарки" subtitle="Аналитика подарков" />
+          <motion.div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" variants={staggerContainer} initial="hidden" animate="visible">
+            <StatCard
+              index={0}
+              icon={Gift}
+              title="Всего подписок"
+              value={<CountUpNumber value={giftAnalytics.totalSubscriptions} />}
+              subtitle={`+${giftAnalytics.last30Days} за 30 дней`}
+              accentColor="violet"
+            />
+            <StatCard
+              index={1}
+              icon={CheckCircle}
+              title="Свои"
+              value={<CountUpNumber value={giftAnalytics.activatedSelf} />}
+              subtitle="активировано себе"
+              accentColor="emerald"
+            />
+            <StatCard
+              index={2}
+              icon={Send}
+              title="Подарено"
+              value={<CountUpNumber value={giftAnalytics.gifted} />}
+              subtitle={`${giftAnalytics.redeemedCodes} кодов использовано`}
+              accentColor="cyan"
+            />
+            <StatCard
+              index={3}
+              icon={TrendingUp}
+              title="Конверсия"
+              value={<span>{giftAnalytics.conversionRate}%</span>}
+              subtitle={`${giftAnalytics.pendingCodes} ожид. · ${giftAnalytics.expiredCodes} истёк.`}
+              accentColor="amber"
+            />
+          </motion.div>
+        </section>
+      )}
+
+      {/* Server Stats */}
+      {serverStats && (
+        <section className="flex flex-col">
+          <SectionHeader icon={Server} title={t("admin.dashboard.command_center")} subtitle={t("admin.dashboard.server_monitoring")} />
+          <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={0}>
+            <ServerStatsCard serverStats={serverStats} />
+          </motion.div>
+        </section>
+      )}
+
+      {/* Remna Nodes */}
+      <section className="flex flex-col">
+        <SectionHeader
+          icon={Globe}
+          title={t("admin.dashboard.remna_nodes")}
+          subtitle={
+            hasRemnaNodesAccess && nodes.length > 0
+              ? t("admin.dashboard.nodes_online_count").replace("{online}", String(nodesOnline)).replace("{total}", String(nodesTotal))
+              : t("admin.dashboard.nodes_subtitle")
+          }
+        />
+        {!hasRemnaNodesAccess ? (
+          <Card className="glass-card glass-card-hover rounded-2xl py-10 text-center">
+            <p className="text-sm text-muted-foreground">{t("admin.dashboard.no_node_access")}</p>
+          </Card>
+        ) : nodes.length === 0 ? (
+          <Card className="glass-card glass-card-hover rounded-2xl py-10 text-center">
+            <p className="text-sm text-muted-foreground">{t("admin.dashboard.nodes_not_loaded")}</p>
+          </Card>
+        ) : (
+          <motion.div className="grid gap-4 lg:grid-cols-2" variants={staggerContainer} initial="hidden" animate="visible">
+            {nodes.map((node, idx) => (
+              <NodeCard
+                key={node.uuid}
+                index={idx}
+                node={node}
+                isBusy={nodeActionUuid === node.uuid}
+                onAction={handleNodeAction}
+                t={t}
+              />
+            ))}
+          </motion.div>
+        )}
+      </section>
+    </div>
+  );
+}

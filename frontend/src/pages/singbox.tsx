@@ -1,0 +1,912 @@
+import { adminAlert, adminConfirm, adminPrompt } from "@/lib/admin-dialogs";
+import { useState } from "react";
+import { useAuth } from "@/contexts/auth";
+import {
+  api,
+  type SingboxNodeListItem,
+  type CreateSingboxNodeResponse,
+  type SingboxNodeDetail,
+} from "@/lib/api";
+import {
+  useSingboxNodes,
+  useSingboxCategories,
+  useSingboxNodeDetail,
+  useCreateSingboxNodeMutation,
+  useUpdateSingboxNodeMutation,
+  useDeleteSingboxNodeMutation,
+  useCreateSingboxCategoryMutation,
+  useUpdateSingboxCategoryMutation,
+  useDeleteSingboxCategoryMutation,
+  useCreateSingboxTariffMutation,
+  useUpdateSingboxTariffMutation,
+  useDeleteSingboxTariffMutation,
+} from "@/lib/admin-queries";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { motion } from "framer-motion";
+import { Server, Plus, Copy, Check, Loader2, Pencil, Trash2, FileJson, Layers, Tag } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
+import type { SingboxCategoryItem, SingboxTariffListItem } from "@/lib/api";
+
+function formatBytes(s: string): string {
+  const n = Number(s);
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return iso;
+  }
+}
+
+function statusBadge(status: string) {
+  const map: Record<string, string> = {
+    ONLINE: "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+    OFFLINE: "border-border bg-foreground/[0.05] dark:bg-white/[0.05] text-muted-foreground",
+    DISABLED: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  };
+  const dotColor: Record<string, string> = {
+    ONLINE: "bg-emerald-500",
+    OFFLINE: "bg-muted-foreground/50",
+    DISABLED: "bg-amber-500",
+  };
+  const label = status === "ONLINE" ? "Онлайн" : status === "DISABLED" ? "Отключена" : "Офлайн";
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium", map[status] ?? map.OFFLINE)}>
+      <span className={cn("h-1.5 w-1.5 rounded-full", dotColor[status] ?? dotColor.OFFLINE)} />
+      {label}
+    </span>
+  );
+}
+
+const PROTOCOLS = ["VLESS", "SHADOWSOCKS", "TROJAN", "HYSTERIA2", "AMNEZIAWG", "AWP_AWG", "AWP_WIREGUARD", "AWP_XRAY"] as const;
+
+export function SingboxPage() {
+  const [webApiToken, setWebApiToken] = useState("");
+  const [webSlotBusy, setWebSlotBusy] = useState(false);
+  const [webPanelForm, setWebPanelForm] = useState({ url: "", apiToken: "", serverId: "0", protocol: "awg2" });
+  const { state } = useAuth();
+  const token = state.accessToken ?? null;
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [newNodeHost, setNewNodeHost] = useState("");
+  const [newNodeName, setNewNodeName] = useState("");
+  const [newNodeProtocol, setNewNodeProtocol] = useState<string>("VLESS");
+  const [newNodePort, setNewNodePort] = useState("443");
+  const [addResult, setAddResult] = useState<CreateSingboxNodeResponse | null>(null);
+  const [copied, setCopied] = useState<"compose" | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [configOpen, setConfigOpen] = useState(false);
+  const [configJson, setConfigJson] = useState("");
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingNode, setEditingNode] = useState<SingboxNodeListItem | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPort, setEditPort] = useState("443");
+  const [editProtocol, setEditProtocol] = useState("VLESS");
+  const [nodeToDelete, setNodeToDelete] = useState<SingboxNodeListItem | null>(null);
+  const [activeTab, setActiveTab] = useState("nodes");
+  const [categoryModal, setCategoryModal] = useState<"add" | { edit: SingboxCategoryItem } | null>(null);
+  const [categoryForm, setCategoryForm] = useState({ name: "", sortOrder: "0" });
+  const [tariffModal, setTariffModal] = useState<{ kind: "add"; categoryId: string } | { kind: "edit"; tariff: SingboxTariffListItem } | null>(null);
+  const [tariffForm, setTariffForm] = useState({
+    protocol: "SINGBOX", name: "", categoryId: "", slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true,
+  });
+
+  const nodesQuery = useSingboxNodes(token);
+  const nodes = nodesQuery.data?.items ?? [];
+  const loading = nodesQuery.isLoading;
+
+  // Категории и тарифы грузятся одним ответом — обе вкладки зависят от него.
+  const categoriesQuery = useSingboxCategories(token);
+  const categories = categoriesQuery.data?.items ?? [];
+  const categoriesLoading = categoriesQuery.isLoading || categoriesQuery.isFetching;
+
+  const detailQuery = useSingboxNodeDetail(token, detailId);
+  const detailNode: SingboxNodeDetail | null = detailQuery.data ?? null;
+  const webStats = (() => { try { return detailNode?.webPanel && detailNode.metadata ? JSON.parse(detailNode.metadata) as { cpu?: number; ram_percent?: number; disk_percent?: number } : null; } catch { return null; } })();
+  const detailLoading = detailQuery.isFetching;
+
+  const createNode = useCreateSingboxNodeMutation(token);
+  const updateNode = useUpdateSingboxNodeMutation(token);
+  const deleteNode = useDeleteSingboxNodeMutation(token);
+  const createCategory = useCreateSingboxCategoryMutation(token);
+  const updateCategory = useUpdateSingboxCategoryMutation(token);
+  const deleteCategory = useDeleteSingboxCategoryMutation(token);
+  const createTariff = useCreateSingboxTariffMutation(token);
+  const updateTariff = useUpdateSingboxTariffMutation(token);
+  const deleteTariff = useDeleteSingboxTariffMutation(token);
+
+  const creating = createNode.isPending;
+  const saving = updateNode.isPending;
+  const deleting = deleteNode.isPending;
+  const savingCat = createCategory.isPending || updateCategory.isPending;
+  const savingTariff = createTariff.isPending || updateTariff.isPending;
+  const configSaving = updateNode.isPending;
+
+  if (!token) return null;
+
+  function handleSaveCategory() {
+    if (!token) return;
+    const name = categoryForm.name.trim();
+    if (!name) return;
+    const payload = { name, sortOrder: parseInt(categoryForm.sortOrder, 10) || 0 };
+    if (categoryModal === "add") {
+      createCategory.mutate(payload, {
+        onSuccess: () => {
+          setCategoryModal(null);
+          setCategoryForm({ name: "", sortOrder: "0" });
+        },
+        onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
+      });
+    } else if (categoryModal && "edit" in categoryModal) {
+      updateCategory.mutate({ id: categoryModal.edit.id, data: payload }, {
+        onSuccess: () => {
+          setCategoryModal(null);
+          setCategoryForm({ name: "", sortOrder: "0" });
+        },
+        onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
+      });
+    }
+  }
+
+  async function handleDeleteCategory(id: string) {
+    if (!token || !(await adminConfirm("Удалить категорию и все тарифы в ней?"))) return;
+    deleteCategory.mutate(id, {
+      onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
+    });
+  }
+
+  function handleSaveTariff() {
+    if (!token) return;
+    const name = tariffForm.name.trim();
+    if (!name) return;
+    const price = parseFloat(tariffForm.price);
+    if (!Number.isFinite(price) || price < 0) return;
+    const trafficBytes = tariffForm.trafficLimitBytes.trim() === "" ? null : (parseInt(tariffForm.trafficLimitBytes, 10) || null);
+    const payload = {
+      name,
+      categoryId: tariffForm.categoryId || (tariffModal && "categoryId" in tariffModal ? tariffModal.categoryId : ""),
+      slotCount: parseInt(tariffForm.slotCount, 10) || 1,
+      durationDays: parseInt(tariffForm.durationDays, 10) || 30,
+      trafficLimitBytes: trafficBytes != null ? trafficBytes * 1024 * 1024 * 1024 : null,
+      price,
+      currency: tariffForm.currency.toUpperCase(),
+      sortOrder: parseInt(tariffForm.sortOrder, 10) || 0,
+      enabled: tariffForm.enabled,
+      protocol: tariffForm.protocol,
+    };
+    const resetForm = () => {
+      setTariffModal(null);
+      setTariffForm({ protocol: "SINGBOX", name: "", categoryId: "", slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true });
+    };
+    if (tariffModal?.kind === "add") {
+      if (!payload.categoryId) return;
+      createTariff.mutate(payload, {
+        onSuccess: resetForm,
+        onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
+      });
+    } else if (tariffModal?.kind === "edit") {
+      updateTariff.mutate({ id: tariffModal.tariff.id, data: payload }, {
+        onSuccess: resetForm,
+        onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
+      });
+    }
+  }
+
+  async function handleDeleteTariff(id: string) {
+    if (!token || !(await adminConfirm("Удалить тариф?"))) return;
+    deleteTariff.mutate(id, {
+      onSuccess: () => setTariffModal(null),
+      onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
+    });
+  }
+
+  function handleAddNode() {
+    if (!token) return;
+    setAddResult(null);
+    const port = parseInt(newNodePort, 10) || 443;
+    createNode.mutate(
+      { name: newNodeName.trim() || "Sing-box node", protocol: newNodeProtocol, port, tlsEnabled: newNodeProtocol !== "AMNEZIAWG", ...(newNodeProtocol === "AMNEZIAWG" && { publicHost: newNodeHost.trim() }), ...(newNodeProtocol.startsWith("AWP_") && { webPanel: { ...webPanelForm, serverId: Number(webPanelForm.serverId) } }) },
+      {
+        onSuccess: (res) => { setAddResult(res); setWebPanelForm(f => ({ ...f, apiToken: "" })); },
+        onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка создания")),
+      },
+    );
+  }
+
+  function copyCompose() {
+    if (!addResult?.dockerCompose) return;
+    navigator.clipboard.writeText(addResult.dockerCompose);
+    setCopied("compose");
+    setTimeout(() => setCopied(null), 2000);
+  }
+
+  function openEdit(node: SingboxNodeListItem) {
+    setWebApiToken("");
+    setEditingNode(node);
+    setEditName(node.name);
+    setEditPort(String(node.port));
+    setEditProtocol(node.protocol);
+    setEditOpen(true);
+  }
+
+  async function changeWebSlot(slotId: string, data: { expiresAt?: string; status?: string }) {
+    if (!token || !detailId) return;
+    setWebSlotBusy(true);
+    try { await api.updateWebPanelSlot(token, detailId, slotId, data); await detailQuery.refetch(); }
+    catch (error) { (await adminAlert(error instanceof Error ? error.message : "Не удалось изменить доступ")); }
+    finally { setWebSlotBusy(false); }
+  }
+
+  function handleSaveEdit() {
+    if (!token || !editingNode) return;
+    const port = parseInt(editPort, 10) || 443;
+    updateNode.mutate(
+      { id: editingNode.id, data: { name: editName.trim(), port, protocol: editProtocol, ...(webApiToken ? { webApiToken } : {}) } },
+      {
+        onSuccess: () => {
+          setEditOpen(false);
+          setEditingNode(null);
+        },
+        onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка")),
+      },
+    );
+  }
+
+  function handleDelete() {
+    if (!token || !nodeToDelete) return;
+    deleteNode.mutate(nodeToDelete.id, {
+      onSuccess: () => {
+        if (detailId === nodeToDelete.id) setDetailId(null);
+        setNodeToDelete(null);
+      },
+      onError: async (e) => (await adminAlert(e instanceof Error ? e.message : "Ошибка удаления")),
+    });
+  }
+
+  function openConfigEditor() {
+    if (!detailNode) return;
+    const raw = detailNode.customConfigJson;
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        setConfigJson(JSON.stringify(parsed, null, 2));
+      } catch {
+        setConfigJson(raw);
+      }
+    } else {
+      setConfigJson(`{
+  "log": { "level": "info" },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "stealthnet-in",
+      "listen": "::",
+      "listen_port": ${detailNode.port},
+      "users": []
+    }
+  ],
+  "outbounds": [
+    { "type": "direct", "tag": "direct" }
+  ]
+}`);
+    }
+    setConfigError(null);
+    setConfigOpen(true);
+  }
+
+  function saveConfig() {
+    if (!token || !detailNode) return;
+    setConfigError(null);
+    const trimmed = configJson.trim();
+    if (!trimmed) {
+      setConfigError("Конфиг не может быть пустым");
+      return;
+    }
+    try {
+      JSON.parse(trimmed);
+    } catch (e) {
+      setConfigError("Невалидный JSON: " + (e instanceof Error ? e.message : ""));
+      return;
+    }
+    updateNode.mutate(
+      { id: detailNode.id, data: { customConfigJson: trimmed } },
+      {
+        onSuccess: () => setConfigOpen(false),
+        onError: (e) => setConfigError(e instanceof Error ? e.message : "Ошибка сохранения"),
+      },
+    );
+  }
+
+  function formatPrice(amount: number, currency: string) {
+    return new Intl.NumberFormat("ru-RU", {
+      style: "currency",
+      currency: currency.toUpperCase() === "RUB" ? "RUB" : "USD",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  }
+
+  return (
+    <div className="flex flex-col gap-3.5 relative">
+
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"
+      >
+        <div className="flex items-start gap-3">
+          <div>
+            <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">
+              Sing-box / AmneziaWG
+            </h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">
+              Ноды VLESS / Shadowsocks / Trojan / Hysteria2 / AmneziaWG. Категории и тарифы для продажи доступов.
+            </p>
+          </div>
+        </div>
+        {activeTab === "nodes" && (
+          <Button onClick={() => { setAddOpen(true); setAddResult(null); setNewNodeName(""); setNewNodeProtocol("VLESS"); setNewNodePort("443"); }} className="gap-2 rounded-xl">
+            <Plus className="h-4 w-4" />
+            Добавить ноду
+          </Button>
+        )}
+      </motion.div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid grid-cols-3 h-auto w-full max-w-md bg-foreground/[0.03] dark:bg-white/[0.02] border border-border rounded-xl p-1">
+          <TabsTrigger value="nodes" className="flex min-w-0 items-center gap-1.5 px-2 sm:px-4 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <Server className="hidden h-4 w-4 shrink-0 sm:block" />
+            Ноды
+          </TabsTrigger>
+          <TabsTrigger value="categories" className="flex min-w-0 items-center gap-1.5 px-2 sm:px-4 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <Layers className="hidden h-4 w-4 shrink-0 sm:block" />
+            Категории
+          </TabsTrigger>
+          <TabsTrigger value="tariffs" className="flex min-w-0 items-center gap-1.5 px-2 sm:px-4 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md">
+            <Tag className="hidden h-4 w-4 shrink-0 sm:block" />
+            Тарифы
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="nodes" className="mt-4">
+      {loading ? (
+        <Card className="bg-card border-border rounded-2xl py-16 flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Загружаем ноды…</p>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card className="bg-card border-border rounded-2xl p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <div>
+                <h3 className="text-sm font-bold tracking-tight">Ноды</h3>
+                <p className="text-xs text-muted-foreground">Список sing-box нод</p>
+              </div>
+            </div>
+            {nodes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center py-8">
+                <p className="text-sm font-medium">Нод пока нет</p>
+                <p className="text-xs text-muted-foreground mt-1">Нажмите «Добавить ноду» в шапке страницы.</p>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {nodes.map((n) => (
+                  <motion.li
+                    key={n.id}
+                    whileHover={{ y: -1 }}
+                    className={cn(
+                      "relative overflow-hidden flex items-center justify-between gap-2 rounded-xl border p-3 cursor-pointer transition-all",
+                      detailId === n.id
+                        ? "border-border bg-primary/5"
+                        : "border-border bg-foreground/[0.02] dark:bg-white/[0.02] hover:bg-foreground/[0.05] dark:hover:bg-white/[0.04] hover:border-border"
+                    )}
+                    onClick={() => setDetailId(n.id)}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-medium truncate">{n.name || n.id.slice(0, 8)}</span>
+                          {n.hasCustomConfig && (
+                            <FileJson className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {statusBadge(n.status)}
+                          <span className="text-[10px] text-muted-foreground">{n.protocol}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-border px-2 py-0.5 text-[10px] text-muted-foreground shrink-0">
+                      {n.slotsCount} сл.
+                    </span>
+                  </motion.li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card className="bg-card border-border rounded-2xl p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <div>
+                <h3 className="text-sm font-bold tracking-tight">Детали ноды</h3>
+                <p className="text-xs text-muted-foreground">
+                  {detailId ? (detailLoading ? "Загрузка…" : "Клик по ноде — детали и конфиг") : "Выберите ноду"}
+                </p>
+              </div>
+            </div>
+            {!detailId ? (
+              <div className="flex flex-col items-center justify-center text-center py-8">
+                <p className="text-sm text-muted-foreground">Выберите ноду из списка слева.</p>
+              </div>
+            ) : detailLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : detailNode ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-4 grid gap-2 text-sm">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Название</span><span className="font-medium">{detailNode.name || "—"}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-muted-foreground">Статус</span>{statusBadge(detailNode.status)}</div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Хост</span><span className="font-mono text-xs">{detailNode.publicHost || "—"}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Порт / протокол</span><span className="font-mono text-xs">{detailNode.port} / {detailNode.protocol}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Heartbeat</span><span className="text-xs">{formatDate(detailNode.lastSeenAt)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Трафик</span><span className="text-xs tabular-nums"> {formatBytes(detailNode.trafficInBytes)}  {formatBytes(detailNode.trafficOutBytes)}</span></div>
+                  {detailNode.webPanel && <><div className="flex justify-between gap-2"><span className="text-muted-foreground">Web Panel</span><span className="text-xs break-all">{detailNode.webPanel.url}</span></div><div className="flex justify-between"><span className="text-muted-foreground">Протокол в панели</span><span>{detailNode.webPanel.protocol}</span></div></>}
+                  {webStats && <div className="text-xs text-muted-foreground">CPU: {webStats.cpu ?? "—"}% · RAM: {webStats.ram_percent ?? "—"}% · Диск: {webStats.disk_percent ?? "—"}%</div>}
+                  <div className="flex justify-between"><span className="text-muted-foreground">Слотов</span><span className="font-semibold">{detailNode.slots.length}</span></div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" disabled={detailNode.protocol === "AMNEZIAWG" || detailNode.protocol.startsWith("AWP_")} onClick={openConfigEditor} className="gap-1.5 rounded-xl">
+                    <FileJson className="h-4 w-4" />
+                    Конфиг JSON
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => openEdit({ ...detailNode, slotsCount: detailNode.slots.length, hasCustomConfig: !!detailNode.customConfigJson } as SingboxNodeListItem)} className="gap-1.5 rounded-xl">
+                    <Pencil className="h-4 w-4" />
+                    Изменить
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5 rounded-xl border-red-500/30 text-red-500 dark:text-red-400 hover:bg-red-500/10 hover:border-red-500/50" onClick={() => setNodeToDelete({ ...detailNode, slotsCount: detailNode.slots.length, hasCustomConfig: !!detailNode.customConfigJson } as SingboxNodeListItem)}>
+                    <Trash2 className="h-4 w-4" />
+                    Удалить
+                  </Button>
+                </div>
+                {detailNode.slots.length > 0 && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-2 block">Слоты</Label>
+                    <ul className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] divide-y divide-border text-sm overflow-hidden">
+                      {detailNode.slots.map((s) => (
+                        <li key={s.id} className="px-3 py-2 flex justify-between items-center">
+                          <span className="font-mono text-xs">{s.userIdentifier}</span>
+                          <span className="text-muted-foreground text-xs">{formatDate(s.expiresAt)}</span>
+                          {detailNode.protocol.startsWith("AWP_") && <div className="flex gap-1">
+                            <Button size="sm" variant="outline" disabled={webSlotBusy} onClick={async () => { const days = (await adminPrompt("На сколько дней продлить?", "30")); const count = Number(days); if (days && Number.isInteger(count) && count > 0 && count <= 3650) void changeWebSlot(s.id, { expiresAt: new Date(Math.max(Date.now(), Date.parse(s.expiresAt)) + count * 86400000).toISOString(), status: "ACTIVE" }); }}>Продлить</Button>
+                            <Button size="sm" variant="outline" disabled={webSlotBusy || s.status === "REVOKED"} onClick={async () => { if ((await adminConfirm("Отозвать доступ во внешней панели?"))) void changeWebSlot(s.id, { status: "REVOKED" }); }}>Отозвать</Button>
+                          </div>}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-sm">Не удалось загрузить ноду.</p>
+            )}
+          </Card>
+        </div>
+      )}
+        </TabsContent>
+
+        <TabsContent value="categories" className="mt-4">
+          <Card className="bg-card border-border rounded-2xl p-5">
+            <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight">Категории</h3>
+                  <p className="text-xs text-muted-foreground">Группы тарифов для магазина доступов</p>
+                </div>
+              </div>
+              <Button onClick={() => { setCategoryModal("add"); setCategoryForm({ name: "", sortOrder: "0" }); }} size="sm" className="gap-1.5 rounded-xl">
+                <Plus className="h-4 w-4" />
+                Добавить
+              </Button>
+            </div>
+            {categoriesLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+            ) : categories.length === 0 ? (
+              <p className="text-muted-foreground text-sm py-8 text-center">Нет категорий. Добавьте категорию, затем тарифы.</p>
+            ) : (
+              <ul className="space-y-2">
+                {categories.map((c, i) => (
+                  <motion.li
+                    key={c.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                    whileHover={{ y: -1 }}
+                    className="rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.02] p-3 flex items-center justify-between hover:border-border transition-all"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="font-medium truncate">{c.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="inline-flex items-center rounded-full bg-foreground/[0.05] dark:bg-white/[0.05] border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
+                        {c.tariffs.length} тарифов
+                      </span>
+                      <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => { setCategoryModal({ edit: c }); setCategoryForm({ name: c.name, sortOrder: String(c.sortOrder) }); }}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg border-red-500/30 text-red-500 dark:text-red-400 hover:bg-red-500/10 hover:border-red-500/50" onClick={() => handleDeleteCategory(c.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </motion.li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="tariffs" className="mt-4">
+          <Card className="bg-card border-border rounded-2xl p-5">
+            <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <div>
+                  <h3 className="text-sm font-bold tracking-tight">Тарифы</h3>
+                  <p className="text-xs text-muted-foreground">Тарифы по категориям. Клиенты покупают по singboxTariffId.</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                className="gap-1.5 rounded-xl"
+                onClick={async () => {
+                  if (categories.length === 0) { (await adminAlert("Сначала добавьте категорию")); return; }
+                  setTariffModal({ kind: "add", categoryId: categories[0]!.id });
+                  setTariffForm({ protocol: "SINGBOX", name: "", categoryId: categories[0]!.id, slotCount: "1", durationDays: "30", trafficLimitBytes: "", price: "", currency: "rub", sortOrder: "0", enabled: true });
+                }}
+              >
+                <Plus className="h-4 w-4" />
+                Добавить
+              </Button>
+            </div>
+            {categoriesLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+            ) : categories.length === 0 ? (
+              <p className="text-muted-foreground text-sm py-8 text-center">Добавьте категорию во вкладке «Категории».</p>
+            ) : (
+              <div className="space-y-5">
+                {categories.map((cat) => (
+                  <div key={cat.id}>
+                    <h3 className="font-semibold text-xs uppercase tracking-wider text-muted-foreground mb-2 px-1">{cat.name}</h3>
+                    {cat.tariffs.length === 0 ? (
+                      <p className="text-sm text-muted-foreground ml-2">Нет тарифов</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {cat.tariffs.map((t) => (
+                          <motion.li
+                            key={t.id}
+                            whileHover={{ y: -1 }}
+                            className={cn(
+                              "rounded-xl border p-3 flex items-center justify-between gap-3 transition-all flex-wrap",
+                              t.enabled
+                                ? "border-border bg-foreground/[0.03] dark:bg-white/[0.02] hover:border-border"
+                                : "border-amber-500/20 bg-amber-500/[0.04] hover:border-amber-500/30"
+                            )}
+                          >
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <div className="min-w-0">
+                                <p className="font-medium truncate">{t.name}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {t.protocol === "AMNEZIAWG" ? "AmneziaWG · " : ""}{t.slotCount} сл. · {t.durationDays} дн. · <span className="font-semibold text-emerald-500 dark:text-emerald-400">{formatPrice(t.price, t.currency)}</span>
+                                  {t.trafficLimitBytes ? ` · ${formatBytes(t.trafficLimitBytes)}` : ""}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {!t.enabled && (
+                                <span className="inline-flex items-center rounded-full bg-amber-500/10 text-amber-500 dark:text-amber-400 border border-amber-500/20 px-2 py-0.5 text-[10px] font-medium">
+                                  Выкл
+                                </span>
+                              )}
+                              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => {
+                                setTariffModal({ kind: "edit", tariff: { ...t, categoryId: cat.id, categoryName: cat.name, sortOrder: 0 } as SingboxTariffListItem });
+                                setTariffForm({
+                                  protocol: t.protocol ?? "SINGBOX", name: t.name, categoryId: cat.id, slotCount: String(t.slotCount), durationDays: String(t.durationDays),
+                                  trafficLimitBytes: t.trafficLimitBytes ? String(Math.round(Number(t.trafficLimitBytes) / (1024 ** 3))) : "", price: String(t.price), currency: t.currency.toLowerCase(), sortOrder: "0", enabled: t.enabled,
+                                });
+                              }}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg border-red-500/30 text-red-500 dark:text-red-400 hover:bg-red-500/10 hover:border-red-500/50" onClick={() => handleDeleteTariff(t.id)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </motion.li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Диалог: добавить ноду */}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Добавить ноду или подключить Web Panel</DialogTitle>
+            <DialogDescription>Для своей ноды получите Docker Compose. Для Amnezia Web Panel укажите адрес и API-токен.</DialogDescription>
+          </DialogHeader>
+          {!addResult ? (
+            <div className="space-y-4 py-4">
+              <div className="grid gap-2">
+                <Label>Название</Label>
+                <Input
+                  value={newNodeName}
+                  onChange={(e) => setNewNodeName(e.target.value)}
+                  placeholder="Sing-box node 1"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Протокол</Label>
+                <select
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                  value={newNodeProtocol}
+                  onChange={(e) => { setNewNodeProtocol(e.target.value); setWebPanelForm(f => ({ ...f, protocol: e.target.value === "AWP_WIREGUARD" ? "wireguard" : e.target.value === "AWP_XRAY" ? "xray" : "awg2" })); setNewNodePort(e.target.value === "AMNEZIAWG" ? "51820" : "443"); }}
+                >
+                  {PROTOCOLS.map((p) => (
+                    <option key={p} value={p}>{p.startsWith("AWP_") ? `Amnezia Web Panel · ${p.slice(4)}` : p}</option>
+                  ))}
+                </select>
+              </div>
+              {!newNodeProtocol.startsWith("AWP_") && <div className="grid gap-2">
+                <Label>Порт</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={newNodePort}
+                  onChange={(e) => setNewNodePort(e.target.value)}
+                />
+              </div>}
+              {newNodeProtocol.startsWith("AWP_") && <div className="space-y-3">
+                <Label>Адрес Amnezia Web Panel</Label><Input value={webPanelForm.url} onChange={e => setWebPanelForm(f => ({ ...f, url: e.target.value }))} placeholder="https://amnezia.example.com" />
+                <Label>API-токен</Label><Input type="password" autoComplete="new-password" value={webPanelForm.apiToken} onChange={e => setWebPanelForm(f => ({ ...f, apiToken: e.target.value }))} />
+                <Label>Номер сервера</Label><Input type="number" min="0" value={webPanelForm.serverId} onChange={e => setWebPanelForm(f => ({ ...f, serverId: e.target.value }))} />
+                <Label>Протокол во внешней панели</Label><Input value={webPanelForm.protocol} onChange={e => setWebPanelForm(f => ({ ...f, protocol: e.target.value }))} placeholder="awg2" />
+                <p className="text-xs text-muted-foreground">Поддерживается PRVTPRO/Amnezia-Web-Panel с API-токенами. Токен создаётся в её настройках, номер сервера указан в адресе /server/0. Например: awg2, awg3, wireguard, xray; для отдельного экземпляра — awg2__2. Часовой пояс внешней панели должен быть UTC.</p>
+                <a className="text-sm text-primary underline" href="https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot/blob/main/docs/amnezia-web-panel.md" target="_blank" rel="noreferrer">Установка патча совместимости и подключение</a>
+              </div>}
+              {newNodeProtocol === "AMNEZIAWG" && <div className="grid gap-2"><Label>Публичный IP или домен ноды</Label><Input value={newNodeHost} onChange={e => setNewNodeHost(e.target.value)} placeholder="vpn.example.com" /><p className="text-xs text-muted-foreground">UDP-порт должен быть открыт. Клиенты получают .conf для AmneziaVPN. Нода работает отдельно от Remnawave.</p></div>}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setAddOpen(false)}>Отмена</Button>
+                <Button onClick={handleAddNode} disabled={creating}>
+                  {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Создать
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4 py-4">
+              {addResult.dockerCompose && <><p className="text-sm text-green-600 dark:text-green-400">Нода создана. Скопируйте docker-compose на сервер и выполните <code className="rounded bg-muted px-1">docker compose up -d --build</code>.</p>
+              <div className="grid gap-2">
+                <Label>Docker Compose</Label>
+                <pre className="rounded-md bg-muted p-3 text-xs overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap break-all">{addResult.dockerCompose}</pre>
+                <Button variant="outline" size="sm" onClick={copyCompose}>
+                  {copied === "compose" ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+                  Копировать
+                </Button>
+              </div>
+              </>}<p className="text-xs text-muted-foreground">{addResult.instructions}</p>
+              <DialogFooter>
+                <Button onClick={() => { setAddOpen(false); setAddResult(null); }}>Закрыть</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Диалог: редактировать ноду */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Изменить ноду</DialogTitle>
+          </DialogHeader>
+          {editingNode && (
+            <div className="space-y-4 py-4">
+              {editingNode.protocol.startsWith("AWP_") && <div className="grid gap-2"><Label>Новый API-токен (необязательно)</Label><Input type="password" autoComplete="new-password" value={webApiToken} onChange={e => setWebApiToken(e.target.value)} /></div>}
+              <div className="grid gap-2">
+                <Label>Название</Label>
+                <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Протокол</Label>
+                <select
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                  disabled={editingNode?.protocol === "AMNEZIAWG" || editingNode?.protocol.startsWith("AWP_")} value={editProtocol}
+                  onChange={(e) => setEditProtocol(e.target.value)}
+                >
+                  {PROTOCOLS.map((p) => (
+                    <option key={p} value={p}>{p.startsWith("AWP_") ? `Amnezia Web Panel · ${p.slice(4)}` : p}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Порт</Label>
+                <Input type="number" min={1} max={65535} disabled={editingNode?.protocol === "AMNEZIAWG" || editingNode?.protocol.startsWith("AWP_")} value={editPort} onChange={(e) => setEditPort(e.target.value)} />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditOpen(false)}>Отмена</Button>
+                <Button onClick={handleSaveEdit} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Сохранить</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Диалог: категория (добавить / изменить) */}
+      <Dialog open={categoryModal !== null} onOpenChange={(open) => !open && setCategoryModal(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{categoryModal === "add" ? "Добавить категорию" : "Изменить категорию"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid gap-2">
+              <Label>Название</Label>
+              <Input
+                value={categoryForm.name}
+                onChange={(e) => setCategoryForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Например: Доступы VLESS"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label>Порядок (sortOrder)</Label>
+              <Input
+                type="number"
+                value={categoryForm.sortOrder}
+                onChange={(e) => setCategoryForm((f) => ({ ...f, sortOrder: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCategoryModal(null)}>Отмена</Button>
+            <Button onClick={handleSaveCategory} disabled={savingCat || !categoryForm.name.trim()}>
+              {savingCat ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Диалог: тариф (добавить / изменить) */}
+      <Dialog open={tariffModal !== null} onOpenChange={(open) => !open && setTariffModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{tariffModal?.kind === "add" ? "Добавить тариф" : "Изменить тариф"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid gap-2">
+              <Label>Категория</Label>
+              <select
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                value={tariffForm.categoryId}
+                onChange={(e) => setTariffForm((f) => ({ ...f, categoryId: e.target.value }))}
+                disabled={tariffModal?.kind === "edit"}
+              >
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Название</Label>
+              <Input value={tariffForm.name} onChange={(e) => setTariffForm((f) => ({ ...f, name: e.target.value }))} placeholder="Тариф 1" />
+            </div>
+            <div className="grid gap-2"><Label>Протокол тарифа</Label><select aria-label="Протокол тарифа" className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={tariffForm.protocol} onChange={e => setTariffForm(f => ({ ...f, protocol: e.target.value }))}><option value="SINGBOX">Sing-box — любой доступный протокол</option>{PROTOCOLS.map(p => <option key={p} value={p}>{p === "AMNEZIAWG" ? "AmneziaWG" : p}</option>)}</select></div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-2">
+                <Label>Слотов</Label>
+                <Input type="number" min={1} value={tariffForm.slotCount} onChange={(e) => setTariffForm((f) => ({ ...f, slotCount: e.target.value }))} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Дней</Label>
+                <Input type="number" min={1} value={tariffForm.durationDays} onChange={(e) => setTariffForm((f) => ({ ...f, durationDays: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Лимит трафика (ГБ), пусто — без лимита</Label>
+              <Input value={tariffForm.trafficLimitBytes} onChange={(e) => setTariffForm((f) => ({ ...f, trafficLimitBytes: e.target.value }))} placeholder="5" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="grid gap-2">
+                <Label>Цена</Label>
+                <Input type="number" min={0} step={0.01} value={tariffForm.price} onChange={(e) => setTariffForm((f) => ({ ...f, price: e.target.value }))} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Валюта</Label>
+                <select className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm" value={tariffForm.currency} onChange={(e) => setTariffForm((f) => ({ ...f, currency: e.target.value }))}>
+                  <option value="rub">RUB</option>
+                  <option value="usd">USD</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="tariff-enabled" checked={tariffForm.enabled} onChange={(e) => setTariffForm((f) => ({ ...f, enabled: e.target.checked }))} className="rounded border-input" />
+              <Label htmlFor="tariff-enabled">Включён (доступен к покупке)</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTariffModal(null)}>Отмена</Button>
+            <Button onClick={handleSaveTariff} disabled={savingTariff || !tariffForm.name.trim()}>
+              {savingTariff ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Диалог: удалить ноду */}
+      <Dialog open={!!nodeToDelete} onOpenChange={(open) => !open && setNodeToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Удалить ноду?</DialogTitle>
+            <DialogDescription>Все слоты на этой ноде будут удалены. Это нельзя отменить.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNodeToDelete(null)}>Отмена</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Удалить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Диалог: редактор конфига JSON */}
+      <Dialog open={configOpen} onOpenChange={setConfigOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Конфиг sing-box (JSON)</DialogTitle>
+            <DialogDescription>
+              Инбаунд с тегом <code className="rounded bg-muted px-1">stealthnet-in</code> — в него агент подставит пользователей из слотов. Остальное можно менять свободно.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 flex flex-col gap-2">
+            <textarea
+              className="flex-1 min-h-[300px] w-full rounded-md border border-input bg-muted/30 p-3 font-mono text-sm resize-y"
+              value={configJson}
+              onChange={(e) => setConfigJson(e.target.value)}
+              spellCheck={false}
+            />
+            {configError && <p className="text-sm text-destructive">{configError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfigOpen(false)}>Отмена</Button>
+            <Button onClick={saveConfig} disabled={configSaving}>
+              {configSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

@@ -1,0 +1,46 @@
+body[data-cabinet-ui="minimal"] .cabinet-subscriptions { gap: 16px; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact { container-type: inline-size; padding: 24px 24px 0; border-radius: 12px; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact > header { gap: 12px; align-items: baseline; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact h2 { min-width: 0; font-size: 22px; letter-spacing: -.5px; line-height: 1.3; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-subscription-state { display: inline-flex; align-items: center; gap: 6px; margin: 0; flex-shrink: 0; font-size: 11px; line-height: 1.5; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-subscription-state::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-metrics { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(0,.8fr) minmax(0,1.25fr); gap: 20px; align-items: start; margin: 24px 0 20px; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-subscription-facts { display: contents; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-subscription-facts dt { margin-bottom: 5px; font-size: 11px; line-height: 1.4; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-subscription-facts dd { font-size: 15px; line-height: 1.5; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-subscription-facts small { margin-top: 3px; font-size: 11px; line-height: 1.5; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-traffic > div { align-items: flex-start; flex-direction: column; gap: 5px; font-size: 11px; line-height: 1.4; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-traffic strong { font-size: 13px; line-height: 1.5; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-traffic progress { height: 3px; margin-top: 8px; border-radius: 2px; overflow: hidden; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-primary-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-connect-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; margin-right: 0; height: 44px; min-height: 44px; padding-inline: 20px; border-radius: 7px; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-renew-button { height: 44px; min-height: 44px; padding-inline: 18px; border-radius: 7px; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-disclosure { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 46px; padding: 12px 0; border: 0; border-top: 1px solid hsl(var(--border)); background: transparent; color: hsl(var(--muted-foreground)); font-size: 12px; text-align: left; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-disclosure:hover { color: hsl(var(--foreground)); }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-disclosure > svg { flex: none; transition: rotate .22s ease; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-disclosure[aria-expanded="true"] > svg { rotate: 180deg; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-settings { overflow: hidden; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-settings-inner { padding: 6px 0 22px; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-subscription-renew { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin: 0; padding: 8px 0 18px; border: 0; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-subscription-renew small { margin-top: 4px; font-size: 11px; line-height: 1.5; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-subscription-renew > button { flex: none; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-management { display: flex; flex-wrap: wrap; gap: 0 20px; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-management > :is(a,button) { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 0; background: transparent; border: 0; font-size: 12px; color: hsl(var(--foreground)); }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-management svg { flex: none; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-manual { margin-top: 12px; font-size: 11px; color: hsl(var(--muted-foreground)); }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-manual > div { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-manual code { min-width: 0; flex: 1; white-space: nowrap; overflow: auto; padding: 12px; border: 1px solid hsl(var(--border)); border-radius: 6px; font-size: 11px; color: hsl(var(--foreground)); }
+body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: none; }
+@container (max-width: 520px) {
+  body[data-cabinet-ui="minimal"] .cabinet-subscription-metrics { grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); gap: 16px; }
+  body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-traffic { grid-column: 1 / -1; }
+  body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-traffic > div { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 12px; }
+  body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-traffic strong { font-size: 12px; text-align: right; }
+}
+@media (max-width: 767px) {
+  body[data-cabinet-ui="minimal"] .cabinet-subscription-compact { padding: 18px 18px 0; }
+  body[data-cabinet-ui="minimal"] .cabinet-subscription-compact h2 { font-size: 20px; }
+  body[data-cabinet-ui="minimal"] .cabinet-subscription-compact > header { flex-wrap: wrap; gap: 6px 12px; }
+  body[data-cabinet-ui="minimal"] .cabinet-subscription-metrics { margin-top: 20px; }
+  body[data-cabinet-ui="minimal"] .cabinet-subscription-compact .cabinet-connect-button { flex: 1; padding-inline: 12px; }
+}

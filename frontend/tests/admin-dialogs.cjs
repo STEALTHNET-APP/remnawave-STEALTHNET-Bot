@@ -1,0 +1,41 @@
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const ts = require('typescript');
+const moduleExports = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/admin-dialogs.ts', 'utf8'), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText, { exports: moduleExports });
+(async () => {
+  const store = moduleExports.createDialogStore();
+  let mutations = 0;
+  const remove = async () => { if (await store.request('confirm', 'Удалить?')) mutations++; };
+  const canceled = remove();
+  assert.equal(mutations, 0);
+  store.cancel();
+  await canceled;
+  assert.equal(mutations, 0);
+  const accepted = remove();
+  const duplicate = remove();
+  await duplicate;
+  assert.equal(mutations, 0);
+  store.settle(true);
+  await accepted;
+  assert.equal(mutations, 1);
+  const prompt = store.request('prompt', 'Дни', '30');
+  assert.equal(store.getSnapshot().initial, '30');
+  store.cancel();
+  assert.equal(await prompt, null);
+  const typed = store.request('prompt', 'Дни');
+  store.settle('90');
+  assert.equal(await typed, '90');
+  let notifications = 0;
+  const unsubscribe = store.subscribe(() => notifications++);
+  const alert = store.request('alert', 'Готово');
+  store.cancel();
+  await alert;
+  assert.equal(notifications, 2);
+  assert.equal(store.getSnapshot(), null);
+  unsubscribe();
+  console.log('PASS: destructive action waits for acceptance, cancellation, duplicate protection, prompts and lifecycle');
+})().catch(error => { console.error(error); process.exitCode = 1; });

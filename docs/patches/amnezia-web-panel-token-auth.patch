@@ -1,0 +1,33 @@
+--- a/app.py
++++ b/app.py
+@@ -2087,15 +2087,22 @@
+ 
+ 
+ def get_current_user(request: Request):
++    data = load_data()
+     user_id = request.session.get('user_id')
+-    if not user_id:
+-        return None
+-    data = load_data()
+-    for u in data.get('users', []):
+-        if u['id'] == user_id:
+-            if not u.get('enabled', True) or u.get('role') == 'none':
+-                return None
+-            return u
++    if user_id:
++        for user in data.get('users', []):
++            if user['id'] == user_id:
++                if not user.get('enabled', True) or user.get('role') == 'none':
++                    return None
++                return user
++    auth = request.headers.get('Authorization', '')
++    if auth.lower().startswith('bearer '):
++        resolved = _resolve_api_token(data, auth[7:].strip())
++        if resolved:
++            entry, user = resolved
++            if _touch_api_token(entry):
++                save_data(data)
++            return user
+     return None
+ 
+ 

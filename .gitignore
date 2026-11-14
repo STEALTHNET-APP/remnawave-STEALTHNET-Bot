@@ -1,0 +1,55 @@
+# ── Dependencies ──────────────────────────────
+node_modules/
+**/node_modules/
+
+# ── Build output ──────────────────────────────
+dist/
+build/
+**/dist/
+**/build/
+
+# ── Secrets & keys (НИКОГДА в git!) ───────────
+keys/
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+nginx/ssl/
+nginx/nginx.conf
+
+# ── Claude / AI tooling (память содержит креды!) ─
+.claude/
+.opencode/
+.sisyphus/
+opencode.json
+.mcp.json
+
+# ── OS junk ───────────────────────────────────
+.DS_Store
+**/.DS_Store
+Thumbs.db
+nul
+
+# ── Temp & artifacts ──────────────────────────
+temp/
+*.log
+*.tar.gz
+*.zip
+
+# ── Local server/helper files ─────────────────
+server_info.md
+git-manager.*
+
+# Local dev tools (portable postgres binaries) + staging dumps
+.tools/
+staging_*.sql
+*.tsbuildinfo
+
+__pycache__/
+
+cloudflare.ini
+cloudflare-*.ini
+
+/bot/data/widget-preferences/
+/data/widget-preferences/

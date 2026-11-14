@@ -1,0 +1,470 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  /* Карточки теперь ПЛОТНЫЕ (редизайн 2026): без прозрачности. */
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  /* Бренд-акцент для точечной подсветки (KPI, графики) — розовый в обеих темах. */
+  --color-brand-500: hsl(var(--brand));
+  /* Акцент stealth-мини-аппа (настраивается из админки через --stealth-accent). */
+  --color-saccent-100: color-mix(in oklab, rgb(var(--stealth-accent)), white 62%);
+  --color-saccent-200: color-mix(in oklab, rgb(var(--stealth-accent)), white 48%);
+  --color-saccent-300: color-mix(in oklab, rgb(var(--stealth-accent)), white 32%);
+  --color-saccent-400: color-mix(in oklab, rgb(var(--stealth-accent)), white 16%);
+  --color-saccent-500: rgb(var(--stealth-accent));
+  --color-saccent-600: color-mix(in oklab, rgb(var(--stealth-accent)), black 12%);
+}
+
+@layer base {
+  :root {
+    /* Дефолтный акцент stealth-мини-аппа (RGB-каналы через пробел). Перекрывается в StealthLayout из конфига. */
+    --stealth-accent: 255 35 87;
+
+    /* ═══ Светлая тема — «Clean Light» (Stripe-style, единая ДНК со STEALTHNET CORE) ═══ */
+    --background: 228 33% 97%;      /* #F6F7FB — холодный светлый фон */
+    --foreground: 226 46% 13%;      /* #0D1430 — тёмно-синий текст */
+    --card: 0 0% 100%;              /* белые карточки */
+    --card-foreground: 226 46% 13%;
+    --primary: 226 61% 22%;         /* #16225C — глубокий тёмно-синий (кнопки/актив) */
+    --primary-foreground: 0 0% 100%;
+    --muted: 228 24% 94%;           /* #EDEFF5 — светло-серые зоны */
+    --muted-foreground: 222 13% 44%;/* #626b7d — вторичный текст (AA на белом) */
+    --accent: 228 24% 94%;          /* hover-поверхность */
+    --accent-foreground: 226 61% 22%;
+    --destructive: 0 72% 44%;       /* читаемый красный */
+    --border: 228 22% 89%;          /* #DCE0EA */
+    --input: 228 22% 89%;
+    --ring: 226 61% 22%;
+    --brand: 344 90% 50%;           /* бренд-розовый, приглушён для белого фона */
+
+    /* ═══ Premium glass layer (светлая версия) ═══ */
+    --glass-tint: 228 40% 100%;
+    --glass-opacity: 0.72;
+    --glass-border: 228 30% 30%;
+    --glass-highlight: 0 0% 100%;
+  }
+
+  .dark {
+    /* ═══ Тёмная тема — «Ops Dark» (Linear/Vercel-style) ═══ */
+    --background: 222 24% 6%;       /* #0B0D12 — почти чёрный сине-графит */
+    --foreground: 222 22% 92%;      /* #E6E9F0 */
+    --card: 222 22% 9%;             /* #12151C — плотная поверхность */
+    --card-foreground: 222 22% 92%;
+    --primary: 344 100% 57%;        /* #FF2357 — фирменный розовый (единый акцент) */
+    --primary-foreground: 0 0% 100%;
+    --muted: 222 16% 13%;           /* #1A1E27 */
+    --muted-foreground: 220 13% 63%;/* #9AA3B5 */
+    --accent: 222 16% 14%;
+    --accent-foreground: 222 22% 92%;
+    --destructive: 0 72% 56%;
+    --border: 222 14% 16%;          /* тонкие видимые рамки */
+    --input: 222 14% 16%;
+    --ring: 344 100% 57%;
+    --brand: 344 100% 60%;          /* бренд-розовый (KPI/подсветка) */
+
+    /* ═══ Premium glass layer (редизайн 2026-09) ═══
+       Полупрозрачные поверхности с размытием поверх тёмного фона.
+       Потребители: .glass-surface (панели/шапки/сайдбары), .glass-card (карточки). */
+    --glass-tint: 222 30% 12%;      /* базовый оттенок стекла */
+    --glass-opacity: 0.55;          /* прозрачность стекла */
+    --glass-border: 222 40% 80%;    /* белый край по верхней границе */
+    --glass-highlight: 0 0% 100%;   /* внутренний блик */
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html, body {
+    /* Плотный тематический фон (редизайн 2026): без анимированных орбов под контентом. */
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  /* Табличные цифры для денег/счётчиков/времени — не «прыгают». */
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+}
+
+@layer components {
+  /* Модальные окна — всегда плотный фон. */
+  .dialog-content-solid {
+    background-color: hsl(var(--card)) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Полупрозрачные «стеклянные» шапки/сайдбары → плотная поверхность с тонкой рамкой. */
+  .bg-background\/95,
+  .bg-white\/10,
+  .dark\:bg-white\/5,
+  .bg-white\/5 {
+    background-color: hsl(var(--card)) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-color: hsl(var(--border));
+  }
+
+  /* Muted-зоны — плотные. */
+  .bg-muted,
+  .bg-muted\/50,
+  .bg-muted\/30 {
+    background-color: hsl(var(--muted)) !important;
+  }
+
+  /* Инпуты/селекты — плотный фон карточки, читаемая рамка. */
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    color: hsl(var(--foreground));
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1rem;
+    transition: all 0.15s ease;
+    cursor: pointer;
+  }
+
+  select:hover {
+    border-color: color-mix(in srgb, hsl(var(--foreground)) 22%, transparent);
+  }
+
+  select:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in srgb, hsl(var(--ring)) 45%, transparent);
+    border-color: hsl(var(--ring));
+  }
+
+  select option {
+    background-color: hsl(var(--card));
+    color: hsl(var(--foreground));
+    padding: 0.5rem;
+  }
+}
+
+/* ── Premium glass surfaces (редизайн 2026-09) — вне @layer, чтобы гарантированно
+   побить Tailwind utilities. Полупрозрачная плёнка + размытие + световой кант. ── */
+.glass-card {
+  position: relative;
+  background-color: hsl(var(--glass-tint) / var(--glass-opacity));
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid hsl(var(--border) / 0.8);
+  border-radius: 1rem;
+  box-shadow:
+    inset 0 1px 0 0 hsl(var(--glass-highlight) / 0.06),
+    0 8px 32px -8px rgba(0, 0, 0, 0.45),
+    0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+}
+.glass-card::before {
+  /* световой кант по верхней границе — эффект «подсветки сверху» */
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(var(--glass-border) / 0.25), transparent);
+  pointer-events: none;
+  border-radius: inherit;
+}
+.glass-card-hover:hover {
+  border-color: hsl(var(--glass-border) / 0.22);
+  box-shadow:
+    inset 0 1px 0 0 hsl(var(--glass-highlight) / 0.08),
+    0 12px 40px -8px rgba(0, 0, 0, 0.55),
+    0 2px 4px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+}
+
+/* Панели (шапки, сайдбары, поповеры) — стекло без тени карточки. */
+.glass-surface {
+  background-color: hsl(var(--glass-tint) / 0.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  backdrop-filter: blur(24px) saturate(1.5);
+  border: 1px solid hsl(var(--border) / 0.7);
+}
+.glass-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, hsl(var(--glass-border) / 0.18), transparent);
+  pointer-events: none;
+}
+
+/* Светлая тема: стекло плотнее, тени мягче (без «черноты»). */
+:root:not(.dark) .glass-card {
+  box-shadow:
+    inset 0 1px 0 0 hsl(var(--glass-highlight) / 0.8),
+    0 8px 32px -12px rgba(15, 23, 42, 0.12),
+    0 1px 2px rgba(15, 23, 42, 0.06);
+}
+:root:not(.dark) .glass-surface {
+  background-color: hsl(var(--glass-tint) / 0.72);
+}
+
+/* Пока открыта нижняя шторка Aurora — убираем стеклянное меню из отрисовки.
+   Оно и так закрыто шторкой, но его backdrop-filter продолжает считаться под
+   нашим слоем: на мобильном WebKit два вложенных размытия при каждой
+   перерисовке дают стробоскоп и проваливание фона в прозрачность. */
+[data-au-sheet="1"] .au-nav {
+  visibility: hidden;
+}
+
+/* Цена «К оплате» на тарифах: при смене срока/тарифа элемент перемонтируется
+   (key=totalPrice) — CSS-анимация вместо framer-motion не трогает слой JS-ом
+   и не мерцает на мобильном WebKit. */
+.au-price-pop {
+  animation: au-price-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes au-price-pop {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Панель инлайн-шторки оплаты (в tariffs, не общий AuroraSheet): выезд снизу
+   CSS-ом — один кадр transform, без JS-драйвера и пересборок слоя. */
+.au-sheet-slide {
+  animation: au-sheet-slide 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes au-sheet-slide {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+:root {
+  --app-safe-top: max(env(safe-area-inset-top, 0px), var(--app-tg-top, 0px));
+  --app-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--app-tg-bottom, 0px));
+  --app-safe-left: max(env(safe-area-inset-left, 0px), var(--app-tg-left, 0px));
+  --app-safe-right: max(env(safe-area-inset-right, 0px), var(--app-tg-right, 0px));
+}
+html[data-tg-miniapp] {
+  touch-action: pan-x pan-y;
+}
+@media (max-width: 767px) {
+  html[data-tg-miniapp] input,
+  html[data-tg-miniapp] textarea,
+  html[data-tg-miniapp] select {
+    font-size: 16px !important;
+  }
+}
+.app-viewport-overlay {
+  top: var(--app-viewport-top, 0px);
+  bottom: auto;
+  height: var(--app-viewport-height, 100dvh);
+  padding-top: calc(var(--app-safe-top) + 8px);
+  padding-left: max(16px, var(--app-safe-left));
+  padding-right: max(16px, var(--app-safe-right));
+}
+.app-viewport-overlay.au-sheet-overlay {
+  padding-left: var(--app-safe-left);
+  padding-right: var(--app-safe-right);
+}
+@media (max-width: 639px) {
+  .cabinet-floating-chat {
+    top: var(--app-viewport-top, 0px);
+    bottom: auto;
+    height: var(--app-viewport-height, 100dvh);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   transitions-dev — universal :root (семантические тайминги всех переходов).
+   Каждый t-* переход читает отсюда; менять настройки — в одном месте.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  /* Card resize */
+  --resize-dur: 300ms;
+  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Number pop-in */
+  --digit-dur: 500ms;
+  --digit-distance: 8px;
+  --digit-stagger: 70ms;
+  --digit-blur: 2px;
+  --digit-ease: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --digit-dir-x: 0;
+  --digit-dir-y: 1;
+  /* Notification badge */
+  --badge-slide-dur: 260ms;
+  --badge-pop-dur: 500ms;
+  --badge-pop-close-dur: 180ms;
+  --badge-fade-dur: 400ms;
+  --badge-fade-close-dur: 180ms;
+  --badge-blur: 2px;
+  --badge-offset-x: -8.2px;
+  --badge-offset-y: 12.4px;
+  --badge-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --badge-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --badge-close-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  /* Text states swap */
+  --text-swap-dur: 150ms;
+  --text-swap-translate-y: 4px;
+  --text-swap-blur: 2px;
+  --text-swap-ease: ease-in-out;
+  /* Menu dropdown */
+  --dropdown-open-dur: 250ms;
+  --dropdown-close-dur: 150ms;
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Modal open / close */
+  --modal-open-dur: 250ms;
+  --modal-close-dur: 150ms;
+  --modal-scale: 0.96;
+  --modal-scale-close: 0.96;
+  --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Panel reveal */
+  --panel-open-dur: 400ms;
+  --panel-close-dur: 350ms;
+  --panel-translate-y: 100px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Page side-by-side */
+  --page-slide-dur: 200ms;
+  --page-fade-dur: 200ms;
+  --page-slide-distance: 8px;
+  --page-blur: 3px;
+  --page-stagger: 0ms;
+  --page-exit-enabled: 1;
+  --page-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --page-fade-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Icon swap */
+  --icon-swap-dur: 200ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+  /* Success check */
+  --check-opacity-dur: 550ms;
+  --check-rotate-dur: 550ms;
+  --check-rotate-from: 80deg;
+  --check-bob-dur: 450ms;
+  --check-y-amount: 40px;
+  --check-blur-dur: 500ms;
+  --check-blur-from: 10px;
+  --check-path-dur: 550ms;
+  --check-path-delay: 80ms;
+  --check-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-opacity: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-rotate: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-bob: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --check-ease-path: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Avatar group hover */
+  --avatar-lift: -4px;
+  --avatar-dur: 320ms;
+  --avatar-scale: 1.05;
+  --avatar-falloff: 0.45;
+  --avatar-ease-in: cubic-bezier(0.22, 1, 0.36, 1);
+  --avatar-ease-out: cubic-bezier(0.34, 3.85, 0.64, 1);
+  /* Error state shake */
+  --shake-distance: 6px;
+  --shake-overshoot: 4px;
+  --shake-dur-a: 80ms;
+  --shake-dur-b: 60ms;
+  --shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --revert-hold: 3000ms;
+  --revert-dur: 280ms;
+}
+
+/* ── Page enter (t-page) — переход между страницами кабинета/админки.
+   Используется вместо animate-in классов: контент плавно подъезжает, без мерцания. ── */
+.t-page-enter > * {
+  opacity: 0;
+  transform: translateY(var(--page-slide-distance));
+  filter: blur(var(--page-blur));
+}
+.t-page-enter.t-ready > * {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+  transition:
+    transform var(--page-slide-dur) var(--page-slide-ease),
+    opacity   var(--page-fade-dur) var(--page-fade-ease),
+    filter    var(--page-fade-dur) var(--page-fade-ease);
+}
+/* Стабильный layout: контент, который появится позже (загрузка данных),
+   резервирует место СРАЗУ — кнопки не «допрыгивают» после ответа API. */
+.t-stable {
+  min-height: var(--stable-h, 0px);
+}
+
+/* Shimmer-полоса скелетона (stealth-tariffs) — CSS вместо JS-анимации:
+   бесконечный проезд x с задержками по индексу. */
+.shimmer-bar {
+  animation: shimmer-x 1.4s linear infinite;
+}
+.shimmer-bar-lg {
+  animation: shimmer-x-lg 1.6s linear infinite;
+}
+@keyframes shimmer-x {
+  from { transform: translate3d(-100%, 0, 0); }
+  to { transform: translate3d(250%, 0, 0); }
+}
+@keyframes shimmer-x-lg {
+  from { transform: translate3d(-100%, 0, 0); }
+  to { transform: translate3d(400%, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-bar,
+  .shimmer-bar-lg {
+    animation: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-page-enter > *,
+  .t-page-enter.t-ready > * {
+    transition: none !important;
+    transform: none !important;
+    filter: none !important;
+    opacity: 1 !important;
+  }
+}
+
+@keyframes ui-collapsible-open {
+  from { height: 0; opacity: 0; }
+  to { height: var(--radix-collapsible-content-height); opacity: 1; }
+}
+@keyframes ui-collapsible-close {
+  from { height: var(--radix-collapsible-content-height); opacity: 1; }
+  to { height: 0; opacity: 0; }
+}
+.ui-collapsible-content[data-state="open"] {
+  animation: ui-collapsible-open 220ms cubic-bezier(.2,.75,.25,1);
+}
+.ui-collapsible-content[data-state="closed"] {
+  animation: ui-collapsible-close 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-collapsible-content[data-state] { animation: none; }
+}

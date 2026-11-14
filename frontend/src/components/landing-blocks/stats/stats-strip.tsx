@@ -1,0 +1,47 @@
+/**
+ * Stats (variant: strip-3 | strip-4) — горизонтальная полоса с цифрами.
+ */
+
+import { Reveal } from "../reveal";
+import { txt, useLandingTheme } from "../utils";
+import type { LandingApiBlock } from "../types";
+
+interface Stat {
+  value: string;
+  label: string;
+}
+
+export function StatsStrip({ block }: { block: LandingApiBlock }) {
+  const { accentTheme } = useLandingTheme();
+
+  // Сначала пытаемся читать stats как массив, иначе — старую плоскую структуру.
+  const itemsRaw = block.text.items;
+  const items: Stat[] = Array.isArray(itemsRaw) && itemsRaw.length > 0
+    ? (itemsRaw as Stat[])
+    : [
+        { value: txt(block.text, "platforms", "5+"), label: "платформ" },
+        { value: txt(block.text, "tariffsCount", "10"), label: txt(block.text, "tariffsLabel", "тарифов онлайн") },
+        { value: txt(block.text, "paymentMethods", "6"), label: txt(block.text, "accessLabel", "способов оплаты") },
+      ];
+  const cap = block.variant === "strip-4" ? 4 : 3;
+  const displayed = items.slice(0, cap);
+
+  return (
+    <section className="max-w-7xl mx-auto px-4 py-8 md:py-12">
+      <div className={`grid gap-3 ${cap === 4 ? "grid-cols-2 md:grid-cols-4" : "grid-cols-3"}`}>
+        {displayed.map((s, idx) => (
+          <Reveal
+            key={`${s.label}-${idx}`}
+            delay={idx * 0.06}
+            className="rounded-xl border border-slate-200/60 dark:border-border bg-card dark:bg-card p-4 text-center md:p-6"
+          >
+            <div className="text-4xl font-black tracking-tight md:text-5xl" style={{ color: accentTheme.primary }}>
+              {s.value}
+            </div>
+            <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">{s.label}</div>
+          </Reveal>
+        ))}
+      </div>
+    </section>
+  );
+}
