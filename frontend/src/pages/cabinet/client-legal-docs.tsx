@@ -42,7 +42,8 @@ export function ClientLegalDocsPage({ kind }: { kind: DocKind }) {
 
   // Пока конфиг грузится (и redirect ещё не сработал) — спиннер вместо карточки.
   const loading = config === null && !redirected;
-  const docTitle = kind === "privacy" ? "Политика обработки персональных данных" : kind === "refund" ? "Политика возврата" : "Публичная оферта";
+  const docTitle = (kind === "privacy" ? config?.agreementTitle : kind === "refund" ? config?.refundTitle : config?.offerTitle)?.trim()
+    || (kind === "privacy" ? "Политика обработки персональных данных" : kind === "refund" ? "Политика возврата" : "Публичная оферта");
 
   if (loading) {
     return (

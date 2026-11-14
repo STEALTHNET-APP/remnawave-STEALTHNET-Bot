@@ -842,11 +842,27 @@ export function BotTab({
                             <Label className="text-sm font-medium">Пользовательское соглашение</Label>
                           </div>
                           <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph или внешняя страница с правилами использования сервиса.</p>
-                          <Input
-                            value={settings.agreementLink ?? ""}
-                            onChange={(e) => setSettings((s) => (s ? { ...s, agreementLink: e.target.value } : s))}
-                            placeholder="https://telegra.ph/..."
-                          />
+                          <div className="space-y-3">
+                            <div className="space-y-1.5">
+                              <Label className="text-xs text-muted-foreground">Название кнопки в боте и кабинете</Label>
+                              <Input
+                                value={settings.agreementTitle ?? ""}
+                                onChange={(e) => setSettings((s) => (s ? { ...s, agreementTitle: e.target.value } : s))}
+                                placeholder="Пользовательское соглашение"
+                                maxLength={200}
+                              />
+                              <p className="text-[11px] text-muted-foreground">Текст кнопки документа в боте и веб-кабинете. Пусто — стандартное название.</p>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-xs text-muted-foreground">Ссылка на документ</Label>
+                              <Input
+                                value={settings.agreementLink ?? ""}
+                                onChange={(e) => setSettings((s) => (s ? { ...s, agreementLink: e.target.value } : s))}
+                                placeholder="https://telegra.ph/..."
+                              />
+                              <p className="text-[11px] text-muted-foreground">Адрес страницы, которая откроется по кнопке.</p>
+                            </div>
+                          </div>
                         </div>
                         <div className="space-y-1.5 p-4 rounded-xl border border-border bg-card/40">
                           <div className="flex items-center gap-2 mb-1">
@@ -854,11 +870,27 @@ export function BotTab({
                             <Label className="text-sm font-medium">Публичная оферта</Label>
                           </div>
                           <p className="text-[11px] text-muted-foreground mb-2">Юридическая оферта (особенно нужна при работе через ИП/самозанятость).</p>
-                          <Input
-                            value={settings.offerLink ?? ""}
-                            onChange={(e) => setSettings((s) => (s ? { ...s, offerLink: e.target.value } : s))}
-                            placeholder="https://telegra.ph/..."
-                          />
+                          <div className="space-y-3">
+                            <div className="space-y-1.5">
+                              <Label className="text-xs text-muted-foreground">Название кнопки в боте и кабинете</Label>
+                              <Input
+                                value={settings.offerTitle ?? ""}
+                                onChange={(e) => setSettings((s) => (s ? { ...s, offerTitle: e.target.value } : s))}
+                                placeholder="Публичная оферта"
+                                maxLength={200}
+                              />
+                              <p className="text-[11px] text-muted-foreground">Текст кнопки документа в боте и веб-кабинете. Пусто — стандартное название.</p>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-xs text-muted-foreground">Ссылка на документ</Label>
+                              <Input
+                                value={settings.offerLink ?? ""}
+                                onChange={(e) => setSettings((s) => (s ? { ...s, offerLink: e.target.value } : s))}
+                                placeholder="https://telegra.ph/..."
+                              />
+                              <p className="text-[11px] text-muted-foreground">Адрес страницы, которая откроется по кнопке.</p>
+                            </div>
+                          </div>
                         </div>
                         <div className="space-y-1.5 p-4 rounded-xl border border-border bg-card/40">
                           <div className="flex items-center gap-2 mb-1">
@@ -878,11 +910,12 @@ export function BotTab({
                             <FileText className="h-4 w-4 text-emerald-500" />
                             <Label className="text-sm font-medium">Инструкция по реферальной программе</Label>
                           </div>
-                          <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph-статья «Как пользоваться рефералкой». Кнопка «Инструкции» под «Поделиться ссылкой» в разделе рефералки бота. Пусто = дефолтная ссылка.</p>
+                          <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph-статья «Как пользоваться рефералкой». Кнопка «Инструкции» под «Поделиться ссылкой» в разделе рефералки бота. Пусто = ссылка не задана.</p>
                           <Input
                             value={settings.referralInstructionsUrl ?? ""}
                             onChange={(e) => setSettings((s) => (s ? { ...s, referralInstructionsUrl: e.target.value } : s))}
-                            placeholder="https://telegra.ph/Kak-polzovatsya-referalnoj-programmoj-i-zarabatyvat-05-28"
+                            placeholder="https://telegra.ph/..."
+                            maxLength={2000}
                           />
                         </div>
                         {/* T11 (11.05.2026): Политика возврата (Telegraph URL). Кнопка появляется в боте «Помощь  Документы». */}
@@ -891,12 +924,28 @@ export function BotTab({
                             <FileText className="h-4 w-4 text-amber-500" />
                             <Label className="text-sm font-medium">Политика возврата</Label>
                           </div>
-                          <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph-страница с правилами возврата средств. Появляется кнопкой в «Помощь  Документы».</p>
-                          <Input
-                            value={(settings as { refundLink?: string | null }).refundLink ?? ""}
-                            onChange={(e) => setSettings((s) => (s ? { ...s, refundLink: e.target.value } as typeof s : s))}
-                            placeholder="https://telegra.ph/..."
-                          />
+                          <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph-страница с правилами возврата средств. Появляется кнопкой в «Помощь → Документы».</p>
+                          <div className="space-y-3">
+                            <div className="space-y-1.5">
+                              <Label className="text-xs text-muted-foreground">Название кнопки в боте и кабинете</Label>
+                              <Input
+                                value={settings.refundTitle ?? ""}
+                                onChange={(e) => setSettings((s) => (s ? { ...s, refundTitle: e.target.value } : s))}
+                                placeholder="Политика возврата"
+                                maxLength={200}
+                              />
+                              <p className="text-[11px] text-muted-foreground">Текст кнопки документа в боте и веб-кабинете. Пусто — стандартное название.</p>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-xs text-muted-foreground">Ссылка на документ</Label>
+                              <Input
+                                value={settings.refundLink ?? ""}
+                                onChange={(e) => setSettings((s) => (s ? { ...s, refundLink: e.target.value } : s))}
+                                placeholder="https://telegra.ph/..."
+                              />
+                              <p className="text-[11px] text-muted-foreground">Адрес страницы, которая откроется по кнопке.</p>
+                            </div>
+                          </div>
                         </div>
                         {/* Текст экрана «Помощь» (help_intro_text) — большой rich-text «цели/приоритеты». */}
                         <div className="space-y-1.5 p-4 rounded-xl border border-border bg-card/40 sm:col-span-2">

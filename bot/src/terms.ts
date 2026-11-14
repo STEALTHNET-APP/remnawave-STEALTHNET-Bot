@@ -43,7 +43,7 @@ export function createTermsGate(api: TermsApi, resume: (ctx: Context, payload: s
       : { agreement: "Пользовательское соглашение", offer: "Публичная оферта", refund: "Политика возврата" };
     await ctx.reply(english ? "Before using the bot, please read and accept the terms below." : "Перед использованием бота ознакомьтесь с документами ниже и примите условия.", {
       reply_markup: { inline_keyboard: [
-        ...status.documents.map((doc) => [{ text: labels[doc.kind] ?? doc.kind, url: doc.url }]),
+        ...status.documents.map((doc) => [{ text: doc.title || labels[doc.kind] || doc.kind, url: doc.url }]),
         [{ text: english ? "Accept" : "Принимаю", callback_data: `terms:accept:${status.version}` }],
       ] },
     });

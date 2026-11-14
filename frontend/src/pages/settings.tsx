@@ -267,11 +267,14 @@ export function SettingsPage() {
       subscriptionPageConfig: (data as AdminSettings).subscriptionPageConfig ?? null,
       supportLink: (data as AdminSettings).supportLink ?? "",
       agreementLink: (data as AdminSettings).agreementLink ?? "",
+      agreementTitle: (data as AdminSettings).agreementTitle ?? "",
       referralInstructionsUrl: (data as AdminSettings).referralInstructionsUrl ?? "",
       offerLink: (data as AdminSettings).offerLink ?? "",
+      offerTitle: (data as AdminSettings).offerTitle ?? "",
       instructionsLink: (data as AdminSettings).instructionsLink ?? "",
       // T11 (11.05.2026): — Политика возврата.
       refundLink: (data as AdminSettings & { refundLink?: string | null }).refundLink ?? "",
+      refundTitle: (data as AdminSettings).refundTitle ?? "",
       // Текст экрана «Помощь» (большой rich-text «цели/приоритеты»).
       helpIntroText: (data as AdminSettings & { helpIntroText?: string | null }).helpIntroText ?? "",
       // настройки экрана «Бесплатный Прокси для Telegram».
@@ -730,13 +733,15 @@ export function SettingsPage() {
           ...(settings.botInnerButtonStyles ?? {}),
         }),
         subscriptionPageConfig: settings.subscriptionPageConfig ?? undefined,
-        supportLink: settings.supportLink ?? undefined,
-        agreementLink: settings.agreementLink ?? undefined,
-        referralInstructionsUrl: settings.referralInstructionsUrl ?? undefined,
-        offerLink: settings.offerLink ?? undefined,
-        instructionsLink: settings.instructionsLink ?? undefined,
-        // T11 (11.05.2026): — Политика возврата.
-        refundLink: (settings as { refundLink?: string | null }).refundLink ?? undefined,
+        supportLink: settings.supportLink?.trim() || null,
+        agreementLink: settings.agreementLink?.trim() || null,
+        agreementTitle: settings.agreementTitle?.trim() || null,
+        referralInstructionsUrl: settings.referralInstructionsUrl?.trim() || null,
+        offerLink: settings.offerLink?.trim() || null,
+        offerTitle: settings.offerTitle?.trim() || null,
+        instructionsLink: settings.instructionsLink?.trim() || null,
+        refundLink: settings.refundLink?.trim() || null,
+        refundTitle: settings.refundTitle?.trim() || null,
         // Текст экрана «Помощь».
         helpIntroText: (settings as { helpIntroText?: string | null }).helpIntroText ?? undefined,
         // экран бесплатного TG-прокси.

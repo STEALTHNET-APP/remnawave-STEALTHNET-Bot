@@ -346,7 +346,7 @@ function CabinetShell() {
         </div>
       </header>
       <main id="cabinet-content" tabIndex={-1} className="cabinet-content"><div key={location.pathname} className="cabinet-route-enter"><Outlet /></div></main>
-      <footer className="cabinet-footer"><span>{config?.serviceName || "STEALTHNET"}</span><Link to="/cabinet/help">{t("cabinet.workspace.help")}</Link><Link to="/cabinet/documents/offer">{t("cabinet.workspace.terms")}</Link><Link to="/cabinet/documents/privacy">{t("cabinet.workspace.privacy")}</Link></footer>
+      <footer className="cabinet-footer"><span>{config?.serviceName || "STEALTHNET"}</span><Link to="/cabinet/help">{t("cabinet.workspace.help")}</Link><Link to="/cabinet/documents/offer">{config?.offerTitle?.trim() || t("cabinet.workspace.terms")}</Link><Link to="/cabinet/documents/privacy">{config?.agreementTitle?.trim() || t("cabinet.workspace.privacy")}</Link></footer>
     </div>
     <nav className="cabinet-bottom-nav" aria-label={t("cabinet.workspace.quick_navigation")}>{primary.map(({ to, label, icon: Icon }) => <Link key={to} to={to} aria-current={section === to ? "page" : undefined}><Icon size={21} /><span>{label}</span></Link>)}<button aria-expanded={menuOpen} aria-label={t("cabinet.nav.menu")} onClick={() => setMenuOpen(true)}><MoreHorizontal size={21} /><span>{t("cabinet.nav.more")}</span></button></nav>
     <Dialog open={menuOpen} onOpenChange={setMenuOpen}><DialogContent className="cabinet-menu-dialog"><DialogHeader><DialogTitle>{t("cabinet.nav.menu")}</DialogTitle></DialogHeader>{navigation(true)}</DialogContent></Dialog>
