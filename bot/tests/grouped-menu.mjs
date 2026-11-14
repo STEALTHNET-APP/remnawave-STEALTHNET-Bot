@@ -24,4 +24,31 @@ assert(!buttons(hidden).some(b=>b.text==='Hidden'));
 assert.equal(buttons(hidden).find(b=>b.text==='My devices').web_app.url,'https://example.com/cabinet/menu/devices');
 assert.equal(buttons(hidden).find(b=>b.text==='My devices').style,'danger');
 assert(!callbacks(mainMenu({...base,showTrial:false,section:'profile'})).includes('menu:trial'));
-console.log('PASS: grouped navigation, Web cabinet, support, back, hidden buttons, custom labels, Web mode and immutable config');
+
+const defaultGrouped=mainMenu({...base,groupCabinet:true});
+assert(callbacks(defaultGrouped).includes('menu:profile'));
+assert(!callbacks(defaultGrouped).includes('menu:tariffs'));
+assert(!callbacks(defaultGrouped).includes('menu:devices'));
+const defaultChildren=mainMenu({...base,groupCabinet:true,section:'profile'});
+assert(callbacks(defaultChildren).includes('menu:tariffs'));
+assert(callbacks(defaultChildren).includes('menu:devices'));
+
+const customGrouped=mainMenu({...base,groupCabinet:true,groupCabinetItems:['devices','topup']});
+assert(callbacks(customGrouped).includes('menu:tariffs'));
+assert(!callbacks(customGrouped).includes('menu:devices'));
+assert(!callbacks(customGrouped).includes('menu:topup'));
+assert(callbacks(customGrouped).includes('menu:profile'));
+const customChildren=mainMenu({...base,groupCabinet:true,groupCabinetItems:['devices','topup'],section:'profile'});
+assert(callbacks(customChildren).includes('menu:devices'));
+assert(callbacks(customChildren).includes('menu:topup'));
+assert(!callbacks(customChildren).includes('menu:tariffs'));
+
+const emptyGrouped=mainMenu({...base,groupCabinet:true,groupCabinetItems:[]});
+assert(callbacks(emptyGrouped).includes('menu:tariffs'));
+assert(callbacks(emptyGrouped).includes('menu:devices'));
+assert(callbacks(emptyGrouped).includes('menu:topup'));
+const emptyChildren=mainMenu({...base,groupCabinet:true,groupCabinetItems:[],section:'profile'});
+assert(!callbacks(emptyChildren).includes('menu:tariffs'));
+assert(!callbacks(emptyChildren).includes('menu:devices'));
+assert(!callbacks(emptyChildren).includes('menu:topup'));
+console.log('PASS: grouped navigation, Web cabinet, support, back, hidden buttons, custom labels, Web mode, default/custom/empty cabinet grouping and immutable config');
