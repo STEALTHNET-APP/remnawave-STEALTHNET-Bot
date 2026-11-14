@@ -1,4 +1,4 @@
-import { adminConfirm } from "@/lib/admin-dialogs";
+import { adminAlert, adminConfirm } from "@/lib/admin-dialogs";
 /**
  * админ-страница управления Trial-пресетами.
  *
@@ -8,7 +8,7 @@ import { adminConfirm } from "@/lib/admin-dialogs";
  * UI: таблица + модалка создания/редактирования. Сделано простой формой, без лишних украшений.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
@@ -19,6 +19,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, Pencil, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -118,6 +119,12 @@ export function TrialsPage() {
           {legacyMutation.isSuccess && <p role="status" className="text-sm">Старый триал отключён. Новые пробные подписки можно настроить в списке ниже.</p>}
         </Card>
       )}
+      <TrialCleanupSettings
+        token={token}
+        settings={legacy ? { trialCleanupEnabled: legacy.trialCleanupEnabled, trialCleanupDays: legacy.trialCleanupDays } : undefined}
+        onSaved={() => { void settingsQuery.refetch(); }}
+      />
+
       {(errorState || error) && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500 dark:text-red-400">{errorState ?? error}</div>
       )}
@@ -207,6 +214,118 @@ export function TrialsPage() {
         />
       )}
     </div>
+  );
+}
+
+function TrialCleanupSettings({
+  token,
+  settings,
+  onSaved,
+}: {
+  token: string | null;
+  settings?: { trialCleanupEnabled?: boolean; trialCleanupDays?: number };
+  onSaved: () => void;
+}) {
+  const [enabled, setEnabled] = useState(settings?.trialCleanupEnabled ?? false);
+  const [days, setDays] = useState(settings?.trialCleanupDays ?? 90);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEnabled(settings?.trialCleanupEnabled ?? false);
+    setDays(settings?.trialCleanupDays ?? 90);
+  }, [settings?.trialCleanupEnabled, settings?.trialCleanupDays]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => api.updateSettings(token!, {
+      trialCleanupEnabled: enabled,
+      trialCleanupDays: Math.max(1, Math.floor(days) || 90),
+    }),
+    onSuccess: () => {
+      setError(null);
+      setNotice("Настройки автоудаления сохранены.");
+      onSaved();
+    },
+    onError: (e) => {
+      setNotice(null);
+      setError(e instanceof Error ? e.message : "Ошибка сохранения");
+    },
+  });
+
+  const cleanupMutation = useMutation({
+    mutationFn: () => api.runTrialCleanup(token!, false),
+    onSuccess: async (result) => {
+      setError(null);
+      setNotice(`Найдено пользователей: ${result.candidateCount}. Удалено: ${result.deletedCount}.`);
+      onSaved();
+      await adminAlert(`Очистка завершена.\nНайдено пользователей: ${result.candidateCount}\nУдалено: ${result.deletedCount}`);
+    },
+    onError: (e) => {
+      setNotice(null);
+      setError(e instanceof Error ? e.message : "Ошибка очистки");
+    },
+  });
+
+  const handleCleanup = async () => {
+    if (!token) return;
+    const ok = await adminConfirm(
+      "Запустить очистку сейчас? Пользователи с истёкшим триалом без платных покупок будут удалены из базы и Remnawave без возможности восстановления."
+    );
+    if (!ok) return;
+    cleanupMutation.mutate();
+  };
+
+  return (
+    <Card className="rounded-2xl p-5 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="font-semibold">Автоудаление истёкших триалов</h2>
+          <p className="text-sm text-muted-foreground">
+            Пользователи, активировавшие пробный период и не совершившие ни одной платной покупки, будут безвозвратно удалены из базы и Remnawave через указанное число дней после окончания триала.
+          </p>
+        </div>
+        <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Автоудаление истёкших триалов" />
+      </div>
+
+      <div className="grid gap-1 max-w-xs">
+        <Label htmlFor="trial-cleanup-days" className="text-xs">Срок хранения после истечения (дней)</Label>
+        <Input
+          id="trial-cleanup-days"
+          type="number"
+          min={1}
+          max={3650}
+          value={days}
+          onChange={(e) => setDays(parseInt(e.target.value, 10) || 0)}
+          onBlur={() => setDays((value) => Math.max(1, value || 90))}
+        />
+      </div>
+
+      {(notice || error) && (
+        <p role="status" className={cn("text-sm", error ? "text-red-500 dark:text-red-400" : "text-muted-foreground")}>
+          {error ?? notice}
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          disabled={!token || saveMutation.isPending}
+          onClick={() => saveMutation.mutate()}
+        >
+          {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          Сохранить настройки
+        </Button>
+        <Button
+          variant="destructive"
+          disabled={!token || !settings?.trialCleanupEnabled || cleanupMutation.isPending}
+          onClick={handleCleanup}
+          title={!settings?.trialCleanupEnabled ? "Сначала включите и сохраните автоудаление" : undefined}
+        >
+          {cleanupMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          Запустить очистку сейчас
+        </Button>
+      </div>
+    </Card>
   );
 }
 
