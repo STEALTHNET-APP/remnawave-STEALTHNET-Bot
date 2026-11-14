@@ -80,6 +80,27 @@ check_deps() {
 
   success "Docker $(docker --version | grep -oP '\d+\.\d+\.\d+') найден"
   success "Docker Compose $(docker compose version --short 2>/dev/null || echo 'OK')"
+
+  if ! command -v make &>/dev/null; then
+    info "Установка make..."
+    if command -v apt-get &>/dev/null; then
+      apt-get update -qq && apt-get install -y -qq make
+    elif command -v apk &>/dev/null; then
+      apk add --no-cache make
+    elif command -v dnf &>/dev/null; then
+      dnf install -y make
+    elif command -v yum &>/dev/null; then
+      yum install -y make
+    elif command -v pacman &>/dev/null; then
+      pacman -Sy --noconfirm make
+    fi || true
+  fi
+
+  if command -v make &>/dev/null; then
+    success "make найден"
+  else
+    warn "make не установлен. Для использования команд 'make upgrade' и 'make backup' установите его вручную."
+  fi
 }
 
 # ── Очистка старых данных (НОВОЕ) ─────────────────────────────────
