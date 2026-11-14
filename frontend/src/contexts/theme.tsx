@@ -55,24 +55,56 @@ export function useTheme() {
   return useContext(ThemeContext);
 }
 
-const STORAGE_KEY = "stealthnet-admin-theme";
+const ADMIN_STORAGE_KEY = "stealthnet-admin-theme";
+const CLIENT_STORAGE_KEY = "stealthnet-client-theme";
+const LEGACY_STORAGE_KEY = "stealthnet-theme";
+const SERVER_STORAGE_KEY = "stealthnet-server-theme";
+const PUBLIC_CONFIG_STORAGE_KEY = "stealthnet-public-config";
+
+type ServerThemeConfig = ThemeConfig & { allowUserThemeChange?: boolean };
 
 function getSystemDark() {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches;
 }
 
-function loadTheme(): ThemeConfig | null {
+function loadTheme(isAdmin: boolean): ThemeConfig | null {
   try {
-    return readStoredTheme(localStorage.getItem(STORAGE_KEY)) ?? readStoredTheme(localStorage.getItem("stealthnet-theme"));
+    return readStoredTheme(localStorage.getItem(isAdmin ? ADMIN_STORAGE_KEY : CLIENT_STORAGE_KEY)) ?? readStoredTheme(localStorage.getItem(LEGACY_STORAGE_KEY));
   } catch {
     return null;
   }
 }
 
-function saveTheme(cfg: ThemeConfig) {
+function saveTheme(cfg: ThemeConfig, isAdmin: boolean) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+    localStorage.setItem(isAdmin ? ADMIN_STORAGE_KEY : CLIENT_STORAGE_KEY, JSON.stringify(cfg));
+    if (!isAdmin) localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(cfg));
   } catch {}
+}
+
+function readServerTheme(raw: string | null): ServerThemeConfig | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Record<string, unknown> | null;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const mode = value.mode ?? value.themeMode;
+    const accent = value.accent ?? value.themeAccent;
+    if (mode === undefined && accent === undefined) return null;
+    return {
+      ...normalizeTheme({ mode, accent }),
+      ...(typeof value.allowUserThemeChange === "boolean" ? { allowUserThemeChange: value.allowUserThemeChange } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function loadInitialServerTheme(): ServerThemeConfig {
+  try {
+    const cached = readServerTheme(localStorage.getItem(SERVER_STORAGE_KEY)) ?? readServerTheme(localStorage.getItem(PUBLIC_CONFIG_STORAGE_KEY));
+    if (cached) return cached;
+  } catch {}
+  return document.documentElement.classList.contains("light") ? { mode: "light", accent: "default" } : normalizeTheme(null);
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -90,15 +122,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     else delete document.body.dataset.adminUi;
     return () => { delete document.body.dataset.adminUi; };
   }, [pathname, adminAppearance]);
-  const [personalConfig, setPersonalConfig] = useState<ThemeConfig | null>(loadTheme);
+  const [personalConfig, setPersonalConfig] = useState<ThemeConfig | null>(() => loadTheme(isAdminThemePath(pathname)));
   const [systemDark, setSystemDark] = useState(getSystemDark);
-  const [serverConfig, setServerConfig] = useState<ThemeConfig>(() => normalizeTheme(null));
+  const [serverConfig, setServerConfig] = useState<ServerThemeConfig>(loadInitialServerTheme);
   const { config, editable } = resolveThemePolicy(pathname, personalConfig, serverConfig);
 
   useEffect(() => {
     let active = true;
     getPublicConfigCached().then((cfg) => {
-      if (active) setServerConfig(normalizeTheme({ mode: "themeMode" in cfg ? cfg.themeMode : "dark", accent: cfg.themeAccent }));
+      const theme: ServerThemeConfig = {
+        ...normalizeTheme({ mode: "themeMode" in cfg ? cfg.themeMode : "dark", accent: cfg.themeAccent }),
+        allowUserThemeChange: cfg.allowUserThemeChange !== false,
+      };
+      try { localStorage.setItem(SERVER_STORAGE_KEY, JSON.stringify(theme)); } catch {}
+      if (active) setServerConfig(theme);
     }).catch(() => {});
     return () => { active = false; };
   }, []);
@@ -117,6 +154,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.classList.remove("light", "dark");
     root.classList.add(resolvedMode);
     root.style.colorScheme = resolvedMode;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolvedMode === "light" ? "#f6f7fb" : "#0f172a");
     const allVars = new Set<string>();
     for (const p of Object.values(ACCENT_PALETTES)) {
       for (const k of Object.keys(p.light)) allVars.add(k);
@@ -132,8 +170,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (!editable) return;
     const next = normalizeTheme(cfg);
     setPersonalConfig(next);
-    saveTheme(next);
-  }, [editable]);
+    saveTheme(next, isAdminThemePath(pathname));
+  }, [editable, pathname]);
 
   const setMode = useCallback((mode: ThemeMode) => {
     setConfig({ ...config, mode });

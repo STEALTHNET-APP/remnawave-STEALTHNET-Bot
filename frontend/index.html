@@ -5,6 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
     <meta name="description" content="Личный кабинет и админка VPN на базе Remnawave" />
+    <script>
+      (function () {
+        try {
+          var path = window.location.pathname;
+          var isAdmin = path === "/admin" || path.indexOf("/admin/") === 0;
+          var keys = isAdmin
+            ? ["stealthnet-admin-theme", "stealthnet-theme"]
+            : ["stealthnet-client-theme", "stealthnet-server-theme", "stealthnet-public-config", "stealthnet-theme"];
+          var theme = null;
+          for (var i = 0; i < keys.length; i += 1) {
+            try {
+              var value = JSON.parse(localStorage.getItem(keys[i]) || "null");
+              if (value && typeof value === "object" && (value.mode || value.themeMode)) {
+                theme = value;
+                break;
+              }
+            } catch (error) {}
+          }
+          var mode = theme && (theme.mode || theme.themeMode);
+          var resolved = mode === "system"
+            ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+            : (mode === "light" ? "light" : "dark");
+          var root = document.documentElement;
+          root.classList.remove("light", "dark");
+          root.classList.add(resolved);
+          root.style.colorScheme = resolved;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", resolved === "light" ? "#f6f7fb" : "#0f172a");
+        } catch (error) {}
+      })();
+    </script>
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
