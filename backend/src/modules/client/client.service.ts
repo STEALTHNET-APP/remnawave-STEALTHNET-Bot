@@ -153,6 +153,7 @@ export const SYSTEM_CONFIG_KEYS = [
   "category_emojis", // JSON: { "ordinary": "📦", "premium": "⭐" } — эмодзи категорий по коду
   "subscription_page_config",
   "support_link", "agreement_link", "offer_link", "instructions_link", // Поддержка: тех поддержка, соглашения, оферта, инструкции
+  "agreement_title", "offer_title", "refund_title", // Названия кнопок юридических документов
   "referral_instructions_url", // ссылка на инструкцию по рефералке (кнопка «📖 Инструкции»)
   // T11+T13+T14 (11.05.2026): редактируемые тексты бота + URL'ы для документов и Telegram-прокси.
   "refund_link", // Политика возврата (URL — Telegraph)
@@ -863,12 +864,15 @@ async function loadSystemConfigFromDb() {
     supportLink: (map.support_link ?? "").trim() || null,
     agreementLink: (map.agreement_link ?? "").trim() || null,
     offerLink: (map.offer_link ?? "").trim() || null,
+    agreementTitle: (map.agreement_title ?? "").trim() || null,
+    offerTitle: (map.offer_title ?? "").trim() || null,
     instructionsLink: (map.instructions_link ?? "").trim() || null,
     // ссылка на инструкцию по рефералке.
     // Дефолт — Telegraph-статья; админ может переопределить в настройках.
     referralInstructionsUrl: (map.referral_instructions_url ?? "").trim() || "https://telegra.ph/Kak-polzovatsya-referalnoj-programmoj-i-zarabatyvat-05-28",
     // T11+T13+T14 (11.05.2026): новые редактируемые поля для бота.
     refundLink: (map.refund_link ?? "").trim() || null,
+    refundTitle: (map.refund_title ?? "").trim() || null,
     tariffRestrictionMessage: (map.tariff_restriction_message ?? "").trim() || null,
     supportHoursFrom: (map.support_hours_from ?? "").trim() || "10:00",
     supportHoursTo: (map.support_hours_to ?? "").trim() || "22:00",
@@ -1487,11 +1491,14 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     supportLink: full.supportLink ?? null,
     agreementLink: full.agreementLink ?? null,
     offerLink: full.offerLink ?? null,
+    agreementTitle: full.agreementTitle ?? null,
+    offerTitle: full.offerTitle ?? null,
     instructionsLink: full.instructionsLink ?? null,
     // ссылка инструкции рефералки для кнопки в боте.
     referralInstructionsUrl: (full as { referralInstructionsUrl?: string | null }).referralInstructionsUrl ?? null,
     // T11+T13+T14 (11.05.2026): новые поля кастомизации бота.
     refundLink: (full as { refundLink?: string | null }).refundLink ?? null,
+    refundTitle: (full as { refundTitle?: string | null }).refundTitle ?? null,
     supportHoursFrom: (full as { supportHoursFrom?: string | null }).supportHoursFrom ?? "10:00",
     supportHoursTo: (full as { supportHoursTo?: string | null }).supportHoursTo ?? "22:00",
     tgProxyText: (full as { tgProxyText?: string | null }).tgProxyText ?? null,

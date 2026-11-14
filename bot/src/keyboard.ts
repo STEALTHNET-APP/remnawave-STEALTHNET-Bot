@@ -449,7 +449,14 @@ export function helpMainMenu(
  *         Политика возврата (refundLink), 🏠 Главное меню.
  */
 export function documentsSubMenu(
-  links: { agreement?: string | null; offer?: string | null; refund?: string | null },
+  links: {
+    agreement?: string | null;
+    offer?: string | null;
+    refund?: string | null;
+    agreementTitle?: string | null;
+    offerTitle?: string | null;
+    refundTitle?: string | null;
+  },
   backLabel?: string | null,
   backStyle?: string,
   emojiIds?: InnerEmojiIds,
@@ -459,9 +466,9 @@ export function documentsSubMenu(
   const backSty = resolveStyle(toStyle(backStyle), "danger");
   const rows: (InlineButton | UrlButton)[][] = [];
   const items: [string, string | null | undefined][] = [
-    ["Политика конфиденциальности", links.agreement],
-    ["Публичная оферта", links.offer],
-    ["Политика возврата", links.refund],
+    [(links.agreementTitle ?? "").trim() || "Политика конфиденциальности", links.agreement],
+    [(links.offerTitle ?? "").trim() || "Публичная оферта", links.offer],
+    [(links.refundTitle ?? "").trim() || "Политика возврата", links.refund],
   ];
   for (const [label, url] of items) {
     const u = (url ?? "").trim();
@@ -472,7 +479,16 @@ export function documentsSubMenu(
 }
 
 export function supportSubMenu(
-  links: { support?: string | null; agreement?: string | null; offer?: string | null; instructions?: string | null; hasVideoInstructions?: boolean },
+  links: {
+    support?: string | null;
+    agreement?: string | null;
+    offer?: string | null;
+    instructions?: string | null;
+    hasVideoInstructions?: boolean;
+    agreementTitle?: string | null;
+    offerTitle?: string | null;
+    refundTitle?: string | null;
+  },
   backLabel?: string | null,
   backStyle?: string,
   emojiIds?: InnerEmojiIds,
@@ -483,8 +499,8 @@ export function supportSubMenu(
   const rows: (InlineButton | UrlButton)[][] = [];
   const items: [string, string | null | undefined][] = [
     [_t("support.btn_tech", lang), links.support],
-    [_t("support.btn_agreement", lang), links.agreement],
-    [_t("support.btn_offer", lang), links.offer],
+    [(links.agreementTitle ?? "").trim() || _t("support.btn_agreement", lang), links.agreement],
+    [(links.offerTitle ?? "").trim() || _t("support.btn_offer", lang), links.offer],
     [_t("support.btn_instructions", lang), links.instructions],
   ];
   for (const [label, url] of items) {

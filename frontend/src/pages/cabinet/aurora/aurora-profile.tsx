@@ -101,6 +101,8 @@ export function AuroraProfile() {
   const agreementUrl = (config?.agreementLink as string | null)?.trim() || null;
   const offerUrl = (config?.offerLink as string | null)?.trim() || null;
   const instructionsUrl = (config?.instructionsLink as string | null)?.trim() || null;
+  const agreementTitle = ((config?.agreementTitle as string | null | undefined) ?? "").trim() || t("aurora.agreement");
+  const offerTitle = ((config?.offerTitle as string | null | undefined) ?? "").trim() || t("aurora.offer");
   const telegramLinked = Boolean(client?.telegramUsername || client?.telegramId);
 
   const groups: MenuGroup[] = [
@@ -148,8 +150,8 @@ export function AuroraProfile() {
       ? [{
           title: t("aurora.documents"),
           rows: [
-            ...(agreementUrl ? [{ id: "tos", label: t("aurora.agreement"), icon: FileText, href: agreementUrl }] : []),
-            ...(offerUrl ? [{ id: "offer", label: t("aurora.offer"), icon: FileText, href: offerUrl }] : []),
+            ...(agreementUrl ? [{ id: "tos", label: agreementTitle, icon: FileText, href: agreementUrl }] : []),
+            ...(offerUrl ? [{ id: "offer", label: offerTitle, icon: FileText, href: offerUrl }] : []),
             ...(instructionsUrl ? [{ id: "docs", label: t("aurora.instructions"), icon: FileText, href: instructionsUrl }] : []),
           ] as MenuRow[],
         }]

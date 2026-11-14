@@ -835,11 +835,14 @@ const updateSettingsSchema = z.object({
   supportLink: z.string().max(2000).nullable().optional(),
   agreementLink: z.string().max(2000).nullable().optional(),
   offerLink: z.string().max(2000).nullable().optional(),
+  agreementTitle: z.string().max(200).nullable().optional(),
+  offerTitle: z.string().max(200).nullable().optional(),
   instructionsLink: z.string().max(2000).nullable().optional(),
   // ссылка инструкции по рефералке.
   referralInstructionsUrl: z.string().max(2000).nullable().optional(),
   // T11+T13+T14 (11.05.2026) — кастомизация бота
   refundLink: z.string().max(2000).nullable().optional(),
+  refundTitle: z.string().max(200).nullable().optional(),
   supportHoursFrom: z.string().max(20).nullable().optional(),
   supportHoursTo: z.string().max(20).nullable().optional(),
   tgProxyText: z.string().max(8000).nullable().optional(),
@@ -1751,11 +1754,14 @@ adminRouter.patch("/settings", async (req, res) => {
     ["supportLink", "support_link"],
     ["agreementLink", "agreement_link"],
     ["offerLink", "offer_link"],
+    ["agreementTitle", "agreement_title"],
+    ["offerTitle", "offer_title"],
     ["instructionsLink", "instructions_link"],
     // T-ref-instructions (27.05.2026) — ссылка инструкции рефералки.
     ["referralInstructionsUrl", "referral_instructions_url"],
     // T11+T13+T14 (11.05.2026) — кастомизация бота.
     ["refundLink", "refund_link"],
+    ["refundTitle", "refund_title"],
     ["supportHoursFrom", "support_hours_from"],
     ["supportHoursTo", "support_hours_to"],
     ["tgProxyText", "tg_proxy_text"],
