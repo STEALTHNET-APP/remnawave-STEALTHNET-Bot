@@ -39,8 +39,12 @@ import { GiftsTab } from "@/components/admin/settings/tabs/gifts-tab";
 const DEFAULT_GROQ_MODELS = [
   "llama-3.3-70b-versatile",
   "llama-3.1-8b-instant",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
   "deepseek-r1-distill-llama-70b",
   "deepseek-r1-distill-qwen-32b",
+  "qwen/qwen3.8-27b",
+  "qwen-2.5-coder-32b",
   "mixtral-8x7b-32768",
   "gemma2-9b-it",
 ];
