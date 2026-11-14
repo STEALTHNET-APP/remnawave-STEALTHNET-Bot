@@ -2052,6 +2052,9 @@ export async function groupedProfileMenu(config: Awaited<ReturnType<typeof api.g
     botButtons: config.botButtons,
     menuMode: config.botMenuMode,
     buttonsPerRow: config.botButtonsPerRow,
+    groupCabinetItems: config.botGroupCabinetItems,
+    showTickets: config?.ticketsEnabled === true,
+    hasSupportLinks: Boolean(config?.supportLink?.trim() || config?.instructionsLink?.trim() || config?.agreementLink?.trim() || config?.offerLink?.trim() || config?.refundLink?.trim() || config?.referralInstructionsUrl?.trim()),
     showExtraOptions: config.sellOptionsEnabled && (config.sellOptions?.length ?? 0) > 0,
     showGift: config.giftSubscriptionsEnabled,
   });
