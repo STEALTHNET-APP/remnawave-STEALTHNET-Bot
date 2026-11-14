@@ -78,3 +78,41 @@ test('webhook secret stays private and saved false overrides environment default
   assert.equal(JSON.stringify(config).includes('private-webhook-fixture'), false);
   delete process.env.BOT_WEBHOOK_ENABLED;
 });
+
+test('legal document links and titles can be cleared back to null', async () => {
+  settings.clear();
+  settings.set('agreement_link', 'https://example.com/terms');
+  settings.set('offer_link', 'https://example.com/offer');
+  settings.set('refund_link', 'https://example.com/refund');
+  settings.set('agreement_title', 'Terms of use');
+  settings.set('offer_title', 'Public offer');
+  settings.set('refund_title', 'Refund policy');
+  settings.set('referral_instructions_url', 'https://example.com/referrals');
+  invalidateSystemConfigCache();
+
+  let config = await getPublicConfig();
+  assert.equal(config.agreementLink, 'https://example.com/terms');
+  assert.equal(config.offerLink, 'https://example.com/offer');
+  assert.equal(config.refundLink, 'https://example.com/refund');
+  assert.equal(config.agreementTitle, 'Terms of use');
+  assert.equal(config.offerTitle, 'Public offer');
+  assert.equal(config.refundTitle, 'Refund policy');
+  assert.equal(config.referralInstructionsUrl, 'https://example.com/referrals');
+
+  for (const key of [
+    'agreement_link', 'offer_link', 'refund_link',
+    'agreement_title', 'offer_title', 'refund_title',
+    'referral_instructions_url',
+  ]) settings.set(key, '');
+  invalidateSystemConfigCache();
+
+  config = await getPublicConfig();
+  assert.equal(config.agreementLink, null);
+  assert.equal(config.offerLink, null);
+  assert.equal(config.refundLink, null);
+  assert.equal(config.agreementTitle, null);
+  assert.equal(config.offerTitle, null);
+  assert.equal(config.refundTitle, null);
+  assert.equal(config.referralInstructionsUrl, null);
+});
+

@@ -910,11 +910,12 @@ export function BotTab({
                             <FileText className="h-4 w-4 text-emerald-500" />
                             <Label className="text-sm font-medium">Инструкция по реферальной программе</Label>
                           </div>
-                          <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph-статья «Как пользоваться рефералкой». Кнопка «Инструкции» под «Поделиться ссылкой» в разделе рефералки бота. Пусто = дефолтная ссылка.</p>
+                          <p className="text-[11px] text-muted-foreground mb-2">Telegra.ph-статья «Как пользоваться рефералкой». Кнопка «Инструкции» под «Поделиться ссылкой» в разделе рефералки бота. Пусто = ссылка не задана.</p>
                           <Input
                             value={settings.referralInstructionsUrl ?? ""}
                             onChange={(e) => setSettings((s) => (s ? { ...s, referralInstructionsUrl: e.target.value } : s))}
-                            placeholder="https://telegra.ph/Kak-polzovatsya-referalnoj-programmoj-i-zarabatyvat-05-28"
+                            placeholder="https://telegra.ph/..."
+                            maxLength={2000}
                           />
                         </div>
                         {/* T11 (11.05.2026): Политика возврата (Telegraph URL). Кнопка появляется в боте «Помощь  Документы». */}

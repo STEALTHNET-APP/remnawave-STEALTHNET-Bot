@@ -867,9 +867,7 @@ async function loadSystemConfigFromDb() {
     agreementTitle: (map.agreement_title ?? "").trim() || null,
     offerTitle: (map.offer_title ?? "").trim() || null,
     instructionsLink: (map.instructions_link ?? "").trim() || null,
-    // ссылка на инструкцию по рефералке.
-    // Дефолт — Telegraph-статья; админ может переопределить в настройках.
-    referralInstructionsUrl: (map.referral_instructions_url ?? "").trim() || "https://telegra.ph/Kak-polzovatsya-referalnoj-programmoj-i-zarabatyvat-05-28",
+    referralInstructionsUrl: (map.referral_instructions_url ?? "").trim() || null,
     // T11+T13+T14 (11.05.2026): новые редактируемые поля для бота.
     refundLink: (map.refund_link ?? "").trim() || null,
     refundTitle: (map.refund_title ?? "").trim() || null,
