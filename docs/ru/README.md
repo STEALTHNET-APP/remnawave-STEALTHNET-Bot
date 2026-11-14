@@ -65,7 +65,7 @@
 > Во избежании каких-либо конфликтов, настоятельно рекомендуется устанавливать данный стек **на отдельный сервер**!
 
 ```bash
-apt install git -y
+apt update && apt install git make -y
 curl -fsSL https://get.docker.com | sh
 cd /opt
 git clone https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git

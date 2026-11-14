@@ -62,7 +62,7 @@
 > 为了避免任何冲突，强烈建议将此技术栈安装在**独立的服务器**上！
 
 ```bash
-apt install git -y
+apt update && apt install git make -y
 curl -fsSL https://get.docker.com | sh
 cd /opt
 git clone https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git

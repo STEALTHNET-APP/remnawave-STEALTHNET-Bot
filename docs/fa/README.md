@@ -62,7 +62,7 @@
 > برای جلوگیری از هرگونه تداخل، اکیداً توصیه می‌شود این مجموعه روی یک **سرور اختصاصی** نصب شود!
 
 ```bash
-apt install git -y
+apt update && apt install git make -y
 curl -fsSL https://get.docker.com | sh
 cd /opt
 git clone https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git

@@ -73,7 +73,7 @@
 > To avoid any conflicts, it is strongly recommended to install this stack on a **separate server**!
 
 ```bash
-apt install git -y
+apt update && apt install git make -y
 curl -fsSL https://get.docker.com | sh
 cd /opt
 git clone https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git
