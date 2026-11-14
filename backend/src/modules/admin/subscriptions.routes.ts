@@ -19,6 +19,8 @@ import {
 // extendSecondarySubscription — для админского продления конкретной
 // подписки (grant-extend): тот же механизм, что и оплаченное продление.
 import { extendSecondarySubscription } from "../tariff/tariff-activation.service.js";
+import { promoteSubscriptionToPrimary } from "../subscription/subscription.helpers.js";
+import { Prisma } from "@prisma/client";
 import { deleteDeviceSchema, getRemnaUserFieldsForMerge, remnaUpdateBodySchema, squadActionSchema } from "./clients.routes.js";
 import { chooseGrantExtendMode, extendSubscriptionDaysOnly } from "./grant-extend-days.service.js";
 
@@ -217,6 +219,96 @@ adminSubscriptionsRouter.post("/:subId/grant-extend", asyncRoute(async (req, res
     subscriptionIndex: sub.subscriptionIndex,
     tariff: { id: tariff.id, name: tariff.name, durationDays: effectiveDays },
   });
+}));
+
+const updateSubscriptionDbSchema = z.object({
+  customName: z.string().max(60).nullable().optional(),
+  tariffId: z.string().min(1).nullable().optional(),
+  remnawaveUuid: z.string().min(1).nullable().optional(),
+  expireAt: z.string().datetime({ offset: true }).nullable().optional(),
+  customPrice: z.number().min(0).nullable().optional(),
+  autoRenewEnabled: z.boolean().optional(),
+  extraDevices: z.number().int().min(0).optional(),
+  syncToClient: z.boolean().optional(),
+});
+
+adminSubscriptionsRouter.post("/:subId/make-primary", asyncRoute(async (req, res) => {
+  const parsed = subIdParam.safeParse(req.params);
+  if (!parsed.success) return res.status(400).json({ message: "Invalid subscription id" });
+
+  const result = await promoteSubscriptionToPrimary(parsed.data.subId);
+  if (!result) return res.status(404).json({ message: "Подписка не найдена" });
+
+  await logAdmin(req, "subscription.make_primary", { type: "subscription", id: result.id }, {
+    ownerId: result.ownerId,
+    previousPrimaryId: result.previousPrimaryId,
+  });
+
+  return res.json({ ok: true, subscriptionId: result.id, subscriptionIndex: 0 });
+}));
+
+adminSubscriptionsRouter.patch("/:subId", asyncRoute(async (req, res) => {
+  const parsed = subIdParam.safeParse(req.params);
+  if (!parsed.success) return res.status(400).json({ message: "Invalid subscription id" });
+  const body = updateSubscriptionDbSchema.safeParse(req.body);
+  if (!body.success) return res.status(400).json({ message: "Invalid input", errors: body.error.flatten() });
+
+  const sub = await prisma.subscription.findUnique({
+    where: { id: parsed.data.subId },
+    select: { id: true, ownerId: true, subscriptionIndex: true, remnawaveUuid: true, tariffId: true },
+  });
+  if (!sub) return res.status(404).json({ message: "Подписка не найдена" });
+
+  const input = body.data;
+
+  if (input.tariffId) {
+    const tariff = await prisma.tariff.findUnique({ where: { id: input.tariffId }, select: { id: true } });
+    if (!tariff) return res.status(404).json({ message: "Тариф не найден" });
+  }
+
+  if (input.remnawaveUuid) {
+    const linked = await prisma.subscription.findFirst({
+      where: { remnawaveUuid: input.remnawaveUuid, id: { not: sub.id } },
+      select: { id: true, ownerId: true },
+    });
+    if (linked && linked.ownerId !== sub.ownerId) {
+      return res.status(409).json({ message: "Этот Remna UUID уже привязан к другому клиенту" });
+    }
+  }
+
+  const data: Prisma.SubscriptionUncheckedUpdateInput = {};
+  if (input.customName !== undefined) data.customName = input.customName;
+  if (input.tariffId !== undefined) data.tariffId = input.tariffId;
+  if (input.remnawaveUuid !== undefined) data.remnawaveUuid = input.remnawaveUuid;
+  if (input.expireAt !== undefined) data.expireAt = input.expireAt ? new Date(input.expireAt) : null;
+  if (input.customPrice !== undefined) data.customPrice = input.customPrice;
+  if (input.autoRenewEnabled !== undefined) data.autoRenewEnabled = input.autoRenewEnabled;
+  if (input.extraDevices !== undefined) data.extraDevices = input.extraDevices;
+
+  if (Object.keys(data).length === 0) {
+    return res.status(400).json({ message: "Нет полей для обновления" });
+  }
+
+  const updated = await prisma.subscription.update({ where: { id: sub.id }, data });
+
+  const syncToClient = input.syncToClient === true || sub.subscriptionIndex === 0;
+  if (syncToClient) {
+    const clientData: Prisma.ClientUncheckedUpdateInput = {};
+    if (input.remnawaveUuid !== undefined) clientData.remnawaveUuid = input.remnawaveUuid;
+    if (input.tariffId !== undefined) clientData.currentTariffId = input.tariffId;
+    if (Object.keys(clientData).length > 0) {
+      await prisma.client.update({ where: { id: sub.ownerId }, data: clientData });
+    }
+  }
+
+  await logAdmin(req, "subscription.update_db", { type: "subscription", id: updated.id }, {
+    ownerId: sub.ownerId,
+    subscriptionIndex: sub.subscriptionIndex,
+    changes: { ...input },
+    syncedToClient: syncToClient,
+  });
+
+  return res.json({ ok: true, subscription: updated });
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────

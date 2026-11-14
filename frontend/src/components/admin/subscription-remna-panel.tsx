@@ -21,11 +21,13 @@ import {
   type AdminClientSubscriptionItem,
   type RemnaUserFull,
   type UpdateClientRemnaPayload,
+  type UpdateSubscriptionDbPayload,
 } from "@/lib/api";
 import { fmtMsk, isoToMskInputValue, mskInputValueToIso } from "@/lib/datetime";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Ticket,
@@ -37,6 +39,7 @@ import {
   Copy,
   Check,
   Trash2,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -104,7 +107,7 @@ interface Props {
   onChanged?: () => void;
 }
 
-type InnerTab = "overview" | "squads" | "actions";
+type InnerTab = "overview" | "squads" | "actions" | "db";
 
 interface RemnaUserResponseShape {
   response?: RemnaUserFull;
@@ -116,6 +119,145 @@ function unwrapRemnaUser(raw: unknown): RemnaUserFull | null {
   if (r.response && typeof r.response === "object") return r.response as RemnaUserFull;
   if ("uuid" in r && typeof (r as RemnaUserFull).uuid === "string") return r as RemnaUserFull;
   return null;
+}
+
+function SubscriptionDbEditor({
+  subscription,
+  token,
+  onChanged,
+}: {
+  subscription: AdminClientSubscriptionItem;
+  token: string;
+  onChanged?: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [msg, setMsg] = useState<string | null>(null);
+  const [customName, setCustomName] = useState(subscription.customName ?? "");
+  const [tariffId, setTariffId] = useState(subscription.tariffId ?? "");
+  const [remnawaveUuid, setRemnawaveUuid] = useState(subscription.remnawaveUuid ?? "");
+  const [extraDevices, setExtraDevices] = useState(String(subscription.extraDevices ?? 0));
+  const [autoRenewEnabled, setAutoRenewEnabled] = useState(subscription.autoRenewEnabled);
+
+  useEffect(() => {
+    setCustomName(subscription.customName ?? "");
+    setTariffId(subscription.tariffId ?? "");
+    setRemnawaveUuid(subscription.remnawaveUuid ?? "");
+    setExtraDevices(String(subscription.extraDevices ?? 0));
+    setAutoRenewEnabled(subscription.autoRenewEnabled);
+  }, [
+    subscription.id,
+    subscription.customName,
+    subscription.tariffId,
+    subscription.remnawaveUuid,
+    subscription.extraDevices,
+    subscription.autoRenewEnabled,
+  ]);
+
+  const tariffsQ = useQuery({
+    queryKey: qk.admin.tariffs(),
+    queryFn: () => api.getTariffs(token),
+    staleTime: 60_000,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: UpdateSubscriptionDbPayload) =>
+      api.updateSubscriptionDb(token, subscription.id, payload),
+    onSuccess: () => {
+      setMsg("Сохранено в БД");
+      void queryClient.invalidateQueries({ queryKey: ["admin"], exact: false });
+      onChanged?.();
+    },
+    onError: (e) => setMsg(e instanceof Error ? e.message : "Ошибка сохранения"),
+  });
+
+  async function save() {
+    setMsg(null);
+    const devices = extraDevices.trim() === "" ? 0 : Number(extraDevices);
+    if (!Number.isInteger(devices) || devices < 0) {
+      setMsg("Дополнительные устройства должны быть целым неотрицательным числом");
+      return;
+    }
+    await saveMutation.mutateAsync({
+      customName: customName.trim() ? customName.trim() : null,
+      tariffId: tariffId || null,
+      remnawaveUuid: remnawaveUuid.trim() ? remnawaveUuid.trim() : null,
+      extraDevices: devices,
+      autoRenewEnabled,
+      syncToClient: true,
+    });
+  }
+
+  const tariffs = tariffsQ.data?.items ?? [];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2 text-sm">
+        <div className="space-y-2">
+          <Label>Название подписки</Label>
+          <Input
+            value={customName}
+            maxLength={60}
+            onChange={(e) => setCustomName(e.target.value)}
+            placeholder="—"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Тариф</Label>
+          <MiniSelect
+            value={tariffId}
+            onChange={setTariffId}
+            options={[
+              { value: "", label: "— без тарифа —" },
+              ...tariffs.map((t) => ({ value: t.id, label: t.name })),
+            ]}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Remnawave UUID</Label>
+          <Input
+            value={remnawaveUuid}
+            onChange={(e) => setRemnawaveUuid(e.target.value)}
+            placeholder="—"
+            className="font-mono text-xs"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Дополнительные устройства</Label>
+          <Input
+            type="number"
+            min={0}
+            step={1}
+            value={extraDevices}
+            onChange={(e) => setExtraDevices(e.target.value)}
+            placeholder="0"
+          />
+        </div>
+        <div className="flex items-center justify-between gap-3 sm:col-span-2 rounded-xl border border-border bg-foreground/[0.03] dark:bg-white/[0.03] px-3 py-2">
+          <div>
+            <div className="font-medium">Автопродление</div>
+            <div className="text-[11.5px] text-muted-foreground">
+              Списывать оплату автоматически перед окончанием подписки
+            </div>
+          </div>
+          <Switch checked={autoRenewEnabled} onCheckedChange={setAutoRenewEnabled} />
+        </div>
+      </div>
+
+      <Button
+        variant="outline"
+        size="sm"
+        className="rounded-xl border-border bg-foreground/[0.03] dark:bg-white/[0.03] hover:bg-foreground/[0.06] dark:hover:bg-white/[0.08]"
+        onClick={save}
+        disabled={saveMutation.isPending}
+      >
+        <Database className="h-4 w-4" /> {saveMutation.isPending ? "Сохраняем…" : "Сохранить в БД"}
+      </Button>
+      {msg && <p className="text-sm text-muted-foreground">{msg}</p>}
+      <p className="text-[11.5px] text-muted-foreground">
+        Изменения пишутся только в базу панели. Пользователь Remnawave этими полями не меняется — для него используйте вкладку «Обзор».
+      </p>
+    </div>
+  );
 }
 
 export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onChanged }: Props) {
@@ -227,9 +369,17 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
   // Нет привязки к Remna  плашка.
   if (!subscription.remnawaveUuid) {
     return (
-      <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/[0.06] p-4 text-sm text-yellow-200">
-         Эта подписка ещё не привязана к Remna (`remnawaveUuid = null`).
-        Купите/активируйте тариф или сделайте «Push в Remna» в массовых операциях клиента.
+      <div className="space-y-3">
+        <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/[0.06] p-4 text-sm text-yellow-200">
+           Эта подписка ещё не привязана к Remna (`remnawaveUuid = null`).
+          Купите/активируйте тариф или сделайте «Push в Remna» в массовых операциях клиента.
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="text-[11px] font-bold uppercase tracking-[0.9px] text-muted-foreground mb-3">
+            Запись в БД
+          </div>
+          <SubscriptionDbEditor subscription={subscription} token={token} onChanged={onChanged} />
+        </div>
       </div>
     );
   }
@@ -249,6 +399,9 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
           </TabsTrigger>
           <TabsTrigger value="actions" className="text-xs rounded-lg data-[state=active]:bg-primary/15 data-[state=active]:text-primary">
              Действия
+          </TabsTrigger>
+          <TabsTrigger value="db" className="text-xs rounded-lg data-[state=active]:bg-primary/15 data-[state=active]:text-primary">
+             БД
           </TabsTrigger>
         </TabsList>
 
@@ -498,6 +651,10 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
             </div>
             <p className="text-[11.5px] text-muted-foreground mt-2">Отзыв подписки перевыпустит ссылку — старые конфиги у клиента перестанут работать. Удаление необратимо: подписка исчезнет и у клиента, и в Remnawave.</p>
           </div>
+        </TabsContent>
+
+        <TabsContent value="db" className="mt-3">
+          <SubscriptionDbEditor subscription={subscription} token={token} onChanged={onChanged} />
         </TabsContent>
       </Tabs>
 

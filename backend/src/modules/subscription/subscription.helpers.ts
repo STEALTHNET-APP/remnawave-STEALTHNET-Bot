@@ -13,6 +13,7 @@
  */
 
 import { prisma } from "../../db.js";
+import { isReservedGiftStatus, planSubscriptionSlotOrder } from "./subscription-slots.js";
 
 export type SubscriptionWithRelations = Awaited<ReturnType<typeof getPrimarySubscription>>;
 
@@ -204,6 +205,152 @@ export async function upsertPrimarySubscription(
       data: { remnawaveUuid: data.remnawaveUuid },
     });
     return { id: again.id, created: false };
+  }
+}
+
+export type PromoteSubscriptionResult = {
+  id: string;
+  ownerId: string;
+  previousPrimaryId: string | null;
+  remnawaveUuid: string | null;
+};
+
+export async function promoteSubscriptionToPrimary(subId: string): Promise<PromoteSubscriptionResult | null> {
+  return prisma.$transaction(async (db) => {
+    const target = await db.subscription.findUnique({
+      where: { id: subId },
+      select: { id: true, ownerId: true },
+    });
+    if (!target) return null;
+
+    await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"subscription-owner:" + target.ownerId}, 0))`;
+
+    const fresh = await db.subscription.findUnique({
+      where: { id: target.id },
+      select: { subscriptionIndex: true, remnawaveUuid: true, tariffId: true },
+    });
+    if (!fresh) return null;
+    if (fresh.subscriptionIndex === 0) {
+      return { id: target.id, ownerId: target.ownerId, previousPrimaryId: null, remnawaveUuid: fresh.remnawaveUuid };
+    }
+
+    const currentPrimary = await db.subscription.findUnique({
+      where: { ownerId_subscriptionIndex: { ownerId: target.ownerId, subscriptionIndex: 0 } },
+      select: { id: true },
+    });
+
+    await db.subscription.update({ where: { id: target.id }, data: { subscriptionIndex: -1 } });
+    if (currentPrimary && currentPrimary.id !== target.id) {
+      await db.subscription.update({
+        where: { id: currentPrimary.id },
+        data: { subscriptionIndex: fresh.subscriptionIndex },
+      });
+    }
+    await db.subscription.update({ where: { id: target.id }, data: { subscriptionIndex: 0 } });
+
+    await db.client.update({
+      where: { id: target.ownerId },
+      data: {
+        remnawaveUuid: fresh.remnawaveUuid ?? null,
+        ...(fresh.tariffId ? { currentTariffId: fresh.tariffId } : {}),
+      },
+    });
+
+    return {
+      id: target.id,
+      ownerId: target.ownerId,
+      previousPrimaryId: currentPrimary?.id ?? null,
+      remnawaveUuid: fresh.remnawaveUuid,
+    };
+  });
+}
+
+export type NormalizedSubscriptionSlots = {
+  primaryId: string | null;
+  primaryRemnawaveUuid: string | null;
+  promotedId: string | null;
+  reindexed: boolean;
+};
+
+export async function normalizeClientSubscriptionSlots(clientId: string): Promise<NormalizedSubscriptionSlots> {
+  return prisma.$transaction(async (db) => {
+    await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"subscription-owner:" + clientId}, 0))`;
+
+    const subs = await db.subscription.findMany({
+      where: { ownerId: clientId },
+      orderBy: [{ subscriptionIndex: "asc" }, { createdAt: "asc" }],
+      select: { id: true, subscriptionIndex: true, remnawaveUuid: true, tariffId: true, giftStatus: true },
+    });
+
+    const { ordered, promotedId, reindexed } = planSubscriptionSlotOrder(subs);
+    if (ordered.length === 0) {
+      await db.client.update({
+        where: { id: clientId },
+        data: { remnawaveUuid: null, currentTariffId: null },
+      });
+      return { primaryId: null, primaryRemnawaveUuid: null, promotedId: null, reindexed: false };
+    }
+
+    const primary = ordered[0];
+    if (reindexed) {
+      for (let i = 0; i < ordered.length; i++) {
+        await db.subscription.update({ where: { id: ordered[i].id }, data: { subscriptionIndex: -(i + 1) } });
+      }
+      for (let i = 0; i < ordered.length; i++) {
+        await db.subscription.update({ where: { id: ordered[i].id }, data: { subscriptionIndex: i } });
+      }
+    }
+
+    await db.client.update({
+      where: { id: clientId },
+      data: {
+        remnawaveUuid: primary.remnawaveUuid ?? null,
+        ...(primary.tariffId ? { currentTariffId: primary.tariffId } : {}),
+      },
+    });
+
+    return {
+      primaryId: primary.id,
+      primaryRemnawaveUuid: primary.remnawaveUuid ?? null,
+      promotedId,
+      reindexed,
+    };
+  }, { timeout: 20_000 });
+}
+
+export async function healMissingPrimarySlot(clientId: string): Promise<string | null> {
+  try {
+    return await prisma.$transaction(async (db) => {
+      await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${"subscription-owner:" + clientId}, 0))`;
+
+      const subs = await db.subscription.findMany({
+        where: { ownerId: clientId },
+        orderBy: [{ subscriptionIndex: "asc" }, { createdAt: "asc" }],
+        select: { id: true, subscriptionIndex: true, remnawaveUuid: true, giftStatus: true },
+      });
+      if (subs.length === 0) return null;
+      if (subs.some((sub) => sub.subscriptionIndex === 0)) return null;
+
+      const candidates = subs.filter((sub) => !isReservedGiftStatus(sub.giftStatus));
+      if (candidates.length === 0) return null;
+
+      const target = candidates[0];
+      await db.subscription.update({ where: { id: target.id }, data: { subscriptionIndex: 0 } });
+      if (target.remnawaveUuid) {
+        await db.client.update({
+          where: { id: clientId },
+          data: { remnawaveUuid: target.remnawaveUuid },
+        });
+      }
+
+      console.warn(
+        `[subscription self-heal] Auto-promoted sub ${target.id} to primary slot 0 for client ${clientId}`,
+      );
+      return target.id;
+    });
+  } catch (e) {
+    console.warn("[subscription self-heal] failed:", e instanceof Error ? e.message : e);
+    return null;
   }
 }
 

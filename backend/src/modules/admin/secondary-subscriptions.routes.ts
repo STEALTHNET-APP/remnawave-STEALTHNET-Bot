@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../db.js";
 import { remnaGetUser, remnaUpdateUser, remnaDeleteUser, isRemnaConfigured } from "../remna/remna.client.js";
+import { normalizeClientSubscriptionSlots } from "../subscription/subscription.helpers.js";
 
 export const adminSecondarySubscriptionsRouter = Router();
 
@@ -357,6 +358,10 @@ adminSecondarySubscriptionsRouter.delete("/:id", asyncRoute(async (req, res) => 
   // Cascade deletes GiftCodes via DB relation
   await prisma.subscription.delete({ where: { id: sub.id } });
 
+  await normalizeClientSubscriptionSlots(sub.ownerId).catch((e) => {
+    console.error("[admin/secondary-subscriptions] slot normalization failed:", e);
+  });
+
   return res.json({ success: true });
 }));
 
@@ -389,6 +394,13 @@ adminSecondarySubscriptionsRouter.delete("/bulk", asyncRoute(async (req, res) =>
   });
 
   await prisma.subscription.deleteMany({ where: { id: { in: ids } } });
+
+  const ownerIds = Array.from(new Set(subs.map((s) => s.ownerId)));
+  for (const ownerId of ownerIds) {
+    await normalizeClientSubscriptionSlots(ownerId).catch((e) => {
+      console.error("[admin/secondary-subscriptions] slot normalization failed:", e);
+    });
+  }
 
   return res.json({ success: true, deleted: subs.length });
 }));

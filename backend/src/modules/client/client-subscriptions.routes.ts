@@ -7,7 +7,7 @@ import { getSystemConfig } from "./client.service.js";
 import { remnaUpdateUser, isRemnaConfigured, remnaGetUser, remnaGetUserByTelegramId, extractRemnaUuid, remnaGetUserHwidDevices, remnaDeleteUserHwidDevice, encryptSubscriptionUrlInPlace, remnaRevokeUserSubscription } from "../remna/remna.client.js";
 import { offlineSubscriptionSnapshot } from "../remna/offline-snapshot.js";
 import { activateTariffForClient } from "../tariff/tariff-activation.service.js";
-import { upsertSubscriptionByRemnaUuid } from "../subscription/subscription.helpers.js";
+import { upsertSubscriptionByRemnaUuid, healMissingPrimarySlot } from "../subscription/subscription.helpers.js";
 import { autoRenewPrefsFromLastPayment } from "../payment/secondary-renew-plan.js";
 import { requireRemnaOnline } from "./client.middleware.js";
 import { toClientShape } from "./client-auth.routes.js";
@@ -44,6 +44,7 @@ async function resolveTariffDisplayName(remnaUserData: unknown): Promise<string>
 
 clientSubscriptionsRouter.get("/subscription", async (req, res) => {
   const client = (req as unknown as { client: { id: string; remnawaveUuid: string | null } }).client;
+  await healMissingPrimarySlot(client.id);
   // T-uuid-resync : резолвим активную подписку из таблицы subscriptions (root, index 0),
   // а НЕ по clients.remnawaveUuid — оно рассинхронивается при перевыпуске/продлении (указывает на старого
   // EXPIRED Remna-юзера, тогда как subscriptions хранит актуального). Бот берёт из subscriptions — кабинет теперь тоже.
@@ -268,6 +269,7 @@ export type ClientSubInfo = {
 };
 
 async function doFetchClientSubscriptionsAll(clientId: string): Promise<{ items: ClientSubInfo[] }> {
+  await healMissingPrimarySlot(clientId);
   const subAllCfg = await getSystemConfig();
   const cryptOn = subAllCfg.happCryptEnabled;
 

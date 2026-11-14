@@ -43,6 +43,7 @@ import {
   Plus,
   Loader2,
   Pencil,
+  Crown,
 } from "lucide-react";
 
 /**
@@ -232,6 +233,18 @@ export function AdminSecondarySubscriptionsPage() {
 
   const openDetail = (id: string) => {
     setDetailId(id);
+  };
+
+  const handleMakePrimary = async (id: string) => {
+    if (!token) return;
+    if (!(await adminConfirm("Сделать эту подписку основной? Она займёт слот #0 в боте и веб-кабинете, а текущая основная (если есть) станет дополнительной."))) return;
+    try {
+      await api.subscriptionMakePrimary(token, id);
+      fetchItems();
+    } catch (err) {
+      console.error("Failed to make primary", err);
+      await adminAlert(err instanceof Error ? err.message : "Ошибка при смене основной подписки");
+    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -577,6 +590,11 @@ export function AdminSecondarySubscriptionsPage() {
                             всегда, а не только при hover. Раньше пользователи думали что
                             кнопки удаления нет. */}
                         <div className="flex items-center justify-end gap-2">
+                          {item.subscriptionIndex !== 0 && (
+                            <Button variant="ghost" size="icon" aria-label="Сделать подписку основной" title="Сделать подписку основной" className="h-8 w-8 rounded-xl bg-foreground/[0.04] dark:bg-card hover:bg-amber-500/15 hover:text-amber-400 border border-border hover:border-amber-500/30 transition-all shadow-sm" onClick={(e) => { e.stopPropagation(); handleMakePrimary(item.id); }}>
+                              <Crown className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button variant="ghost" size="icon" aria-label="Открыть подписку" className="h-8 w-8 rounded-xl bg-foreground/[0.04] dark:bg-card hover:bg-blue-500/15 hover:text-blue-400 border border-border hover:border-blue-500/30 transition-all shadow-sm" onClick={(e) => { e.stopPropagation(); openDetail(item.id); }}>
                             <Eye className="h-4 w-4" />
                           </Button>
