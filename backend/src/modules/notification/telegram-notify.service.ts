@@ -7,6 +7,8 @@ import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { proxyFetch } from "../proxy-util/proxy-fetch.js";
 import { getProxyUrl } from "../proxy-util/get-proxy-url.js";
+import { isMailConfigured, mailConfigFromSystem, sendEmail } from "../mail/mail.service.js";
+import { renderEmailTemplate } from "../email-templates/email-templates.service.js";
 
 /** Inline keyboard with a single "Back to menu" button for client notifications. */
 function backToMenuMarkup(backLabel?: string | null): Record<string, unknown> {
@@ -237,6 +239,7 @@ export async function notifyTariffActivated(clientId: string, paymentId: string)
       amount: true,
       currency: true,
       provider: true,
+      orderId: true,
       subscriptionId: true,
       tariffId: true,
       metadata: true,
@@ -261,6 +264,24 @@ export async function notifyTariffActivated(clientId: string, paymentId: string)
       adminNote = meta.note.trim();
     }
   } catch { /* ignore */ }
+
+  const subscriptionContext = payment?.subscriptionId && !isGiftPurchase
+    ? await prisma.subscription.findUnique({
+        where: { id: payment.subscriptionId },
+        select: { remnawaveUuid: true, expireAt: true },
+      })
+    : null;
+  let subscriptionUrl: string | null = null;
+  if (subscriptionContext?.remnawaveUuid) {
+    try {
+      const { remnaGetUser } = await import("../remna/remna.client.js");
+      const r = await remnaGetUser(subscriptionContext.remnawaveUuid);
+      const inner = (r.data as { response?: Record<string, unknown>; data?: Record<string, unknown> } | null)?.response
+        ?? (r.data as { response?: Record<string, unknown>; data?: Record<string, unknown> } | null)?.data
+        ?? (r.data as Record<string, unknown> | null);
+      subscriptionUrl = (inner as { subscriptionUrl?: string } | null)?.subscriptionUrl ?? null;
+    } catch { /* ignore */ }
+  }
 
   if (client.telegramId && isGiftPurchase && payment?.subscriptionId) {
     // Авто-создание gift code сразу после оплаты.
@@ -326,23 +347,6 @@ export async function notifyTariffActivated(clientId: string, paymentId: string)
   } else if (client.telegramId) {
     // после успешной оплаты — выдаём ту же UX что после триала:
     // ссылка подписки + кнопки «📲 Инструкции по установке» и «🌐 Локации» (если есть).
-    let subscriptionUrl: string | null = null;
-    if (payment?.subscriptionId) {
-      const sub = await prisma.subscription.findUnique({
-        where: { id: payment.subscriptionId },
-        select: { remnawaveUuid: true },
-      });
-      if (sub?.remnawaveUuid) {
-        try {
-          const { remnaGetUser } = await import("../remna/remna.client.js");
-          const r = await remnaGetUser(sub.remnawaveUuid);
-          const inner = (r.data as { response?: Record<string, unknown>; data?: Record<string, unknown> } | null)?.response
-            ?? (r.data as { response?: Record<string, unknown>; data?: Record<string, unknown> } | null)?.data
-            ?? (r.data as Record<string, unknown> | null);
-          subscriptionUrl = (inner as { subscriptionUrl?: string } | null)?.subscriptionUrl ?? null;
-        } catch { /* ignore */ }
-      }
-    }
     const cfg = await getSystemConfig();
     // подсказка «если инструкция не открылась»
     // (платная/админская подписка). Текст из настроек (Тексты бота) или дефолт.
@@ -373,6 +377,30 @@ export async function notifyTariffActivated(clientId: string, paymentId: string)
       clientIdForBotToken: clientId,
     });
   }
+
+  if (client.email?.trim() && !isGiftPurchase && payment) {
+    const emailTo = client.email.trim();
+    void (async () => {
+      const cfg = await getSystemConfig();
+      const mailConfig = mailConfigFromSystem(cfg);
+      if (!isMailConfigured(mailConfig)) return;
+      const baseUrl = (cfg.publicAppUrl || "").replace(/\/+$/, "");
+      const rendered = await renderEmailTemplate("payment_confirmed", {
+        serviceName: cfg.serviceName?.trim() || "STEALTHNET",
+        tariffName: escapeHtml(tariffName),
+        amount: payment.amount.toFixed(2),
+        currency: (payment.currency || "RUB").toUpperCase(),
+        expiresAt: subscriptionContext?.expireAt ? formatDate(subscriptionContext.expireAt) : "—",
+        subscriptionUrl: subscriptionUrl || (baseUrl ? `${baseUrl}/cabinet/dashboard` : "—"),
+        orderId: escapeHtml(payment.orderId),
+      });
+      if (!rendered) return;
+      await sendEmail(mailConfig, emailTo, rendered.subject, rendered.body);
+    })().catch((err) => {
+      console.error(`[notify] failed to send payment email to client ${clientId}:`, err);
+    });
+  }
+
   const clientLabel = formatClientLabel(client);
   const lines = [
     `📦 <b>Оплата тарифа</b>`,

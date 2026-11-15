@@ -7,7 +7,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2, RefreshCw, Save, Eye, Send, AlertCircle, Check } from "lucide-react";
+import { Loader2, RefreshCw, Save, Eye, Send, AlertCircle, Check, Info } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -114,7 +114,7 @@ export function AdminEmailTemplatesPage() {
         <div className="flex items-start gap-3">
           <div>
             <h1 className="text-xl font-extrabold tracking-[-0.3px] text-foreground">Email-шаблоны</h1>
-            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Системные транзакционные письма (приветствие, оплата, истечение и т.п.)</p>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px]">Системные транзакционные письма: приветствие, оплата, пробный период, ответы поддержки</p>
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={() => void templatesQuery.refetch()} disabled={loading} className="rounded-xl gap-2">
@@ -129,6 +129,13 @@ export function AdminEmailTemplatesPage() {
           <p className="text-xs text-rose-500">{err}</p>
         </Card>
       )}
+
+      <Card className="p-3 bg-indigo-500/[0.06] border-indigo-500/20 flex items-center gap-2 rounded-xl">
+        <Info className="h-4 w-4 text-indigo-500 shrink-0" />
+        <p className="text-xs text-indigo-500/90">
+          Напоминания об окончании подписки отправляются планировщиком «Авто-рассылки». Здесь — только транзакционные письма, которые уходят сразу после события.
+        </p>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
         {/* LEFT: list */}
@@ -151,11 +158,6 @@ export function AdminEmailTemplatesPage() {
                   <div className="flex items-center gap-2">
                     <span className="truncate">{t.label}</span>
                     <span className="ml-auto flex items-center gap-1">
-                      {t.wired === false && (
-                        <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-500/90 border border-amber-500/20">
-                          скоро
-                        </span>
-                      )}
                       {t.isDefault && <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60">default</span>}
                     </span>
                   </div>
@@ -169,14 +171,6 @@ export function AdminEmailTemplatesPage() {
         {/* RIGHT: editor */}
         {active ? (
           <div className="space-y-4">
-            {active.wired === false && (
-              <Card className="p-3 bg-amber-500/[0.07] border-amber-500/20 flex items-center gap-2 rounded-xl">
-                <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
-                <p className="text-xs text-amber-500/90">
-                  Этот шаблон пока не отправляется автоматически — правки сохранятся и применятся, когда соответствующая рассылка появится. «Send test» работает уже сейчас.
-                </p>
-              </Card>
-            )}
             <Card className="bg-card border-border rounded-xl p-4 space-y-3">
               <div>
                 <Label className="text-xs">Тема (subject)</Label>

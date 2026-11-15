@@ -11,6 +11,7 @@ import {
   isMailConfigured,
   brandedNotificationEmail,
 } from "../mail/mail.service.js";
+import { emailBadge, renderEmailTemplate } from "../email-templates/email-templates.service.js";
 
 export function escapeHtml(s: string): string {
   return s
@@ -177,18 +178,40 @@ export async function notifyClientAboutSupportReply(
   if (client.email?.trim()) {
     const mailConfig = mailConfigFromSystem(config);
     if (isMailConfigured(mailConfig)) {
-      const { emailSubject, html } = buildEmailReplyPayload({
-        serviceName,
-        subject: ticket.subject,
-        snippet,
-        attachmentsCount: params.attachmentsCount,
-        ticketUrl: ticketUrl || undefined,
-        isEn,
-      });
+      const attachmentsCount = params.attachmentsCount ?? 0;
+      const rendered = ticketUrl
+        ? await renderEmailTemplate("ticket_reply", {
+            serviceName,
+            ticketId: ticket.id.slice(0, 8).toUpperCase(),
+            ticketSubject: escapeHtml(ticket.subject || "—"),
+            replyText: escapeHtml(
+              params.replyContent.trim() || (isEn ? "(no text in reply)" : "(ответ без текста)"),
+            ),
+            ticketUrl,
+            attachmentsInfo: attachmentsCount > 0
+              ? emailBadge(`📎 ${isEn ? "Attached files" : "Прикреплено файлов"}: ${attachmentsCount}`)
+              : "",
+          })
+        : null;
 
-      await sendEmail(mailConfig, client.email.trim(), emailSubject, html).catch((err) => {
-        console.warn(`[ticket-notify] failed to send email notice to client ${client.id}:`, err);
-      });
+      if (rendered) {
+        await sendEmail(mailConfig, client.email.trim(), rendered.subject, rendered.body).catch((err) => {
+          console.warn(`[ticket-notify] failed to send email notice to client ${client.id}:`, err);
+        });
+      } else {
+        const { emailSubject, html } = buildEmailReplyPayload({
+          serviceName,
+          subject: ticket.subject,
+          snippet,
+          attachmentsCount: params.attachmentsCount,
+          ticketUrl: ticketUrl || undefined,
+          isEn,
+        });
+
+        await sendEmail(mailConfig, client.email.trim(), emailSubject, html).catch((err) => {
+          console.warn(`[ticket-notify] failed to send email notice to client ${client.id}:`, err);
+        });
+      }
     }
   }
 }

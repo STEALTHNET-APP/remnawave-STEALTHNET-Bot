@@ -33,7 +33,9 @@ emailTemplatesRouter.use(requireAdminSection);
 emailTemplatesRouter.get(
   "/list",
   asyncRoute(async (_req, res) => {
-    const items = await Promise.all(TEMPLATES.map((t) => getStoredTemplate(t.key)));
+    const items = await Promise.all(
+      TEMPLATES.filter((t) => !t.hidden).map((t) => getStoredTemplate(t.key)),
+    );
     return res.json({ items: items.filter(Boolean) });
   }),
 );
