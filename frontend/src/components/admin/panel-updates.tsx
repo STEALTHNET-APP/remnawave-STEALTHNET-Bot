@@ -89,8 +89,10 @@ export function PanelUpdates({ token }: { token: string }) {
           {data.status?.cleanupWarning && <p className="text-sm text-amber-600 dark:text-amber-400">{data.status.cleanupWarning}</p>}
           {localChanges && <div className="rounded-lg border p-4 space-y-2">
             <p className="font-medium">Локальные изменения: {localChanges.count}</p>
-            <ul className="text-xs font-mono break-all">{localChanges.files.map(file => <li key={file}>{file}</li>)}</ul>
-            {localChanges.count > localChanges.files.length && <p className="text-sm">Показаны первые {localChanges.files.length} файлов.</p>}
+            <details><summary className="cursor-pointer text-sm">Показать изменённые файлы</summary>
+              <ul className="mt-2 max-h-48 overflow-y-auto text-xs font-mono break-all">{localChanges.files.map(file => <li key={file}>{file}</li>)}</ul>
+              {localChanges.count > localChanges.files.length && <p className="mt-2 text-xs text-muted-foreground">Показаны первые {localChanges.files.length} файлов.</p>}
+            </details>
             {!localChanges.canPreserve && <p className="text-sm text-amber-600 dark:text-amber-400">Нужна проверка на сервере: есть конфликт Git, вложенный репозиторий, изменения защищённых настроек.</p>}
             <p className="text-sm text-muted-foreground">При ручном обновлении сохраним правки отдельно и установим исходники новой версии. Правки не применяются поверх новой версии автоматически. .env и локальный docker-compose.override.yml сохраняются. Резервная копия локальных правок не удаляется по расписанию.</p>
           </div>}
