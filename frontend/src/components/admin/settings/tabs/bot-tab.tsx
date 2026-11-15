@@ -1,4 +1,5 @@
 import { BotMenuPreview } from "@/components/admin/bot-menu-preview";
+import { WidgetAvailabilityNotice } from "@/components/admin/widget-availability-notice";
 import { compactBotMenu } from "@/lib/bot-menu-preset";
 import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
@@ -812,7 +813,7 @@ export function BotTab({
                       </div>
                       <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-3">
                         <Switch id="htmlbubbles-test" checked={settings.botHtmlBubblesTest === true} onCheckedChange={checked => setSettings(s => s ? { ...s, botHtmlBubblesTest: checked === true } : s)} />
-                        <div className="space-y-1"><Label htmlFor="htmlbubbles-test">htmlbubbles test</Label><p className="text-xs text-muted-foreground">Интерактивные меню внутри сообщений Telegram. Только личные чаты и актуальные клиенты. Email, промокоды и обращения вводятся сообщением боту. Под каждым виджетом доступен переход к обычному меню.</p></div>
+                        <div className="space-y-2"><Label htmlFor="htmlbubbles-test">htmlbubbles test</Label><p className="text-xs text-muted-foreground">Интерактивные меню внутри сообщений Telegram. Email, промокоды и обращения вводятся сообщением боту. Под каждым виджетом доступен переход к обычному меню.</p><WidgetAvailabilityNotice /></div>
                       </div>
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-card border border-border">
                         <Switch

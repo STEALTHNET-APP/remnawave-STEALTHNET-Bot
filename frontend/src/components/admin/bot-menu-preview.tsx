@@ -5,6 +5,7 @@ import { api, type AdminSettings } from "@/lib/api";
 import { buildMenuPreview, type MenuScenario } from "@/lib/bot-menu-preview";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { WidgetAvailabilityNotice } from "@/components/admin/widget-availability-notice";
 
 export function BotMenuPreview({ settings }: { settings: AdminSettings }) {
   const { state } = useAuth();
@@ -32,6 +33,7 @@ export function BotMenuPreview({ settings }: { settings: AdminSettings }) {
       <div><Label htmlFor="preview-scenario" className="text-xs">Состояние клиента</Label><select id="preview-scenario" value={scenario} onChange={event => setScenario(event.target.value as MenuScenario)} className="mt-1 w-full rounded-md border bg-background p-2 text-xs"><option value="new">Новый клиент</option><option value="active">Активная подписка</option><option value="expired">Подписка истекла</option><option value="trial-used">Триал использован</option></select></div>
       <div><Label htmlFor="preview-mode" className="text-xs">Вид меню</Label><select id="preview-mode" value={mode} onChange={event => setMode(event.target.value as "classic" | "widget")} className="mt-1 w-full rounded-md border bg-background p-2 text-xs"><option value="classic">Обычное</option><option value="widget">HTML-виджет</option></select></div>
     </div>
+    {mode === "widget" && <WidgetAvailabilityNotice />}
     {settings.botGroupCabinet && <div className="flex gap-2"><Button type="button" size="sm" variant={section === "main" ? "secondary" : "ghost"} onClick={() => setSection("main")}>Главное меню</Button><Button type="button" size="sm" variant={section === "profile" ? "secondary" : "ghost"} onClick={() => setSection("profile")}>Профиль</Button></div>}
     {catalog.isError && <p className="text-xs text-amber-600">Не удалось проверить каталог услуг. Прокси, доступы и отдельные триалы могут не отображаться. <button type="button" className="underline" onClick={() => void catalog.refetch()}>Повторить</button></p>}
     <div className="rounded-2xl border bg-muted/30 p-3">
