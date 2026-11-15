@@ -811,9 +811,12 @@ export function BotTab({
                         />
                         <Label className="text-sm">Кнопка «Мой баланс» в Тарифах</Label>
                       </div>
-                      <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-3">
-                        <Switch id="htmlbubbles-test" checked={settings.botHtmlBubblesTest === true} onCheckedChange={checked => setSettings(s => s ? { ...s, botHtmlBubblesTest: checked === true } : s)} />
-                        <div className="space-y-2"><Label htmlFor="htmlbubbles-test">htmlbubbles test</Label><p className="text-xs text-muted-foreground">Интерактивные меню внутри сообщений Telegram. Email, промокоды и обращения вводятся сообщением боту. Под каждым виджетом доступен переход к обычному меню.</p><WidgetAvailabilityNotice /></div>
+                      <div className="space-y-3 rounded-xl border border-border bg-card p-3">
+                        <div className="flex items-start gap-3">
+                          <Switch id="htmlbubbles-test" checked={settings.botHtmlBubblesTest === true} onCheckedChange={checked => setSettings(s => s ? { ...s, botHtmlBubblesTest: checked === true } : s)} />
+                          <div className="min-w-0 space-y-1"><Label htmlFor="htmlbubbles-test">htmlbubbles test</Label><p className="text-xs text-muted-foreground">Интерактивные меню внутри сообщений Telegram. Email, промокоды и обращения вводятся сообщением боту. Под каждым виджетом доступен переход к обычному меню.</p></div>
+                        </div>
+                        <WidgetAvailabilityNotice />
                       </div>
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-card border border-border">
                         <Switch
