@@ -7,7 +7,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2, RefreshCw, Save, Eye, Send, AlertCircle, Check, Info } from "lucide-react";
+import { Loader2, RefreshCw, Save, Eye, Send, AlertCircle, Check, Info, RotateCcw } from "lucide-react";
 import { useAuth } from "@/contexts/auth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -52,11 +52,13 @@ export function AdminEmailTemplatesPage() {
     setVars(initial);
     setShowPreview(false);
     setSaved(false);
+    setResetDone(false);
   }
 
   const active = items.find((t) => t.key === activeKey);
 
-  const [busy, setBusy] = useState<"save" | "send" | null>(null);
+  const [busy, setBusy] = useState<"save" | "send" | "reset" | null>(null);
+  const [resetDone, setResetDone] = useState(false);
 
   const saveMutation = useMutation({
     mutationFn: () => emailTemplatesApi.update(token!, active!.key, subject, body),
@@ -84,6 +86,20 @@ export function AdminEmailTemplatesPage() {
     onSettled: () => setBusy(null),
   });
 
+  const resetMutation = useMutation({
+    mutationFn: () => emailTemplatesApi.reset(token!, active!.key),
+    onSuccess: (res) => {
+      setSubject(res.subject);
+      setBody(res.body);
+      setShowPreview(false);
+      setResetDone(true);
+      setTimeout(() => setResetDone(false), 2500);
+      void templatesQuery.refetch();
+    },
+    onError: (e) => setSaveErr(e instanceof Error ? e.message : "reset error"),
+    onSettled: () => setBusy(null),
+  });
+
   function preview() {
     if (!active) return;
     // используем текущие subject/body, а не сохранённые
@@ -106,6 +122,14 @@ export function AdminEmailTemplatesPage() {
     setSaveErr(null);
     setBusy("send");
     sendTestMutation.mutate();
+  }
+
+  function reset() {
+    if (!token || !active || busy) return;
+    if (!window.confirm("Сбросить тему и текст шаблона к исходным системным настройкам? Все ваши правки будут удалены.")) return;
+    setSaveErr(null);
+    setBusy("reset");
+    resetMutation.mutate();
   }
 
   return (
@@ -213,6 +237,15 @@ export function AdminEmailTemplatesPage() {
                 <Button onClick={preview} variant="outline" disabled={busy !== null} className="gap-2">
                   <Eye className="h-4 w-4" />
                   Превью
+                </Button>
+                <Button
+                  onClick={reset}
+                  variant="outline"
+                  disabled={busy !== null || active.isDefault === true}
+                  className="gap-2"
+                >
+                  {busy === "reset" ? <Loader2 className="h-4 w-4 animate-spin" /> : resetDone ? <Check className="h-4 w-4" /> : <RotateCcw className="h-4 w-4" />}
+                  {resetDone ? "Сброшено" : "Сбросить к дефолту"}
                 </Button>
                 <div className="flex items-center gap-2 ml-auto">
                   <Input
