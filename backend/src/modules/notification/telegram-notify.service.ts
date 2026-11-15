@@ -378,7 +378,7 @@ export async function notifyTariffActivated(clientId: string, paymentId: string)
     });
   }
 
-  if (client.email?.trim() && !isGiftPurchase && payment) {
+  if (client.email?.trim() && !isGiftPurchase && !isAdminGrant && payment) {
     const emailTo = client.email.trim();
     void (async () => {
       const cfg = await getSystemConfig();
