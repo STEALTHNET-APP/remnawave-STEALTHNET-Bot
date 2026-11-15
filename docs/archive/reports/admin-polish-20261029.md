@@ -1,5 +1,9 @@
 # Admin interface corrections — 2026-10-29
 
+[← Архив разработки](../README.md)
+
+> Исторический документ. Описывает работу на дату составления; команды и пути конкретного стенда не являются общей инструкцией по установке или обновлению.
+
 The stand frontend has been updated without changing backend services or client records. GitHub was not pushed.
 
 ## Changes

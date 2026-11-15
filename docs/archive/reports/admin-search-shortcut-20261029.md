@@ -1,5 +1,9 @@
 # Admin search shortcut
 
+[← Архив разработки](../README.md)
+
+> Исторический документ. Описывает работу на дату составления; команды и пути конкретного стенда не являются общей инструкцией по установке или обновлению.
+
 The search palette uses physical KeyK, allowing Latin and Cyrillic layouts. Platform detection reads User-Agent Client Hints when available, then user agent and navigator.platform fallback. Mac/iOS use Meta+K; Windows/Linux/Android use Control+K. Modern and legacy admin headers display the corresponding label and aria-keyshortcuts.
 
 The handler runs in capture phase, prevents the browser default, ignores IME composition and extra modifiers, and suppresses repeated toggles while a key is held. Header clicks dispatch a dedicated open-search event rather than fabricated keyboard input.

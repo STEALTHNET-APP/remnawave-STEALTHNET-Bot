@@ -1,5 +1,7 @@
 # SSL через Cloudflare DNS
 
+[← Обслуживание](operations/README.md)
+
 Для установленной панели со встроенным Docker nginx. Используется официальный плагин [Certbot DNS Cloudflare](https://certbot-dns-cloudflare.readthedocs.io/en/stable/). DNS-зона должна обслуживаться Cloudflare. Проверка DNS не требует открытого порта 80 и поддерживает wildcard.
 
 Создайте API Token Cloudflare с правом `Zone:DNS:Edit` только для нужной зоны. На сервере сохраните `/root/cloudflare.ini` с правами `600`:

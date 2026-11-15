@@ -1,5 +1,7 @@
 # Amnezia Web Panel (issue #96)
 
+[← Панель и кабинет](panel/README.md)
+
 Интеграция предназначена для [PRVTPRO/Amnezia-Web-Panel](https://github.com/PRVTPRO/Amnezia-Web-Panel), а не для одноимённых сторонних API. Она не заменяет прямые AmneziaWG-ноды STEALTHNET.
 
 ## Совместимость API

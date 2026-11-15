@@ -1,5 +1,7 @@
 # STEALTHNET External API v1
 
+[← Разработчикам](development/README.md)
+
 ## Обзор
 
 External API v1 позволяет интегрировать панель STEALTHNET в мобильные приложения и сторонние сервисы.
