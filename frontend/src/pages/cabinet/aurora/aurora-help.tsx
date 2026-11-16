@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { ArrowUpRight, CreditCard, FileText, MessageSquare, Send, ShieldCheck, Smartphone, Wifi } from "lucide-react";
+import { ArrowUpRight, CreditCard, FileText, MessageSquare, Send, ShieldCheck, Smartphone, Sparkles, Wifi } from "lucide-react";
 import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { AuBadge, AuEmpty, AuPage, AuRow, AuSection } from "@/components/aurora/aurora-ui";
 
@@ -70,6 +70,16 @@ export function AuroraHelp() {
           <p className="text-[13px] leading-relaxed text-[var(--au-muted)]">{t("aurora.help_support_text")}</p>
           {hours && <AuBadge tone="accent">{t("aurora.help_hours", { hours })}</AuBadge>}
           <div className="grid gap-2">
+            {config?.aiChatEnabled !== false && (
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("client:open-ai-chat"))}
+                className="flex items-center justify-center gap-2 rounded-[16px] bg-[var(--au-surface)] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] px-4 py-3.5 text-[14.5px] font-bold text-[var(--au-ink)] hover:bg-[var(--au-bg)] transition"
+              >
+                <Sparkles className="h-4 w-4 text-[var(--au-from)]" />
+                {t("aurora.help_ai_ask")}
+              </button>
+            )}
             {config?.ticketsEnabled && (
               <button
                 type="button"

@@ -668,7 +668,7 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
   );
 }
 
-export function FloatingChat({ placement = "floating" }: { placement?: "floating" | "toolbar" }) {
+export function FloatingChat({ placement = "floating", fabOffsetClass }: { placement?: "floating" | "toolbar"; fabOffsetClass?: string }) {
   const { t } = useTranslation();
   const { state } = useClientAuth();
   const config = useCabinetConfig();
@@ -705,13 +705,20 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
       setIsOpen(true);
     };
     const handleTourClose = () => setIsOpen(false);
+    const handleOpenAiChat = () => {
+      if (!aiChatEnabled) return;
+      setActiveChat("ai");
+      setIsOpen(true);
+    };
     window.addEventListener("tour:open-chat", handleTourOpen);
     window.addEventListener("tour:close-chat", handleTourClose);
+    window.addEventListener("client:open-ai-chat", handleOpenAiChat);
     return () => {
       window.removeEventListener("tour:open-chat", handleTourOpen);
       window.removeEventListener("tour:close-chat", handleTourClose);
+      window.removeEventListener("client:open-ai-chat", handleOpenAiChat);
     };
-  }, []);
+  }, [aiChatEnabled]);
 
   const [aiInput, setAiInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -832,7 +839,7 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
 
   return (
     <>
-      <div className={cn(placement === "toolbar" ? "cabinet-chat-toolbar relative z-[100]" : "fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-[100]", hasOpenDialog && !isOpen && "pointer-events-none opacity-0")}>
+      <div className={cn(placement === "toolbar" ? "cabinet-chat-toolbar relative z-[100]" : cn("fixed right-4 sm:bottom-6 sm:right-6 z-[100]", fabOffsetClass ?? "bottom-24"), hasOpenDialog && !isOpen && "pointer-events-none opacity-0")}>
         <AnimatePresence>
         {isOpen && (
         <motion.div

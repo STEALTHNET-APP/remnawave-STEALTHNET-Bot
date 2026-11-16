@@ -4,7 +4,7 @@ import { botCommandsSchema } from "../bot/bot-commands.js";
 import { botButtonsJsonSchema } from "../bot/menu-buttons.js";
 import { mailTestRouter } from "../mail/mail-test.routes.js";
 import { updateRouter } from "../update/update.routes.js";
-import { AI_PROVIDER_TYPES, AiProviderError, fetchAiModels, resolveAiConfig, type AiProviderType } from "../ai/ai-provider.service.js";
+import { AI_PROVIDERS_CONFIG, AI_PROVIDER_TYPES, AiProviderError, fetchAiModels, resolveAiConfig, sendAiChatRequest, type AiChatMessage, type AiProviderType } from "../ai/ai-provider.service.js";
 /**
  * Админские эндпоинты — прокси к Remna API + клиенты панели + настройки
  */
@@ -533,6 +533,83 @@ function createAiModelsHandler(forcedProvider?: AiProviderType) {
 
 adminRouter.post("/settings/ai-models", createAiModelsHandler());
 adminRouter.post("/settings/groq-models", createAiModelsHandler("groq"));
+
+const aiTestSchema = z.object({
+  provider: z.enum(AI_PROVIDER_TYPES).optional(),
+  apiKey: z.string().max(500).optional(),
+  baseUrl: z.string().trim().max(500).optional(),
+  model: z.string().max(200).optional(),
+  fallbackModels: z.array(z.string().max(200)).max(10).optional(),
+  systemPrompt: z.string().max(10_000).optional(),
+  message: z.string().trim().min(1).max(4000),
+  history: z.array(z.object({
+    role: z.enum(["user", "assistant"]),
+    content: z.string().max(4000),
+  })).max(50).optional(),
+});
+
+adminRouter.post("/settings/ai-test", asyncRoute(async (req, res) => {
+  const fail = (message: string) => res.status(400).json({ ok: false, message, error: message });
+  const parsed = aiTestSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return fail("Некорректные параметры запроса");
+  }
+
+  const config = await getSystemConfig();
+  const saved = resolveAiConfig(config);
+  const provider = parsed.data.provider ?? saved.provider;
+  const sameProvider = provider === saved.provider;
+  const preset = AI_PROVIDERS_CONFIG[provider];
+
+  const bodyKey = parsed.data.apiKey?.trim() ?? "";
+  const typedKey = bodyKey && bodyKey !== "********" ? bodyKey : "";
+  if (!typedKey && !sameProvider) {
+    return fail("Укажите API-ключ для выбранного провайдера");
+  }
+  const apiKey = typedKey || saved.apiKey;
+  if (!apiKey) {
+    return fail("API-ключ AI-провайдера не указан");
+  }
+
+  const baseUrl = provider === "custom"
+    ? (parsed.data.baseUrl?.trim() || (sameProvider ? saved.baseUrl : ""))
+    : preset.baseUrl;
+  if (!baseUrl) {
+    return fail("Укажите Base URL AI-провайдера");
+  }
+
+  const model = parsed.data.model?.trim() || (sameProvider ? saved.model : preset.defaultModel);
+  const fallbackModels = parsed.data.fallbackModels
+    ? parsed.data.fallbackModels.map((value) => value.trim()).filter(Boolean)
+    : sameProvider ? saved.fallbackModels : [];
+  const systemPrompt = parsed.data.systemPrompt?.trim() || config.aiSystemPrompt;
+
+  const messages: AiChatMessage[] = [
+    ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
+    ...(parsed.data.history ?? []),
+    { role: "user", content: parsed.data.message },
+  ];
+
+  const startedAt = Date.now();
+  try {
+    const { getProxyUrl } = await import("../proxy-util/get-proxy-url.js");
+    const aiProxy = await getProxyUrl("ai");
+    const result = await sendAiChatRequest({
+      provider,
+      apiKey,
+      baseUrl,
+      modelsToTry: [model, ...fallbackModels],
+      messages,
+      aiProxy,
+    });
+    return res.json({ ok: true, reply: result.reply, latencyMs: Date.now() - startedAt, model: result.model });
+  } catch (err) {
+    if (err instanceof AiProviderError) {
+      return res.json({ ok: false, error: err.message, status: err.status });
+    }
+    return res.json({ ok: false, error: "Не удалось выполнить запрос к AI-провайдеру" });
+  }
+}));
 
 /** Версия панели — для мониторинга. Под auth, чтобы не светить наружу. */
 adminRouter.get("/version", asyncRoute(async (_req, res) => {

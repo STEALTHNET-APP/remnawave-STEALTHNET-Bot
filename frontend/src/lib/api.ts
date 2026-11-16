@@ -1165,6 +1165,26 @@ export const api = {
     });
   },
 
+  async testAiChat(
+    token: string,
+    data: {
+      provider?: string;
+      apiKey?: string;
+      baseUrl?: string;
+      model?: string;
+      fallbackModels?: string[];
+      systemPrompt?: string;
+      message: string;
+      history?: { role: "user" | "assistant"; content: string }[];
+    },
+  ): Promise<{ ok: boolean; reply?: string; latencyMs?: number; model?: string; error?: string; status?: number }> {
+    return request("/admin/settings/ai-test", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    });
+  },
+
   async getReferralNetwork(token: string): Promise<{
     nodes: Array<{
       id: string;

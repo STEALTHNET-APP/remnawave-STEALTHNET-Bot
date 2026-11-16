@@ -1,13 +1,14 @@
 import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
-import { ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { ExternalLink, Loader2, RefreshCw, RotateCcw, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TabsContent } from "@/components/ui/tabs";
 import { ModelCombobox } from "@/components/model-combobox";
+import { cn } from "@/lib/utils";
 import { api, type AdminSettings } from "@/lib/api";
 import {
   AI_PROVIDER_IDS,
@@ -24,6 +25,13 @@ function isMasked(value: string | null | undefined): boolean {
   return value === SECRET_MASK;
 }
 
+type TestMessage = {
+  role: "user" | "assistant";
+  content: string;
+  latencyMs?: number;
+  model?: string;
+};
+
 export function AiTab({
   settings,
   setSettings,
@@ -39,6 +47,10 @@ export function AiTab({
   const [loadedModels, setLoadedModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsMessage, setModelsMessage] = useState<string | null>(null);
+  const [testMessages, setTestMessages] = useState<TestMessage[]>([]);
+  const [testInput, setTestInput] = useState("");
+  const [testLoading, setTestLoading] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
 
   const provider = resolveAiProviderId(settings.aiProvider, settings.groqApiKey);
   const preset = AI_PROVIDER_PRESETS[provider];
@@ -98,6 +110,50 @@ export function AiTab({
       setModelsMessage(t("admin.settings.ai_models_error", { message }));
     } finally {
       setLoadingModels(false);
+    }
+  }
+
+  function resetTestChat() {
+    setTestMessages([]);
+    setTestError(null);
+    setTestInput("");
+  }
+
+  async function handleTestSend() {
+    const message = testInput.trim();
+    if (!message || testLoading) return;
+    const history = testMessages.map(({ role, content }) => ({ role, content }));
+    setTestMessages((prev) => [...prev, { role: "user", content: message }]);
+    setTestInput("");
+    setTestError(null);
+    setTestLoading(true);
+    try {
+      const res = await api.testAiChat(token, {
+        provider,
+        apiKey: isMasked(apiKeyValue) ? undefined : (apiKeyValue || undefined),
+        baseUrl: provider === "custom" ? (settings.aiBaseUrl || undefined) : undefined,
+        model: modelValue,
+        fallbackModels: fallbackValues.filter((value): value is string => Boolean(value) && value !== modelValue),
+        systemPrompt: settings.aiSystemPrompt ?? undefined,
+        message,
+        history,
+      });
+      if (res.ok && res.reply) {
+        setTestMessages((prev) => [...prev, {
+          role: "assistant",
+          content: res.reply ?? "",
+          latencyMs: res.latencyMs,
+          model: res.model,
+        }]);
+      } else {
+        const status = res.status ? ` ${res.status}` : "";
+        setTestError(`${t("admin.settings.ai_test_error")}${status}: ${res.error || t("admin.settings.ai_test_unknown_error")}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setTestError(`${t("admin.settings.ai_test_error")}: ${message}`);
+    } finally {
+      setTestLoading(false);
     }
   }
 
@@ -226,6 +282,89 @@ export function AiTab({
           <div className="pt-2 border-t">
             <Button type="submit" disabled={saving} className="min-w-[140px]">
               {saving ? t("admin.settings.saving") : t("admin.settings.save")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4 overflow-hidden border-border">
+        <div className="border-b border-border bg-muted p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="flex items-center gap-2 text-base font-bold tracking-tight text-foreground">
+                <Sparkles className="h-4 w-4 text-primary" />
+                {t("admin.settings.ai_test_title")}
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground">{t("admin.settings.ai_test_hint")}</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={resetTestChat}
+              disabled={testLoading || (testMessages.length === 0 && !testError)}
+            >
+              <RotateCcw className="mr-1 h-3 w-3" />
+              {t("admin.settings.ai_test_clear")}
+            </Button>
+          </div>
+        </div>
+        <CardContent className="space-y-3 p-4">
+          <div className="min-h-[120px] max-h-[340px] space-y-3 overflow-y-auto rounded-lg border border-border bg-background p-3">
+            {testMessages.length === 0 && !testLoading && (
+              <p className="py-6 text-center text-xs text-muted-foreground">{t("admin.settings.ai_test_empty")}</p>
+            )}
+            {testMessages.map((item, index) => (
+              <div key={index} className={cn("flex", item.role === "user" ? "justify-end" : "justify-start")}>
+                <div
+                  className={cn(
+                    "max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm",
+                    item.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+                  )}
+                >
+                  {item.content}
+                  {item.role === "assistant" && (
+                    <div className="mt-1.5 text-[11px] font-medium text-muted-foreground">
+                      ⚡ {item.model || modelValue} • {item.latencyMs ?? 0} {t("admin.settings.ai_test_ms")}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {testLoading && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {t("admin.settings.ai_test_thinking")}
+              </div>
+            )}
+          </div>
+          {testError && (
+            <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {testError}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Input
+              value={testInput}
+              onChange={(e) => setTestInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleTestSend();
+                }
+              }}
+              placeholder={t("admin.settings.ai_test_placeholder")}
+              disabled={testLoading}
+              className="h-10"
+            />
+            <Button
+              type="button"
+              onClick={() => void handleTestSend()}
+              disabled={testLoading || !testInput.trim()}
+              className="shrink-0"
+            >
+              {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              <span className="ml-1.5 hidden sm:inline">{t("admin.settings.ai_test_send")}</span>
             </Button>
           </div>
         </CardContent>

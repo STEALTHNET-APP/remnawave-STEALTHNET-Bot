@@ -168,7 +168,7 @@ test('chat requests walk the fallback chain and report exhausted limits', async 
     messages: [{ role: 'user', content: 'hi' }],
     aiProxy: 'http://fixture-proxy',
   });
-  assert.deepEqual(plain(result), { reply: 'Привет!' });
+  assert.deepEqual(plain(result), { reply: 'Привет!', model: 'gemini-1.5-flash' });
   assert.deepEqual(seen, ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash']);
   assert.equal(calls[0].url, 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');
   assert.equal(calls[0].init.headers.Authorization, 'Bearer secret');
@@ -189,11 +189,13 @@ test('chat requests walk the fallback chain and report exhausted limits', async 
 test('admin routes expose the universal endpoint and keep the Groq alias', () => {
   const universal = routeSource.indexOf('adminRouter.post("/settings/ai-models"');
   const alias = routeSource.indexOf('adminRouter.post("/settings/groq-models", createAiModelsHandler("groq"))');
+  const sandbox = routeSource.indexOf('adminRouter.post("/settings/ai-test"');
   assert.ok(universal >= 0, 'Universal AI models endpoint must be registered');
   assert.ok(alias >= 0, 'Groq models alias must stay registered');
+  assert.ok(sandbox >= 0, 'Admin AI test chat endpoint must be registered');
   for (const middleware of ['requireAuth', 'requireAdminSection']) {
     const index = routeSource.indexOf(`adminRouter.use(${middleware})`);
-    assert.ok(index >= 0 && index < universal && index < alias);
+    assert.ok(index >= 0 && index < universal && index < alias && index < sandbox);
   }
 });
 

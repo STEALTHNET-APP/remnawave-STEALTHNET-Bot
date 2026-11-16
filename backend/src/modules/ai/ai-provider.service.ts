@@ -141,7 +141,7 @@ export async function sendAiChatRequest(params: {
   modelsToTry: string[];
   messages: AiChatMessage[];
   aiProxy?: string | null;
-}): Promise<{ reply: string }> {
+}): Promise<{ reply: string; model: string }> {
   const baseUrl = normalizeBaseUrl(params.baseUrl);
   if (!baseUrl) {
     throw new AiProviderError("Не задан Base URL AI-провайдера", 400);
@@ -177,7 +177,7 @@ export async function sendAiChatRequest(params: {
           choices?: Array<{ message?: { content?: string | null } }>;
         };
         const reply = data.choices?.[0]?.message?.content?.trim();
-        if (reply) return { reply };
+        if (reply) return { reply, model };
         lastDetails = "Провайдер вернул пустой ответ";
         console.error(`[ai/${params.provider}] Empty response (model: ${model})`);
         continue;
