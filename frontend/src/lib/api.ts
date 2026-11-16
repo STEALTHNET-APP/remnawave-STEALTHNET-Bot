@@ -1150,6 +1150,41 @@ export const api = {
     });
   },
 
+  async getAiModels(
+    token: string,
+    data: { provider: string; apiKey?: string; baseUrl?: string },
+  ): Promise<{ models: string[] }> {
+    return request("/admin/settings/ai-models", {
+      method: "POST",
+      body: JSON.stringify({
+        provider: data.provider,
+        apiKey: data.apiKey || undefined,
+        baseUrl: data.baseUrl || undefined,
+      }),
+      token,
+    });
+  },
+
+  async testAiChat(
+    token: string,
+    data: {
+      provider?: string;
+      apiKey?: string;
+      baseUrl?: string;
+      model?: string;
+      fallbackModels?: string[];
+      systemPrompt?: string;
+      message: string;
+      history?: { role: "user" | "assistant"; content: string }[];
+    },
+  ): Promise<{ ok: boolean; reply?: string; latencyMs?: number; model?: string; error?: string; status?: number }> {
+    return request("/admin/settings/ai-test", {
+      method: "POST",
+      body: JSON.stringify(data),
+      token,
+    });
+  },
+
   async getReferralNetwork(token: string): Promise<{
     nodes: Array<{
       id: string;
@@ -3784,6 +3819,13 @@ export type UpdateSettingsPayload = {
   groqFallback1?: string | null;
   groqFallback2?: string | null;
   groqFallback3?: string | null;
+  aiProvider?: string | null;
+  aiApiKey?: string | null;
+  aiBaseUrl?: string | null;
+  aiModel?: string | null;
+  aiFallback1?: string | null;
+  aiFallback2?: string | null;
+  aiFallback3?: string | null;
   aiSystemPrompt?: string | null;
   botButtons?: string | null;
   paymentDescription?: string;
@@ -4371,6 +4413,13 @@ export interface AdminSettings {
   groqFallback1?: string | null;
   groqFallback2?: string | null;
   groqFallback3?: string | null;
+  aiProvider?: string | null;
+  aiApiKey?: string | null;
+  aiBaseUrl?: string | null;
+  aiModel?: string | null;
+  aiFallback1?: string | null;
+  aiFallback2?: string | null;
+  aiFallback3?: string | null;
   aiSystemPrompt?: string | null;
   /** Кнопки главного меню бота: порядок, видимость, текст, стиль, ключ эмодзи, в один ряд */
   botButtons?: { id: string; visible: boolean; label: string; order: number; style?: string; emojiKey?: string; onePerRow?: boolean; url?: string }[];

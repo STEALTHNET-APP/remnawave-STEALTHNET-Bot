@@ -4,6 +4,7 @@ import { prisma } from "../../db.js";
 import { getSystemConfig, getPublicConfig } from "./client.service.js";
 import { remnaGetUser } from "../remna/remna.client.js";
 import { extractCurrentExpireAt } from "./client-trials-promo.routes.js";
+import { AiProviderError, resolveAiConfig, sendAiChatRequest, type AiChatMessage } from "../ai/ai-provider.service.js";
 
 export const clientAiChatRouter = Router();
 
@@ -29,23 +30,15 @@ clientAiChatRouter.post("/ai/chat", async (req, res) => {
       return res.status(403).json({ message: "AI-чат отключён" });
     }
 
-    const apiKey = (config as { groqApiKey?: string | null }).groqApiKey?.trim();
-    if (!apiKey) {
-      // Заглушка, если API ключ не настроен
+    const aiConfig = resolveAiConfig(config);
+    if (!aiConfig.apiKey || (aiConfig.provider === "custom" && !aiConfig.baseUrl)) {
+      // Заглушка, если AI-провайдер не настроен
       return res.json({
-        reply: "Извините, AI-ассистент пока не настроен. Пожалуйста, обратитесь в поддержку или настройте Groq API Key в админ-панели."
+        reply: "Извините, AI-ассистент пока не настроен. Пожалуйста, обратитесь в поддержку или настройте AI-провайдера в админ-панели."
       });
     }
 
-    const primaryModel = (config as { groqModel?: string | null }).groqModel?.trim() || "llama-3.3-70b-versatile";
-    const fallback1 = (config as { groqFallback1?: string | null }).groqFallback1?.trim();
-    const fallback2 = (config as { groqFallback2?: string | null }).groqFallback2?.trim();
-    const fallback3 = (config as { groqFallback3?: string | null }).groqFallback3?.trim();
-    
-    const modelsToTry = [primaryModel];
-    if (fallback1) modelsToTry.push(fallback1);
-    if (fallback2) modelsToTry.push(fallback2);
-    if (fallback3) modelsToTry.push(fallback3);
+    const modelsToTry = [aiConfig.model, ...aiConfig.fallbackModels];
 
     const systemPromptText = (config as { aiSystemPrompt?: string | null }).aiSystemPrompt?.trim() || "Ты — лучший менеджер техподдержки VPN-сервиса. Твоя цель — вежливо, быстро и точно помогать пользователям с настройкой VPN, тарифами и решением технических проблем. Отвечай кратко и по делу.";
 
@@ -132,61 +125,31 @@ clientAiChatRouter.post("/ai/chat", async (req, res) => {
 
     const systemPrompt = systemPromptText + tariffsContext + paymentContext + instructionsContext + userInfoContext;
 
-    const messages = [
+    const messages: AiChatMessage[] = [
       { role: "system", content: systemPrompt },
       ...parsed.data.messages
     ];
 
-    let lastErrorDetails = "";
-    let lastStatus = 500;
-
-    const { proxyFetch } = await import("../proxy-util/proxy-fetch.js");
     const { getProxyUrl } = await import("../proxy-util/get-proxy-url.js");
     const aiProxy = await getProxyUrl("ai");
 
-    for (const model of modelsToTry) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-        const groqRes = await proxyFetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model,
-            messages,
-            temperature: 0.5,
-            max_tokens: 1024,
-          }),
-          signal: controller.signal,
-        }, aiProxy);
-        
-        clearTimeout(timeoutId);
-
-        if (groqRes.ok) {
-          const data = await groqRes.json() as any;
-          const reply = data.choices?.[0]?.message?.content || "Не удалось получить ответ.";
-          return res.json({ reply });
-        }
-
-        // Если ошибка (например, 429 Rate Limit), пробуем следующую модель
-        const errText = await groqRes.text().catch(() => "");
-        console.error(`[ai/chat] Groq error (model: ${model}):`, groqRes.status, errText);
-        lastStatus = groqRes.status;
-        lastErrorDetails = errText;
-        
-        // Если это не 429 Rate Limit или 5xx, возможно стоит прервать, но лучше попробовать следующую
-      } catch (err) {
-        console.error(`[ai/chat] Network/Abort error with model ${model}:`, err);
-        lastErrorDetails = err instanceof Error ? err.message : String(err);
+    try {
+      const result = await sendAiChatRequest({
+        provider: aiConfig.provider,
+        apiKey: aiConfig.apiKey,
+        baseUrl: aiConfig.baseUrl,
+        modelsToTry,
+        messages,
+        aiProxy,
+      });
+      return res.json({ reply: result.reply });
+    } catch (err) {
+      if (err instanceof AiProviderError) {
+        console.error(`[ai/chat] ${aiConfig.provider} failed:`, err.status, err.details);
+        return res.status(502).json({ message: err.message, details: err.details });
       }
+      throw err;
     }
-
-    // Если все модели не сработали
-    return res.status(502).json({ message: "Ошибка сервиса AI или превышены лимиты", details: lastErrorDetails });
 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
