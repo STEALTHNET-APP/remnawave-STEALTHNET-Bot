@@ -974,9 +974,9 @@ export function FloatingChat({ placement = "floating", fabOffsetClass }: { place
             aria-expanded={isOpen}
             onClick={() => setIsOpen((v) => !v)}
             className={cn(
-              "relative flex h-9 w-9 sm:h-16 sm:w-16 items-center justify-center rounded-full z-10",
-              "bg-card/60 border border-border/50 text-foreground transition-colors hover:bg-card/80",
-              !isOpen ? "shadow-[0_8px_32px_rgba(0,0,0,0.12)]" : "shadow-lg"
+              "relative z-10 flex h-14 w-14 items-center justify-center rounded-full sm:h-16 sm:w-16",
+              "border border-white/20 bg-[#0066FF] text-white transition-all duration-200 active:scale-95",
+              "shadow-[0_8px_25px_rgba(0,102,255,0.38)] hover:bg-blue-500 hover:shadow-[0_10px_30px_rgba(0,102,255,0.48)]",
             )}
           >
             <motion.span
@@ -995,7 +995,7 @@ export function FloatingChat({ placement = "floating", fabOffsetClass }: { place
                 initial={reduceMotion ? false : { scale: 0, y: 10 }}
                 animate={{ scale: 1, y: 0 }}
                 transition={{ duration: 0.25, ease: [0.34, 1.56, 0.64, 1] }}
-                className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-destructive text-[11px] font-bold text-white"
+                className="absolute -right-0.5 -top-0.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-rose-500 text-[11px] font-bold text-white shadow-md"
               >
                 {aiUnread + supportUnread}
               </motion.span>

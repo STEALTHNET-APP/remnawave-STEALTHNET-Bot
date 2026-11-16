@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, MessageCircle, AlertCircle, ChevronRight, History } from "lucide-react";
+import { Plus, MessageCircle, AlertCircle, ChevronRight, History, Sparkles } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
+import { useCabinetConfig } from "@/contexts/cabinet-config";
 import { api } from "@/lib/api";
 import { AuroraNewTicketSheet } from "@/components/aurora/aurora-new-ticket-sheet";
 import { AuroraTicketChatSheet } from "@/components/aurora/aurora-ticket-chat-sheet";
@@ -40,6 +41,8 @@ function fmtDate(iso: string, locale: string): string {
 export function AuroraTickets() {
   const { t, i18n } = useTranslation();
   const { state } = useClientAuth();
+  const config = useCabinetConfig();
+  const aiChatEnabled = config?.aiChatEnabled !== false;
   const [items, setItems] = useState<TicketItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -82,14 +85,26 @@ export function AuroraTickets() {
         <p className="mt-0.5 text-[14px] text-[var(--au-muted)]">{t("aurora.support_subtitle")}</p>
       </header>
 
-      <button
-        type="button"
-        onClick={() => setShowNew(true)}
-        className="flex min-h-12 w-full items-center justify-center gap-2 rounded-[18px] bg-[var(--au-from)] px-5 text-[15.5px] font-bold text-white transition-transform active:scale-[0.99]"
-      >
-        <Plus className="h-[19px] w-[19px]" />
-        {t("aurora.new_ticket")}
-      </button>
+      <div className={cn("grid gap-2", aiChatEnabled ? "grid-cols-2" : "grid-cols-1")}>
+        <button
+          type="button"
+          onClick={() => setShowNew(true)}
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-[18px] bg-[var(--au-from)] px-3 text-center text-[13.5px] font-bold leading-tight text-white transition-transform active:scale-[0.99]"
+        >
+          <Plus className="h-[19px] w-[19px] shrink-0" />
+          {t("aurora.new_ticket")}
+        </button>
+        {aiChatEnabled && (
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("client:open-ai-chat"))}
+            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-[18px] border border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[var(--au-surface)] px-3 text-center text-[13.5px] font-bold leading-tight text-[var(--au-ink)] transition hover:bg-[var(--au-bg)] active:scale-[0.99]"
+          >
+            <Sparkles className="h-[19px] w-[19px] shrink-0 text-[var(--au-from)]" />
+            {t("aurora.ask_ai")}
+          </button>
+        )}
+      </div>
 
       {!loading && !err && (
         <div className="grid grid-cols-2 gap-1 rounded-[14px] bg-[var(--au-surface)] p-1">
