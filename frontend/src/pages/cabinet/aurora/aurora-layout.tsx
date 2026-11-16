@@ -2,8 +2,9 @@ import { useTranslation } from "react-i18next";
 import { formatAuroraBalance } from "@/lib/aurora-profile";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import { Settings2, User, Gift, SlidersHorizontal, Shield, Network, LogOut, X, ChevronRight, HelpCircle, History, Wallet } from "lucide-react";
+import { Settings2, Sparkles, User, Gift, SlidersHorizontal, Shield, Network, LogOut, X, ChevronRight, HelpCircle, History, Wallet } from "lucide-react";
 import { AuroraTabs } from "@/components/aurora/aurora-tabs";
+import { FloatingChat } from "@/components/floating-chat";
 import { RouletteIcon } from "@/components/icons/roulette-icon";
 import { IsMiniappContext } from "@/contexts/miniapp";
 import { useIsMiniapp } from "@/hooks/use-is-miniapp";
@@ -83,7 +84,7 @@ export function AuroraLayout() {
     {to:"/cabinet/help",label:t("aurora.help"),icon:HelpCircle,show:true},
   ].filter(x=>x.show);
   return <IsMiniappContext.Provider value={isMiniapp}><div className="au-client min-h-screen" data-au-theme={resolvedMode} style={{"--au-link":dark?`color-mix(in srgb, ${accent} 48%, white)`:accent,"--au-from":accent,"--au-to":gradientEnd,"--au-bg":dark?"#10131d":"#ffffff","--au-canvas":dark?"#10131d":"#f8f9fc","--au-surface":dark?"#1b2030":"#f2f3f7","--au-nav":dark?"#202637":"#ffffff","--au-ink":dark?"#f1f3fa":"#0f1222","--au-muted":dark?"#adb6ce":"#606a80"} as React.CSSProperties}>
-    <header className="au-header"><Link to="/cabinet/dashboard" className="au-wordmark">{config?.serviceName || "Aurora"}</Link><button type="button" onClick={()=>setMenu(true)} aria-label={t("aurora.profile_appearance")}><Settings2 size={20}/><span>{t("aurora.settings")}</span></button></header>
+    <header className="au-header"><Link to="/cabinet/dashboard" className="au-wordmark">{config?.serviceName || "Aurora"}</Link><div className="flex shrink-0 items-center gap-2">{config?.aiChatEnabled !== false && (<button type="button" onClick={()=>window.dispatchEvent(new CustomEvent("client:open-ai-chat"))} aria-label="AI Чат"><Sparkles size={18}/><span className="hidden min-[400px]:inline">AI Чат</span></button>)}<button type="button" onClick={()=>setMenu(true)} aria-label={t("aurora.profile_appearance")}><Settings2 size={20}/><span>{t("aurora.settings")}</span></button></div></header>
     <main className="au-content"><div key={location.pathname} className="au-page"><Outlet/></div></main>
     <AuroraTabs/>
     <dialog ref={dialog} className="au-settings" onCancel={e=>{e.preventDefault();setMenu(false);}} onClose={()=>setMenu(false)} aria-labelledby="au-settings-title">
@@ -92,5 +93,6 @@ export function AuroraLayout() {
       <Link className="au-menu-balance" to="/cabinet/profile" onClick={()=>setMenu(false)}><span>{t("aurora.my_balance")}</span><strong>{formatAuroraBalance(state.client?.balance || 0, state.client?.preferredCurrency || "RUB", i18n.language)}</strong><span>{t("aurora.topup_history")}<ChevronRight size={16}/></span></Link><h3>{t("aurora.sections")}</h3><nav aria-label={t("aurora.all_sections")} className="au-menu-links">{links.map(({to,label,icon:Icon})=><Link key={to} to={to} onClick={()=>setMenu(false)}><Icon size={20}/><span>{label}</span><ChevronRight size={17}/></Link>)}</nav>
       <Link className="au-logout" to="/cabinet/login" onClick={()=>{setMenu(false);logout();}}><LogOut size={18}/>{t("aurora.logout")}</Link>
     </dialog>
+    <FloatingChat placement="floating" fabOffsetClass="bottom-[calc(5.5rem_+_max(env(safe-area-inset-bottom,0px),var(--app-tg-bottom,0px)))]" />
   </div></IsMiniappContext.Provider>;
 }

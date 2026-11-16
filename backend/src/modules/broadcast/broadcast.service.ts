@@ -1,4 +1,5 @@
 import { sendBroadcastEmail, subscribedEmailFilter } from "../email-unsubscribe/email-unsubscribe.service.js";
+import { buildBroadcastEmailHtml } from "../email-templates/email-templates.service.js";
 /**
  * Рассылка: отправка сообщения клиентам через Telegram и/или Email.
  */
@@ -119,12 +120,25 @@ function isValidEmail(s: string): boolean {
 }
 
 // Готовит SMTP-конфиг, тему и HTML-тело письма (1-в-1 как email-ветка runBroadcast).
-function buildEmailParts(config: Awaited<ReturnType<typeof getSystemConfig>>, subject: string | undefined, message: string, attachment: BroadcastAttachment | undefined) {
+function buildEmailParts(
+  config: Awaited<ReturnType<typeof getSystemConfig>>,
+  subject: string | undefined,
+  message: string,
+  attachment: BroadcastAttachment | undefined,
+  cta?: { text?: string; url?: string },
+) {
   const smtpConfig = mailConfigFromSystem(config);
   const serviceName = config.serviceName || "Сервис";
   const subj = subject?.trim() || `Сообщение от ${serviceName}`;
-  const html = message.trim().replace(/\n/g, "<br>\n");
-  const htmlBody = `<!DOCTYPE html><html><body style="font-family: sans-serif;">${html}</body></html>`;
+  const baseUrl = (config.publicAppUrl || "").replace(/\/+$/, "");
+  const ctaUrl = cta?.url?.trim();
+  const htmlBody = buildBroadcastEmailHtml({
+    serviceName,
+    message,
+    buttonText: cta?.text,
+    buttonUrl: ctaUrl && /^https?:\/\//i.test(ctaUrl) ? ctaUrl : null,
+    cabinetUrl: baseUrl ? `${baseUrl}/cabinet/dashboard` : null,
+  });
   const emailAttachments = attachment ? [{ filename: attachment.originalname || "file", content: attachment.buffer }] : undefined;
   return { smtpConfig, subj, htmlBody, emailAttachments };
 }
@@ -225,7 +239,7 @@ export function startListSendJob(recipients: string[], message: string, extras?:
 
       // ── EMAIL ──
       if (channel === "email") {
-        const { smtpConfig, subj, htmlBody, emailAttachments } = buildEmailParts(config, extras?.subject, message, extras?.attachment);
+        const { smtpConfig, subj, htmlBody, emailAttachments } = buildEmailParts(config, extras?.subject, message, extras?.attachment, { text: extras?.buttonText, url: extras?.buttonUrl });
         if (!isMailConfigured(smtpConfig)) {
           job.failed = ids.length;
           job.errors.push({ telegramId: "—", error: "Не настроен SMTP (Настройки → Почта)" });
@@ -853,8 +867,12 @@ export async function runBroadcast(options: {
       });
       const serviceName = config.serviceName || "Сервис";
       const subj = subject.trim() || `Сообщение от ${serviceName}`;
-      const html = message.trim().replace(/\n/g, "<br>\n");
-      const htmlBody = `<!DOCTYPE html><html><body style="font-family: sans-serif;">${html}</body></html>`;
+      const baseUrl = (config.publicAppUrl || "").replace(/\/+$/, "");
+      const htmlBody = buildBroadcastEmailHtml({
+        serviceName,
+        message,
+        cabinetUrl: baseUrl ? `${baseUrl}/cabinet/dashboard` : null,
+      });
       const emailAttachments = attachment
         ? [{ filename: attachment.originalname || "file", content: attachment.buffer }]
         : undefined;

@@ -585,15 +585,32 @@ export function AuroraTariffs() {
           </dl>}
 
           {!extendTarget && currentTariff && (currentTariff.maxExtraDevices ?? 0) > 0 && (
-            <div className="flex items-center justify-between gap-3 rounded-[18px] bg-[var(--au-surface)] px-4 py-3">
+            <div className={cn(
+              "flex items-center justify-between gap-3 rounded-[18px] border px-4 py-3 transition-colors",
+              extraDevices > 0
+                ? "border-[color-mix(in_srgb,var(--au-from)_45%,transparent)] bg-[color-mix(in_srgb,var(--au-from)_6%,var(--au-surface))]"
+                : "border-[color-mix(in_srgb,var(--au-muted)_22%,transparent)] bg-[color-mix(in_srgb,var(--au-surface)_92%,var(--au-bg))]",
+            )}>
               <div className="min-w-0">
                 <p className="text-[13.5px] font-semibold">{t("aurora.checkout_extra_devices")}</p>
                 <p className="text-[11.5px] text-[var(--au-muted)]">{extrasTotal > 0 ? `+${fmtPrice(extrasTotal, currency)}` : t("aurora.checkout_extra_devices_hint")}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button type="button" aria-label={t("aurora.checkout_less_devices")} onClick={() => setExtraDevices((value) => Math.max(0, value - 1))} className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--au-bg)] text-[18px] font-bold">−</button>
+                <button
+                  type="button"
+                  aria-label={t("aurora.checkout_less_devices")}
+                  disabled={extraDevices <= 0}
+                  onClick={() => setExtraDevices((value) => Math.max(0, value - 1))}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--au-muted)_20%,transparent)] bg-[var(--au-bg)] text-[18px] font-bold text-[var(--au-ink)] transition-all hover:border-[var(--au-from)] active:scale-95 disabled:opacity-40"
+                >−</button>
                 <span className="w-6 text-center text-[15px] font-extrabold tabular-nums">{extraDevices}</span>
-                <button type="button" aria-label={t("aurora.checkout_more_devices")} onClick={() => setExtraDevices((value) => Math.min(currentTariff.maxExtraDevices ?? 0, value + 1))} className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--au-bg)] text-[18px] font-bold">+</button>
+                <button
+                  type="button"
+                  aria-label={t("aurora.checkout_more_devices")}
+                  disabled={extraDevices >= (currentTariff.maxExtraDevices ?? 0)}
+                  onClick={() => setExtraDevices((value) => Math.min(currentTariff.maxExtraDevices ?? 0, value + 1))}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--au-muted)_20%,transparent)] bg-[var(--au-bg)] text-[18px] font-bold text-[var(--au-ink)] transition-all hover:border-[var(--au-from)] active:scale-95 disabled:opacity-40"
+                >+</button>
               </div>
             </div>
           )}

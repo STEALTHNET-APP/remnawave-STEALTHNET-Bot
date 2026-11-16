@@ -9,3 +9,5 @@
 - [Недоступность Remnawave](../remna-outages.md) — Поведение сервиса при сбоях Remna.
 - [Продление SSL](../SSL-RENEWAL.md) — Проверка и восстановление сертификата.
 - [Cloudflare DNS и wildcard SSL](../CLOUDFLARE_SSL.md) — Настройка сертификатов через DNS.
+
+- [Два аккаунта у клиента](duplicate-accounts.md) — Как сохранить подписки при привязке Telegram.

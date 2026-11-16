@@ -9,6 +9,7 @@
  *   GET    /api/admin/email-templates/list           — все шаблоны (с defaults)
  *   GET    /api/admin/email-templates/:key            — один шаблон
  *   PUT    /api/admin/email-templates/:key            — обновить (subject + body)
+ *   POST   /api/admin/email-templates/:key/reset      — сбросить к системному дефолту
  *   POST   /api/admin/email-templates/:key/preview    — отрендерить с тестовыми переменными
  *   POST   /api/admin/email-templates/:key/send-test  — отправить тестовое письмо
  */
@@ -33,7 +34,9 @@ emailTemplatesRouter.use(requireAdminSection);
 emailTemplatesRouter.get(
   "/list",
   asyncRoute(async (_req, res) => {
-    const items = await Promise.all(TEMPLATES.map((t) => getStoredTemplate(t.key)));
+    const items = await Promise.all(
+      TEMPLATES.filter((t) => !t.hidden).map((t) => getStoredTemplate(t.key)),
+    );
     return res.json({ items: items.filter(Boolean) });
   }),
 );
@@ -76,6 +79,24 @@ emailTemplatesRouter.put(
       subjectLength: parsed.data.subject.length,
       bodyLength: parsed.data.body.length,
     });
+
+    return res.json({ ok: true, ...(await getStoredTemplate(def.key))! });
+  }),
+);
+
+emailTemplatesRouter.post(
+  "/:key/reset",
+  asyncRoute(async (req, res) => {
+    const def = TEMPLATES.find((t) => t.key === req.params.key);
+    if (!def) return res.status(404).json({ message: "Template not found" });
+
+    await prisma.systemSetting.deleteMany({
+      where: {
+        key: { in: [subjectKey(def.key), bodyKey(def.key)] },
+      },
+    });
+
+    await logAdmin(req, "email_template.reset", { type: "system", id: def.key });
 
     return res.json({ ok: true, ...(await getStoredTemplate(def.key))! });
   }),

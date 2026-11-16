@@ -28,6 +28,14 @@ const prisma = {
   autoBroadcastLog: { findMany: async () => [], create: async () => ({}) },
   subscription: { findFirst: async () => null },
 };
+const originalDatabaseUrl = process.env.DATABASE_URL;
+process.env.DATABASE_URL = 'postgresql://fixture:fixture@127.0.0.1:1/unused';
+const { default: ignoredDefault, ...prismaExports } = await import('@prisma/client');
+mock.module('@prisma/client', { namedExports: { ...prismaExports, PrismaClient: class {
+  async $queryRaw() { return [{ locked: true }]; }
+  async $disconnect() {}
+} } });
+after(() => { if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL; else process.env.DATABASE_URL = originalDatabaseUrl; });
 mock.module("../dist/db.js", { namedExports: { prisma } });
 mock.module("../dist/config/index.js", { namedExports: { env: { JWT_SECRET: secret } } });
 mock.module("../dist/modules/client/client.service.js", { namedExports: { getSystemConfig: async () => config } });

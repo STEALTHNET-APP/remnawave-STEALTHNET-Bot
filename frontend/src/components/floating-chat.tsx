@@ -57,8 +57,8 @@ function getInitialAiMessage(serviceName: string): Message[] {
   ];
 }
 
-const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFloating = false, showAiTab = true }: any) => {
-  if (!showAiTab) {
+const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFloating = false, showAiTab = true, showSupportTab = true }: any) => {
+  if (!showAiTab || !showSupportTab) {
     return (
       <div className={cn(
         "relative flex p-1 w-full sm:w-auto sm:min-w-[200px]",
@@ -67,12 +67,12 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
           : "bg-black/20 border border-border rounded-xl"
       )}>
         <button
-          aria-pressed={activeChat === "support"}
-      onClick={() => setActiveChat("support")}
+          aria-pressed={true}
+          onClick={() => setActiveChat(showSupportTab ? "support" : "ai")}
           className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold text-primary-foreground bg-primary relative z-10"
         >
-          <Headset className="w-4 h-4" /> Поддержка
-          {supportUnread > 0 && (
+          {showSupportTab ? <><Headset className="w-4 h-4" /> Поддержка</> : <><Sparkles className="w-4 h-4" /> AI Чат</>}
+          {showSupportTab && supportUnread > 0 && (
             <span className="ml-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white">
               {supportUnread}
             </span>
@@ -104,8 +104,8 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
       )}
     </button>
     <button
-      aria-pressed={activeChat === "support"}
-      onClick={() => setActiveChat("support")}
+      aria-pressed={true}
+          onClick={() => setActiveChat(showSupportTab ? "support" : "ai")}
       className={cn(
         "flex-1 sm:flex-none sm:w-[160px] flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all duration-300 relative z-10",
         activeChat === "support" ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-card"
@@ -130,7 +130,7 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
   );
 };
 
-const ChatHeader = ({ activeChat, setActiveChat, isExpanded, setIsExpanded, setIsOpen, aiUnread, supportUnread, showAiTab = true }: any) => (
+const ChatHeader = ({ activeChat, setActiveChat, isExpanded, setIsExpanded, setIsOpen, aiUnread, supportUnread, showAiTab = true, showSupportTab = true }: any) => (
   <>
     <div className="px-4 py-3 sm:py-4 border-b border-border bg-black/5 dark:bg-card shrink-0 relative overflow-hidden pt-[max(var(--app-safe-top),16px)] sm:pt-4">
       <div className="absolute inset-0 bg-transparent pointer-events-none" />
@@ -168,9 +168,9 @@ const ChatHeader = ({ activeChat, setActiveChat, isExpanded, setIsExpanded, setI
     </div>
 
     {/* Chat Switcher */}
-    {showAiTab && (
+    {showAiTab && showSupportTab && (
       <div className="flex sm:justify-center px-4 py-3 sm:py-4 shrink-0 bg-black/5 dark:bg-card border-b border-border">
-        <ChatSwitcher activeChat={activeChat} setActiveChat={setActiveChat} aiUnread={aiUnread} supportUnread={supportUnread} showAiTab={showAiTab} />
+        <ChatSwitcher activeChat={activeChat} setActiveChat={setActiveChat} aiUnread={aiUnread} supportUnread={supportUnread} showAiTab={showAiTab} showSupportTab={showSupportTab} />
       </div>
     )}
   </>
@@ -668,17 +668,20 @@ function SupportTab({ headerProps, onRefreshUnread }: { headerProps: any, onRefr
   );
 }
 
-export function FloatingChat({ placement = "floating" }: { placement?: "floating" | "toolbar" }) {
+export function FloatingChat({ placement = "floating", fabOffsetClass }: { placement?: "floating" | "toolbar"; fabOffsetClass?: string }) {
   const { t } = useTranslation();
   const { state } = useClientAuth();
   const config = useCabinetConfig();
   const token = state.token ?? null;
   const serviceName = config?.serviceName?.trim() || "Сервис";
-  const aiChatEnabled = config?.aiChatEnabled !== false;
+  const aiChatEnabled = config?.aiChatEnabled === true;
+  const supportEnabled = config?.ticketsEnabled === true;
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeChat, setActiveChat] = useState<ChatType>("support");
   const [hasOpenDialog, setHasOpenDialog] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const chatRootRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
   const [aiChats, setAiChats] = useState<Message[]>(() => getInitialAiMessage("Сервис"));
   useEffect(() => {
@@ -695,7 +698,8 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
 
   useEffect(() => {
     if (!aiChatEnabled && activeChat === "ai") setActiveChat("support");
-  }, [aiChatEnabled, activeChat]);
+    if (!supportEnabled && aiChatEnabled && activeChat === "support") setActiveChat("ai");
+  }, [aiChatEnabled, supportEnabled, activeChat]);
 
   // Tour integration: programmatically open/close chat when tour requests it
   useEffect(() => {
@@ -705,13 +709,20 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
       setIsOpen(true);
     };
     const handleTourClose = () => setIsOpen(false);
+    const handleOpenAiChat = () => {
+      if (!aiChatEnabled) return;
+      setActiveChat("ai");
+      setIsOpen(true);
+    };
     window.addEventListener("tour:open-chat", handleTourOpen);
     window.addEventListener("tour:close-chat", handleTourClose);
+    window.addEventListener("client:open-ai-chat", handleOpenAiChat);
     return () => {
       window.removeEventListener("tour:open-chat", handleTourOpen);
       window.removeEventListener("tour:close-chat", handleTourClose);
+      window.removeEventListener("client:open-ai-chat", handleOpenAiChat);
     };
-  }, []);
+  }, [aiChatEnabled]);
 
   const [aiInput, setAiInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -738,14 +749,55 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
   // Скрываем кнопку чата когда открыт любой Dialog (Radix)
   useEffect(() => {
     function checkDialogs() {
-      const overlay = document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]');
-      setHasOpenDialog(!!overlay);
+      const chatRoot = chatRootRef.current;
+      const root = document.documentElement;
+      const sheetOpen = root.dataset.auSheet === "1" || root.dataset.auFabHidden === "1";
+      const nativeDialog = Array.from(document.querySelectorAll<HTMLDialogElement>("dialog[open]"))
+        .some((node) => !chatRoot?.contains(node));
+      const radixDialog = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]'))
+        .some((node) => !chatRoot?.contains(node));
+      const overlay = Boolean(document.querySelector(".au-sheet-overlay, .app-viewport-overlay"));
+      setHasOpenDialog(sheetOpen || nativeDialog || radixDialog || overlay);
     }
     const observer = new MutationObserver(checkDialogs);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state"] });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state", "open"] });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-au-sheet", "data-au-fab-hidden"] });
     checkDialogs();
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (hasOpenDialog) setIsOpen(false);
+  }, [hasOpenDialog]);
+
+  useEffect(() => {
+    if (placement === "toolbar") return;
+    function isTextControl(target: EventTarget | null): target is HTMLElement {
+      return target instanceof HTMLElement
+        && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT");
+    }
+    function handleFocusIn(event: FocusEvent) {
+      if (window.innerWidth >= 768) return;
+      const target = event.target;
+      if (!isTextControl(target)) return;
+      if (chatRootRef.current?.contains(target)) return;
+      setIsInputFocused(true);
+    }
+    function handleFocusOut() {
+      setIsInputFocused(false);
+    }
+    function handleResize() {
+      if (window.innerWidth >= 768) setIsInputFocused(false);
+    }
+    window.addEventListener("focusin", handleFocusIn);
+    window.addEventListener("focusout", handleFocusOut);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("focusin", handleFocusIn);
+      window.removeEventListener("focusout", handleFocusOut);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [placement]);
 
   // Блокировка скролла body при открытом чате только на мобилках
   useEffect(() => {
@@ -828,11 +880,12 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
     }
   }
 
-  const headerProps = { activeChat, setActiveChat, isExpanded, setIsExpanded, setIsOpen, aiUnread, supportUnread, showAiTab: aiChatEnabled };
+  const headerProps = { activeChat, setActiveChat, isExpanded, setIsExpanded, setIsOpen, aiUnread, supportUnread, showAiTab: aiChatEnabled, showSupportTab: supportEnabled };
+  if (!aiChatEnabled && !supportEnabled) return null;
 
   return (
     <>
-      <div className={cn(placement === "toolbar" ? "cabinet-chat-toolbar relative z-[100]" : "fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-[100]", hasOpenDialog && !isOpen && "pointer-events-none opacity-0")}>
+      <div ref={chatRootRef} className={cn(placement === "toolbar" ? "cabinet-chat-toolbar relative z-[100]" : cn("fixed right-4 sm:bottom-6 sm:right-6 z-[100]", fabOffsetClass ?? "bottom-24"), (hasOpenDialog || isInputFocused) && !isOpen && "pointer-events-none opacity-0")}>
         <AnimatePresence>
         {isOpen && (
         <motion.div
@@ -967,9 +1020,9 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
             aria-expanded={isOpen}
             onClick={() => setIsOpen((v) => !v)}
             className={cn(
-              "relative flex h-9 w-9 sm:h-16 sm:w-16 items-center justify-center rounded-full z-10",
-              "bg-card/60 border border-border/50 text-foreground transition-colors hover:bg-card/80",
-              !isOpen ? "shadow-[0_8px_32px_rgba(0,0,0,0.12)]" : "shadow-lg"
+              "relative z-10 flex h-14 w-14 items-center justify-center rounded-full sm:h-16 sm:w-16",
+              "border border-white/20 bg-[#0066FF] text-white transition-all duration-200 active:scale-95",
+              "shadow-[0_8px_25px_rgba(0,102,255,0.38)] hover:bg-blue-500 hover:shadow-[0_10px_30px_rgba(0,102,255,0.48)]",
             )}
           >
             <motion.span
@@ -988,7 +1041,7 @@ export function FloatingChat({ placement = "floating" }: { placement?: "floating
                 initial={reduceMotion ? false : { scale: 0, y: 10 }}
                 animate={{ scale: 1, y: 0 }}
                 transition={{ duration: 0.25, ease: [0.34, 1.56, 0.64, 1] }}
-                className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-destructive text-[11px] font-bold text-white"
+                className="absolute -right-0.5 -top-0.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-rose-500 text-[11px] font-bold text-white shadow-md"
               >
                 {aiUnread + supportUnread}
               </motion.span>

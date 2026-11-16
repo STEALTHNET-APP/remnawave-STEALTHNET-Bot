@@ -20,6 +20,17 @@ VPN subscription management with a Telegram bot, client cabinet, Mini App and ad
 
 The linked operator guides are currently in Russian. The [documentation index](docs/README.md) groups them by task. Installation and updates have separate instructions; do not rerun the installer to update a working service.
 
+## Prebuilt images
+
+The publication workflow builds multi-arch (`linux/amd64`, `linux/arm64`) images for new commits on main and release tags. After that workflow succeeds, an administrator can deploy them without compiling locally:
+
+```bash
+bash scripts/run-prebuilt.sh
+```
+
+The script downloads images for the checked-out commit, verifies that all four images match, backs up an existing database and preserves Compose overrides. Images are published as `sha-<full commit>` after the GitHub workflow completes. If any image is unavailable, the running installation is left intact. This is an opt-in server deployment mode; panel auto-updates currently support source builds only. See [installation](docs/getting-started/installation.md) for prerequisites and recovery. The installer still builds from source.
+
+
 ## What is included
 
 - Tariffs, trials, subscriptions, renewals and device limits.

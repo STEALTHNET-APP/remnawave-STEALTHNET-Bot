@@ -4,6 +4,7 @@ import { botCommandsSchema } from "../bot/bot-commands.js";
 import { botButtonsJsonSchema } from "../bot/menu-buttons.js";
 import { mailTestRouter } from "../mail/mail-test.routes.js";
 import { updateRouter } from "../update/update.routes.js";
+import { AI_PROVIDER_TYPES, AiProviderError, fetchAiModels, resolveAiConfig, resolveAiRequestConfig, sendAiChatRequest, type AiChatMessage, type AiProviderType } from "../ai/ai-provider.service.js";
 /**
  * Админские эндпоинты — прокси к Remna API + клиенты панели + настройки
  */
@@ -482,63 +483,114 @@ adminRouter.use("/subscriptions", adminSubscriptionsRouter);
 // Настройки (языки, валюты, название сервиса) — для бота, mini app, сайта
 adminRouter.get("/settings", asyncRoute(async (_req, res) => {
   const config = await getSystemConfig();
-  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
+  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "", groqApiKey: config.groqApiKey ? "********" : "" });
 }));
 
-adminRouter.post("/settings/groq-models", asyncRoute(async (req, res) => {
-  const rawBody = req.body as { apiKey?: unknown } | undefined;
-  const bodyKey = typeof rawBody?.apiKey === "string" ? rawBody.apiKey.trim() : "";
-  const config = await getSystemConfig();
-  const apiKey = bodyKey || (config as { groqApiKey?: string | null }).groqApiKey?.trim();
-  if (!apiKey) {
-    return res.status(400).json({ message: "API-ключ Groq не указан" });
+const aiModelsSchema = z.object({
+  provider: z.enum(AI_PROVIDER_TYPES).optional(),
+  apiKey: z.string().max(500).nullable().optional(),
+  baseUrl: z.string().trim().max(500).nullable().optional(),
+});
+
+function createAiModelsHandler(forcedProvider?: AiProviderType) {
+  return asyncRoute(async (req, res) => {
+    const parsed = aiModelsSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Некорректные параметры запроса" });
+    }
+
+    const config = await getSystemConfig();
+    let resolved;
+    try {
+      resolved = resolveAiRequestConfig(config, { ...parsed.data, provider: forcedProvider ?? parsed.data.provider });
+    } catch (err) {
+      return res.status(400).json({ message: err instanceof AiProviderError ? err.message : "Некорректные настройки AI" });
+    }
+
+    if (!resolved.apiKey) {
+      return res.status(400).json({ message: "API-ключ AI-провайдера не указан" });
+    }
+
+    try {
+      const { getProxyUrl } = await import("../proxy-util/get-proxy-url.js");
+      const aiProxy = await getProxyUrl("ai");
+      const models = await fetchAiModels({
+        provider: resolved.provider,
+        apiKey: resolved.apiKey,
+        baseUrl: resolved.baseUrl,
+        aiProxy,
+      });
+      return res.json({ models });
+    } catch (err) {
+      if (err instanceof AiProviderError) {
+        const status = err.status === 400 ? 400 : err.status === 504 ? 504 : 502;
+        return res.status(status).json({ message: err.message });
+      }
+      return res.status(502).json({ message: "Не удалось связаться с AI-провайдером. Повторите попытку позже." });
+    }
+  });
+}
+
+adminRouter.post("/settings/ai-models", createAiModelsHandler());
+adminRouter.post("/settings/groq-models", createAiModelsHandler("groq"));
+
+const aiTestSchema = z.object({
+  provider: z.enum(AI_PROVIDER_TYPES).optional(),
+  apiKey: z.string().max(500).optional(),
+  baseUrl: z.string().trim().max(500).optional(),
+  model: z.string().max(200).optional(),
+  fallbackModels: z.array(z.string().max(200)).max(3).optional(),
+  systemPrompt: z.string().max(10_000).optional(),
+  message: z.string().trim().min(1).max(4000),
+  history: z.array(z.object({
+    role: z.enum(["user", "assistant"]),
+    content: z.string().max(4000),
+  })).max(50).optional(),
+});
+
+adminRouter.post("/settings/ai-test", asyncRoute(async (req, res) => {
+  const fail = (message: string) => res.status(400).json({ ok: false, message, error: message });
+  const parsed = aiTestSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return fail("Некорректные параметры запроса");
   }
 
-  const signal = AbortSignal.timeout(10_000);
+  const config = await getSystemConfig();
+  let resolved;
   try {
-    const { proxyFetch } = await import("../proxy-util/proxy-fetch.js");
+    resolved = resolveAiRequestConfig(config, parsed.data);
+  } catch (err) {
+    return fail(err instanceof AiProviderError ? err.message : "Некорректные настройки AI");
+  }
+  const { provider, apiKey, baseUrl, model, fallbackModels } = resolved;
+  if (!apiKey) return fail("Укажите API-ключ для выбранного провайдера и адреса");
+  if (!baseUrl) return fail("Укажите Base URL AI-провайдера");
+  const systemPrompt = parsed.data.systemPrompt?.trim() || config.aiSystemPrompt;
+
+  const messages: AiChatMessage[] = [
+    ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
+    ...(parsed.data.history ?? []),
+    { role: "user", content: parsed.data.message },
+  ];
+
+  const startedAt = Date.now();
+  try {
     const { getProxyUrl } = await import("../proxy-util/get-proxy-url.js");
     const aiProxy = await getProxyUrl("ai");
-    const groqRes = await proxyFetch("https://api.groq.com/openai/v1/models", {
-      method: "GET",
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal,
-    }, aiProxy);
-    if (!groqRes.ok) {
-      const message = groqRes.status === 401 || groqRes.status === 403
-        ? "Groq отклонил API-ключ. Проверьте ключ в настройках."
-        : groqRes.status === 429
-          ? "Groq ограничил число запросов. Повторите попытку позже."
-          : "Groq временно недоступен. Повторите попытку позже.";
-      return res.status(502).json({ message });
-    }
-    let payload: unknown;
-    try {
-      payload = await groqRes.json();
-    } catch (error) {
-      if (signal.aborted) throw error;
-      return res.status(502).json({ message: "Groq вернул некорректный список моделей" });
-    }
-    if (!payload || typeof payload !== "object" || !Array.isArray((payload as { data?: unknown }).data)) {
-      return res.status(502).json({ message: "Groq вернул некорректный список моделей" });
-    }
-    const models = Array.from(new Set(
-      ((payload as { data: unknown[] }).data)
-        .filter((model): model is { id: string; active?: unknown } => {
-          if (!model || typeof model !== "object" || Array.isArray(model)) return false;
-          const entry = model as { id?: unknown; active?: unknown };
-          return typeof entry.id === "string" && entry.id.trim().length > 0 && entry.id.length <= 200
-            && !entry.id.startsWith("whisper-") && entry.active !== false;
-        })
-        .map((model) => model.id)
-    )).sort();
-    return res.json({ models });
-  } catch {
-    return res.status(signal.aborted ? 504 : 502).json({
-      message: signal.aborted
-        ? "Groq не ответил за 10 секунд. Повторите попытку позже."
-        : "Не удалось связаться с Groq. Проверьте настройки подключения и повторите попытку.",
+    const result = await sendAiChatRequest({
+      provider,
+      apiKey,
+      baseUrl,
+      modelsToTry: [model, ...fallbackModels],
+      messages,
+      aiProxy,
     });
+    return res.json({ ok: true, reply: result.reply, latencyMs: Date.now() - startedAt, model: result.model });
+  } catch (err) {
+    if (err instanceof AiProviderError) {
+      return res.json({ ok: false, error: err.message, status: err.status });
+    }
+    return res.json({ ok: false, error: "Не удалось выполнить запрос к AI-провайдеру" });
   }
 }));
 
@@ -817,6 +869,13 @@ const updateSettingsSchema = z.object({
   groqFallback1: z.string().max(100).nullable().optional(),
   groqFallback2: z.string().max(100).nullable().optional(),
   groqFallback3: z.string().max(100).nullable().optional(),
+  aiProvider: z.enum(["gemini", "deepseek", "groq", "openrouter", "openai", "custom"]).nullable().optional(),
+  aiApiKey: z.string().max(500).nullable().optional(),
+  aiBaseUrl: z.string().trim().max(500).refine(value => !value || /^https?:\/\//.test(value) && URL.canParse(value)).nullable().optional(),
+  aiModel: z.string().max(200).nullable().optional(),
+  aiFallback1: z.string().max(200).nullable().optional(),
+  aiFallback2: z.string().max(200).nullable().optional(),
+  aiFallback3: z.string().max(200).nullable().optional(),
   aiSystemPrompt: z.string().max(5000).nullable().optional(),
   botButtons: botButtonsJsonSchema.nullable().optional(),
   paymentDescription: z.string().trim().max(128).optional(),
@@ -1075,6 +1134,21 @@ adminRouter.patch("/settings", async (req, res) => {
     return res.status(400).json({ message: "Invalid input", errors: body.error.flatten() });
   }
   const updates = body.data;
+  if (updates.aiApiKey === "********") delete updates.aiApiKey;
+  if (updates.groqApiKey === "********") delete updates.groqApiKey;
+  if (updates.aiProvider !== undefined || updates.aiBaseUrl !== undefined) {
+    const savedConfig = await getSystemConfig();
+    try {
+      const saved = resolveAiConfig(savedConfig);
+      const next = resolveAiConfig({ ...savedConfig, ...updates });
+      if ((next.provider !== saved.provider || next.baseUrl !== saved.baseUrl) && !updates.aiApiKey?.trim()) {
+        updates.aiApiKey = null;
+      }
+    } catch (err) {
+      return res.status(400).json({ message: err instanceof AiProviderError ? err.message : "Некорректные настройки AI" });
+    }
+  }
+
   if (updates.activeLanguages != null) {
     await prisma.systemSetting.upsert({
       where: { key: "active_languages" },
@@ -1639,6 +1713,28 @@ adminRouter.patch("/settings", async (req, res) => {
   if (updates.groqFallback3 !== undefined) {
     const val = updates.groqFallback3 ?? "";
     await prisma.systemSetting.upsert({ where: { key: "groq_fallback_3" }, create: { key: "groq_fallback_3", value: val }, update: { value: val } });
+  }
+  if (updates.aiProvider !== undefined) {
+    const val = updates.aiProvider ?? "";
+    await prisma.systemSetting.upsert({ where: { key: "ai_provider" }, create: { key: "ai_provider", value: val }, update: { value: val } });
+  }
+  if (updates.aiApiKey !== undefined) {
+    const val = updates.aiApiKey ?? "";
+    await prisma.systemSetting.upsert({ where: { key: "ai_api_key" }, create: { key: "ai_api_key", value: val }, update: { value: val } });
+  }
+  if (updates.aiBaseUrl !== undefined) {
+    const val = updates.aiBaseUrl ?? "";
+    await prisma.systemSetting.upsert({ where: { key: "ai_base_url" }, create: { key: "ai_base_url", value: val }, update: { value: val } });
+  }
+  if (updates.aiModel !== undefined) {
+    const val = updates.aiModel ?? "";
+    await prisma.systemSetting.upsert({ where: { key: "ai_model" }, create: { key: "ai_model", value: val }, update: { value: val } });
+  }
+  for (const [field, key] of [["aiFallback1", "ai_fallback_1"], ["aiFallback2", "ai_fallback_2"], ["aiFallback3", "ai_fallback_3"]] as const) {
+    if (updates[field] !== undefined) {
+      const val = updates[field] ?? "";
+      await prisma.systemSetting.upsert({ where: { key }, create: { key, value: val }, update: { value: val } });
+    }
   }
   if (updates.aiSystemPrompt !== undefined) {
     const val = updates.aiSystemPrompt ?? "";
@@ -2288,7 +2384,7 @@ adminRouter.patch("/settings", async (req, res) => {
   // invalidate cache до возврата свежего config'а.
   invalidateSystemConfigCache();
   const config = await getSystemConfig();
-  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
+  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "", groqApiKey: config.groqApiKey ? "********" : "" });
 });
 
 adminRouter.post("/nalog/test", asyncRoute(async (_req, res) => {
@@ -2333,7 +2429,7 @@ adminRouter.post("/settings/reset-landing-text", asyncRoute(async (req, res) => 
     });
   }
   const config = await getSystemConfig();
-  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
+  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "", groqApiKey: config.groqApiKey ? "********" : "" });
 }));
 
 adminRouter.use("/tickets", adminTicketsRouter);

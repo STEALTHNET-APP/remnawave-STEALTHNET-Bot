@@ -62,8 +62,9 @@ test('sync retains primary reference when importing another profile for the same
     remnaGetUsers: async () => ({ data: [{ uuid: 'primary', telegramId: 123 }, { uuid: 'secondary', telegramId: 123 }] }),
     extractRemnaUsers: data => data,
     prisma: {
-      subscription: { findFirst: async () => null },
+      subscription: { findFirst: async () => null, findMany: async () => [] },
       client: {
+        findMany: async () => [{ ...client }],
         findFirst: async ({ where }) => where.id?.not ? null : (where.telegramId === '123' || where.remnawaveUuid === client.remnawaveUuid ? { ...client } : null),
         update: async ({ data }) => Object.assign(client, data),
       },

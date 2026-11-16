@@ -1,7 +1,7 @@
 export STEALTHNET_BUILD_COMMIT := $(shell git rev-parse HEAD)
 export STEALTHNET_BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 .PHONY: menu upgrade update rebuild watch docker frontend logs start stop restart \
-        ps status clean alias backup
+        ps status pull-up pull-update clean alias backup
 
 COMPOSE_PROFILE := $(shell grep -qE '^USE_BUILTIN_NGINX=true' .env 2>/dev/null && echo "--profile builtin-nginx")
 DOCKER_COMPOSE := docker compose $(COMPOSE_PROFILE)
@@ -9,7 +9,7 @@ FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
 SCRIPT_VERSION := v1.0.6
 PANEL_VERSION := $(shell awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' version.json 2>/dev/null)
 PANEL_VERSION_DISPLAY := $(if $(PANEL_VERSION),v$(PANEL_VERSION),unknown)
-MENU_TARGETS := upgrade update rebuild watch docker frontend logs start stop restart ps status clean alias backup
+MENU_TARGETS := upgrade update rebuild watch docker frontend logs start stop restart ps status pull-up pull-update clean alias backup
 
 .DEFAULT_GOAL := menu
 
@@ -103,6 +103,12 @@ ps: ## 📦 Running containers
 
 status: ## ❤️  All containers
 	$(DOCKER_COMPOSE) ps --all
+
+pull-up: ## 📥 Pull a verified prebuilt image set and start
+	bash ./scripts/run-prebuilt.sh
+
+pull-update: ## 🔃 Backup and update from prebuilt images for the current commit
+	bash ./scripts/run-prebuilt.sh
 
 clean: ## 🧹 Remove unused Docker resources
 	@bash -c '\

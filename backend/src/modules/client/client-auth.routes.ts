@@ -35,6 +35,26 @@ function getRequestIp(req: Request): string | null {
   return ip.startsWith("::ffff:") ? ip.slice(7) : ip;
 }
 
+async function sendWelcomeEmail(
+  email: string,
+  config: Awaited<ReturnType<typeof getSystemConfig>>,
+): Promise<void> {
+  const mailConfig = mailConfigFromSystem(config);
+  if (!isMailConfigured(mailConfig)) return;
+  const baseUrl = (config.publicAppUrl || "").replace(/\/+$/, "");
+  if (!baseUrl) return;
+  const loginUrl = `${baseUrl}/cabinet/login`;
+  const nameFromEmail = email.split("@")[0]?.trim();
+  const rendered = await renderEmailTemplate("welcome", {
+    serviceName: config.serviceName?.trim() || "STEALTHNET",
+    email,
+    loginUrl,
+    clientName: nameFromEmail || "друг",
+  });
+  if (!rendered) return;
+  await sendEmail(mailConfig, email, rendered.subject, rendered.body);
+}
+
 /**
  * Определяет, какому Bot-клону принадлежит запрос на регистрацию/логин.
  *
@@ -501,6 +521,9 @@ clientAuthRouter.post("/verify-email", async (req, res) => {
     .catch(() => {});
 
   notifyAdminsAboutNewClient(client.id).catch(() => {});
+  void sendWelcomeEmail(pending.email, configForAutoRenew).catch((e) => {
+    console.error("[register] welcome email failed:", e);
+  });
   const signToken = signClientToken(client.id);
   return res.status(201).json({ token: signToken, client: toClientShape(client) });
 });
@@ -1009,6 +1032,11 @@ clientAuthRouter.post("/google", async (req, res) => {
     }),
   });
   notifyAdminsAboutNewClient(client.id).catch(() => {});
+  if (client.email?.trim()) {
+    void sendWelcomeEmail(client.email.trim(), configForDefaults).catch((e) => {
+      console.error("[Google OAuth] welcome email failed:", e);
+    });
+  }
   const token = signClientToken(client.id);
   // isNewClient=true — клиент только что создан.
   // Бот после регистрации проверяет флаг и запускает event-driven welcome (after_registration).

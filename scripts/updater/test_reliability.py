@@ -19,6 +19,12 @@ class ReliabilityTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.updater = Updater({'project': self.temp.name, 'stateDir': self.temp.name + '/state'})
 
+    def test_prebuilt_mode_blocks_source_updater_before_docker(self):
+        (self.updater.root / '.env').write_text('COMPOSE_FILE=docker-compose.yml:compose.ghcr.yaml\n')
+        with patch('reliability.preflight') as run, self.assertRaisesRegex(RuntimeError, 'готовые образы GHCR'):
+            self.updater.preflight()
+        run.assert_not_called()
+
     def test_download_recovers_after_transient_failures(self):
         operation = Mock(side_effect=[CommandFailure('network'), TimeoutError('timeout'), 'ok'])
         with patch('reliability.time.sleep') as sleep:

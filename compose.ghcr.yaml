@@ -1,0 +1,11 @@
+services:
+  api:
+    image: ghcr.io/${STEALTHNET_IMAGE_REPO:-stealthnet-app}/stealthnet-api:${STEALTHNET_IMAGE_TAG:?Use bash scripts/run-prebuilt.sh}
+  broadcast-worker:
+    image: ghcr.io/${STEALTHNET_IMAGE_REPO:-stealthnet-app}/stealthnet-api:${STEALTHNET_IMAGE_TAG:?Use bash scripts/run-prebuilt.sh}
+  bot:
+    image: ghcr.io/${STEALTHNET_IMAGE_REPO:-stealthnet-app}/stealthnet-bot:${STEALTHNET_IMAGE_TAG:?Use bash scripts/run-prebuilt.sh}
+  frontend:
+    image: ghcr.io/${STEALTHNET_IMAGE_REPO:-stealthnet-app}/stealthnet-frontend:${STEALTHNET_IMAGE_TAG:?Use bash scripts/run-prebuilt.sh}
+  console:
+    image: ghcr.io/${STEALTHNET_IMAGE_REPO:-stealthnet-app}/stealthnet-console:${STEALTHNET_IMAGE_TAG:?Use bash scripts/run-prebuilt.sh}
