@@ -19,7 +19,7 @@ import { notifyAdminsAboutNewClient } from "../notification/telegram-notify.serv
 import { requireClientAuth } from "./client.middleware.js";
 import { isRemnaConfigured, remnaGetUserByEmail, remnaGetUserByTelegramId, remnaGetUserByShortUuid, extractRemnaUuid } from "../remna/remna.client.js";
 import { isMailConfigured, mailConfigFromSystem, sendEmail } from "../mail/mail.service.js";
-import { renderEmailTemplate } from "../email-templates/email-templates.service.js";
+import { renderEmailTemplate, escapeEmailHtml } from "../email-templates/email-templates.service.js";
 import { notifyClientPasswordReset } from "./client-security-notify.service.js";
 import { signClientPasswordResetToken, verifyClientPasswordResetToken } from "../auth/auth.service.js";
 import { NO_PASSWORD_HASH, resolveRegisterRoute, clientPasswordHashFromPending, decideVerifyEmail, consumedPendingExpiry, passwordResetFingerprint, canResetPassword, isEmailUniqueViolation } from "./email-registration.js";
@@ -33,6 +33,26 @@ function getRequestIp(req: Request): string | null {
   const ip = req.ip || req.socket?.remoteAddress || null;
   if (!ip) return null;
   return ip.startsWith("::ffff:") ? ip.slice(7) : ip;
+}
+
+async function sendWelcomeEmail(
+  email: string,
+  config: Awaited<ReturnType<typeof getSystemConfig>>,
+): Promise<void> {
+  const mailConfig = mailConfigFromSystem(config);
+  if (!isMailConfigured(mailConfig)) return;
+  const baseUrl = (config.publicAppUrl || "").replace(/\/+$/, "");
+  if (!baseUrl) return;
+  const loginUrl = `${baseUrl}/cabinet/login`;
+  const nameFromEmail = email.split("@")[0]?.trim();
+  const rendered = await renderEmailTemplate("welcome", {
+    serviceName: config.serviceName?.trim() || "STEALTHNET",
+    email: escapeEmailHtml(email),
+    loginUrl,
+    clientName: escapeEmailHtml(nameFromEmail || "друг"),
+  });
+  if (!rendered) return;
+  await sendEmail(mailConfig, email, rendered.subject, rendered.body);
 }
 
 /**
@@ -501,6 +521,9 @@ clientAuthRouter.post("/verify-email", async (req, res) => {
     .catch(() => {});
 
   notifyAdminsAboutNewClient(client.id).catch(() => {});
+  void sendWelcomeEmail(pending.email, configForAutoRenew).catch((e) => {
+    console.error("[register] welcome email failed:", e);
+  });
   const signToken = signClientToken(client.id);
   return res.status(201).json({ token: signToken, client: toClientShape(client) });
 });
@@ -1009,6 +1032,11 @@ clientAuthRouter.post("/google", async (req, res) => {
     }),
   });
   notifyAdminsAboutNewClient(client.id).catch(() => {});
+  if (client.email?.trim()) {
+    void sendWelcomeEmail(client.email.trim(), configForDefaults).catch((e) => {
+      console.error("[Google OAuth] welcome email failed:", e);
+    });
+  }
   const token = signClientToken(client.id);
   // isNewClient=true — клиент только что создан.
   // Бот после регистрации проверяет флаг и запускает event-driven welcome (after_registration).

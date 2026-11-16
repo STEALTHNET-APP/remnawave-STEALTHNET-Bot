@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { subscriptionReminderWindow, verifySubscriptionReminder } from "./subscription-reminder.service.js";
 import { sendBroadcastEmail, subscribedEmailFilter, isEmailUnsubscribed } from "../email-unsubscribe/email-unsubscribe.service.js";
+import { buildBroadcastEmailHtml } from "../email-templates/email-templates.service.js";
 /**
  * Авто-рассылка: настраиваемые правила (после регистрации, неактивность, без платежа и т.д.).
  * Джоб выбирает подходящих клиентов, отправляет сообщение и пишет лог.
@@ -97,6 +98,21 @@ function makeButton(label: string, action: string, publicAppUrl?: string | null)
     return { text: label, web_app: { url: `${base}${path}` } };
   }
   return { text: label, url: action };
+}
+
+/** URL для CTA-кнопки в email (callback-кнопки бота в письме неприменимы). */
+function resolveEmailCta(action: string | null | undefined, publicAppUrl?: string | null): string | null {
+  const value = action?.trim();
+  if (!value) return null;
+  const base = (publicAppUrl || "").replace(/\/+$/, "");
+  if (value.startsWith("webapp:")) {
+    const path = value.slice(7);
+    if (!base) return null;
+    return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+  }
+  if (value.startsWith("https://") || value.startsWith("http://")) return value;
+  if (value.startsWith("/")) return base ? `${base}${value}` : null;
+  return null;
 }
 
 /**
@@ -964,7 +980,14 @@ async function executeRule(ruleId: string, opts?: { onlyClientId?: string; catch
 
     if (doEmail && smtpConfig && isMailConfigured(smtpConfig) && c.email?.trim()) {
       try {
-        const perClientHtml = `<!DOCTYPE html><html><body style="font-family: sans-serif;">${perClientMessage.replace(/\n/g, "<br>\n")}</body></html>`;
+        const baseUrl = (config.publicAppUrl || "").replace(/\/+$/, "");
+        const perClientHtml = buildBroadcastEmailHtml({
+          serviceName: config.serviceName || "Сервис",
+          message: perClientMessage,
+          buttonText: rule.buttonText,
+          buttonUrl: resolveEmailCta(subB1Url, config.publicAppUrl),
+          cabinetUrl: baseUrl ? `${baseUrl}/cabinet/dashboard` : null,
+        });
         const res = await sendBroadcastEmail(smtpConfig, config.publicAppUrl, c.email.trim(), subject, perClientHtml);
         emailOk = res.ok;
         emailSkipped = res.skipped === true;

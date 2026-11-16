@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { isRemnaConfigured, remnaGetUser } from "../remna/remna.client.js";
+import { isMailConfigured, mailConfigFromSystem, sendEmail } from "../mail/mail.service.js";
+import { escapeEmailHtml, renderEmailTemplate } from "../email-templates/email-templates.service.js";
 function reply(status: number, body: Record<string, unknown>) {
     return { status, body };
 }
@@ -126,7 +128,7 @@ export async function activateTrial(clientId: string, trialId: string, expectedP
     }
     const createdSub = await prisma.subscription.findUnique({
         where: { id: subResult.data.subscriptionId },
-        select: { remnawaveUuid: true },
+        select: { remnawaveUuid: true, expireAt: true },
     });
     let subscriptionUrl: string | null = null;
     if (createdSub?.remnawaveUuid) {
@@ -146,6 +148,31 @@ export async function activateTrial(clientId: string, trialId: string, expectedP
             } | null)?.subscriptionUrl ?? null;
         }
         catch { }
+    }
+    const clientForEmail = await prisma.client.findUnique({
+        where: { id: clientId },
+        select: { email: true },
+    }).catch(() => null);
+    if (clientForEmail?.email?.trim() && cfgTrialStandalone) {
+        const cfgForEmail = cfgTrialStandalone;
+        const emailTo = clientForEmail.email.trim();
+        void (async () => {
+            const mailConfig = mailConfigFromSystem(cfgForEmail);
+            if (!isMailConfigured(mailConfig)) return;
+            const baseUrl = (cfgForEmail.publicAppUrl || "").replace(/\/+$/, "");
+            const rendered = await renderEmailTemplate("trial_activated", {
+                serviceName: cfgForEmail.serviceName?.trim() || "STEALTHNET",
+                trialName: escapeEmailHtml(trial.name),
+                durationDays: String(trial.durationDays),
+                expiresAt: createdSub?.expireAt
+                    ? `${createdSub.expireAt.toISOString().slice(0, 10)} UTC`
+                    : "—",
+                subscriptionUrl: subscriptionUrl || (baseUrl ? `${baseUrl}/cabinet/dashboard` : "—"),
+                cabinetUrl: baseUrl ? `${baseUrl}/cabinet/dashboard` : "—",
+            });
+            if (!rendered) return;
+            await sendEmail(mailConfig, emailTo, rendered.subject, rendered.body);
+        })().catch((e) => console.error("[trial activate] client email notify failed:", e));
     }
     import("../notification/telegram-notify.service.js")
         .then((m) => m.notifyAdminsAboutTrialActivated(clientId, trial.name, trial.durationDays))
