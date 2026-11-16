@@ -50,6 +50,45 @@ bash install.sh
 
 При выборе собственного reverse proxy настройте его отдельно по [конфигурации](configuration.md).
 
+## Быстрый запуск на готовых образах
+
+Если на сервере мало памяти и сборка фронтенда падает, используйте готовые образы из GitHub Container Registry. Они собираются в GitHub Actions для `linux/amd64` и `linux/arm64` при каждом релизе, поэтому подходят и для ARM-серверов.
+
+Установщик спросит способ запуска: вариант `2` загружает готовые образы вместо сборки.
+
+```bash
+bash install.sh
+```
+
+На уже настроенной копии проекта, где есть `.env` и `nginx/nginx.conf`, тот же стек поднимается одной командой без сборки:
+
+```bash
+docker compose -f compose.ghcr.yaml up -d
+```
+
+Обновление на новых образах:
+
+```bash
+docker compose -f compose.ghcr.yaml pull && docker compose -f compose.ghcr.yaml up -d
+```
+
+Цель `make pull-update` делает то же самое и предварительно сохраняет бэкап базы. Для первого запуска из Makefile есть `make pull-up`.
+
+Теги образов: `latest` — текущая ветка `main` (перепубликуется на релизных тегах), `edge` — тоже `main`, `vX.Y.Z` — конкретный релиз. Источник и тег можно переопределить в `.env`:
+
+```bash
+STEALTHNET_IMAGE_REPO=stealthnet-app
+STEALTHNET_IMAGE_TAG=latest
+```
+
+Если пакеты в GHCR ещё не открыты публично, авторизуйтесь перед первым запуском:
+
+```bash
+echo "$GITHUB_TOKEN" | docker login ghcr.io -u <github-user> --password-stdin
+```
+
+Сборка из исходников остаётся вариантом по умолчанию: `docker compose up -d --build` и `make docker` работают как раньше. Агент автообновления привязан к `docker-compose.yml` и собирает образы сам, поэтому на готовых образах обновляйтесь через `make pull-update` или командами выше.
+
 ## Проверьте запуск
 
 Из каталога проекта выполните:

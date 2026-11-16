@@ -1,0 +1,187 @@
+###############################################################################
+#  STEALTHNET — Docker Compose на готовых образах из GitHub Container Registry
+#  Запуск: docker compose -f compose.ghcr.yaml up -d
+#  Обновление: docker compose -f compose.ghcr.yaml pull && docker compose -f compose.ghcr.yaml up -d
+###############################################################################
+name: stealthnet
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: stealthnet-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-stealthnet}
+      POSTGRES_USER: ${POSTGRES_USER:-stealthnet}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stealthnet_change_me}
+      TZ: Europe/Moscow
+      PGTZ: Europe/Moscow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - stealthnet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stealthnet} -d ${POSTGRES_DB:-stealthnet}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: ghcr.io/${STEALTHNET_IMAGE_REPO:-stealthnet-app}/stealthnet-api:${STEALTHNET_IMAGE_TAG:-latest}
+    container_name: stealthnet-api
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:5000:5000"
+    environment:
+      TZ: Europe/Moscow
+      NODE_ENV: production
+      PORT: "5000"
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-stealthnet}:${POSTGRES_PASSWORD:-stealthnet_change_me}@postgres:5432/${POSTGRES_DB:-stealthnet}?connection_limit=30"
+      JWT_SECRET: "${JWT_SECRET}"
+      JWT_ACCESS_EXPIRES_IN: "${JWT_ACCESS_EXPIRES_IN:-15m}"
+      JWT_REFRESH_EXPIRES_IN: "${JWT_REFRESH_EXPIRES_IN:-7d}"
+      CORS_ORIGIN: "https://${DOMAIN:-localhost}"
+      REMNA_API_URL: "${REMNA_API_URL:-}"
+      REMNA_ADMIN_TOKEN: "${REMNA_ADMIN_TOKEN:-}"
+      REMNA_SECRET_KEY: "${REMNA_SECRET_KEY:-}"
+      INIT_ADMIN_EMAIL: "${INIT_ADMIN_EMAIL:-admin@stealthnet.local}"
+      INIT_ADMIN_PASSWORD: "${INIT_ADMIN_PASSWORD:-}"
+      BOT_TOKEN: "${BOT_TOKEN:-}"
+    volumes:
+      - /run/stealthnet-updater:/run/stealthnet-updater:ro
+      - /etc/ssh:/host-etc/ssh
+      - /proc:/host-proc:ro
+      - uploads_data:/app/uploads
+      - backups_data:/app/backups
+      - broadcast_attachments:/data/broadcast-attachments
+      - frontend_dist:/var/www/stealthnet:ro
+      - ./backend/subpage-00000000-0000-0000-0000-000000000000.json:/app/subpage-00000000-0000-0000-0000-000000000000.json:ro
+    pid: host
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "require(\"http\").get(\"http://127.0.0.1:5000/api/health\",(r)=>{r.resume();r.on(\"end\",()=>process.exit(r.statusCode===200?0:1));}).on(\"error\",()=>process.exit(1))"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 600s
+    networks:
+      - stealthnet
+
+  broadcast-worker:
+    image: ghcr.io/${STEALTHNET_IMAGE_REPO:-stealthnet-app}/stealthnet-api:${STEALTHNET_IMAGE_TAG:-latest}
+    container_name: stealthnet-broadcast-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: Europe/Moscow
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-stealthnet}:${POSTGRES_PASSWORD:-stealthnet_change_me}@postgres:5432/${POSTGRES_DB:-stealthnet}?connection_limit=10"
+      BROADCAST_ATTACHMENT_DIR: "/data/broadcast-attachments"
+    entrypoint: ["node", "dist/worker/broadcast-worker.js"]
+    volumes:
+      - broadcast_attachments:/data/broadcast-attachments
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - stealthnet
+
+  bot:
+    image: ghcr.io/${STEALTHNET_IMAGE_REPO:-stealthnet-app}/stealthnet-bot:${STEALTHNET_IMAGE_TAG:-latest}
+    container_name: stealthnet-bot
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Moscow
+      BOT_TOKEN: "${BOT_TOKEN:-}"
+      API_URL: "http://api:5000"
+      BOT_RICH_MENU: "${BOT_RICH_MENU:-}"
+      BOT_WIDGET_PREFERENCES_DIR: "/data/widget-preferences"
+    volumes:
+      - bot_preferences:/data/widget-preferences
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - stealthnet
+
+  frontend:
+    image: ghcr.io/${STEALTHNET_IMAGE_REPO:-stealthnet-app}/stealthnet-frontend:${STEALTHNET_IMAGE_TAG:-latest}
+    container_name: stealthnet-frontend-build
+    restart: "no"
+    volumes:
+      - frontend_dist:/out
+    entrypoint: ["sh", "-c", "rm -rf /out/* && cp -r /dist/* /out/ && echo 'Frontend copied to volume'"]
+
+  nginx:
+    image: nginx:1.28-alpine
+    container_name: stealthnet-nginx
+    restart: unless-stopped
+    profiles:
+      - builtin-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - frontend_dist:/var/www/stealthnet:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/40-watch-certificates.sh:/docker-entrypoint.d/40-watch-certificates.sh:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_certs:/etc/nginx/ssl:ro
+    depends_on:
+      frontend:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    networks:
+      - stealthnet
+
+  certbot:
+    image: ${CERTBOT_IMAGE:-certbot/certbot:latest}
+    container_name: stealthnet-certbot
+    restart: unless-stopped
+    profiles:
+      - builtin-nginx
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+      - ./nginx/renew-certificates.sh:/opt/renew-certificates.sh:ro
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do /bin/sh /opt/renew-certificates.sh; sleep 12h & wait $${!}; done;'"
+    networks:
+      - stealthnet
+
+  console:
+    image: ghcr.io/${STEALTHNET_IMAGE_REPO:-stealthnet-app}/stealthnet-console:${STEALTHNET_IMAGE_TAG:-latest}
+    container_name: stealthnet-console
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      API_URL: "http://127.0.0.1:5000"
+      INTERNAL_KEY: "${JWT_SECRET}"
+      CONSOLE_HOSTKEY: "/data/host_ed25519"
+    volumes:
+      - console_data:/data
+    depends_on:
+      - api
+
+volumes:
+  bot_preferences:
+  backups_data:
+  postgres_data:
+  frontend_dist:
+  uploads_data:
+  certbot_www:
+  certbot_certs:
+  broadcast_attachments:
+  console_data:
+
+networks:
+  stealthnet:
+    driver: bridge

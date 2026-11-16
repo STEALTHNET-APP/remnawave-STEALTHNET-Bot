@@ -1,15 +1,16 @@
 export STEALTHNET_BUILD_COMMIT := $(shell git rev-parse HEAD)
 export STEALTHNET_BUILD_DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 .PHONY: menu upgrade update rebuild watch docker frontend logs start stop restart \
-        ps status clean alias backup
+        ps status pull-up pull-update clean alias backup
 
 COMPOSE_PROFILE := $(shell grep -qE '^USE_BUILTIN_NGINX=true' .env 2>/dev/null && echo "--profile builtin-nginx")
 DOCKER_COMPOSE := docker compose $(COMPOSE_PROFILE)
+GHCR_COMPOSE := docker compose -f compose.ghcr.yaml $(COMPOSE_PROFILE)
 FRONT_SCRIPT := ./scripts/update-front-with-external-nginx.sh
 SCRIPT_VERSION := v1.0.6
 PANEL_VERSION := $(shell awk -F'"' '/"version"[[:space:]]*:/ {print $$4; exit}' version.json 2>/dev/null)
 PANEL_VERSION_DISPLAY := $(if $(PANEL_VERSION),v$(PANEL_VERSION),unknown)
-MENU_TARGETS := upgrade update rebuild watch docker frontend logs start stop restart ps status clean alias backup
+MENU_TARGETS := upgrade update rebuild watch docker frontend logs start stop restart ps status pull-up pull-update clean alias backup
 
 .DEFAULT_GOAL := menu
 
@@ -103,6 +104,17 @@ ps: ## 📦 Running containers
 
 status: ## ❤️  All containers
 	$(DOCKER_COMPOSE) ps --all
+
+pull-up: ## 📥 Pull prebuilt GHCR images and start
+	$(GHCR_COMPOSE) pull
+	$(GHCR_COMPOSE) up -d
+	$(GHCR_COMPOSE) up -d --no-deps --force-recreate broadcast-worker
+
+pull-update: ## 🔃 Backup and update from prebuilt GHCR images
+	$(MAKE) --no-print-directory backup
+	$(MAKE) --no-print-directory pull-up
+	@printf '\nGHCR images updated!\n'
+	$(GHCR_COMPOSE) ps
 
 clean: ## 🧹 Remove unused Docker resources
 	@bash -c '\

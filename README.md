@@ -20,6 +20,17 @@ VPN subscription management with a Telegram bot, client cabinet, Mini App and ad
 
 The linked operator guides are currently in Russian. The [documentation index](docs/README.md) groups them by task. Installation and updates have separate instructions; do not rerun the installer to update a working service.
 
+## Prebuilt images
+
+Every release publishes multi-arch (`linux/amd64`, `linux/arm64`) images of all services to GitHub Container Registry. The quick-start stack uses them without compiling anything locally:
+
+```bash
+docker compose -f compose.ghcr.yaml up -d
+docker compose -f compose.ghcr.yaml pull && docker compose -f compose.ghcr.yaml up -d
+```
+
+The first command starts the stack, the second updates it. `install.sh` asks which mode to use, and `make pull-up` / `make pull-update` wrap the same commands. Images live under `ghcr.io/stealthnet-app/stealthnet-{api,bot,frontend,console}`; set `STEALTHNET_IMAGE_REPO` and `STEALTHNET_IMAGE_TAG` in `.env` to use another repository or pin a release. Building from sources is unchanged: `docker compose up -d --build`.
+
 ## What is included
 
 - Tariffs, trials, subscriptions, renewals and device limits.
