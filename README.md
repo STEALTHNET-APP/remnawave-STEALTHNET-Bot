@@ -22,14 +22,14 @@ The linked operator guides are currently in Russian. The [documentation index](d
 
 ## Prebuilt images
 
-Every release publishes multi-arch (`linux/amd64`, `linux/arm64`) images of all services to GitHub Container Registry. The quick-start stack uses them without compiling anything locally:
+The publication workflow builds multi-arch (`linux/amd64`, `linux/arm64`) images for new commits on main and release tags. After that workflow succeeds, an administrator can deploy them without compiling locally:
 
 ```bash
-docker compose -f compose.ghcr.yaml up -d
-docker compose -f compose.ghcr.yaml pull && docker compose -f compose.ghcr.yaml up -d
+bash scripts/run-prebuilt.sh
 ```
 
-The first command starts the stack, the second updates it. `install.sh` asks which mode to use, and `make pull-up` / `make pull-update` wrap the same commands. Images live under `ghcr.io/stealthnet-app/stealthnet-{api,bot,frontend,console}`; set `STEALTHNET_IMAGE_REPO` and `STEALTHNET_IMAGE_TAG` in `.env` to use another repository or pin a release. Building from sources is unchanged: `docker compose up -d --build`.
+The script downloads images for the checked-out commit, verifies that all four images match, backs up an existing database and preserves Compose overrides. Images are published as `sha-<full commit>` after the GitHub workflow completes. If any image is unavailable, the running installation is left intact. This is an opt-in server deployment mode; panel auto-updates currently support source builds only. See [installation](docs/getting-started/installation.md) for prerequisites and recovery. The installer still builds from source.
+
 
 ## What is included
 

@@ -145,8 +145,8 @@ clientAiChatRouter.post("/ai/chat", async (req, res) => {
       return res.json({ reply: result.reply });
     } catch (err) {
       if (err instanceof AiProviderError) {
-        console.error(`[ai/chat] ${aiConfig.provider} failed:`, err.status, err.details);
-        return res.status(502).json({ message: err.message, details: err.details });
+        console.error(`[ai/chat] ${aiConfig.provider} failed:`, err.status);
+        return res.status(502).json({ message: err.message });
       }
       throw err;
     }

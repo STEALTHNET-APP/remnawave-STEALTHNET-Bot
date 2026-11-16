@@ -54,7 +54,7 @@ export function AiTab({
 
   const provider = resolveAiProviderId(settings.aiProvider, settings.groqApiKey);
   const preset = AI_PROVIDER_PRESETS[provider];
-  const apiKeyValue = settings.aiApiKey ?? (provider === "groq" ? (settings.groqApiKey ?? "") : "");
+  const apiKeyValue = settings.aiApiKey || (provider === "groq" ? (settings.groqApiKey ?? "") : "");
   const legacyModel = provider === "groq" ? settings.groqModel : null;
   const modelValue = (settings.aiModel ?? "").trim() || (legacyModel ?? "").trim() || aiProviderDefaultModel(provider);
   const fallbackValues = [
@@ -85,6 +85,7 @@ export function AiTab({
     setSettings((s) => (s ? {
       ...s,
       aiProvider: next,
+      aiApiKey: null,
       aiModel: aiProviderDefaultModel(next),
       aiFallback1: null,
       aiFallback2: null,
@@ -218,7 +219,7 @@ export function AiTab({
               <Input
                 id="ai-base-url"
                 value={settings.aiBaseUrl ?? ""}
-                onChange={(e) => setSettings((s) => (s ? { ...s, aiBaseUrl: e.target.value || null } : s))}
+                onChange={(e) => setSettings((s) => (s ? { ...s, aiBaseUrl: e.target.value || null, aiApiKey: null } : s))}
                 placeholder={preset.baseUrlPlaceholder}
               />
               <p className="text-xs text-muted-foreground">{t("admin.settings.ai_base_url_hint")}</p>

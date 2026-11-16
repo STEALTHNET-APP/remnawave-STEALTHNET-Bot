@@ -19,7 +19,7 @@ import { notifyAdminsAboutNewClient } from "../notification/telegram-notify.serv
 import { requireClientAuth } from "./client.middleware.js";
 import { isRemnaConfigured, remnaGetUserByEmail, remnaGetUserByTelegramId, remnaGetUserByShortUuid, extractRemnaUuid } from "../remna/remna.client.js";
 import { isMailConfigured, mailConfigFromSystem, sendEmail } from "../mail/mail.service.js";
-import { renderEmailTemplate, escapeEmailHtml } from "../email-templates/email-templates.service.js";
+import { renderEmailTemplate } from "../email-templates/email-templates.service.js";
 import { notifyClientPasswordReset } from "./client-security-notify.service.js";
 import { signClientPasswordResetToken, verifyClientPasswordResetToken } from "../auth/auth.service.js";
 import { NO_PASSWORD_HASH, resolveRegisterRoute, clientPasswordHashFromPending, decideVerifyEmail, consumedPendingExpiry, passwordResetFingerprint, canResetPassword, isEmailUniqueViolation } from "./email-registration.js";
@@ -47,9 +47,9 @@ async function sendWelcomeEmail(
   const nameFromEmail = email.split("@")[0]?.trim();
   const rendered = await renderEmailTemplate("welcome", {
     serviceName: config.serviceName?.trim() || "STEALTHNET",
-    email: escapeEmailHtml(email),
+    email,
     loginUrl,
-    clientName: escapeEmailHtml(nameFromEmail || "друг"),
+    clientName: nameFromEmail || "друг",
   });
   if (!rendered) return;
   await sendEmail(mailConfig, email, rendered.subject, rendered.body);

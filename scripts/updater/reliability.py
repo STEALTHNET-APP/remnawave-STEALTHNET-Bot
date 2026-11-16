@@ -41,6 +41,11 @@ def preflight(run):
 
 class Reliability:
     def preflight(self):
+        env_file = self.root / '.env'
+        if env_file.exists():
+            for line in env_file.read_text().splitlines():
+                if line.strip().startswith('COMPOSE_FILE=') and 'compose.ghcr.yaml' in line:
+                    raise RuntimeError('Установлены готовые образы GHCR. Обновление из панели пока не поддерживает этот режим. Используйте bash scripts/run-prebuilt.sh после перехода на нужный коммит; инструкция: docs/getting-started/installation.md.')
         preflight(self.run)
 
     def download_retry(self, label, operation):

@@ -526,6 +526,6 @@ export async function renderEmailTemplate(
   if (!item) return null;
   return {
     subject: renderTemplate(item.subject, vars),
-    body: renderTemplate(item.body, vars),
+    body: renderTemplate(item.body, Object.fromEntries(Object.entries(vars).map(([name, value]) => [name, name === "attachmentsInfo" ? value : escapeEmailHtml(value)]))),
   };
 }

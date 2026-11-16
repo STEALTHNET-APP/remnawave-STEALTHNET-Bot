@@ -411,35 +411,12 @@ obtain_ssl() {
   generate_nginx_conf
 }
 
-# ── Выбор способа запуска ────────────────────────────────────────
-choose_install_mode() {
-  echo ""
-  echo -e "${BOLD}${CYAN}── Способ запуска ──${NC}"
-  echo ""
-  echo -e "  ${BOLD}1)${NC} Сборка из исходников на этом сервере — универсально, но требует ресурсов"
-  echo -e "  ${BOLD}2)${NC} Готовые образы из GHCR — без сборки, запуск за секунды"
-  echo ""
-  read -rp "$(echo -e "${BOLD}Выберите [1/2]${NC} [1]: ")" IMAGE_MODE
-  IMAGE_MODE="${IMAGE_MODE:-1}"
-  if [ "$IMAGE_MODE" = "2" ]; then
-    export COMPOSE_FILE="compose.ghcr.yaml"
-    success "Используются готовые образы GHCR (${BOLD}compose.ghcr.yaml${NC})"
-  else
-    IMAGE_MODE="1"
-    success "Образы будут собраны из исходников (${BOLD}docker-compose.yml${NC})"
-  fi
-}
-
 # ── Сборка и запуск ──────────────────────────────────────────────
 build_and_start() {
   export STEALTHNET_BUILD_COMMIT="$(git -C "$SCRIPT_DIR" rev-parse HEAD)"
   export STEALTHNET_BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo ""
-  if [ "$IMAGE_MODE" = "2" ]; then
-    echo -e "${BOLD}${CYAN}═══ Запуск проекта ═══${NC}"
-  else
-    echo -e "${BOLD}${CYAN}═══ Сборка проекта ═══${NC}"
-  fi
+  echo -e "${BOLD}${CYAN}═══ Сборка проекта ═══${NC}"
   echo ""
 
   # Определяем compose profiles
@@ -448,15 +425,10 @@ build_and_start() {
     PROFILES="--profile builtin-nginx"
   fi
 
-  if [ "$IMAGE_MODE" = "2" ]; then
-    info "Загрузка готовых образов из GHCR..."
-    docker compose $PROFILES pull 2>&1 | tail -5
-    success "Образы загружены"
-  else
-    info "Сборка Docker-образов (это может занять несколько минут)..."
-    docker compose $PROFILES build 2>&1 | tail -5
-    success "Образы собраны"
-  fi
+  # Сборка
+  info "Сборка Docker-образов (это может занять несколько минут)..."
+  docker compose $PROFILES build 2>&1 | tail -5
+  success "Образы собраны"
 
   # Запуск БД
   info "Запуск PostgreSQL..."
@@ -524,10 +496,6 @@ show_status() {
 }
 
 show_summary() {
-  local compose_hint="docker compose"
-  if [ "$IMAGE_MODE" = "2" ]; then
-    compose_hint="docker compose -f compose.ghcr.yaml"
-  fi
   echo ""
   echo -e "${GREEN}${BOLD}╔═══════════════════════════════════════════════════════════════╗${NC}"
   echo -e "${GREEN}${BOLD}║          STEALTHNET v3 — Установка завершена!                 ║${NC}"
@@ -551,16 +519,12 @@ show_summary() {
     echo ""
   fi
   echo -e "  ${BOLD}Команды:${NC}"
-  echo "    $compose_hint ps                  — статус"
-  echo "    $compose_hint logs -f api         — логи API"
-  echo "    $compose_hint logs -f bot         — логи бота"
-  echo "    $compose_hint restart api bot     — перезапуск"
-  echo "    $compose_hint down                — остановить всё"
-  echo "    $compose_hint up -d               — запустить всё"
-  if [ "$IMAGE_MODE" = "2" ]; then
-    echo "    $compose_hint pull                — обновить образы"
-    echo "    make pull-update                  — бэкап и обновление на новых образах"
-  fi
+  echo "    docker compose ps                  — статус"
+  echo "    docker compose logs -f api         — логи API"
+  echo "    docker compose logs -f bot         — логи бота"
+  echo "    docker compose restart api bot     — перезапуск"
+  echo "    docker compose down                — остановить всё"
+  echo "    docker compose up -d               — запустить всё"
   echo ""
 }
 
@@ -591,8 +555,6 @@ main() {
   set -a
   source "$SCRIPT_DIR/.env"
   set +a
-
-  choose_install_mode
 
   # !!! ДОБАВЛЕННЫЙ ШАГ: Спрашиваем про очистку !!!
   clean_old_data

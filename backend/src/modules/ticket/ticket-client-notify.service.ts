@@ -179,14 +179,12 @@ export async function notifyClientAboutSupportReply(
     const mailConfig = mailConfigFromSystem(config);
     if (isMailConfigured(mailConfig)) {
       const attachmentsCount = params.attachmentsCount ?? 0;
-      const rendered = ticketUrl
+      const rendered = ticketUrl && !isEn
         ? await renderEmailTemplate("ticket_reply", {
             serviceName,
             ticketId: ticket.id.slice(0, 8).toUpperCase(),
-            ticketSubject: escapeHtml(ticket.subject || "—"),
-            replyText: escapeHtml(
-              params.replyContent.trim() || (isEn ? "(no text in reply)" : "(ответ без текста)"),
-            ),
+            ticketSubject: ticket.subject || "—",
+            replyText: params.replyContent.trim() || "(ответ без текста)",
             ticketUrl,
             attachmentsInfo: attachmentsCount > 0
               ? emailBadge(`📎 ${isEn ? "Attached files" : "Прикреплено файлов"}: ${attachmentsCount}`)

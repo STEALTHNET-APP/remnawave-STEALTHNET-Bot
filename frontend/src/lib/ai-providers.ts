@@ -17,7 +17,7 @@ export const AI_PROVIDER_PRESETS: Record<AiProviderId, AiProviderPreset> = {
     hintKey: "admin.settings.ai_provider_gemini_hint",
     keyPlaceholder: "AIza...",
     keyHintUrl: "https://aistudio.google.com/app/apikey",
-    models: ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"],
+    models: ["gemini-flash-latest"],
   },
   deepseek: {
     labelKey: "admin.settings.ai_provider_deepseek",
@@ -38,14 +38,7 @@ export const AI_PROVIDER_PRESETS: Record<AiProviderId, AiProviderPreset> = {
     hintKey: "admin.settings.ai_provider_openrouter_hint",
     keyPlaceholder: "sk-or-v1-...",
     keyHintUrl: "https://openrouter.ai/keys",
-    models: [
-      "google/gemini-2.0-flash-exp:free",
-      "deepseek/deepseek-chat:free",
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "qwen/qwen-2.5-72b-instruct:free",
-      "deepseek/deepseek-chat",
-      "openai/gpt-4o-mini",
-    ],
+    models: ["openrouter/free"],
   },
   openai: {
     labelKey: "admin.settings.ai_provider_openai",

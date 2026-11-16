@@ -14,7 +14,7 @@ export const AI_PROVIDERS_CONFIG: Record<AiProviderType, {
   gemini: {
     name: "Google Gemini",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    defaultModel: "gemini-2.0-flash",
+    defaultModel: "gemini-flash-latest",
     modelsEndpoint: "https://generativelanguage.googleapis.com/v1beta/openai/models",
     keyHintUrl: "https://aistudio.google.com/app/apikey",
   },
@@ -35,7 +35,7 @@ export const AI_PROVIDERS_CONFIG: Record<AiProviderType, {
   openrouter: {
     name: "OpenRouter",
     baseUrl: "https://openrouter.ai/api/v1",
-    defaultModel: "google/gemini-2.0-flash-exp:free",
+    defaultModel: "openrouter/free",
     modelsEndpoint: "https://openrouter.ai/api/v1/models",
     keyHintUrl: "https://openrouter.ai/keys",
   },
@@ -99,7 +99,14 @@ export function isAiProviderType(value: unknown): value is AiProviderType {
 }
 
 function normalizeBaseUrl(url: string | null | undefined): string {
-  return (url ?? "").trim().replace(/\/+$/, "");
+  const value = (url ?? "").trim().replace(/\/+$/, "");
+  if (!value) return "";
+  let parsed: URL;
+  try { parsed = new URL(value); } catch { throw new AiProviderError("Некорректный Base URL AI-провайдера", 400); }
+  if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new AiProviderError("Base URL должен быть HTTP(S)-адресом без пароля и параметров", 400);
+  }
+  return parsed.toString().replace(/\/+$/, "");
 }
 
 function readTrimmed(value: string | null | undefined): string {
@@ -134,6 +141,29 @@ export function resolveAiConfig(cfg: AiSettings): ResolvedAiConfig {
   return { provider, apiKey, baseUrl, model, fallbackModels };
 }
 
+export function resolveAiRequestConfig(cfg: AiSettings, request: {
+  provider?: AiProviderType;
+  apiKey?: string | null;
+  baseUrl?: string | null;
+  model?: string;
+  fallbackModels?: string[];
+}): ResolvedAiConfig {
+  const saved = resolveAiConfig(cfg);
+  const provider = request.provider ?? saved.provider;
+  const preset = AI_PROVIDERS_CONFIG[provider];
+  const baseUrl = provider === "custom"
+    ? normalizeBaseUrl(request.baseUrl === undefined ? (provider === saved.provider ? saved.baseUrl : "") : request.baseUrl)
+    : preset.baseUrl;
+  const sameEndpoint = provider === saved.provider && baseUrl === saved.baseUrl;
+  const typedKey = readTrimmed(request.apiKey);
+  const apiKey = typedKey && typedKey !== "********" ? typedKey : sameEndpoint ? saved.apiKey : "";
+  return {
+    provider, apiKey, baseUrl,
+    model: readTrimmed(request.model) || (sameEndpoint ? saved.model : preset.defaultModel),
+    fallbackModels: request.fallbackModels ?? (sameEndpoint ? saved.fallbackModels : []),
+  };
+}
+
 export async function sendAiChatRequest(params: {
   provider: AiProviderType;
   apiKey: string;
@@ -147,7 +177,7 @@ export async function sendAiChatRequest(params: {
     throw new AiProviderError("Не задан Base URL AI-провайдера", 400);
   }
   const endpoint = `${baseUrl}/chat/completions`;
-  const models = params.modelsToTry.map(readTrimmed).filter(Boolean);
+  const models = [...new Set(params.modelsToTry.map(readTrimmed).filter(Boolean))].slice(0, 4);
 
   let lastStatus: number | undefined;
   let lastDetails = "";
@@ -159,6 +189,7 @@ export async function sendAiChatRequest(params: {
     try {
       const response = await proxyFetch(endpoint, {
         method: "POST",
+        redirect: "error",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${params.apiKey}`,
@@ -184,11 +215,13 @@ export async function sendAiChatRequest(params: {
       }
 
       lastStatus = response.status;
-      lastDetails = await response.text().catch(() => "");
-      console.error(`[ai/${params.provider}] Error (model: ${model}):`, response.status, lastDetails);
+      lastDetails = `HTTP ${response.status}`;
+      await response.body?.cancel();
+      console.error(`[ai/${params.provider}] Request failed:`, response.status);
+      if (response.status === 401 || response.status === 403) break;
     } catch (err) {
-      lastDetails = err instanceof Error ? err.message : String(err);
-      console.error(`[ai/${params.provider}] Network/Abort error (model: ${model}):`, err);
+      lastDetails = "Ошибка соединения с AI-провайдером";
+      console.error(`[ai/${params.provider}] Network/Abort error`);
     } finally {
       clearTimeout(timeoutId);
     }
@@ -221,6 +254,7 @@ export async function fetchAiModels(params: {
   try {
     response = await proxyFetch(endpoint, {
       method: "GET",
+      redirect: "error",
       headers: { Authorization: `Bearer ${params.apiKey}` },
       signal,
     }, params.aiProxy ?? null);
@@ -231,7 +265,7 @@ export async function fetchAiModels(params: {
         ? "AI-провайдер не ответил за 10 секунд. Повторите попытку позже."
         : "Не удалось связаться с AI-провайдером. Проверьте настройки подключения и повторите попытку.",
       aborted ? 504 : undefined,
-      err instanceof Error ? err.message : String(err),
+      undefined,
     );
   }
 

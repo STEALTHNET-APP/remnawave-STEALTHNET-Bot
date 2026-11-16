@@ -1,0 +1,41 @@
+name: Verify changes
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            bot/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci --prefix backend
+      - run: npm ci --prefix bot
+      - run: npm ci --prefix frontend
+      - run: npm --prefix backend run db:generate
+      - run: npm --prefix backend run build
+      - name: Account, AI and email regression checks
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
+          JWT_SECRET: test-secret-for-isolated-regressions
+        run: |
+          node tests/merge-clients-remna.cjs
+          node tests/email-template-legacy-subject.cjs
+          node --experimental-vm-modules --experimental-test-module-mocks --test tests/groq-models.test.mjs tests/telegram-subscriptions.test.mjs tests/telegram-register-discovery.test.mjs tests/remna-duplicate-profiles.test.mjs tests/email-unsubscribe.test.mjs
+          node --import tsx --test src/modules/ticket/ticket-client-notify.service.test.ts
+      - run: npm --prefix bot test
+      - run: npm --prefix bot run build
+      - run: npm --prefix frontend run build
+      - run: python3 scripts/tests/prebuilt.py
+      - run: python3 -m unittest discover -s scripts/updater -p 'test_*.py'

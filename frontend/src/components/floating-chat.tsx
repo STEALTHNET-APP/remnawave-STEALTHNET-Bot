@@ -57,8 +57,8 @@ function getInitialAiMessage(serviceName: string): Message[] {
   ];
 }
 
-const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFloating = false, showAiTab = true }: any) => {
-  if (!showAiTab) {
+const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFloating = false, showAiTab = true, showSupportTab = true }: any) => {
+  if (!showAiTab || !showSupportTab) {
     return (
       <div className={cn(
         "relative flex p-1 w-full sm:w-auto sm:min-w-[200px]",
@@ -67,12 +67,12 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
           : "bg-black/20 border border-border rounded-xl"
       )}>
         <button
-          aria-pressed={activeChat === "support"}
-      onClick={() => setActiveChat("support")}
+          aria-pressed={true}
+          onClick={() => setActiveChat(showSupportTab ? "support" : "ai")}
           className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold text-primary-foreground bg-primary relative z-10"
         >
-          <Headset className="w-4 h-4" /> Поддержка
-          {supportUnread > 0 && (
+          {showSupportTab ? <><Headset className="w-4 h-4" /> Поддержка</> : <><Sparkles className="w-4 h-4" /> AI Чат</>}
+          {showSupportTab && supportUnread > 0 && (
             <span className="ml-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white">
               {supportUnread}
             </span>
@@ -104,8 +104,8 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
       )}
     </button>
     <button
-      aria-pressed={activeChat === "support"}
-      onClick={() => setActiveChat("support")}
+      aria-pressed={true}
+          onClick={() => setActiveChat(showSupportTab ? "support" : "ai")}
       className={cn(
         "flex-1 sm:flex-none sm:w-[160px] flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all duration-300 relative z-10",
         activeChat === "support" ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-card"
@@ -130,7 +130,7 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
   );
 };
 
-const ChatHeader = ({ activeChat, setActiveChat, isExpanded, setIsExpanded, setIsOpen, aiUnread, supportUnread, showAiTab = true }: any) => (
+const ChatHeader = ({ activeChat, setActiveChat, isExpanded, setIsExpanded, setIsOpen, aiUnread, supportUnread, showAiTab = true, showSupportTab = true }: any) => (
   <>
     <div className="px-4 py-3 sm:py-4 border-b border-border bg-black/5 dark:bg-card shrink-0 relative overflow-hidden pt-[max(var(--app-safe-top),16px)] sm:pt-4">
       <div className="absolute inset-0 bg-transparent pointer-events-none" />
@@ -168,9 +168,9 @@ const ChatHeader = ({ activeChat, setActiveChat, isExpanded, setIsExpanded, setI
     </div>
 
     {/* Chat Switcher */}
-    {showAiTab && (
+    {showAiTab && showSupportTab && (
       <div className="flex sm:justify-center px-4 py-3 sm:py-4 shrink-0 bg-black/5 dark:bg-card border-b border-border">
-        <ChatSwitcher activeChat={activeChat} setActiveChat={setActiveChat} aiUnread={aiUnread} supportUnread={supportUnread} showAiTab={showAiTab} />
+        <ChatSwitcher activeChat={activeChat} setActiveChat={setActiveChat} aiUnread={aiUnread} supportUnread={supportUnread} showAiTab={showAiTab} showSupportTab={showSupportTab} />
       </div>
     )}
   </>
@@ -674,7 +674,8 @@ export function FloatingChat({ placement = "floating", fabOffsetClass }: { place
   const config = useCabinetConfig();
   const token = state.token ?? null;
   const serviceName = config?.serviceName?.trim() || "Сервис";
-  const aiChatEnabled = config?.aiChatEnabled !== false;
+  const aiChatEnabled = config?.aiChatEnabled === true;
+  const supportEnabled = config?.ticketsEnabled === true;
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeChat, setActiveChat] = useState<ChatType>("support");
@@ -697,7 +698,8 @@ export function FloatingChat({ placement = "floating", fabOffsetClass }: { place
 
   useEffect(() => {
     if (!aiChatEnabled && activeChat === "ai") setActiveChat("support");
-  }, [aiChatEnabled, activeChat]);
+    if (!supportEnabled && aiChatEnabled && activeChat === "support") setActiveChat("ai");
+  }, [aiChatEnabled, supportEnabled, activeChat]);
 
   // Tour integration: programmatically open/close chat when tour requests it
   useEffect(() => {
@@ -878,7 +880,8 @@ export function FloatingChat({ placement = "floating", fabOffsetClass }: { place
     }
   }
 
-  const headerProps = { activeChat, setActiveChat, isExpanded, setIsExpanded, setIsOpen, aiUnread, supportUnread, showAiTab: aiChatEnabled };
+  const headerProps = { activeChat, setActiveChat, isExpanded, setIsExpanded, setIsOpen, aiUnread, supportUnread, showAiTab: aiChatEnabled, showSupportTab: supportEnabled };
+  if (!aiChatEnabled && !supportEnabled) return null;
 
   return (
     <>

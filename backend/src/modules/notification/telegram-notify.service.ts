@@ -387,12 +387,12 @@ export async function notifyTariffActivated(clientId: string, paymentId: string)
       const baseUrl = (cfg.publicAppUrl || "").replace(/\/+$/, "");
       const rendered = await renderEmailTemplate("payment_confirmed", {
         serviceName: cfg.serviceName?.trim() || "STEALTHNET",
-        tariffName: escapeHtml(tariffName),
+        tariffName,
         amount: payment.amount.toFixed(2),
         currency: (payment.currency || "RUB").toUpperCase(),
         expiresAt: subscriptionContext?.expireAt ? formatDate(subscriptionContext.expireAt) : "—",
         subscriptionUrl: subscriptionUrl || (baseUrl ? `${baseUrl}/cabinet/dashboard` : "—"),
-        orderId: escapeHtml(payment.orderId),
+        orderId: payment.orderId,
       });
       if (!rendered) return;
       await sendEmail(mailConfig, emailTo, rendered.subject, rendered.body);

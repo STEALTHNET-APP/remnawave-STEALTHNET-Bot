@@ -5,11 +5,6 @@ on:
     branches: [main]
     tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Additional tag for the published images
-        required: false
-        default: ""
 
 permissions:
   contents: read
@@ -17,14 +12,19 @@ permissions:
 
 concurrency:
   group: publish-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
   PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+    permissions:
+      contents: read
   build:
+    needs: verify
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -71,14 +71,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-            type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
+            type=sha,format=long
           labels: |
             org.opencontainers.image.title=${{ matrix.image }}
             org.opencontainers.image.revision=${{ github.sha }}

@@ -3,7 +3,7 @@ import { prisma } from "../../db.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { isRemnaConfigured, remnaGetUser } from "../remna/remna.client.js";
 import { isMailConfigured, mailConfigFromSystem, sendEmail } from "../mail/mail.service.js";
-import { escapeEmailHtml, renderEmailTemplate } from "../email-templates/email-templates.service.js";
+import { renderEmailTemplate } from "../email-templates/email-templates.service.js";
 function reply(status: number, body: Record<string, unknown>) {
     return { status, body };
 }
@@ -162,7 +162,7 @@ export async function activateTrial(clientId: string, trialId: string, expectedP
             const baseUrl = (cfgForEmail.publicAppUrl || "").replace(/\/+$/, "");
             const rendered = await renderEmailTemplate("trial_activated", {
                 serviceName: cfgForEmail.serviceName?.trim() || "STEALTHNET",
-                trialName: escapeEmailHtml(trial.name),
+                trialName: trial.name,
                 durationDays: String(trial.durationDays),
                 expiresAt: createdSub?.expireAt
                     ? `${createdSub.expireAt.toISOString().slice(0, 10)} UTC`

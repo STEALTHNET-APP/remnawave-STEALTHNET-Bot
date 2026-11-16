@@ -4,7 +4,7 @@ import { botCommandsSchema } from "../bot/bot-commands.js";
 import { botButtonsJsonSchema } from "../bot/menu-buttons.js";
 import { mailTestRouter } from "../mail/mail-test.routes.js";
 import { updateRouter } from "../update/update.routes.js";
-import { AI_PROVIDERS_CONFIG, AI_PROVIDER_TYPES, AiProviderError, fetchAiModels, resolveAiConfig, sendAiChatRequest, type AiChatMessage, type AiProviderType } from "../ai/ai-provider.service.js";
+import { AI_PROVIDER_TYPES, AiProviderError, fetchAiModels, resolveAiConfig, resolveAiRequestConfig, sendAiChatRequest, type AiChatMessage, type AiProviderType } from "../ai/ai-provider.service.js";
 /**
  * Админские эндпоинты — прокси к Remna API + клиенты панели + настройки
  */
@@ -483,7 +483,7 @@ adminRouter.use("/subscriptions", adminSubscriptionsRouter);
 // Настройки (языки, валюты, название сервиса) — для бота, mini app, сайта
 adminRouter.get("/settings", asyncRoute(async (_req, res) => {
   const config = await getSystemConfig();
-  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "" });
+  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "", groqApiKey: config.groqApiKey ? "********" : "" });
 }));
 
 const aiModelsSchema = z.object({
@@ -500,12 +500,12 @@ function createAiModelsHandler(forcedProvider?: AiProviderType) {
     }
 
     const config = await getSystemConfig();
-    const resolved = resolveAiConfig({
-      aiProvider: forcedProvider ?? parsed.data.provider ?? config.aiProvider,
-      aiApiKey: parsed.data.apiKey?.trim() || config.aiApiKey,
-      aiBaseUrl: parsed.data.baseUrl?.trim() || config.aiBaseUrl,
-      aiModel: config.aiModel,
-    });
+    let resolved;
+    try {
+      resolved = resolveAiRequestConfig(config, { ...parsed.data, provider: forcedProvider ?? parsed.data.provider });
+    } catch (err) {
+      return res.status(400).json({ message: err instanceof AiProviderError ? err.message : "Некорректные настройки AI" });
+    }
 
     if (!resolved.apiKey) {
       return res.status(400).json({ message: "API-ключ AI-провайдера не указан" });
@@ -539,7 +539,7 @@ const aiTestSchema = z.object({
   apiKey: z.string().max(500).optional(),
   baseUrl: z.string().trim().max(500).optional(),
   model: z.string().max(200).optional(),
-  fallbackModels: z.array(z.string().max(200)).max(10).optional(),
+  fallbackModels: z.array(z.string().max(200)).max(3).optional(),
   systemPrompt: z.string().max(10_000).optional(),
   message: z.string().trim().min(1).max(4000),
   history: z.array(z.object({
@@ -556,32 +556,15 @@ adminRouter.post("/settings/ai-test", asyncRoute(async (req, res) => {
   }
 
   const config = await getSystemConfig();
-  const saved = resolveAiConfig(config);
-  const provider = parsed.data.provider ?? saved.provider;
-  const sameProvider = provider === saved.provider;
-  const preset = AI_PROVIDERS_CONFIG[provider];
-
-  const bodyKey = parsed.data.apiKey?.trim() ?? "";
-  const typedKey = bodyKey && bodyKey !== "********" ? bodyKey : "";
-  if (!typedKey && !sameProvider) {
-    return fail("Укажите API-ключ для выбранного провайдера");
+  let resolved;
+  try {
+    resolved = resolveAiRequestConfig(config, parsed.data);
+  } catch (err) {
+    return fail(err instanceof AiProviderError ? err.message : "Некорректные настройки AI");
   }
-  const apiKey = typedKey || saved.apiKey;
-  if (!apiKey) {
-    return fail("API-ключ AI-провайдера не указан");
-  }
-
-  const baseUrl = provider === "custom"
-    ? (parsed.data.baseUrl?.trim() || (sameProvider ? saved.baseUrl : ""))
-    : preset.baseUrl;
-  if (!baseUrl) {
-    return fail("Укажите Base URL AI-провайдера");
-  }
-
-  const model = parsed.data.model?.trim() || (sameProvider ? saved.model : preset.defaultModel);
-  const fallbackModels = parsed.data.fallbackModels
-    ? parsed.data.fallbackModels.map((value) => value.trim()).filter(Boolean)
-    : sameProvider ? saved.fallbackModels : [];
+  const { provider, apiKey, baseUrl, model, fallbackModels } = resolved;
+  if (!apiKey) return fail("Укажите API-ключ для выбранного провайдера и адреса");
+  if (!baseUrl) return fail("Укажите Base URL AI-провайдера");
   const systemPrompt = parsed.data.systemPrompt?.trim() || config.aiSystemPrompt;
 
   const messages: AiChatMessage[] = [
@@ -1151,6 +1134,21 @@ adminRouter.patch("/settings", async (req, res) => {
     return res.status(400).json({ message: "Invalid input", errors: body.error.flatten() });
   }
   const updates = body.data;
+  if (updates.aiApiKey === "********") delete updates.aiApiKey;
+  if (updates.groqApiKey === "********") delete updates.groqApiKey;
+  if (updates.aiProvider !== undefined || updates.aiBaseUrl !== undefined) {
+    const savedConfig = await getSystemConfig();
+    try {
+      const saved = resolveAiConfig(savedConfig);
+      const next = resolveAiConfig({ ...savedConfig, ...updates });
+      if ((next.provider !== saved.provider || next.baseUrl !== saved.baseUrl) && !updates.aiApiKey?.trim()) {
+        updates.aiApiKey = null;
+      }
+    } catch (err) {
+      return res.status(400).json({ message: err instanceof AiProviderError ? err.message : "Некорректные настройки AI" });
+    }
+  }
+
   if (updates.activeLanguages != null) {
     await prisma.systemSetting.upsert({
       where: { key: "active_languages" },
@@ -2386,7 +2384,7 @@ adminRouter.patch("/settings", async (req, res) => {
   // invalidate cache до возврата свежего config'а.
   invalidateSystemConfigCache();
   const config = await getSystemConfig();
-  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
+  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "", groqApiKey: config.groqApiKey ? "********" : "" });
 });
 
 adminRouter.post("/nalog/test", asyncRoute(async (_req, res) => {
@@ -2431,7 +2429,7 @@ adminRouter.post("/settings/reset-landing-text", asyncRoute(async (req, res) => 
     });
   }
   const config = await getSystemConfig();
-  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "" });
+  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "", groqApiKey: config.groqApiKey ? "********" : "" });
 }));
 
 adminRouter.use("/tickets", adminTicketsRouter);

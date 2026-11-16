@@ -59,5 +59,13 @@ const defaultSubject = 'Подтверждение регистрации — {{
   const custom = await getStoredTemplate('email_verification');
   assert.equal(custom.subject, 'Своя тема — {{serviceName}}');
 
+  state.subject = null; state.body = null;
+  const rendered = await mod.exports.renderEmailTemplate('ticket_reply', { serviceName: 'A & B', ticketSubject: '<VPN> & "test"', ticketId: '123', replyText: '<img src=x onerror=alert(1)>', ticketUrl: 'https://example.com/?a=1&b=2', attachmentsInfo: mod.exports.emailBadge('2 файла') });
+  assert.ok(rendered.subject.includes('<VPN> & "test"'));
+  assert.ok(rendered.subject.includes('A & B'));
+  assert.ok(rendered.body.includes('&lt;img src=x onerror=alert(1)&gt;'));
+  assert.ok(!rendered.body.includes('<img src=x'));
+  assert.ok(rendered.body.includes('https://example.com/?a=1&amp;b=2'));
+  assert.ok(rendered.body.includes('<span style='));
   console.log('PASS: legacy email verification subject migrated and code placeholder sanitized');
 })();

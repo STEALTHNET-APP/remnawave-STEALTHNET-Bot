@@ -1,24 +1,4 @@
-/**
- * Слияние двух клиентских аккаунтов в один (схема «инициатор — основной»).
- *
- * Используется при привязке Telegram/email, когда обнаруживается второй аккаунт
- * того же человека:
- *   - привязка TG: у Telegram-аккаунта нет email/пароля/OAuth → его данные
- *     (подписки, баланс, платежи, рефералы) переезжают в аккаунт-инициатор,
- *     сам он удаляется, telegramId переходит инициатору;
- *   - привязка email: владелец почты подтвердил письмо и у него нет Telegram →
- *     аналогично сливается в инициатора, email переходит инициатору.
- *
- * ВСЁ выполняется одной транзакцией: перенос FK-строк → чистка pending-заявок →
- * удаление поглощаемого клиента (освобождает unique telegramId/email) →
- * обновление полей основного. Каждая подписка несёт собственный remnawaveUuid.
- * После транзакции root-юзер поглощаемого в Remnawave (если остался ничейным)
- * удаляется (issue #84) — best-effort, падение НЕ роняет уже успешный merge.
- */
-
 import { prisma } from "../../db.js";
-
-import { isRemnaConfigured, remnaDeleteUser } from "../remna/remna.client.js";
 
 export interface MergeAssignFields {
   /** Присвоить основному telegramId (обычно — телеграм поглощаемого). */
@@ -41,10 +21,6 @@ export async function mergeClients(
 ): Promise<MergeClientsResult> {
   if (primaryId === absorbedId) throw new Error("Нельзя объединить аккаунт сам с собой");
 
-  // ISSUE #84: фиксируем root-uuid поглощаемого — он нужен для удаления из Remna ПОСЛЕ транзакции.
-  let absorbedRemnawaveUuid: string | null = null;
-  let primaryRemnawaveUuid: string | null = null;
-
   const result = await prisma.$transaction(
     async (tx) => {
       const [primary, absorbed] = await Promise.all([
@@ -53,9 +29,39 @@ export async function mergeClients(
       ]);
       if (!primary) throw new Error("Основной аккаунт не найден");
       if (!absorbed) throw new Error("Объединяемый аккаунт не найден");
-      // ISSUE #84: запоминаем root-uuid до того, как строка поглощаемого будет удалена.
-      absorbedRemnawaveUuid = absorbed.remnawaveUuid;
-      primaryRemnawaveUuid = primary.remnawaveUuid;
+      for (const client of [primary, absorbed]) {
+        if (!client.remnawaveUuid) continue;
+        const refs = await tx.subscription.findMany({
+          where: { remnawaveUuid: client.remnawaveUuid },
+          select: { ownerId: true },
+        });
+        const otherClient = await tx.client.findFirst({
+          where: { remnawaveUuid: client.remnawaveUuid, id: { notIn: [primaryId, absorbedId] } },
+          select: { id: true },
+        });
+        if (otherClient || refs.some((ref) => ref.ownerId !== primaryId && ref.ownerId !== absorbedId)) {
+          throw new Error("Подписка привязана к другому аккаунту. Обратитесь к администратору");
+        }
+        if (refs.length) continue;
+        const max = await tx.subscription.aggregate({
+          where: { ownerId: client.id },
+          _max: { subscriptionIndex: true },
+        });
+        await tx.subscription.create({ data: {
+          ownerId: client.id,
+          remnawaveUuid: client.remnawaveUuid,
+          subscriptionIndex: (max._max.subscriptionIndex ?? -1) + 1,
+          tariffId: client.currentTariffId,
+          autoRenewEnabled: client.autoRenewEnabled,
+          autoRenewTariffId: client.autoRenewTariffId,
+          autoRenewPriceOptionId: client.autoRenewPriceOptionId,
+          autoRenewExtraDevices: client.autoRenewExtraDevices,
+          autoRenewRetryCount: client.autoRenewRetryCount,
+          autoRenewNotifiedAt: client.autoRenewNotifiedAt,
+          autoRenewPromoCode: client.autoRenewPromoCode,
+          currentPricePerDay: client.currentPricePerDay,
+        } });
+      }
 
       // ── Подписки: unique(ownerId, subscriptionIndex) → переносим по одной с реиндексацией ──
       const primaryMax = await tx.subscription.aggregate({
@@ -181,57 +187,10 @@ export async function mergeClients(
         balanceAdded: absorbed.balance,
       };
     },
-    { timeout: 30000, maxWait: 10000 },
+    { timeout: 30000, maxWait: 10000, isolationLevel: "Serializable" },
   );
 
-  // ── ISSUE #84 / #186: после успешной транзакции удаляем ничейный root-юзер поглощаемого из Remna ──
-  // Root-uuid клиента обычно совпадает с remnawaveUuid его подписки #0, а подписки переезжают
-  // к основному ВМЕСТЕ со своими uuid. Поэтому удаляем только если на uuid больше никто не
-  // ссылается (ни Subscription, ни Client) — иначе пропадёт оплаченный доступ (issue #186).
-  // Если удаление падает — только warning, НЕ роняем merge (транзакция уже успешна).
-  if (absorbedRemnawaveUuid && isRemnaConfigured()) {
-    const uuid: string = absorbedRemnawaveUuid;
-    let referenced: ReadonlySet<string> | null = null;
-    try {
-      const [subRefs, clientRefs] = await Promise.all([
-        prisma.subscription.count({ where: { remnawaveUuid: uuid } }),
-        prisma.client.count({ where: { remnawaveUuid: uuid } }),
-      ]);
-      referenced = subRefs + clientRefs > 0 ? new Set([uuid]) : new Set<string>();
-    } catch (e) {
-      console.warn(`[merge-clients] issue #186: не удалось проверить ссылки на ${uuid}, удаление пропущено:`, e);
-    }
-    const toDelete = referenced ? pickRemnaUserToDelete(uuid, primaryRemnawaveUuid, referenced) : null;
-    if (toDelete) {
-      const del = await remnaDeleteUser(toDelete);
-      if (del.error && del.status !== 404) {
-        console.warn(
-          `[merge-clients] ISSUE #84: не удалось удалить ничейный root-юзер поглощаемого ${toDelete} из Remna:`,
-          del.error,
-        );
-      }
-    } else if (referenced) {
-      console.info(`[merge-clients] issue #186: Remna-юзер ${uuid} поглощаемого ещё используется — не удаляем`);
-    }
-  }
-
   return result;
-}
-
-/**
- * Какой Remna-юзер поглощаемого можно удалить после merge (issue #84 / #186).
- * Возвращает uuid только если он есть, не совпадает с root-uuid основного и на него
- * не ссылается ни одна подписка/клиент после merge (`referencedUuids`). Иначе null.
- */
-export function pickRemnaUserToDelete(
-  absorbedRootUuid: string | null,
-  primaryRootUuid: string | null,
-  referencedUuids: ReadonlySet<string>,
-): string | null {
-  if (!absorbedRootUuid) return null;
-  if (absorbedRootUuid === primaryRootUuid) return null;
-  if (referencedUuids.has(absorbedRootUuid)) return null;
-  return absorbedRootUuid;
 }
 
 /**

@@ -21,6 +21,7 @@ function loadService({ fetch = async () => Response.json({ data: [] }) } = {}) {
     exports: module.exports,
     console,
     Response,
+    URL,
     AbortSignal,
     AbortController,
     setTimeout,
@@ -58,7 +59,7 @@ test('explicit provider overrides legacy settings and resolves defaults', () => 
   const { service } = loadService();
   const defaults = service.resolveAiConfig({});
   assert.equal(defaults.provider, 'gemini');
-  assert.equal(defaults.model, 'gemini-2.0-flash');
+  assert.equal(defaults.model, 'gemini-flash-latest');
   assert.equal(defaults.baseUrl, 'https://generativelanguage.googleapis.com/v1beta/openai');
   assert.equal(defaults.apiKey, '');
 
@@ -74,7 +75,7 @@ test('explicit provider overrides legacy settings and resolves defaults', () => 
   });
   assert.equal(explicit.provider, 'gemini');
   assert.equal(explicit.apiKey, 'ai-key');
-  assert.equal(explicit.model, 'gemini-2.0-flash');
+  assert.equal(explicit.model, 'gemini-flash-latest');
   assert.deepEqual(plain(explicit.fallbackModels), ['gemini-2.5-flash', 'gemini-1.5-flash']);
 });
 
@@ -204,4 +205,26 @@ test('admin settings mask the universal AI key and persist the new fields', () =
   for (const key of ['ai_provider', 'ai_api_key', 'ai_base_url', 'ai_model', 'ai_fallback_1', 'ai_fallback_2', 'ai_fallback_3']) {
     assert.match(routeSource, new RegExp(`"${key}"`));
   }
+});
+
+
+test('saved credentials are reused only for the same provider and endpoint', () => {
+  const { service } = loadService();
+  const cfg = { aiProvider: 'custom', aiApiKey: 'private-key', aiBaseUrl: 'https://trusted.example/v1', aiModel: 'saved-model' };
+  assert.equal(service.resolveAiRequestConfig(cfg, {}).apiKey, 'private-key');
+  assert.equal(service.resolveAiRequestConfig(cfg, { baseUrl: 'https://trusted.example/v1/' }).apiKey, 'private-key');
+  assert.equal(service.resolveAiRequestConfig(cfg, { baseUrl: 'https://other.example/v1', apiKey: '********' }).apiKey, '');
+  assert.equal(service.resolveAiRequestConfig(cfg, { provider: 'gemini' }).apiKey, '');
+  assert.equal(service.resolveAiRequestConfig(cfg, { provider: 'gemini', apiKey: 'new-key' }).apiKey, 'new-key');
+  assert.equal(service.resolveAiRequestConfig({ groqApiKey: 'legacy' }, { provider: 'groq' }).apiKey, 'legacy');
+  for (const baseUrl of ['ftp://host/v1', 'https://user:password@host/v1', 'https://host/v1?token=x']) {
+    assert.throws(() => service.resolveAiRequestConfig(cfg, { baseUrl }), /Base URL/);
+  }
+});
+
+test('authentication failures stop fallback requests and never expose provider bodies', async () => {
+  const { service, calls } = loadService({ fetch: async () => new Response('private-key and customer data', { status: 401 }) });
+  await assert.rejects(() => service.sendAiChatRequest({ provider: 'groq', apiKey: 'private-key', baseUrl: 'https://api.groq.com/openai/v1', modelsToTry: ['one', 'two'], messages: [] }), err => err.status === 401 && !JSON.stringify(err).includes('private-key'));
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].init.redirect, 'error');
 });
