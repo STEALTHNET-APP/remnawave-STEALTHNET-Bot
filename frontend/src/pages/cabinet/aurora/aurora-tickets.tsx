@@ -49,6 +49,15 @@ export function AuroraTickets() {
   const [showNew, setShowNew] = useState(false);
   const [chatTicketId, setChatTicketId] = useState<string | null>(null);
   const [tab, setTab] = useState<"active" | "history">("active");
+  const sheetOpen = showNew || chatTicketId !== null;
+
+  useEffect(() => {
+    if (!sheetOpen) return;
+    document.documentElement.dataset.auFabHidden = "1";
+    return () => {
+      delete document.documentElement.dataset.auFabHidden;
+    };
+  }, [sheetOpen]);
 
   function load() {
     if (!state.token) return;

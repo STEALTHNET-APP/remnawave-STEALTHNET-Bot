@@ -679,6 +679,8 @@ export function FloatingChat({ placement = "floating", fabOffsetClass }: { place
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeChat, setActiveChat] = useState<ChatType>("support");
   const [hasOpenDialog, setHasOpenDialog] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const chatRootRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
   const [aiChats, setAiChats] = useState<Message[]>(() => getInitialAiMessage("Сервис"));
   useEffect(() => {
@@ -745,14 +747,55 @@ export function FloatingChat({ placement = "floating", fabOffsetClass }: { place
   // Скрываем кнопку чата когда открыт любой Dialog (Radix)
   useEffect(() => {
     function checkDialogs() {
-      const overlay = document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]');
-      setHasOpenDialog(!!overlay);
+      const chatRoot = chatRootRef.current;
+      const root = document.documentElement;
+      const sheetOpen = root.dataset.auSheet === "1" || root.dataset.auFabHidden === "1";
+      const nativeDialog = Array.from(document.querySelectorAll<HTMLDialogElement>("dialog[open]"))
+        .some((node) => !chatRoot?.contains(node));
+      const radixDialog = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]'))
+        .some((node) => !chatRoot?.contains(node));
+      const overlay = Boolean(document.querySelector(".au-sheet-overlay, .app-viewport-overlay"));
+      setHasOpenDialog(sheetOpen || nativeDialog || radixDialog || overlay);
     }
     const observer = new MutationObserver(checkDialogs);
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state"] });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-state", "open"] });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-au-sheet", "data-au-fab-hidden"] });
     checkDialogs();
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    if (hasOpenDialog) setIsOpen(false);
+  }, [hasOpenDialog]);
+
+  useEffect(() => {
+    if (placement === "toolbar") return;
+    function isTextControl(target: EventTarget | null): target is HTMLElement {
+      return target instanceof HTMLElement
+        && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT");
+    }
+    function handleFocusIn(event: FocusEvent) {
+      if (window.innerWidth >= 768) return;
+      const target = event.target;
+      if (!isTextControl(target)) return;
+      if (chatRootRef.current?.contains(target)) return;
+      setIsInputFocused(true);
+    }
+    function handleFocusOut() {
+      setIsInputFocused(false);
+    }
+    function handleResize() {
+      if (window.innerWidth >= 768) setIsInputFocused(false);
+    }
+    window.addEventListener("focusin", handleFocusIn);
+    window.addEventListener("focusout", handleFocusOut);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("focusin", handleFocusIn);
+      window.removeEventListener("focusout", handleFocusOut);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [placement]);
 
   // Блокировка скролла body при открытом чате только на мобилках
   useEffect(() => {
@@ -839,7 +882,7 @@ export function FloatingChat({ placement = "floating", fabOffsetClass }: { place
 
   return (
     <>
-      <div className={cn(placement === "toolbar" ? "cabinet-chat-toolbar relative z-[100]" : cn("fixed right-4 sm:bottom-6 sm:right-6 z-[100]", fabOffsetClass ?? "bottom-24"), hasOpenDialog && !isOpen && "pointer-events-none opacity-0")}>
+      <div ref={chatRootRef} className={cn(placement === "toolbar" ? "cabinet-chat-toolbar relative z-[100]" : cn("fixed right-4 sm:bottom-6 sm:right-6 z-[100]", fabOffsetClass ?? "bottom-24"), (hasOpenDialog || isInputFocused) && !isOpen && "pointer-events-none opacity-0")}>
         <AnimatePresence>
         {isOpen && (
         <motion.div

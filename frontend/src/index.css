@@ -232,6 +232,23 @@
   visibility: hidden;
 }
 
+[data-au-sheet="1"] [data-tour="floating-chat-button"],
+[data-au-sheet="1"] .cabinet-floating-chat,
+[data-au-fab-hidden="1"] [data-tour="floating-chat-button"],
+[data-au-fab-hidden="1"] .cabinet-floating-chat {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+html:has(dialog[open]) [data-tour="floating-chat-button"],
+body:has([role="dialog"][data-state="open"]) [data-tour="floating-chat-button"],
+body:has([role="alertdialog"][data-state="open"]) [data-tour="floating-chat-button"],
+body:has(.au-sheet-overlay) [data-tour="floating-chat-button"],
+body:has(.app-viewport-overlay) [data-tour="floating-chat-button"] {
+  display: none !important;
+  pointer-events: none !important;
+}
+
 /* Цена «К оплате» на тарифах: при смене срока/тарифа элемент перемонтируется
    (key=totalPrice) — CSS-анимация вместо framer-motion не трогает слой JS-ом
    и не мерцает на мобильном WebKit. */
