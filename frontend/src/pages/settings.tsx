@@ -15,7 +15,6 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/auth";
 import { api, type AdminSettings, type SshConfig, type UpdateSettingsPayload } from "@/lib/api";
 import { SubscriptionPageEditor } from "@/components/subscription-page-editor";
-import { ModelCombobox } from "@/components/model-combobox";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { Download, Upload, Link2, ChevronDown, Check, Plus, Trash2, KeyRound, Loader2, Sparkles, Globe, Plug, RefreshCw } from "lucide-react";
+import { Download, Upload, Link2, ChevronDown, Check, Plus, Trash2, KeyRound, Loader2, Sparkles, Globe, Plug } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ACCENT_PALETTES } from "@/contexts/theme";
@@ -36,14 +35,8 @@ import { MailTelegramTab } from "@/components/admin/settings/tabs/mail-telegram-
 import { ApiTab } from "@/components/admin/settings/tabs/api-tab";
 import { ReferralsTab } from "@/components/admin/settings/tabs/referrals-tab";
 import { GiftsTab } from "@/components/admin/settings/tabs/gifts-tab";
-
-const DEFAULT_GROQ_MODELS = [
-  "llama-3.3-70b-versatile",
-  "llama-3.1-8b-instant",
-  "openai/gpt-oss-120b",
-  "openai/gpt-oss-20b",
-  "qwen/qwen3.8-27b",
-];
+import { AiTab } from "@/components/admin/settings/tabs/ai-tab";
+import { aiProviderDefaultModel, resolveAiProviderId } from "@/lib/ai-providers";
 
 export function SettingsPage() {
   const { t } = useTranslation();
@@ -161,34 +154,6 @@ export function SettingsPage() {
   const [landingQuickStartList, setLandingQuickStartList] = useState<string[]>(defaultQuickStartList);
   const token = state.accessToken!;
 
-  const [groqModels, setGroqModels] = useState<string[]>([]);
-  const [loadingGroqModels, setLoadingGroqModels] = useState(false);
-  const [groqModelsMessage, setGroqModelsMessage] = useState<string | null>(null);
-
-  const handleLoadGroqModels = async () => {
-    setLoadingGroqModels(true);
-    setGroqModelsMessage(null);
-    try {
-      const res = await api.getGroqModels(token, settings?.groqApiKey || undefined);
-      setGroqModels(res.models);
-      setGroqModelsMessage(res.models.length ? t("admin.settings.ai_models_loaded", { count: res.models.length }) : t("admin.settings.ai_models_empty"));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setGroqModelsMessage(`Ошибка: ${msg}`);
-    } finally {
-      setLoadingGroqModels(false);
-    }
-  };
-
-  const availableModels = Array.from(new Set([
-    ...groqModels,
-    ...DEFAULT_GROQ_MODELS,
-    ...(settings?.groqModel ? [settings.groqModel] : []),
-    ...(settings?.groqFallback1 ? [settings.groqFallback1] : []),
-    ...(settings?.groqFallback2 ? [settings.groqFallback2] : []),
-    ...(settings?.groqFallback3 ? [settings.groqFallback3] : []),
-  ])).filter(Boolean);
-
   /* Данные — через TanStack Query (admin-queries). Формы остаются локальным useState. */
   const qc = useQueryClient();
   const { bumpRefresh } = useAdminUi();
@@ -221,6 +186,7 @@ export function SettingsPage() {
     const data = settingsQ.data;
     if (!data) return;
     const allowed = installedLangCodes;
+    const aiProvider = resolveAiProviderId((data as AdminSettings).aiProvider, (data as AdminSettings).groqApiKey);
     setSettings({
       ...data,
       activeLanguages: (data.activeLanguages || []).filter((l: string) => allowed.includes(l)),
@@ -298,6 +264,12 @@ export function SettingsPage() {
       ticketsEnabled: (data as AdminSettings).ticketsEnabled ?? false,
       aiChatEnabled: (data as AdminSettings).aiChatEnabled !== false,
       groqModel: (data as AdminSettings).groqModel ?? "llama-3.3-70b-versatile",
+      aiProvider,
+      aiModel: (data as AdminSettings).aiModel ?? (aiProvider === "groq" ? ((data as AdminSettings).groqModel ?? aiProviderDefaultModel("groq")) : aiProviderDefaultModel(aiProvider)),
+      aiBaseUrl: (data as AdminSettings).aiBaseUrl ?? "",
+      aiFallback1: (data as AdminSettings).aiFallback1 ?? null,
+      aiFallback2: (data as AdminSettings).aiFallback2 ?? null,
+      aiFallback3: (data as AdminSettings).aiFallback3 ?? null,
       sellOptionsEnabled: (data as AdminSettings).sellOptionsEnabled ?? false,
       sellOptionsTrafficEnabled: (data as AdminSettings).sellOptionsTrafficEnabled ?? false,
       sellOptionsTrafficProducts: (data as AdminSettings).sellOptionsTrafficProducts ?? [],
@@ -717,6 +689,13 @@ export function SettingsPage() {
         groqFallback1: settings.groqFallback1 ?? undefined,
         groqFallback2: settings.groqFallback2 ?? undefined,
         groqFallback3: settings.groqFallback3 ?? undefined,
+        aiProvider: settings.aiProvider ?? undefined,
+        aiApiKey: settings.aiApiKey === "********" ? undefined : (settings.aiApiKey || null),
+        aiBaseUrl: settings.aiBaseUrl || null,
+        aiModel: settings.aiModel ?? undefined,
+        aiFallback1: settings.aiFallback1 ?? undefined,
+        aiFallback2: settings.aiFallback2 ?? undefined,
+        aiFallback3: settings.aiFallback3 ?? undefined,
         aiSystemPrompt: settings.aiSystemPrompt ?? undefined,
         botButtons: settings.botButtons != null ? JSON.stringify(settings.botButtons) : undefined,
         botCommands: settings.botCommands,
@@ -1056,116 +1035,12 @@ export function SettingsPage() {
             handleSubmit={handleSubmit}
           />
 
-          <TabsContent value="ai">
-            <Card className="overflow-hidden border-border">
-              <div className="relative bg-muted p-4 border-b border-border">
-                <div className="absolute inset-0 bg-transparent pointer-events-none" />
-                <div className="relative flex items-start gap-5">
-                  <div className="flex-1 min-w-0">
-                    <h2 className="text-xl font-bold tracking-tight text-foreground">
-                      {t("admin.settings.ai_title")}
-                    </h2>
-                    <p className="text-[12.5px] text-muted-foreground mt-1">{t("admin.settings.ai_subtitle")} {t("admin.settings.ai_integration_hint")}</p>
-                  </div>
-                </div>
-              </div>
-              <CardContent className="space-y-4 p-4 sm:p-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>{t("admin.settings.ai_groq_key")}</Label>
-                    <Input
-                      type="password"
-                      value={settings.groqApiKey ?? ""}
-                      onChange={(e) => setSettings((s) => (s ? { ...s, groqApiKey: e.target.value || null } : s))}
-                      placeholder="gsk_..."
-                    />
-                    <p className="text-xs text-muted-foreground">{t("admin.settings.ai_key_hint")}</p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>{t("admin.settings.ai_model")}</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={loadingGroqModels}
-                        onClick={handleLoadGroqModels}
-                      >
-                        {loadingGroqModels ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <RefreshCw className="h-3 w-3 mr-1" />}
-                        {t("admin.settings.ai_load_models")}
-                      </Button>
-                    </div>
-                    <ModelCombobox
-                      options={availableModels}
-                      value={settings.groqModel}
-                      onChange={(model) => setSettings((s) => (s ? { ...s, groqModel: model } : s))}
-                      placeholder="llama-3.3-70b-versatile"
-                    />
-                    <p className="text-xs text-muted-foreground">{t("admin.settings.ai_model_hint")}</p>
-                    {groqModelsMessage && <p className="text-xs text-muted-foreground">{groqModelsMessage}</p>}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("admin.settings.ai_fallback")}</Label>
-                  <p className="text-xs text-muted-foreground mb-2">
-                    {t("admin.settings.ai_fallback_hint")}
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="space-y-1">
-                      <span className="text-xs text-muted-foreground">{t("admin.settings.ai_no_fallback")} 1</span>
-                      <ModelCombobox
-                        options={availableModels}
-                        value={settings.groqFallback1}
-                        onChange={(model) => setSettings((s) => (s ? { ...s, groqFallback1: model } : s))}
-                        placeholder="llama-3.1-8b-instant"
-                        allowEmpty
-                        emptyLabel={t("admin.settings.ai_no_fallback")}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-xs text-muted-foreground">{t("admin.settings.ai_no_fallback")} 2</span>
-                      <ModelCombobox
-                        options={availableModels}
-                        value={settings.groqFallback2}
-                        onChange={(model) => setSettings((s) => (s ? { ...s, groqFallback2: model } : s))}
-                        placeholder="openai/gpt-oss-20b"
-                        allowEmpty
-                        emptyLabel={t("admin.settings.ai_no_fallback")}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-xs text-muted-foreground">{t("admin.settings.ai_no_fallback")} 3</span>
-                      <ModelCombobox
-                        options={availableModels}
-                        value={settings.groqFallback3}
-                        onChange={(model) => setSettings((s) => (s ? { ...s, groqFallback3: model } : s))}
-                        placeholder=""
-                        allowEmpty
-                        emptyLabel={t("admin.settings.ai_no_fallback")}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("admin.settings.ai_system_prompt")}</Label>
-                  <textarea
-                    className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={settings.aiSystemPrompt ?? ""}
-                    onChange={(e) => setSettings((s) => (s ? { ...s, aiSystemPrompt: e.target.value } : s))}
-                    placeholder="Ты — лучший менеджер техподдержки VPN-сервиса..."
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t("admin.settings.ai_prompt_hint")}
-                  </p>
-                </div>
-                <div className="pt-2 border-t">
-                  <Button type="submit" disabled={saving} className="min-w-[140px]">
-                    {saving ? t("admin.settings.saving") : t("admin.settings.save")}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+          <AiTab
+            settings={settings}
+            setSettings={setSettings}
+            token={token}
+            saving={saving}
+          />
 
           <MailTelegramTab
             settings={settings}
