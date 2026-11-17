@@ -16,7 +16,7 @@ assert.ok(callback);
 const compiled = ts.transpileModule(`(${callback})`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 class CheckError extends Error { constructor(status) { super(status === 409 ? 'Привяжите Telegram в профиле' : 'Недоступно'); this.status = status; } }
 
-async function run({ existing = true, lookupError, conflict = false, ids = ['vpn-a', 'vpn-b'], authenticated = true } = {}) {
+async function run({ existing = true, lookupError, conflict = false, ids = [{ remnawaveUuid: 'vpn-a', status: 'ACTIVE', expireAt: null }, { remnawaveUuid: 'vpn-b', status: 'ACTIVE', expireAt: null }], authenticated = true } = {}) {
   let record = existing ? { id: 'existing', telegramId: '123', remnawaveUuid: 'vpn-a', isBlocked: false, trialUsed: false } : null;
   let created = 0, checks = 0; const restored = [];
   const context = {
@@ -33,10 +33,11 @@ async function run({ existing = true, lookupError, conflict = false, ids = ['vpn
     getSystemConfig: async () => ({ blacklistEnabled: false }),
     findTelegramSubscriptions: async () => { checks++; if (lookupError) throw new CheckError(lookupError); return ids; },
     checkTelegramSubscriptionOwners: async () => { if (conflict) throw new CheckError(409); },
+    isLiveRemnaSubscription: sub => sub.status === 'ACTIVE',
     restoreTelegramSubscriptions: async (client, found) => {
-      restored.push([...found]);
+      restored.push(found.map(sub => sub.remnawaveUuid));
       if (conflict) throw new CheckError(409);
-      if (!record.remnawaveUuid && found.length) record.remnawaveUuid = found[0];
+      if (!record.remnawaveUuid && found.length) record.remnawaveUuid = found[0].remnawaveUuid;
     },
     prisma: { client: {
       findFirst: async () => record,

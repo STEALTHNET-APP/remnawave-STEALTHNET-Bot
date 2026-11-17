@@ -156,6 +156,12 @@ export function remnaGetUser(uuid: string) {
   return remnaFetch<unknown>(`/api/users/${uuid}`);
 }
 
+/** Ошибка Remna «пользователь не найден»: 404 либо 400 из-за устаревшего строкового uuid. */
+export function isRemnaNotFoundError(status: number, error?: string): boolean {
+  if (status === 404 || status === 400) return true;
+  return typeof error === "string" && /not found|not exist|validation/i.test(error);
+}
+
 /** DELETE /api/users/{uuid} — удалить пользователя из Remna */
 export function remnaDeleteUser(uuid: string) {
   return remnaFetch<unknown>(`/api/users/${uuid}`, { method: "DELETE" });

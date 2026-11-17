@@ -2,10 +2,18 @@ import express, { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../db.js";
-import { remnaGetUser, remnaUpdateUser, remnaDeleteUser, isRemnaConfigured } from "../remna/remna.client.js";
+import { remnaGetUser, remnaUpdateUser, remnaDeleteUser, isRemnaConfigured, isRemnaNotFoundError } from "../remna/remna.client.js";
 import { normalizeClientSubscriptionSlots } from "../subscription/subscription.helpers.js";
 
 export const adminSecondarySubscriptionsRouter = Router();
+
+async function remnaUuidInUse(uuid: string, subscriptionId: string, ownerId: string): Promise<boolean> {
+  const [subscriptions, clients] = await Promise.all([
+    prisma.subscription.count({ where: { remnawaveUuid: uuid, id: { not: subscriptionId } } }),
+    prisma.client.count({ where: { remnawaveUuid: uuid, id: { not: ownerId } } }),
+  ]);
+  return subscriptions > 0 || clients > 0;
+}
 
 function asyncRoute(
   fn: (req: express.Request, res: express.Response) => Promise<void | express.Response>
@@ -338,11 +346,23 @@ adminSecondarySubscriptionsRouter.delete("/:id", asyncRoute(async (req, res) => 
   });
   if (!sub) return res.status(404).json({ message: "Подписка не найдена" });
 
-  // Delete Remnawave user if exists
-  if (sub.remnawaveUuid && isRemnaConfigured()) {
-    try {
-      await remnaDeleteUser(sub.remnawaveUuid);
-    } catch { /* best effort */ }
+  const deleteRemnaUser = req.query.deleteRemnaUser === "true";
+  let remnaUserDeleted = false;
+  let remnaUserKeptReason: string | null = null;
+
+  if (deleteRemnaUser && sub.remnawaveUuid) {
+    if (!isRemnaConfigured()) {
+      remnaUserKeptReason = "Remnawave не настроен — пользователь сохранён";
+    } else if (await remnaUuidInUse(sub.remnawaveUuid, sub.id, sub.ownerId)) {
+      remnaUserKeptReason = "UUID используется другой подпиской или клиентом — пользователь Remnawave сохранён";
+    } else {
+      const result = await remnaDeleteUser(sub.remnawaveUuid);
+      if (result.error && !isRemnaNotFoundError(result.status, result.error)) {
+        return res.status(result.status >= 400 && result.status < 500 ? result.status : 502)
+          .json({ message: `Remnawave: ${result.error}` });
+      }
+      remnaUserDeleted = true;
+    }
   }
 
   // Log event
@@ -351,7 +371,13 @@ adminSecondarySubscriptionsRouter.delete("/:id", asyncRoute(async (req, res) => 
       clientId: sub.ownerId,
       subscriptionId: sub.id,
       eventType: "DELETED",
-      metadata: { deletedBy: "admin" },
+      metadata: {
+        deletedBy: "admin",
+        remnawaveUuid: sub.remnawaveUuid,
+        deleteRemnaUser,
+        remnaUserDeleted,
+        remnaUserKeptReason,
+      },
     },
   });
 
@@ -362,25 +388,34 @@ adminSecondarySubscriptionsRouter.delete("/:id", asyncRoute(async (req, res) => 
     console.error("[admin/secondary-subscriptions] slot normalization failed:", e);
   });
 
-  return res.json({ success: true });
+  return res.json({ success: true, remnaUserDeleted, remnaUserKeptReason });
 }));
 
 adminSecondarySubscriptionsRouter.delete("/bulk", asyncRoute(async (req, res) => {
-  const { ids } = req.body as { ids?: string[] };
+  const { ids } = req.body as { ids?: string[]; deleteRemnaUser?: boolean };
   if (!Array.isArray(ids) || ids.length === 0) {
     return res.status(400).json({ message: "Укажите массив ids" });
   }
+  const deleteRemnaUser = req.query.deleteRemnaUser === "true" || req.body?.deleteRemnaUser === true;
 
   const subs = await prisma.subscription.findMany({
     where: { id: { in: ids } },
     select: { id: true, remnawaveUuid: true, ownerId: true },
   });
 
-  // Delete Remnawave users
-  if (isRemnaConfigured()) {
-    await Promise.allSettled(
-      subs.filter((s) => s.remnawaveUuid).map((s) => remnaDeleteUser(s.remnawaveUuid!))
-    );
+  let remnaUserDeleted = 0;
+  let remnaUserKept = 0;
+  if (deleteRemnaUser && isRemnaConfigured()) {
+    for (const sub of subs) {
+      if (!sub.remnawaveUuid) continue;
+      if (await remnaUuidInUse(sub.remnawaveUuid, sub.id, sub.ownerId)) {
+        remnaUserKept++;
+        continue;
+      }
+      const result = await remnaDeleteUser(sub.remnawaveUuid);
+      if (!result.error || isRemnaNotFoundError(result.status, result.error)) remnaUserDeleted++;
+      else remnaUserKept++;
+    }
   }
 
   // Log events
@@ -389,7 +424,7 @@ adminSecondarySubscriptionsRouter.delete("/bulk", asyncRoute(async (req, res) =>
       clientId: s.ownerId,
       subscriptionId: s.id,
       eventType: "DELETED",
-      metadata: { deletedBy: "admin", bulk: true },
+      metadata: { deletedBy: "admin", bulk: true, remnawaveUuid: s.remnawaveUuid, deleteRemnaUser },
     })),
   });
 
@@ -402,5 +437,5 @@ adminSecondarySubscriptionsRouter.delete("/bulk", asyncRoute(async (req, res) =>
     });
   }
 
-  return res.json({ success: true, deleted: subs.length });
+  return res.json({ success: true, deleted: subs.length, remnaUserDeleted, remnaUserKept });
 }));

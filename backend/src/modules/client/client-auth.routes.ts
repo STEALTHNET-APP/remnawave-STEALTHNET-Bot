@@ -1,4 +1,4 @@
-import { findTelegramSubscriptions, checkTelegramSubscriptionOwners, restoreTelegramSubscriptions, TelegramSubscriptionCheckError } from "./telegram-subscriptions.service.js";
+import { findTelegramSubscriptions, checkTelegramSubscriptionOwners, restoreTelegramSubscriptions, isLiveRemnaSubscription, TelegramSubscriptionCheckError } from "./telegram-subscriptions.service.js";
 import { randomBytes, createHmac } from "crypto";
 import { verify } from "otplib";
 import { Router, type Request } from "express";
@@ -297,8 +297,8 @@ clientAuthRouter.post("/register", async (req, res) => {
 
       let subscriptionCheckPending = false;
       try {
-        const ids = await findTelegramSubscriptions(data.telegramId!);
-        await restoreTelegramSubscriptions(existing, ids);
+        const found = await findTelegramSubscriptions(data.telegramId!);
+        await restoreTelegramSubscriptions(existing, found);
         const restored = await prisma.client.findUniqueOrThrow({ where: { id: existing.id }, select: { remnawaveUuid: true, trialUsed: true } });
         Object.assign(existing, restored);
       } catch (error) {
@@ -313,16 +313,16 @@ clientAuthRouter.post("/register", async (req, res) => {
   }
 
   const configForAutoRenew = await getSystemConfig();
-  let telegramSubscriptionIds: string[] = [];
+  let telegramSubscriptions: Awaited<ReturnType<typeof findTelegramSubscriptions>> = [];
   let subscriptionCheckPending = false;
   try {
-    telegramSubscriptionIds = await findTelegramSubscriptions(data.telegramId!);
-    await checkTelegramSubscriptionOwners(telegramSubscriptionIds);
+    telegramSubscriptions = await findTelegramSubscriptions(data.telegramId!);
+    await checkTelegramSubscriptionOwners(telegramSubscriptions.map(sub => sub.remnawaveUuid));
   } catch (error) {
     if (error instanceof TelegramSubscriptionCheckError && error.status === 409) return res.status(error.status).json({ message: error.message });
     subscriptionCheckPending = true;
   }
-  const remnawaveUuid = telegramSubscriptionIds[0] ?? null;
+  const remnawaveUuid = telegramSubscriptions.find(isLiveRemnaSubscription)?.remnawaveUuid ?? null;
 
   const referralCode = generateReferralCode();
   let referrerId: string | null = null;
@@ -364,7 +364,7 @@ clientAuthRouter.post("/register", async (req, res) => {
   notifyAdminsAboutNewClient(client.id).catch(() => {});
 
   try {
-    await restoreTelegramSubscriptions(client, telegramSubscriptionIds);
+    await restoreTelegramSubscriptions(client, telegramSubscriptions);
     const restored = await prisma.client.findUniqueOrThrow({ where: { id: client.id }, select: { remnawaveUuid: true, trialUsed: true } });
     Object.assign(client, restored);
   } catch (error) {
