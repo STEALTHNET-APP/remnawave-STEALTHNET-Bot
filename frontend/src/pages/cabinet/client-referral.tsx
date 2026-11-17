@@ -38,6 +38,8 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
   const [wOpen, setWOpen] = useState(false);
   const [wMethod, setWMethod] = useState<"sbp" | "card" | "usdt">("usdt");
   const [wDetails, setWDetails] = useState("");
+  const [wBankName, setWBankName] = useState("");
+  const [wRecipientName, setWRecipientName] = useState("");
   const [wAmount, setWAmount] = useState("");
   const [wSubmitting, setWSubmitting] = useState(false);
   const [wMsg, setWMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -101,12 +103,22 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
       return;
     }
     const details = wDetails.trim();
+    const bankName = wBankName.trim();
+    const recipientName = wRecipientName.trim();
     if (activeMethod === "usdt" && !/^T[A-Za-z0-9]{33}$/.test(details)) {
       setWMsg({ type: "err", text: "Некорректный TRC20-адрес (начинается с T, 34 символа)" });
       return;
     }
     if (activeMethod === "card" && !/^\d{16,19}$/.test(details.replace(/[\s-]/g, ""))) {
       setWMsg({ type: "err", text: "Некорректный номер карты (16–19 цифр)" });
+      return;
+    }
+    if (activeMethod === "card" && !bankName) {
+      setWMsg({ type: "err", text: "Укажите банк получателя" });
+      return;
+    }
+    if (activeMethod === "card" && !recipientName) {
+      setWMsg({ type: "err", text: "Укажите имя или ФИО получателя" });
       return;
     }
     if (activeMethod === "sbp" && (!details.includes(",") || details.split(",").slice(1).join(",").trim().length < 2)) {
@@ -116,11 +128,18 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
     setWSubmitting(true);
     setWMsg(null);
     try {
-      const r = await api.createWithdrawal(token, { amount: amt, method: activeMethod, details });
+      const r = await api.createWithdrawal(token, {
+        amount: amt,
+        method: activeMethod,
+        details,
+        ...(activeMethod === "card" ? { bankName, recipientName } : {}),
+      });
       toast.success("Заявка отправлена", r.message || "Ожидайте подтверждения администратора.");
       setWOpen(false);
       refreshProfile().catch(() => {});
       setWDetails("");
+      setWBankName("");
+      setWRecipientName("");
       setWAmount("");
     } catch (e) {
       setWMsg({ type: "err", text: e instanceof Error ? e.message : "Ошибка отправки заявки" });
@@ -230,6 +249,32 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
                   disabled={wSubmitting}
                 />
               </div>
+              {activeMethod === "card" && (
+                <>
+                  <div className="space-y-1.5">
+                    <label htmlFor="withdraw-bank" className="text-sm font-medium">Банк получателя</label>
+                    <Input
+                      id="withdraw-bank"
+                      autoComplete="off"
+                      value={wBankName}
+                      onChange={(e) => { setWBankName(e.target.value.slice(0, 100)); setWMsg(null); }}
+                      placeholder="Например: Т-Банк, Сбербанк"
+                      disabled={wSubmitting}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="withdraw-recipient" className="text-sm font-medium">Имя / ФИО получателя</label>
+                    <Input
+                      id="withdraw-recipient"
+                      autoComplete="off"
+                      value={wRecipientName}
+                      onChange={(e) => { setWRecipientName(e.target.value.slice(0, 100)); setWMsg(null); }}
+                      placeholder="Например: Иван И."
+                      disabled={wSubmitting}
+                    />
+                  </div>
+                </>
+              )}
               <div className="space-y-1.5">
                 <label htmlFor="withdraw-amount" className="text-sm font-medium">Сумма, ₽ (минимум {withdrawMin})</label>
                 <Input id="withdraw-amount" value={wAmount} onChange={(e) => { setWAmount(e.target.value.replace(/[^\d.,]/g, "")); setWMsg(null); }} inputMode="decimal" placeholder={String(withdrawMin)} disabled={wSubmitting} />
@@ -237,7 +282,7 @@ function ClassicReferralPage({ aurora = false }: { aurora?: boolean }) {
               {wMsg && (
                 <p className={`text-sm font-medium ${wMsg.type === "ok" ? "text-green-600 dark:text-green-400" : "text-destructive"}`}>{wMsg.text}</p>
               )}
-              <Button className="w-full gap-2 h-11 rounded-xl" onClick={submitWithdraw} disabled={wSubmitting || !wDetails.trim() || !wAmount.trim()}>
+              <Button className="w-full gap-2 h-11 rounded-xl" onClick={submitWithdraw} disabled={wSubmitting || !wDetails.trim() || !wAmount.trim() || (activeMethod === "card" && (!wBankName.trim() || !wRecipientName.trim()))}>
                 {wSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Отправить заявку
               </Button>

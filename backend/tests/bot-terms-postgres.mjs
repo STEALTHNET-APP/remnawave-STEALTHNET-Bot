@@ -27,10 +27,11 @@ try {
   let state = await botTerms('123', {});
   assert.equal(state.required, false);
   assert.equal(await prisma.telegramConsent.count(), 0);
-  for (const [key, value] of [['agreement_link', 'https://example.com/terms'], ['offer_link', 'https://example.com/offer'], ['refund_link', 'javascript:alert(1)']]) await prisma.systemSetting.create({ data: { key, value } });
+  for (const [key, value] of [['agreement_link', 'https://example.com/terms'], ['offer_link', 'https://example.com/offer'], ['refund_link', 'javascript:alert(1)'], ['agreement_title', 'Условия использования'], ['offer_title', 'Конфиденциальность'], ['refund_title', 'Политика возврата']]) await prisma.systemSetting.create({ data: { key, value } });
   state = await (await request('/status', { telegramId: '123', pendingStart: 'ref_TEST' })).json();
   assert.equal(state.accepted, false);
   assert.equal(state.documents.length, 2);
+  assert.deepEqual(state.documents.map((doc) => doc.title), ['Условия использования', 'Конфиденциальность']);
   assert.equal((await request('/accept', { telegramId: '456', version: state.version })).status, 409);
   await botTerms('123', {});
   assert.equal((await prisma.telegramConsent.findUnique({ where: { telegramId: '123' } })).pendingStart, 'ref_TEST');

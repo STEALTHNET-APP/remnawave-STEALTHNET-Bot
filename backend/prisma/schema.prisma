@@ -307,17 +307,19 @@ model Payment {
 // Заявка на вывод реферального баланса: СБП, банковская карта или USDT TRC20.
 // Баланс замораживается при создании; reject возвращает средства, approve уведомляет клиента.
 model WithdrawalRequest {
-  id           String    @id @default(cuid())
-  clientId     String    @map("client_id")
-  amount       Float
-  method       String    @default("usdt")
-  details      String    @default("")
-  walletTrc20  String?   @map("wallet_trc20")
-  status       String    @default("PENDING") // PENDING | APPROVED | REJECTED
-  adminComment String?   @map("admin_comment")
-  processedAt  DateTime? @map("processed_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id            String    @id @default(cuid())
+  clientId      String    @map("client_id")
+  amount        Float
+  method        String    @default("usdt")
+  details       String    @default("")
+  bankName      String?   @map("bank_name")
+  recipientName String?   @map("recipient_name")
+  walletTrc20   String?   @map("wallet_trc20")
+  status        String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  adminComment  String?   @map("admin_comment")
+  processedAt   DateTime? @map("processed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 

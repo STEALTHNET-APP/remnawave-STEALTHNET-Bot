@@ -20,14 +20,43 @@ function withdrawMethodLabel(method: WithdrawMethod): string {
 
 function withdrawDetailsPrompt(method: WithdrawMethod): string {
   if (method === "sbp") return "🏦 Введите номер телефона и банк получателя.\nПример: +79991234567, Сбербанк";
-  if (method === "card") return "💳 Введите номер банковской карты (16-19 цифр):";
+  if (method === "card") return "💳 Введите номер карты, банк и имя получателя через запятую.\nПример: 2200 1234 5678 9010, Т-Банк, Иван Иванов";
   return "🌐 Введите адрес кошелька USDT TRC20 (начинается с T):";
 }
 
 function withdrawDetailsError(method: WithdrawMethod): string {
   if (method === "sbp") return "❌ Укажите номер телефона и банк через запятую.\nПример: +79991234567, Сбербанк\nПопробуйте снова:";
-  if (method === "card") return "❌ Некорректный номер карты.\nНомер должен содержать 16-19 цифр.\nПопробуйте снова:";
+  if (method === "card") return "❌ Укажите номер карты, банк и имя получателя через запятую.\nПример: 2200 1234 5678 9010, Т-Банк, Иван Иванов\nПопробуйте снова:";
   return "❌ Некорректный кошелёк TRC20.\n\nАдрес должен начинаться с буквы T и содержать 34 символа.\nПопробуйте снова:";
+}
+
+function normalizeCardNumber(raw: string): string | null {
+  const digits = raw.replace(/[\s-]/g, "");
+  if (!/^\d{16,19}$/.test(digits)) return null;
+  let sum = 0;
+  let double = false;
+  for (let i = digits.length - 1; i >= 0; i -= 1) {
+    let digit = Number(digits[i]);
+    if (double) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+    double = !double;
+  }
+  if (sum % 10 !== 0) return null;
+  return digits.replace(/(\d{4})(?=\d)/g, "$1 ");
+}
+
+function parseCardWithdrawDetails(raw: string): { details: string; bankName: string; recipientName: string } | null {
+  const parts = raw.split(/[,;]/).map((part) => part.trim());
+  if (parts.length < 3) return null;
+  const details = normalizeCardNumber(parts[0] ?? "");
+  const bankName = parts[1] ?? "";
+  const recipientName = parts.slice(2).join(", ");
+  if (!details || bankName.length < 2 || recipientName.length < 2) return null;
+  if (bankName.length > 100 || recipientName.length > 100) return null;
+  return { details, bankName, recipientName };
 }
 
 function normalizeWithdrawDetails(method: WithdrawMethod, raw: string): string | null {
@@ -36,21 +65,7 @@ function normalizeWithdrawDetails(method: WithdrawMethod, raw: string): string |
     return /^T[A-Za-z0-9]{33}$/.test(value) ? value : null;
   }
   if (method === "card") {
-    const digits = value.replace(/[\s-]/g, "");
-    if (!/^\d{16,19}$/.test(digits)) return null;
-    let sum = 0;
-    let double = false;
-    for (let i = digits.length - 1; i >= 0; i -= 1) {
-      let digit = Number(digits[i]);
-      if (double) {
-        digit *= 2;
-        if (digit > 9) digit -= 9;
-      }
-      sum += digit;
-      double = !double;
-    }
-    if (sum % 10 !== 0) return null;
-    return digits.replace(/(\d{4})(?=\d)/g, "$1 ");
+    return normalizeCardNumber(value);
   }
   const parts = value.split(/[,;]/).map((part) => part.trim()).filter(Boolean);
   if (parts.length < 2) return null;
@@ -446,7 +461,7 @@ composer.command("referral", async (ctx) => {
     if (data === "withdraw:confirm") {
       const draft = pendingWithdrawals.get(userId);
       const withdrawConfirmMin = config?.withdrawalMinAmount ?? 3000;
-      if (!draft?.method || !draft.details || !Number.isFinite(draft.amount) || draft.amount < withdrawConfirmMin) {
+      if (!draft?.method || !draft.details || !Number.isFinite(draft.amount) || draft.amount < withdrawConfirmMin || (draft.method === "card" && (!draft.bankName || !draft.recipientName))) {
         awaitingWithdrawAmount.delete(userId);
         awaitingWithdrawDetails.delete(userId);
         pendingWithdrawals.delete(userId);
@@ -459,13 +474,21 @@ composer.command("referral", async (ctx) => {
         return;
       }
       try {
-        const result = await api.createWithdrawal(token, { amount: draft.amount, method: draft.method, details: draft.details });
+        const result = await api.createWithdrawal(token, {
+          amount: draft.amount,
+          method: draft.method,
+          details: draft.details,
+          ...(draft.method === "card" ? { bankName: draft.bankName, recipientName: draft.recipientName } : {}),
+        });
         pendingWithdrawals.delete(userId);
         awaitingWithdrawAmount.delete(userId);
         awaitingWithdrawDetails.delete(userId);
+        const cardLines = draft.method === "card"
+          ? `\nБанк: ${draft.bankName}\nПолучатель: ${draft.recipientName}`
+          : "";
         await editMessageContent(
           ctx,
-          `✅ ${result.message}\n\n💸 Сумма: ${draft.amount.toFixed(2)}₽\nСпособ: ${withdrawMethodLabel(draft.method)}\nРеквизиты: ${draft.details}\n\nКак только администратор обработает заявку — мы пришлём уведомление в этот чат.`,
+          `✅ ${result.message}\n\n💸 Сумма: ${draft.amount.toFixed(2)}₽\nСпособ: ${withdrawMethodLabel(draft.method)}\nРеквизиты: ${draft.details}${cardLines}\n\nКак только администратор обработает заявку — мы пришлём уведомление в этот чат.`,
           {
             inline_keyboard: [
               [{ text: "👥 К рефералке", callback_data: "menu:referral" }],
@@ -610,6 +633,27 @@ composer.command("referral", async (ctx) => {
       awaitingWithdrawDetails.delete(userId);
       pendingWithdrawals.delete(userId);
       await ctx.reply("❌ Заявка устарела. Начните заново.", backRef);
+      return;
+    }
+    if (draft.method === "card") {
+      const card = parseCardWithdrawDetails(ctx.message.text);
+      if (!card) {
+        await ctx.reply(withdrawDetailsError(draft.method), backRef);
+        return;
+      }
+      awaitingWithdrawDetails.delete(userId);
+      pendingWithdrawals.set(userId, { ...draft, ...card });
+      await ctx.reply(
+        `📋 Проверьте данные заявки на вывод:\n\n💸 Сумма: ${draft.amount.toFixed(2)} ₽\nСпособ: ${withdrawMethodLabel(draft.method)}\nНомер карты: ${card.details}\nБанк: ${card.bankName}\nПолучатель: ${card.recipientName}\n\nСоздать заявку?`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "✅ Подтвердить", callback_data: "withdraw:confirm" }],
+              [{ text: "❌ Отмена", callback_data: "menu:referral" }],
+            ],
+          },
+        },
+      );
       return;
     }
     const details = normalizeWithdrawDetails(draft.method, ctx.message.text);

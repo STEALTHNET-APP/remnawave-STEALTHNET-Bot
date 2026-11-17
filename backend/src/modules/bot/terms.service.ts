@@ -15,7 +15,7 @@ export async function botTerms(telegramId: string, input: { pendingStart?: strin
         const parsed = new URL(url);
         if (!["https:", "http:"].includes(parsed.protocol) || parsed.username || parsed.password) return [];
       } catch { return []; }
-      const title = settings.find((item) => item.key === `${key}_title`)?.value.trim() || null;
+      const title = settings.find((item) => item.key === key.replace("_link", "_title"))?.value.trim() || null;
       return [{ kind: key.replace("_link", ""), url, title }];
     });
     if (!documents.length) return { required: false, accepted: true, documents, version: "", completed: false, pendingStart: null };
