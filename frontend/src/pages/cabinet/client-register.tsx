@@ -397,12 +397,20 @@ export function ClientRegisterPage() {
                   {telegramBotUsername && <TelegramSignIn botUsername={telegramBotUsername} disabled={loading} registration />}
                 </div>
               )}
-              <p className="text-center text-sm text-muted-foreground">
-                {t("cabinet.register.has_account")}{" "}
-                <Link to="/cabinet/login" className="text-primary hover:underline">
-                  {t("cabinet.register.login_link")}
-                </Link>
-              </p>
+              <div className="pt-2 text-center space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  {t("cabinet.register.has_account")}
+                </p>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="w-full h-12 rounded-xl text-base font-bold border-border bg-card/40 hover:bg-muted text-foreground transition-all"
+                >
+                  <Link to="/cabinet/login">
+                    {t("cabinet.register.login_link", "Войти")}
+                  </Link>
+                </Button>
+              </div>
             </form>
           
         

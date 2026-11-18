@@ -598,7 +598,7 @@ export function parseTelegramUser(initData: string): { id: number; username?: st
 const forgotPasswordSchema = z.object({ email: z.string().email() });
 clientAuthRouter.post("/forgot-password", async (req, res) => {
   const cfg = await getSystemConfig();
-  if (!cfg.passwordResetEnabled) return res.status(404).json({ message: "Восстановление пароля временно недоступно" });
+  if (cfg.passwordResetEnabled === false) return res.status(404).json({ message: "Восстановление пароля временно недоступно" });
   const body = forgotPasswordSchema.safeParse(req.body);
   if (!body.success) return res.status(400).json({ message: "Введите корректный email" });
   const email = body.data.email.toLowerCase().trim();
@@ -684,7 +684,7 @@ clientAuthRouter.post("/forgot-password", async (req, res) => {
 const resetPasswordSchema = z.object({ token: z.string().min(10), password: z.string().min(8, "Минимум 8 символов") });
 clientAuthRouter.post("/reset-password", async (req, res) => {
   const cfg = await getSystemConfig();
-  if (!cfg.passwordResetEnabled) return res.status(404).json({ message: "Восстановление пароля временно недоступно" });
+  if (cfg.passwordResetEnabled === false) return res.status(404).json({ message: "Восстановление пароля временно недоступно" });
   const body = resetPasswordSchema.safeParse(req.body);
   if (!body.success) return res.status(400).json({ message: body.error.issues[0]?.message ?? "Проверьте данные" });
   const payload = verifyClientPasswordResetToken(body.data.token, env.JWT_SECRET);
