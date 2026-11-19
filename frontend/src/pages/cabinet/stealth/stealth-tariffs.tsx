@@ -1,3 +1,4 @@
+import { paymentLabelHasIcon } from "@/lib/payment-label";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -540,7 +541,7 @@ export function StealthTariffs() {
                     : "bg-white/[0.02] border-white/[0.06] hover:border-white/20 hover:bg-white/[0.04]",
                 )}
               >
-                <Icon className={cn("h-5 w-5 transition-colors duration-300", active ? "text-saccent-400 drop-shadow-[0_0_8px_rgb(var(--stealth-accent)_/_0.6)]" : "text-zinc-500")} />
+                {!paymentLabelHasIcon(m.label) && <Icon className={cn("h-5 w-5 transition-colors duration-300", active ? "text-saccent-400 drop-shadow-[0_0_8px_rgb(var(--stealth-accent)_/_0.6)]" : "text-zinc-500")} />}
                 <span className="text-[11px] font-bold uppercase tracking-wider">{m.label}</span>
               </button>
             );

@@ -33,7 +33,7 @@ export function isLiveRemnaSubscription(sub: TelegramRemoteSubscription): boolea
     if (!Number.isNaN(expireAt.getTime()) && expireAt.getTime() <= Date.now()) return false;
   }
   const status = sub.status?.toUpperCase();
-  return status !== "EXPIRED" && status !== "DISABLED";
+  return status !== "EXPIRED" && status !== "DISABLED" && status !== "MISSING";
 }
 
 export async function findTelegramSubscriptions(telegramId: string): Promise<TelegramRemoteSubscription[]> {
@@ -87,7 +87,7 @@ export async function checkTelegramSubscriptionOwners(ids: string[], clientId?: 
   if (subscriptions.some(sub => sub.ownerId !== clientId) || clients.some(client => client.id !== clientId)) throw accountConflict();
 }
 
-async function adminDetachedUuids(clientId: string): Promise<Set<string>> {
+export async function adminDetachedUuids(clientId?: string): Promise<Set<string>> {
   const rows = await prisma.giftHistory.findMany({
     where: { clientId, eventType: { in: ADMIN_DETACH_EVENTS } },
     select: { metadata: true },
@@ -108,13 +108,14 @@ async function loadRemoteSubscription(uuid: string, known?: TelegramRemoteSubscr
   try {
     const result = await remnaGetUser(uuid);
     if (result.error || !result.data || typeof result.data !== "object") {
-      return { remnawaveUuid: uuid, status: null, expireAt: null };
+      if (result.status === 404) return { remnawaveUuid: uuid, status: "MISSING", expireAt: null };
+      throw unavailable();
     }
     const raw = result.data as Record<string, unknown>;
     const user = (raw.response ?? raw) as Record<string, unknown>;
     return parseRemoteSubscription(user, uuid);
   } catch {
-    return { remnawaveUuid: uuid, status: null, expireAt: null };
+    throw unavailable();
   }
 }
 
@@ -142,7 +143,7 @@ export async function restoreTelegramSubscriptions(
   for (const uuid of allIds) {
     const remote = await loadRemoteSubscription(uuid, known.get(uuid));
     if (isLiveRemnaSubscription(remote)) live.push(uuid);
-    else dead.push(remote);
+    else if (remote.status !== "MISSING") dead.push(remote);
   }
 
   let selected: string[];

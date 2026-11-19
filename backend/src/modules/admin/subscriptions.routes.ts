@@ -362,14 +362,17 @@ adminSubscriptionsRouter.post("/:subId/remna/unlink", asyncRoute(async (req, res
   });
   if (!sub) return res.status(404).json({ message: "Подписка не найдена" });
   if (!sub.remnawaveUuid) return res.status(400).json({ message: "Подписка уже не привязана к Remna" });
-  await prisma.subscription.update({ where: { id: sub.id }, data: { remnawaveUuid: null } });
-  await prisma.giftHistory.create({
-    data: {
-      clientId: sub.ownerId,
-      subscriptionId: sub.id,
-      eventType: "UNLINKED",
-      metadata: { unlinkedBy: "admin", remnawaveUuid: sub.remnawaveUuid },
-    },
+  await prisma.$transaction(async tx => {
+    await tx.subscription.update({ where: { id: sub.id }, data: { remnawaveUuid: null } });
+    await tx.giftHistory.create({
+      data: {
+        clientId: sub.ownerId,
+        subscriptionId: sub.id,
+        eventType: "UNLINKED",
+        metadata: { unlinkedBy: "admin", remnawaveUuid: sub.remnawaveUuid },
+      },
+    });
+    await tx.client.updateMany({ where: { id: sub.ownerId, remnawaveUuid: sub.remnawaveUuid }, data: { remnawaveUuid: null } });
   });
   await normalizeClientSubscriptionSlots(sub.ownerId, [sub.remnawaveUuid]).catch((e) => {
     console.error("[admin/subscriptions] slot normalization failed:", e);

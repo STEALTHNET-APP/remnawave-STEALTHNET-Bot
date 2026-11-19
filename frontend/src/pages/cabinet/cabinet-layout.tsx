@@ -411,7 +411,14 @@ function CabinetShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [railHovered, setRailHovered] = useState(false);
   const [railFocused, setRailFocused] = useState(false);
-  const [railPinned, setRailPinned] = useState(false);
+  const [railPinned, setRailPinned] = useState(() => {
+    try { return localStorage.getItem("stealthnet.cabinet.menuPinned") === "true"; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("stealthnet.cabinet.menuPinned", String(railPinned)); }
+    catch {}
+  }, [railPinned]);
   const railLeaveTimer = useRef<ReturnType<typeof setTimeout>>();
   const railExpanded = railHovered || railFocused || railPinned;
   useEffect(() => () => clearTimeout(railLeaveTimer.current), []);

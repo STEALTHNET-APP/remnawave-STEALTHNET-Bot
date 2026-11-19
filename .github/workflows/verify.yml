@@ -32,9 +32,10 @@ jobs:
         run: |
           node tests/merge-clients-remna.cjs
           node tests/email-template-legacy-subject.cjs
-          node --experimental-vm-modules --experimental-test-module-mocks --test tests/groq-models.test.mjs tests/telegram-subscriptions.test.mjs tests/telegram-register-discovery.test.mjs tests/remna-duplicate-profiles.test.mjs tests/email-unsubscribe.test.mjs
+          node --experimental-vm-modules --experimental-test-module-mocks --test tests/groq-models.test.mjs tests/telegram-subscriptions.test.mjs tests/telegram-register-discovery.test.mjs tests/remna-duplicate-profiles.test.mjs tests/email-unsubscribe.test.mjs tests/maintenance-nov19.test.mjs
           node --import tsx --test src/modules/ticket/ticket-client-notify.service.test.ts
       - run: npm --prefix bot test
+      - run: node --test bot/tests/terms.test.mjs
       - run: npm --prefix bot run build
       - run: npm --prefix frontend run build
       - run: python3 scripts/tests/prebuilt.py

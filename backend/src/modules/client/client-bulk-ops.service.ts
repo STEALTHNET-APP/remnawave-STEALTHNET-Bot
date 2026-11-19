@@ -255,7 +255,7 @@ export async function syncAllSubscriptionsFromRemna(clientId: string): Promise<B
           data: { remnawaveUuid: null, remnaStatus: "MISSING", remnaSyncedAt: new Date() },
         });
         if (sub.subscriptionIndex === 0) {
-          await prisma.client.update({ where: { id: clientId }, data: { remnawaveUuid: null } }).catch(() => {});
+          await prisma.client.updateMany({ where: { id: clientId, remnawaveUuid: sub.remnawaveUuid }, data: { remnawaveUuid: null } });
         }
         pushItem(report, {
           subscriptionId: sub.id,

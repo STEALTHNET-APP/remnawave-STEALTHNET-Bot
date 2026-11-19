@@ -1,3 +1,4 @@
+import { paymentLabelHasIcon } from "@/lib/payment-label";
 import { CloudPaymentsSubscriptions } from "@/components/cabinet/cloudpayments-subscriptions";
 import { PasswordHint } from "@/components/password-hint";
 import { useEffect, useState } from "react";
@@ -683,7 +684,7 @@ async function startTopUpCloudpayments() {
                 </div>
 
                 <div className="grid grid-cols-4 gap-2">
-                  {[100, 300, 500, 1000].map((n) => {
+                  {[currency.toLowerCase() === "rub" ? 150 : 100, 300, 500, 1000].map((n) => {
                     const isActive = topUpAmount === String(n);
                     return (
                       <button
@@ -833,15 +834,15 @@ async function startTopUpCloudpayments() {
                     <Button key={p.id} size="lg" variant="outline" onClick={p.onClick} disabled={topUpLoading} className={btnCls}>
                       {isMiniapp ? (
                         <>
-                          <div className={cn("p-2 rounded-xl", c.bg10)}>
-                            {topUpLoading ? <Loader2 className={cn("h-6 w-6 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-6 w-6", c.text)} /> : <CreditCard className={cn("h-6 w-6", c.text)} />}
+                          <div className={cn("p-2 rounded-xl", c.bg10, !topUpLoading && paymentLabelHasIcon(p.label) && "hidden")}>
+                            {topUpLoading ? <Loader2 className={cn("h-6 w-6 animate-spin", c.text)} /> : paymentLabelHasIcon(p.label) ? null : p.icon === "crypto" ? <Zap className={cn("h-6 w-6", c.text)} /> : <CreditCard className={cn("h-6 w-6", c.text)} />}
                           </div>
                           <span className="text-base font-bold">{p.label}</span>
                         </>
                       ) : (
                         <>
-                          <div className={cn("absolute left-6 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20)}>
-                            {topUpLoading ? <Loader2 className={cn("h-5 w-5 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-5 w-5", c.text)} /> : <CreditCard className={cn("h-5 w-5", c.text)} />}
+                          <div className={cn("absolute left-6 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20, !topUpLoading && paymentLabelHasIcon(p.label) && "hidden")}>
+                            {topUpLoading ? <Loader2 className={cn("h-5 w-5 animate-spin", c.text)} /> : paymentLabelHasIcon(p.label) ? null : p.icon === "crypto" ? <Zap className={cn("h-5 w-5", c.text)} /> : <CreditCard className={cn("h-5 w-5", c.text)} />}
                           </div>
                           <span className="text-base font-medium">{p.label}</span>
                         </>
@@ -874,7 +875,7 @@ async function startTopUpCloudpayments() {
           <strong className="au-balance-amount">{formatMoney(client.balance, client.preferredCurrency)}</strong>
           <label className="au-amount-label" htmlFor="au-topup">Сумма пополнения, {currency.toUpperCase()}</label>
           <input id="au-topup" type="number" inputMode="decimal" min="1" step="0.01" placeholder="Введите сумму" value={topUpAmount} onChange={e=>setTopUpAmount(e.target.value)}/>
-          <div className="au-amount-presets">{[100,300,500,1000].map(n=><button key={n} aria-pressed={topUpAmount===String(n)} onClick={()=>setTopUpAmount(String(n))}>{n}</button>)}</div>
+          <div className="au-amount-presets">{[currency.toLowerCase() === "rub" ? 150 : 100,300,500,1000].map(n=><button key={n} aria-pressed={topUpAmount===String(n)} onClick={()=>setTopUpAmount(String(n))}>{n}</button>)}</div>
           <button className="au-balance-pay" onClick={()=>{const amount=Number(topUpAmount.replace(",","."));if(!Number.isFinite(amount)||amount<1){setTopUpError(t("cabinet.profile.top_up_min"));return;}setTopUpError(null);setTopUpModalOpen(true);}} disabled={!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || telegramStarsEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || cispayEnabled || paritypayEnabled || cloudpaymentsEnabled || lavaEnabled || overpayEnabled)}><CreditCard size={18}/>Пополнить баланс</button>
           {topUpError&&<p role="alert">{topUpError}</p>}
           {!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || telegramStarsEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || cispayEnabled || paritypayEnabled || cloudpaymentsEnabled || lavaEnabled || overpayEnabled)&&<p>Пополнение сейчас недоступно</p>}

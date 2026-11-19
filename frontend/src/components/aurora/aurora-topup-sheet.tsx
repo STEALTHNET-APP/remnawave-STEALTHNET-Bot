@@ -1,3 +1,4 @@
+import { paymentLabelHasIcon } from "@/lib/payment-label";
 /**
  * AuroraTopUpSheet — шторка пополнения баланса в дизайне Aurora.
  *
@@ -216,7 +217,7 @@ if (Boolean(config.paritypayEnabled) && isRub) {
     onClose();
   }
 
-  const presets = isRub ? [100, 300, 500, 1000] : [5, 10, 20, 50];
+  const presets = isRub ? [150, 300, 500, 1000] : [5, 10, 20, 50];
 
   const currencySymbol = isRub ? "₽" : currency.toUpperCase() === "USD" ? "$" : currency.toUpperCase();
 
@@ -455,7 +456,7 @@ if (Boolean(config.paritypayEnabled) && isRub) {
                             : "bg-[var(--au-bg)] text-[var(--au-muted)]",
                         )}
                       >
-                        <Icon className="h-5 w-5" />
+                        {!paymentLabelHasIcon(m.label) && <Icon className="h-5 w-5" />}
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[14.5px] font-bold text-[var(--au-ink)]">{m.label}</div>

@@ -1,3 +1,4 @@
+import { adminDetachedUuids } from "../client/telegram-subscriptions.service.js";
 /**
  * Синхронизация клиентов панели с Remna (из Remna и в Remna).
  */
@@ -63,6 +64,7 @@ export async function syncFromRemna(): Promise<{
   // Берём настройки панели (язык/валюта по умолчанию),
   // чтобы новые клиенты из Remna создавались с теми же значениями.
   const config = await getSystemConfig();
+  const detached = await adminDetachedUuids();
   const defaultLang = config.defaultLanguage ?? "ru";
   const defaultCurrency = (config.defaultCurrency ?? "usd").toLowerCase();
   // Sync from Remna создаёт «безбот'овых» клиентов (источник истины — Remna,
@@ -146,6 +148,7 @@ export async function syncFromRemna(): Promise<{
         try {
           const linkedSubscription = subscriptionByUuid.get(uuid) ?? null;
           const existingByUuid = clientByUuid.get(uuid) ?? null;
+          if (!linkedSubscription && !existingByUuid && detached.has(uuid)) { result.skipped++; continue; }
           const existingByTg = telegramId ? clientByTg.get(telegramId) ?? null : null;
           const existingByEmail = email ? clientByEmail.get(email) ?? null : null;
 

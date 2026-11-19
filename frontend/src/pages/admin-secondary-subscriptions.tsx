@@ -234,6 +234,7 @@ export function AdminSecondarySubscriptionsPage() {
         if (result.remnaUserKeptReason) await adminAlert(result.remnaUserKeptReason);
       } else {
         const result = await api.deleteSecondarySubscriptionsBulk(token, deleteRequest.ids, mode === "remna");
+        if (result.failedIds?.length) await adminAlert(`Не удалось удалить ${result.failedIds.length} подписок в Remnawave. Их записи сохранены — можно повторить операцию.`);
         if (mode === "remna" && result.remnaUserKept > 0) {
           await adminAlert(`Пользователи Remnawave сохранены для ${result.remnaUserKept} подписок: UUID используется другими подписками или клиентами.`);
         }

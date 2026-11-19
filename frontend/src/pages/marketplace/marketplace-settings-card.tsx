@@ -21,7 +21,7 @@ export function MarketplaceSettingsCard() {
   const { t } = useTranslation();
   const { state } = useAuth();
   const [status, setStatus] = useState<MarketplaceStatusDto | null>(null);
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(false);
   const [role, setRole] = useState<"client" | "hub">("client");
   const [contactUsername, setContactUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -123,7 +123,7 @@ export function MarketplaceSettingsCard() {
             <Label className="text-base font-medium">{t("admin.marketplace.settings.enabled")}</Label>
             <p className="text-xs text-muted-foreground">{t("admin.marketplace.settings.enabled_hint")}</p>
           </div>
-          <Switch checked={enabled} onCheckedChange={setEnabled} />
+          <Switch checked={enabled} onCheckedChange={setEnabled} disabled={!status || saving} />
         </div>
 
         <div>
@@ -168,10 +168,10 @@ export function MarketplaceSettingsCard() {
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
-          <Button onClick={save} disabled={saving}>
+          <Button type="button" onClick={save} disabled={!status || saving}>
             <Save className="h-3.5 w-3.5" /> {saving ? "…" : t("admin.marketplace.settings.save")}
           </Button>
-          <Button variant="outline" onClick={connect} disabled={connecting}>
+          <Button type="button" variant="outline" onClick={connect} disabled={!status || !enabled || connecting}>
             {connecting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Plug className="h-3.5 w-3.5" />}
             {t("admin.marketplace.settings.connect_now")}
           </Button>

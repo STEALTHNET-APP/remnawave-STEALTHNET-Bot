@@ -109,7 +109,7 @@ test('imports all profiles on repeated starts without changing the primary or ex
 
 test('restores the legacy primary before importing additional profiles', async () => {
   const client = { id: 'owner', remnawaveUuid: 'primary' };
-  const t = await setup({ clients: [client] });
+  const t = await setup({ clients: [client], remotes: { primary: { status: 200, data: user('primary') } } });
   await t.restoreTelegramSubscriptions(client, [remote('second')]);
   assert.deepEqual(t.subscriptions.map(s => [s.remnawaveUuid, s.subscriptionIndex]), [['primary', 0], ['second', 1]]);
 });
@@ -177,4 +177,23 @@ test('installations without Remna do not call its API', async () => {
   const t = await setup({ configured: false });
   assert.deepEqual(Array.from(await t.findTelegramSubscriptions('123')), []);
   assert.equal(t.requests.length, 0);
+});
+
+for (const status of [400, 401, 429, 503, 504]) {
+  test(`legacy profile lookup ${status} preserves local subscriptions and stops import`, async () => {
+    const client = { id: 'owner', remnawaveUuid: 'primary' };
+    const t = await setup({ clients: [client], remotes: { primary: { status, error: 'unavailable' } } });
+    await assert.rejects(t.restoreTelegramSubscriptions(client, [remote('second')]), error => error.status === 503);
+    assert.equal(t.subscriptions.length, 0);
+    assert.equal(t.writes.length, 0);
+    assert.equal(t.clients[0].remnawaveUuid, 'primary');
+  });
+}
+
+test('a confirmed missing legacy profile is not restored', async () => {
+  const client = { id: 'owner', remnawaveUuid: 'missing' };
+  const t = await setup({ clients: [client] });
+  await t.restoreTelegramSubscriptions(client, []);
+  assert.equal(t.subscriptions.length, 0);
+  assert.equal(t.writes.length, 0);
 });

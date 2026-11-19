@@ -1447,7 +1447,7 @@ export const api = {
     token: string,
     ids: string[],
     deleteRemnaUser = false
-  ): Promise<{ success: boolean; deleted: number; remnaUserDeleted: number; remnaUserKept: number }> {
+  ): Promise<{ success: boolean; deleted: number; remnaUserDeleted: number; remnaUserKept: number; failedIds: string[] }> {
     const q = deleteRemnaUser ? "?deleteRemnaUser=true" : "";
     return request(`/admin/secondary-subscriptions/bulk${q}`, {
       method: "DELETE",

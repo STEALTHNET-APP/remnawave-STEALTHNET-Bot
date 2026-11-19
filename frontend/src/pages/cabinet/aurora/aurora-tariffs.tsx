@@ -1,3 +1,4 @@
+import { paymentLabelHasIcon } from "@/lib/payment-label";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -690,7 +691,7 @@ export function AuroraTariffs() {
                           : "border-transparent bg-[var(--au-surface)]",
                       )}
                     >
-                      <Icon className={cn("h-[21px] w-[21px]", active ? "text-[var(--au-from)]" : "text-[var(--au-muted)]")} />
+                      {!paymentLabelHasIcon(m.label) && <Icon className={cn("h-[21px] w-[21px]", active ? "text-[var(--au-from)]" : "text-[var(--au-muted)]")} />}
                       <span className={cn("text-[12.5px] font-bold leading-tight", active ? "text-[var(--au-ink)]" : "text-[var(--au-muted)]")}>{m.label}</span>
                     </button>
                   );

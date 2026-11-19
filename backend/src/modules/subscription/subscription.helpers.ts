@@ -327,39 +327,17 @@ export async function normalizeClientSubscriptionSlots(clientId: string, removed
     const owner = await db.client.findUniqueOrThrow({ where: { id: clientId } });
     const subs = await db.subscription.findMany({ where: { ownerId: clientId }, orderBy: [{ subscriptionIndex: "asc" }, { createdAt: "asc" }] });
     const untouched = { primaryId: null, primaryRemnawaveUuid: owner.remnawaveUuid, promotedId: null, reindexed: false };
-    let current = subs;
-    let phantomsRemoved = 0;
-    const removed = new Set(removedUuids);
-    if (subs.some(sub => !!sub.tariffId || !!sub.expireAt || !!sub.trialId)) {
-      const phantoms = subs.filter(sub =>
-        !!sub.remnawaveUuid && !sub.tariffId && !sub.expireAt && !sub.trialId
-        && !sub.giftStatus && !sub.purchasedAsGift && !sub.giftedToClientId);
-      if (phantoms.length) {
-        const giftCodes = await db.giftCode.findMany({
-          where: { subscriptionId: { in: phantoms.map(sub => sub.id) } },
-          select: { subscriptionId: true },
-        });
-        const withGifts = new Set(giftCodes.map(code => code.subscriptionId));
-        const removable = phantoms.filter(sub => !withGifts.has(sub.id));
-        if (removable.length) {
-          await db.subscription.deleteMany({ where: { id: { in: removable.map(sub => sub.id) } } });
-          for (const sub of removable) if (sub.remnawaveUuid) removed.add(sub.remnawaveUuid);
-          phantomsRemoved = removable.length;
-          current = await db.subscription.findMany({ where: { ownerId: clientId }, orderBy: [{ subscriptionIndex: "asc" }, { createdAt: "asc" }] });
-        }
-      }
-    }
-    if (!phantomsRemoved && owner.remnawaveUuid && !removed.has(owner.remnawaveUuid) && !current.some(s => s.remnawaveUuid === owner.remnawaveUuid)) return untouched;
-    const { ordered, promotedId, reindexed } = planSubscriptionSlotOrder(current);
+    if (owner.remnawaveUuid && !removedUuids.includes(owner.remnawaveUuid) && !subs.some(s => s.remnawaveUuid === owner.remnawaveUuid)) return untouched;
+    const { ordered, promotedId, reindexed } = planSubscriptionSlotOrder(subs);
     if (!ordered.length) {
-      if (owner.remnawaveUuid && removed.has(owner.remnawaveUuid)) {
+      if (owner.remnawaveUuid && removedUuids.includes(owner.remnawaveUuid)) {
         await db.client.update({ where: { id: clientId }, data: { remnawaveUuid: null, currentTariffId: null, autoRenewEnabled: false, autoRenewTariffId: null, autoRenewPriceOptionId: null, autoRenewExtraDevices: 0, customPrimaryPrice: null, currentPricePerDay: null } });
         return { ...untouched, primaryRemnawaveUuid: null };
       }
       return untouched;
     }
     if (reindexed) {
-      const temporary = Math.min(0, ...current.map(s => s.subscriptionIndex)) - 1;
+      const temporary = Math.min(0, ...subs.map(s => s.subscriptionIndex)) - 1;
       for (let i = 0; i < ordered.length; i++) await db.subscription.update({ where: { id: ordered[i].id }, data: { subscriptionIndex: temporary - i } });
       for (let i = 0; i < ordered.length; i++) await db.subscription.update({ where: { id: ordered[i].id }, data: { subscriptionIndex: i } });
     }

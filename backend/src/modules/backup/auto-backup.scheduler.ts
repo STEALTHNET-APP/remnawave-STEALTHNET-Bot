@@ -1,3 +1,4 @@
+import { getBackupDiskUsage, backupDiskLine, type BackupDiskUsage } from "./backup-disk.js";
 import { holdBackup } from "./backup-retention.js";
 import cron, { type ScheduledTask } from "node-cron";
 import { writeFile } from "node:fs/promises";
@@ -18,7 +19,7 @@ let running = false;
 
 interface TelegramDestination { botToken: string; chatId: string; topicId: number | null }
 interface TelegramResult { ok?: boolean; description?: string; result?: { message_id?: number }; parameters?: { retry_after?: number } }
-interface BackupArchiveInfo { bytes: number; sha256: string }
+interface BackupArchiveInfo { bytes: number; sha256: string; disk: BackupDiskUsage | null }
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -59,6 +60,7 @@ function partCaption(archive: BackupArchiveInfo, index: number, total: number, r
     ...panelLines(remnawaveVersion),
     "🗄️ <b>СУБД:</b> PostgreSQL (Docker)",
     `📊 <b>Размер:</b> ${formatSize(archive.bytes)}`,
+    backupDiskLine(archive.disk),
     `📅 <b>Дата:</b> ${formatDate(new Date())}`,
   ];
   if (total > 1) lines.push(`🔢 <b>Часть:</b> ${index} из ${total}`);
@@ -75,6 +77,7 @@ function manifestCaption(archive: BackupArchiveInfo, total: number, remnawaveVer
     "",
     ...panelLines(remnawaveVersion),
     `📊 <b>Общий размер:</b> ${formatSize(archive.bytes)}`,
+    backupDiskLine(archive.disk),
     `🔐 <b>SHA-256:</b> <code>${archive.sha256}</code>`,
     "💡 <i>Для восстановления: объединить части по порядку и распаковать gzip → SQL</i>",
     SEPARATOR,
@@ -162,7 +165,8 @@ export async function runAutoBackup(options: { force?: boolean } = {}): Promise<
         const db = source.url && parseDatabaseUrl(source.url);
         if (!db) throw new Error(`Не настроено подключение к БД: ${source.name}`);
         console.log(`${LOG} Creating compressed backup: ${source.name}`);
-        const archive = await saveCompressedBackup(db, source.name);
+        const saved = await saveCompressedBackup(db, source.name);
+        const archive = { ...saved, disk: await getBackupDiskUsage(saved.fullPath) };
         const release = holdBackup(archive.fullPath);
         const total = Math.ceil(archive.bytes / TELEGRAM_PART_BYTES);
         try {
@@ -180,6 +184,7 @@ export async function runAutoBackup(options: { force?: boolean } = {}): Promise<
             remnawaveVersion,
             bytes: archive.bytes,
             sha256: archive.sha256,
+            disk: archive.disk,
             source: source.name,
             format: "SQL + gzip",
             parts: total,
