@@ -96,7 +96,7 @@ export function ClientLoginPage() {
         setBrand({ serviceName: c.serviceName ?? "", logo: c.logo ?? null });
         setTelegramBotUsername(c.telegramBotUsername ?? null);
         setGoogleEnabled(!!c.googleLoginEnabled);
-        setPasswordResetEnabled(!!c.passwordResetEnabled);
+        setPasswordResetEnabled(c.passwordResetEnabled !== false);
         setGoogleClientId(c.googleClientId ?? null);
         setPublicAppUrl(c.publicAppUrl ?? null);
         setAppleEnabled(!!c.appleLoginEnabled);
@@ -277,11 +277,18 @@ export function ClientLoginPage() {
                 {emailError && <p className="text-xs text-destructive">{emailError}</p>}
               </div>
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">{t("cabinet.login.password_label")}</Label>
-                  {passwordResetEnabled && <Link to="/cabinet/forgot-password" className="text-xs text-primary hover:underline">{t("cabinet.login.forgot_password", "Забыли пароль?")}</Link>}
-                </div>
+                <Label htmlFor="password">{t("cabinet.login.password_label")}</Label>
                 <Input id="password" type="password" name="login_password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="off" data-form-type="other" className="h-12 rounded-xl bg-card border-muted-foreground/75 text-base shadow-sm dark:bg-background/50 dark:border-white/15 focus-visible:ring-primary/50 transition-all" />
+                {passwordResetEnabled && (
+                  <div className="flex justify-end pt-1">
+                    <Link
+                      to="/cabinet/forgot-password"
+                      className="text-sm font-semibold text-primary hover:text-primary/80 hover:underline transition-colors"
+                    >
+                      {t("cabinet.login.forgot_password", "Забыли пароль?")}
+                    </Link>
+                  </div>
+                )}
               </div>
               <Button type="submit" className="w-full h-14 rounded-2xl text-base font-bold shadow-xl hover:scale-[1.02] transition-all gap-2" disabled={loading}>
                 {loading ? t("cabinet.login.submit_loading") : t("cabinet.login.submit")}

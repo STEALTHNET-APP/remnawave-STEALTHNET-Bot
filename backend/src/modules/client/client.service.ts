@@ -160,7 +160,7 @@ export const SYSTEM_CONFIG_KEYS = [
   // T11+T13+T14 (11.05.2026): редактируемые тексты бота + URL'ы для документов и Telegram-прокси.
   "refund_link", // Политика возврата (URL — Telegraph)
   "tariff_restriction_message", // T-tariff-restriction: дефолтный текст причины ограничения тарифа
-  "password_reset_enabled", // T-pwd-reset: вкл/выкл восстановление пароля клиента (по умолчанию выкл)
+  "password_reset_enabled", // T-pwd-reset: вкл/выкл восстановление пароля клиента (по умолчанию вкл)
   "support_hours_from", "support_hours_to", // Часы работы поддержки (формат "10:00")
   "tg_proxy_text", "tg_proxy_url_primary", "tg_proxy_url_backup", "tg_proxy_servers", // Бесплатный TG-прокси: текст экрана + 2 legacy-URL + список прокси-серверов (JSON)
   "reissue_warning_text", // T13: текст диалога «Обновление подписки»
@@ -835,7 +835,7 @@ async function loadSystemConfigFromDb() {
     // Default FALSE: по умолчанию одна подписка (hard-replace); мульти — только если явно "true".
     multiSubscriptionsEnabled: parseMultiSubscriptionsEnabled(map.multi_subscriptions_enabled),
     warnBeforeAdditionalSubscription: map.warn_before_additional_subscription !== "false",
-    passwordResetEnabled: map.password_reset_enabled === "true" || map.password_reset_enabled === "1",
+    passwordResetEnabled: map.password_reset_enabled !== "false" && map.password_reset_enabled !== "0",
     /** Master switch для антибот-фильтра. По умолчанию включён. */
     signupProtectionEnabled: (map.signup_protection_enabled ?? "true").trim() !== "false",
     /** Дополнительный список заблокированных доменов (через запятую) — расширяет встроенный */
@@ -1485,7 +1485,7 @@ export async function getPublicConfig(_forCloneBot?: { markupPercent?: number | 
     stealthHeroImage: full.stealthHeroImage ?? null,
     multiSubscriptionsEnabled: isMultiSubscriptionsEnabled(full),
     warnBeforeAdditionalSubscription: full.warnBeforeAdditionalSubscription,
-    passwordResetEnabled: full.passwordResetEnabled ?? false,
+    passwordResetEnabled: full.passwordResetEnabled ?? true,
     // фронту нужен флаг — настроен ли SMTP.
     // Если SMTP не настроен или skipEmailVerification=true → email привязывается
     // мгновенно (без письма) через POST /client/link-email-direct.
