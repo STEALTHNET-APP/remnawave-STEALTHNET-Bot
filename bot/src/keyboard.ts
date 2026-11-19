@@ -363,7 +363,7 @@ export function topUpPresets(currency: string, backLabel?: string | null, innerS
   return {
     inline_keyboard: [
       [
-        btn(`${sym} 100`, "topup:100", topup, cardId),
+        btn(`${sym} ${currency.toUpperCase() === "RUB" ? 150 : 100}`, `topup:${currency.toUpperCase() === "RUB" ? 150 : 100}`, topup, cardId),
         btn(`${sym} 300`, "topup:300", topup, cardId),
         btn(`${sym} 500`, "topup:500", topup, cardId),
       ],

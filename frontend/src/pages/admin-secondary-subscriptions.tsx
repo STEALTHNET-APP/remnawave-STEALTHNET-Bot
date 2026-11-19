@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SubscriptionDeleteDialog, type SubscriptionDeleteMode } from "@/components/admin/subscription-delete-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,7 @@ import {
   Loader2,
   Pencil,
   Crown,
+  Unlink,
 } from "lucide-react";
 
 /**
@@ -127,6 +129,12 @@ export function AdminSecondarySubscriptionsPage() {
   }, [searchInput, appliedSearch, updateList]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteRequest, setDeleteRequest] = useState<{ ids: string[] } | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteHasRemnaUser = !!data?.items.some(
+    (item) => !!item.remnawaveUuid && !!deleteRequest?.ids.includes(item.id),
+  );
   const filterKey = JSON.stringify(filters);
   useEffect(() => setSelectedIds(new Set()), [filterKey]);
   const allSelected = !!data?.items.length && data.items.every((item) => selectedIds.has(item.id));
@@ -205,29 +213,40 @@ export function AdminSecondarySubscriptionsPage() {
   };
 
   const handleDeleteSelected = async () => {
-    if (!token) return;
-    if (!(await adminConfirm(`Удалить ${selectedIds.size} подписок? Это действие нельзя отменить.`))) return;
-    
-    try {
-      await api.deleteSecondarySubscriptionsBulk(token, Array.from(selectedIds));
-      setSelectedIds(new Set());
-      fetchItems();
-    } catch (err) {
-      console.error("Failed to bulk delete", err);
-      (await adminAlert("Ошибка при удалении"));
-    }
+    if (!token || !selectedIds.size) return;
+    setDeleteError(null);
+    setDeleteRequest({ ids: Array.from(selectedIds) });
   };
 
   const handleDeleteSingle = async (id: string) => {
     if (!token) return;
-    if (!(await adminConfirm("Удалить эту подписку?"))) return;
+    setDeleteError(null);
+    setDeleteRequest({ ids: [id] });
+  };
+
+  const confirmDelete = async (mode: SubscriptionDeleteMode) => {
+    if (!token || !deleteRequest) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
     try {
-      await api.deleteSecondarySubscription(token, id);
-      setSelectedIds((previous) => new Set([...previous].filter((value) => value !== id)));
+      if (deleteRequest.ids.length === 1) {
+        const result = await api.deleteSecondarySubscription(token, deleteRequest.ids[0], mode === "remna");
+        if (result.remnaUserKeptReason) await adminAlert(result.remnaUserKeptReason);
+      } else {
+        const result = await api.deleteSecondarySubscriptionsBulk(token, deleteRequest.ids, mode === "remna");
+        if (result.failedIds?.length) await adminAlert(`Не удалось удалить ${result.failedIds.length} подписок в Remnawave. Их записи сохранены — можно повторить операцию.`);
+        if (mode === "remna" && result.remnaUserKept > 0) {
+          await adminAlert(`Пользователи Remnawave сохранены для ${result.remnaUserKept} подписок: UUID используется другими подписками или клиентами.`);
+        }
+      }
+      setSelectedIds((previous) => new Set([...previous].filter((value) => !deleteRequest.ids.includes(value))));
+      setDeleteRequest(null);
       fetchItems();
     } catch (err) {
       console.error("Failed to delete", err);
-      (await adminAlert("Ошибка при удалении"));
+      setDeleteError(err instanceof Error ? err.message : "Ошибка при удалении");
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -244,6 +263,19 @@ export function AdminSecondarySubscriptionsPage() {
     } catch (err) {
       console.error("Failed to make primary", err);
       await adminAlert(err instanceof Error ? err.message : "Ошибка при смене основной подписки");
+    }
+  };
+
+  const handleUnlink = async (id: string) => {
+    if (!token) return;
+    if (!(await adminConfirm("Отвязать эту подписку от Remna? UUID будет очищен, а пользователь Remnawave останется нетронутым."))) return;
+    try {
+      await api.subscriptionRemnaUnlink(token, id);
+      setDetailId(null);
+      fetchItems();
+    } catch (err) {
+      console.error("Failed to unlink", err);
+      await adminAlert(err instanceof Error ? err.message : "Ошибка при отвязке подписки");
     }
   };
 
@@ -724,23 +756,36 @@ export function AdminSecondarySubscriptionsPage() {
                       <Activity className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" /> Данные Remnawave
                     </h3>
                     {/* кнопка «Редактировать» — открывает модалку с полями. */}
-                    {detailData.remnaData && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl h-8 px-3 text-[11px] font-bold gap-1.5 border-border bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08]"
-                        onClick={() => {
-                          setEditAddDays("");
-                          setEditTrafficGb("");
-                          setEditTrafficUnlimited(false);
-                          setEditError(null);
-                          setEditOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-3 w-3" />
-                        Редактировать
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {detailData.remnawaveUuid && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-xl h-8 px-3 text-[11px] font-bold gap-1.5 border-border bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08]"
+                          onClick={() => handleUnlink(detailData.id)}
+                        >
+                          <Unlink className="h-3 w-3" />
+                          Отвязать
+                        </Button>
+                      )}
+                      {detailData.remnaData && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-xl h-8 px-3 text-[11px] font-bold gap-1.5 border-border bg-foreground/[0.04] dark:bg-white/[0.04] hover:bg-foreground/[0.08]"
+                          onClick={() => {
+                            setEditAddDays("");
+                            setEditTrafficGb("");
+                            setEditTrafficUnlimited(false);
+                            setEditError(null);
+                            setEditOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Редактировать
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   {detailData.remnaData ? (() => {
                     // корректные имена полей Remna API
@@ -1293,6 +1338,16 @@ export function AdminSecondarySubscriptionsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <SubscriptionDeleteDialog
+        open={!!deleteRequest}
+        count={deleteRequest?.ids.length ?? 1}
+        hasRemnaUser={deleteHasRemnaUser}
+        busy={deleteBusy}
+        error={deleteError}
+        onClose={() => { if (!deleteBusy) setDeleteRequest(null); }}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

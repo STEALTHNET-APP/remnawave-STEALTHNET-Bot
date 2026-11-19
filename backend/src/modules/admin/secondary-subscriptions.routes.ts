@@ -2,10 +2,18 @@ import express, { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../db.js";
-import { remnaGetUser, remnaUpdateUser, remnaDeleteUser, isRemnaConfigured } from "../remna/remna.client.js";
+import { remnaGetUser, remnaUpdateUser, remnaDeleteUser, isRemnaConfigured, isRemnaNotFoundError } from "../remna/remna.client.js";
 import { normalizeClientSubscriptionSlots } from "../subscription/subscription.helpers.js";
 
 export const adminSecondarySubscriptionsRouter = Router();
+
+async function remnaUuidInUse(uuid: string, subscriptionId: string, ownerId: string): Promise<boolean> {
+  const [subscriptions, clients] = await Promise.all([
+    prisma.subscription.count({ where: { remnawaveUuid: uuid, id: { not: subscriptionId } } }),
+    prisma.client.count({ where: { remnawaveUuid: uuid, id: { not: ownerId } } }),
+  ]);
+  return subscriptions > 0 || clients > 0;
+}
 
 function asyncRoute(
   fn: (req: express.Request, res: express.Response) => Promise<void | express.Response>
@@ -331,6 +339,68 @@ adminSecondarySubscriptionsRouter.patch("/:id", asyncRoute(async (req, res) => {
   return res.json({ success: true, expireAt: newExpireAt?.toISOString() ?? null, trafficLimitBytes: parsed.data.trafficLimitBytes ?? null });
 }));
 
+adminSecondarySubscriptionsRouter.delete("/bulk", asyncRoute(async (req, res) => {
+  const { ids } = req.body as { ids?: string[]; deleteRemnaUser?: boolean };
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > 1000 || ids.some(id => typeof id !== "string" || !id)) {
+    return res.status(400).json({ message: "Укажите массив ids" });
+  }
+  const deleteRemnaUser = req.query.deleteRemnaUser === "true" || req.body?.deleteRemnaUser === true;
+
+  const subs = await prisma.subscription.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, remnawaveUuid: true, ownerId: true },
+  });
+
+  let remnaUserDeleted = 0;
+  let remnaUserKept = 0;
+  const failedIds: string[] = [];
+  if (deleteRemnaUser && !isRemnaConfigured()) return res.status(503).json({ message: "Remnawave не настроен. Подписки не удалены." });
+  if (deleteRemnaUser) {
+    for (const sub of subs) {
+      if (!sub.remnawaveUuid) continue;
+      if (await remnaUuidInUse(sub.remnawaveUuid, sub.id, sub.ownerId)) {
+        remnaUserKept++;
+        continue;
+      }
+      try {
+        const result = await remnaDeleteUser(sub.remnawaveUuid);
+        if (!result.error || isRemnaNotFoundError(result.status, result.error)) remnaUserDeleted++;
+        else failedIds.push(sub.id);
+      } catch { failedIds.push(sub.id); }
+    }
+  }
+
+  const deletedSubs = subs.filter(sub => !failedIds.includes(sub.id));
+  await prisma.$transaction(async tx => {
+    await tx.giftHistory.createMany({
+      data: deletedSubs.map((s) => ({
+        clientId: s.ownerId,
+        subscriptionId: s.id,
+        eventType: "DELETED",
+        metadata: { deletedBy: "admin", bulk: true, remnawaveUuid: s.remnawaveUuid, deleteRemnaUser },
+      })),
+    });
+
+    await tx.subscription.deleteMany({ where: { id: { in: deletedSubs.map(sub => sub.id) } } });
+    for (const sub of deletedSubs) {
+      if (!sub.remnawaveUuid) continue;
+      await tx.client.updateMany({
+        where: { id: sub.ownerId, remnawaveUuid: sub.remnawaveUuid, ownedSubscriptions: { none: { remnawaveUuid: sub.remnawaveUuid } } },
+        data: { remnawaveUuid: null, currentTariffId: null, autoRenewEnabled: false },
+      });
+    }
+  });
+
+  const ownerIds = Array.from(new Set(deletedSubs.map((s) => s.ownerId)));
+  for (const ownerId of ownerIds) {
+    await normalizeClientSubscriptionSlots(ownerId, deletedSubs.filter(s => s.ownerId === ownerId && s.remnawaveUuid).map(s => s.remnawaveUuid!)).catch((e) => {
+      console.error("[admin/secondary-subscriptions] slot normalization failed:", e);
+    });
+  }
+
+  return res.json({ success: failedIds.length === 0, deleted: deletedSubs.length, remnaUserDeleted, remnaUserKept, failedIds });
+}));
+
 adminSecondarySubscriptionsRouter.delete("/:id", asyncRoute(async (req, res) => {
   const sub = await prisma.subscription.findUnique({
     where: { id: req.params.id },
@@ -338,69 +408,53 @@ adminSecondarySubscriptionsRouter.delete("/:id", asyncRoute(async (req, res) => 
   });
   if (!sub) return res.status(404).json({ message: "Подписка не найдена" });
 
-  // Delete Remnawave user if exists
-  if (sub.remnawaveUuid && isRemnaConfigured()) {
-    try {
-      await remnaDeleteUser(sub.remnawaveUuid);
-    } catch { /* best effort */ }
+  const deleteRemnaUser = req.query.deleteRemnaUser === "true";
+  let remnaUserDeleted = false;
+  let remnaUserKeptReason: string | null = null;
+
+  if (deleteRemnaUser && sub.remnawaveUuid) {
+    if (!isRemnaConfigured()) {
+      return res.status(503).json({ message: "Remnawave не настроен. Подписка не удалена." });
+    } else if (await remnaUuidInUse(sub.remnawaveUuid, sub.id, sub.ownerId)) {
+      remnaUserKeptReason = "UUID используется другой подпиской или клиентом — пользователь Remnawave сохранён";
+    } else {
+      const result = await remnaDeleteUser(sub.remnawaveUuid);
+      if (result.error && !isRemnaNotFoundError(result.status, result.error)) {
+        return res.status(result.status >= 400 && result.status < 500 ? result.status : 502)
+          .json({ message: `Remnawave: ${result.error}` });
+      }
+      remnaUserDeleted = true;
+    }
   }
 
-  // Log event
-  await prisma.giftHistory.create({
-    data: {
-      clientId: sub.ownerId,
-      subscriptionId: sub.id,
-      eventType: "DELETED",
-      metadata: { deletedBy: "admin" },
-    },
-  });
+  await prisma.$transaction(async tx => {
+    await tx.giftHistory.create({
+      data: {
+        clientId: sub.ownerId,
+        subscriptionId: sub.id,
+        eventType: "DELETED",
+        metadata: {
+          deletedBy: "admin",
+          remnawaveUuid: sub.remnawaveUuid,
+          deleteRemnaUser,
+          remnaUserDeleted,
+          remnaUserKeptReason,
+        },
+      },
+    });
 
-  // Cascade deletes GiftCodes via DB relation
-  await prisma.subscription.delete({ where: { id: sub.id } });
+    await tx.subscription.delete({ where: { id: sub.id } });
+    if (sub.remnawaveUuid) {
+      await tx.client.updateMany({
+        where: { id: sub.ownerId, remnawaveUuid: sub.remnawaveUuid, ownedSubscriptions: { none: { remnawaveUuid: sub.remnawaveUuid } } },
+        data: { remnawaveUuid: null, currentTariffId: null, autoRenewEnabled: false },
+      });
+    }
+  });
 
   await normalizeClientSubscriptionSlots(sub.ownerId, sub.remnawaveUuid ? [sub.remnawaveUuid] : []).catch((e) => {
     console.error("[admin/secondary-subscriptions] slot normalization failed:", e);
   });
 
-  return res.json({ success: true });
-}));
-
-adminSecondarySubscriptionsRouter.delete("/bulk", asyncRoute(async (req, res) => {
-  const { ids } = req.body as { ids?: string[] };
-  if (!Array.isArray(ids) || ids.length === 0) {
-    return res.status(400).json({ message: "Укажите массив ids" });
-  }
-
-  const subs = await prisma.subscription.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, remnawaveUuid: true, ownerId: true },
-  });
-
-  // Delete Remnawave users
-  if (isRemnaConfigured()) {
-    await Promise.allSettled(
-      subs.filter((s) => s.remnawaveUuid).map((s) => remnaDeleteUser(s.remnawaveUuid!))
-    );
-  }
-
-  // Log events
-  await prisma.giftHistory.createMany({
-    data: subs.map((s) => ({
-      clientId: s.ownerId,
-      subscriptionId: s.id,
-      eventType: "DELETED",
-      metadata: { deletedBy: "admin", bulk: true },
-    })),
-  });
-
-  await prisma.subscription.deleteMany({ where: { id: { in: ids } } });
-
-  const ownerIds = Array.from(new Set(subs.map((s) => s.ownerId)));
-  for (const ownerId of ownerIds) {
-    await normalizeClientSubscriptionSlots(ownerId, subs.filter(s => s.ownerId === ownerId && s.remnawaveUuid).map(s => s.remnawaveUuid!)).catch((e) => {
-      console.error("[admin/secondary-subscriptions] slot normalization failed:", e);
-    });
-  }
-
-  return res.json({ success: true, deleted: subs.length });
+  return res.json({ success: true, remnaUserDeleted, remnaUserKeptReason });
 }));

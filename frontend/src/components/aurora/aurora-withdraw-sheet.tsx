@@ -24,6 +24,8 @@ export function AuroraWithdrawSheet({ open, onClose }: { open: boolean; onClose:
 
   const [method, setMethod] = useState<WithdrawalMethod>("usdt");
   const [details, setDetails] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [recipientName, setRecipientName] = useState("");
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +38,8 @@ export function AuroraWithdrawSheet({ open, onClose }: { open: boolean; onClose:
 
   function reset() {
     setDetails("");
+    setBankName("");
+    setRecipientName("");
     setAmount("");
     setError(null);
   }
@@ -60,6 +64,16 @@ export function AuroraWithdrawSheet({ open, onClose }: { open: boolean; onClose:
       setError(t("aurora.withdraw_card_error"));
       return;
     }
+    const valueBank = bankName.trim();
+    const valueRecipient = recipientName.trim();
+    if (activeMethod === "card" && !valueBank) {
+      setError(t("aurora.withdraw_bank_error"));
+      return;
+    }
+    if (activeMethod === "card" && !valueRecipient) {
+      setError(t("aurora.withdraw_recipient_error"));
+      return;
+    }
     if (activeMethod === "sbp" && (!valueDetails.includes(",") || valueDetails.split(",").slice(1).join(",").trim().length < 2)) {
       setError(t("aurora.withdraw_sbp_error"));
       return;
@@ -67,7 +81,12 @@ export function AuroraWithdrawSheet({ open, onClose }: { open: boolean; onClose:
     setBusy(true);
     setError(null);
     try {
-      const res = await api.createWithdrawal(token, { amount: value, method: activeMethod, details: valueDetails });
+      const res = await api.createWithdrawal(token, {
+        amount: value,
+        method: activeMethod,
+        details: valueDetails,
+        ...(activeMethod === "card" ? { bankName: valueBank, recipientName: valueRecipient } : {}),
+      });
       toast.success(t("aurora.withdraw_done"), res.message);
       reset();
       onClose();
@@ -92,7 +111,7 @@ export function AuroraWithdrawSheet({ open, onClose }: { open: boolean; onClose:
         </div>
       }
       footer={
-        <AuButton onClick={submit} disabled={busy || !details.trim() || !amount.trim()}>
+        <AuButton onClick={submit} disabled={busy || !details.trim() || !amount.trim() || (activeMethod === "card" && (!bankName.trim() || !recipientName.trim()))}>
           {busy && <Loader2 className="h-4 w-4 animate-spin" />}
           {t("aurora.withdraw_submit")}
         </AuButton>
@@ -151,6 +170,42 @@ export function AuroraWithdrawSheet({ open, onClose }: { open: boolean; onClose:
           />
           <p className="px-1 text-[11.5px] text-[var(--au-muted)]">{t(`aurora.withdraw_details_${activeMethod}_hint`)}</p>
         </div>
+        {activeMethod === "card" && (
+          <>
+            <div className="space-y-1.5">
+              <label className="px-1 text-[13px] font-semibold text-[var(--au-muted)]" htmlFor="au-withdraw-bank">
+                {t("aurora.withdraw_bank")}
+              </label>
+              <AuInput
+                id="au-withdraw-bank"
+                value={bankName}
+                onChange={(e) => {
+                  setBankName(e.target.value.slice(0, 100));
+                  setError(null);
+                }}
+                placeholder={t("aurora.withdraw_bank_placeholder")}
+                autoComplete="off"
+                disabled={busy}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="px-1 text-[13px] font-semibold text-[var(--au-muted)]" htmlFor="au-withdraw-recipient">
+                {t("aurora.withdraw_recipient")}
+              </label>
+              <AuInput
+                id="au-withdraw-recipient"
+                value={recipientName}
+                onChange={(e) => {
+                  setRecipientName(e.target.value.slice(0, 100));
+                  setError(null);
+                }}
+                placeholder={t("aurora.withdraw_recipient_placeholder")}
+                autoComplete="off"
+                disabled={busy}
+              />
+            </div>
+          </>
+        )}
         <div className="space-y-1.5">
           <label className="px-1 text-[13px] font-semibold text-[var(--au-muted)]" htmlFor="au-withdraw-amount">
             {t("aurora.withdraw_amount", { min })}

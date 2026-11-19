@@ -1422,8 +1422,13 @@ export const api = {
   ): Promise<AdminSecondarySubscriptionDetail> {
     return request(`/admin/secondary-subscriptions/${id}`, { token });
   },
-  async deleteSecondarySubscription(token: string, id: string): Promise<{ success: boolean }> {
-    return request(`/admin/secondary-subscriptions/${id}`, { method: "DELETE", token });
+  async deleteSecondarySubscription(
+    token: string,
+    id: string,
+    deleteRemnaUser = false
+  ): Promise<{ success: boolean; remnaUserDeleted: boolean; remnaUserKeptReason: string | null }> {
+    const q = deleteRemnaUser ? "?deleteRemnaUser=true" : "";
+    return request(`/admin/secondary-subscriptions/${id}${q}`, { method: "DELETE", token });
   },
   /** редактирование доп. подписки админом —
    *  addDays (+/− дней к текущему expireAt), trafficLimitBytes (0 = безлимит, null = не менять). */
@@ -1438,8 +1443,13 @@ export const api = {
       token,
     });
   },
-  async deleteSecondarySubscriptionsBulk(token: string, ids: string[]): Promise<{ success: boolean; deleted: number }> {
-    return request("/admin/secondary-subscriptions/bulk", {
+  async deleteSecondarySubscriptionsBulk(
+    token: string,
+    ids: string[],
+    deleteRemnaUser = false
+  ): Promise<{ success: boolean; deleted: number; remnaUserDeleted: number; remnaUserKept: number; failedIds: string[] }> {
+    const q = deleteRemnaUser ? "?deleteRemnaUser=true" : "";
+    return request(`/admin/secondary-subscriptions/bulk${q}`, {
       method: "DELETE",
       body: JSON.stringify({ ids }),
       token,
@@ -2206,7 +2216,7 @@ export const api = {
   },
 
   // T-withdrawal (портировано из WolfVPN): заявка клиента на вывод реферального баланса.
-  async createWithdrawal(token: string, data: { amount: number; method?: "sbp" | "card" | "usdt"; details?: string; walletTrc20?: string }): Promise<{ message: string; id: string; amount: number; method: string; details: string; walletTrc20: string | null; status: string }> {
+  async createWithdrawal(token: string, data: { amount: number; method?: "sbp" | "card" | "usdt"; details?: string; walletTrc20?: string; bankName?: string; recipientName?: string }): Promise<{ message: string; id: string; amount: number; method: string; details: string; bankName?: string | null; recipientName?: string | null; walletTrc20: string | null; status: string }> {
     return request("/client/withdrawals", { method: "POST", body: JSON.stringify(data), token });
   },
   async approveWithdrawal(token: string, id: string, comment?: string): Promise<{ message: string }> {
@@ -5511,6 +5521,8 @@ export interface WithdrawalRequestRecord {
   amount: number;
   method: "sbp" | "card" | "usdt";
   details: string;
+  bankName?: string | null;
+  recipientName?: string | null;
   walletTrc20: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED";
   adminComment: string | null;

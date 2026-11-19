@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Check, X, RefreshCw, Copy, Clock3, Smartphone, CreditCard, Coins } from "lucide-react";
 import { fmtMsk } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
+import { toast } from "@/components/ui/toast";
 import { motion } from "framer-motion";
 
 type StatusFilter = "ALL" | "PENDING" | "APPROVED" | "REJECTED";
@@ -66,6 +67,7 @@ export function WithdrawalsPage() {
 
   const [filter, setFilter] = useState<StatusFilter>("PENDING");
   const [processing, setProcessing] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const statusParam = filter === "ALL" ? undefined : filter;
   const listQuery = useQuery({
@@ -86,7 +88,10 @@ export function WithdrawalsPage() {
     if (!token) return;
     const meta = methodMeta(item.method);
     const details = item.details?.trim() || item.walletTrc20 || "—";
-    if (!(await adminConfirm(`Одобрить заявку? Клиенту придёт уведомление в Telegram.\n\nПереведите ${item.amount.toFixed(2)} ₽ на реквизиты (${meta.label}: ${details}) вручную перед подтверждением.`))) return;
+    const cardInfo = item.method === "card"
+      ? `\nБанк: ${item.bankName || "Не указано"}\nПолучатель: ${item.recipientName || "Не указано"}`
+      : "";
+    if (!(await adminConfirm(`Одобрить заявку? Клиенту придёт уведомление в Telegram.\n\nПереведите ${item.amount.toFixed(2)} ₽ на реквизиты (${meta.label}: ${details})${cardInfo} вручную перед подтверждением.`))) return;
     setProcessing(item.id);
     try {
       await api.approveWithdrawal(token, item.id);
@@ -114,11 +119,16 @@ export function WithdrawalsPage() {
     }
   };
 
-  const copyText = async (text: string) => {
+  const copyText = async (text: string, id?: string, label = "Реквизиты") => {
     try {
       await navigator.clipboard.writeText(text);
+      if (id) {
+        setCopiedId(id);
+        setTimeout(() => setCopiedId((curr) => (curr === id ? null : curr)), 2000);
+      }
+      toast.success("Скопировано", label);
     } catch {
-      // ignore
+      toast.error("Не удалось скопировать", "Скопируйте значение вручную.");
     }
   };
 
@@ -251,13 +261,59 @@ export function WithdrawalsPage() {
                         size="icon"
                         variant="ghost"
                         className="h-7 w-7 shrink-0 rounded-lg"
-                        onClick={() => copyText(details)}
+                        onClick={() => copyText(details, item.id, meta.detailsLabel)}
                         title={`Скопировать ${meta.detailsLabel.toLowerCase()}`}
                       >
-                        <Copy className="h-3.5 w-3.5" />
+                        {copiedId === item.id ? (
+                          <Check className="h-3.5 w-3.5 text-emerald-500" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
                       </Button>
                     </div>
                   </div>
+                  {item.method === "card" && (
+                    <>
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Банк получателя</p>
+                        <div className="flex items-center gap-2">
+                          <span className={cn("text-xs font-medium", !item.bankName && "text-muted-foreground italic")}>
+                            {item.bankName || "Не указано"}
+                          </span>
+                          {item.bankName && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 shrink-0 rounded-lg"
+                              onClick={() => copyText(item.bankName!, `${item.id}-bank`, "Банк")}
+                              title="Скопировать банк"
+                            >
+                              {copiedId === `${item.id}-bank` ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Имя получателя</p>
+                        <div className="flex items-center gap-2">
+                          <span className={cn("text-xs font-medium", !item.recipientName && "text-muted-foreground italic")}>
+                            {item.recipientName || "Не указано"}
+                          </span>
+                          {item.recipientName && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 shrink-0 rounded-lg"
+                              onClick={() => copyText(item.recipientName!, `${item.id}-rec`, "Имя получателя")}
+                              title="Скопировать имя получателя"
+                            >
+                              {copiedId === `${item.id}-rec` ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {item.adminComment && (

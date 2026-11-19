@@ -119,17 +119,18 @@ clientProfileRouter.post("/set-password", requireClientAuth, async (req, res) =>
     select: { passwordHash: true },
   });
 
-  // Только если пароля нет. Исключение для dummy-пароля (#200) убрано: оно позволяло перезаписать
-  // существующий пароль без текущего. Смена — /change-password или «Забыли пароль?».
   if (!clientData || !canSetPasswordWithoutCurrent(clientData.passwordHash)) {
     return res.status(400).json({ message: "Пароль уже установлен. Используйте смену пароля." });
   }
 
   const newPasswordHash = await hashPassword(body.data.newPassword);
-  await prisma.client.update({
-    where: { id: client.id },
+  const saved = await prisma.client.updateMany({
+    where: { id: client.id, passwordHash: clientData.passwordHash },
     data: { passwordHash: newPasswordHash },
   });
+  if (saved.count !== 1) {
+    return res.status(409).json({ message: "Пароль уже изменился. Используйте смену пароля." });
+  }
 
   return res.json({ message: "Пароль установлен" });
 });

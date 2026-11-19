@@ -42,6 +42,7 @@ import {
   Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SubscriptionDeleteDialog, type SubscriptionDeleteMode } from "./subscription-delete-dialog";
 
 const STRATEGY_LABELS: Record<string, string> = {
   NO_RESET: "Без сброса",
@@ -265,6 +266,9 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
   const [innerTab, setInnerTab] = useState<InnerTab>("overview");
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<UpdateClientRemnaPayload>({});
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Данные Remna-пользователя — React Query с per-subscription ключом.
   const remnaQ = useQuery({
@@ -362,6 +366,23 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
       onChanged?.();
     } catch (e) {
       setActionMsg(` ${e instanceof Error ? e.message : "Ошибка"}`);
+    }
+  }
+
+  async function deleteSubscription(mode: SubscriptionDeleteMode) {
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      const result = await api.deleteSecondarySubscription(token, subscription.id, mode === "remna");
+      setDeleteOpen(false);
+      invalidate();
+      setActionMsg(result.remnaUserKeptReason
+        ?? (mode === "remna" ? " Подписка и пользователь Remnawave удалены" : " Подписка удалена из панели, пользователь Remnawave сохранён"));
+      onChanged?.();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Ошибка удаления");
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -635,20 +656,20 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
               </Button>
               <Button variant="outline" className="justify-start gap-2 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 text-[12.8px] font-semibold h-9"
                 onClick={async () => {
-                  if (!(await adminConfirm("Отвязать эту подписку от Remna? UUID будет обнулён, при следующей покупке создастся новый."))) return;
+                  if (!(await adminConfirm("Отвязать эту подписку от Remna? UUID будет обнулён, пользователь Remnawave останется. При следующей покупке создастся новый."))) return;
                   runAction("Подписка отвязана от Remna", () => api.subscriptionRemnaUnlink(token, subscription.id));
                 }}>
-                <Unlink className="h-4 w-4" /> Отвязать от Remna
+                <Unlink className="h-4 w-4" /> Отвязать от Remna (без удаления)
               </Button>
               <Button variant="outline" className="justify-start gap-2 rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 text-[12.8px] font-semibold h-9"
-                onClick={async () => {
-                  if (!(await adminConfirm("Удалить эту подписку? Она исчезнет у клиента, а пользователь в Remnawave будет удалён. Действие необратимо."))) return;
-                  runAction("Подписка удалена", () => api.deleteSecondarySubscription(token, subscription.id));
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteOpen(true);
                 }}>
                 <Trash2 className="h-4 w-4" /> Удалить подписку
               </Button>
             </div>
-            <p className="text-[11.5px] text-muted-foreground mt-2">Отзыв подписки перевыпустит ссылку — старые конфиги у клиента перестанут работать. Удаление необратимо: подписка исчезнет и у клиента, и в Remnawave.</p>
+            <p className="text-[11.5px] text-muted-foreground mt-2">Отзыв подписки перевыпустит ссылку — старые конфиги у клиента перестанут работать. Удаление можно сделать только в панели (профиль Remnawave сохранится) или вместе с профилем Remnawave.</p>
           </div>
         </TabsContent>
 
@@ -656,6 +677,16 @@ export function SubscriptionRemnaPanel({ subscription, token, remnaSquads, onCha
           <SubscriptionDbEditor subscription={subscription} token={token} onChanged={onChanged} />
         </TabsContent>
       </Tabs>
+
+      <SubscriptionDeleteDialog
+        open={deleteOpen}
+        count={1}
+        hasRemnaUser={!!subscription.remnawaveUuid}
+        busy={deleteBusy}
+        error={deleteError}
+        onClose={() => { if (!deleteBusy) setDeleteOpen(false); }}
+        onConfirm={deleteSubscription}
+      />
 
       {(actionMsg || loadError) && <p className="text-sm text-muted-foreground">{actionMsg || loadError}</p>}
     </div>

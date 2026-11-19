@@ -57,7 +57,7 @@ test('sync retains primary reference when importing another profile for the same
   const client = { id: 'client', telegramId: '123', remnawaveUuid: 'primary', telegramUsername: 'user' };
   const linked = [];
   const sync = loadFunction('../src/modules/sync/sync.service.ts', 'syncFromRemna', {
-    Date, Math, String, PAGE_SIZE: 100,
+    Date, Math, String, PAGE_SIZE: 100, adminDetachedUuids: async () => new Set(),
     isRemnaConfigured: () => true, getSystemConfig: async () => ({}), getPrimaryBot: async () => ({}),
     remnaGetUsers: async () => ({ data: [{ uuid: 'primary', telegramId: 123 }, { uuid: 'secondary', telegramId: 123 }] }),
     extractRemnaUsers: data => data,
@@ -75,4 +75,24 @@ test('sync retains primary reference when importing another profile for the same
   assert.equal(result.ok, true);
   assert.equal(client.remnawaveUuid, 'primary');
   assert.deepEqual(linked, ['primary', 'secondary']);
+});
+
+test('scheduled import does not restore a profile detached by an administrator', async () => {
+  let writes = 0;
+  const sync = loadFunction('../src/modules/sync/sync.service.ts', 'syncFromRemna', {
+    Date, Math, String, PAGE_SIZE: 100,
+    isRemnaConfigured: () => true, getSystemConfig: async () => ({}), getPrimaryBot: async () => ({}),
+    adminDetachedUuids: async () => new Set(['removed']),
+    remnaGetUsers: async () => ({ data: [{ uuid: 'removed', telegramId: 123 }] }),
+    extractRemnaUsers: data => data,
+    prisma: {
+      subscription: { findFirst: async () => null, findMany: async () => [] },
+      client: { findMany: async () => [], findFirst: async () => null, create: async () => { writes++; } },
+    },
+    upsertSubscriptionByRemnaUuid: async () => { writes++; },
+  });
+  const result = await sync();
+  assert.equal(result.ok, true);
+  assert.equal(result.skipped, 1);
+  assert.equal(writes, 0);
 });

@@ -763,7 +763,9 @@ export async function notifyAdminsAboutWithdrawal(withdrawalId: string): Promise
     detailsLine = `🏦 Реквизиты СБП: <code>${escapeHtml(details)}</code>`;
   } else if (wr.method === "card") {
     title = "Банковская карта";
-    detailsLine = `💳 Номер карты: <code>${escapeHtml(details)}</code>`;
+    const bankLine = wr.bankName ? `\n🏦 Банк: <b>${escapeHtml(wr.bankName)}</b>` : "";
+    const recLine = wr.recipientName ? `\n👤 Получатель: <b>${escapeHtml(wr.recipientName)}</b>` : "";
+    detailsLine = `💳 Номер карты: <code>${escapeHtml(details)}</code>${bankLine}${recLine}`;
   } else {
     title = "USDT TRC20";
     detailsLine = `🌐 Кошелёк TRC20: <code>${escapeHtml(details)}</code>`;

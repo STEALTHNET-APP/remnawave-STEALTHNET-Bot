@@ -156,6 +156,10 @@ export function remnaGetUser(uuid: string) {
   return remnaFetch<unknown>(`/api/users/${uuid}`);
 }
 
+export function isRemnaNotFoundError(status: number, _error?: string): boolean {
+  return status === 404;
+}
+
 /** DELETE /api/users/{uuid} — удалить пользователя из Remna */
 export function remnaDeleteUser(uuid: string) {
   return remnaFetch<unknown>(`/api/users/${uuid}`, { method: "DELETE" });
