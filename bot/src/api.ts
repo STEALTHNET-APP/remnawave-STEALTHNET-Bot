@@ -379,8 +379,8 @@ export async function toggleSubAutoRenew(
 /** создание заявки на вывод реф. баланса (СБП, карта или USDT TRC20). */
 export async function createWithdrawal(
   token: string,
-  body: { amount: number; method?: "sbp" | "card" | "usdt"; details?: string; walletTrc20?: string },
-): Promise<{ message: string; id: string; amount: number; method: string; details: string; walletTrc20: string | null; status: string }> {
+  body: { amount: number; method?: "sbp" | "card" | "usdt"; details?: string; walletTrc20?: string; bankName?: string; recipientName?: string },
+): Promise<{ message: string; id: string; amount: number; method: string; details: string; bankName?: string | null; recipientName?: string | null; walletTrc20: string | null; status: string }> {
   return fetchJson("/api/client/withdrawals", { method: "POST", body, token });
 }
 

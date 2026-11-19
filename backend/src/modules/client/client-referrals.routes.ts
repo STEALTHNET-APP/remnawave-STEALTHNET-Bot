@@ -144,6 +144,8 @@ const withdrawCreateSchema = z.object({
   method: z.enum(["sbp", "card", "usdt"]).default("usdt"),
   details: z.string().min(3).max(255).optional(),
   walletTrc20: z.string().optional(),
+  bankName: z.string().trim().max(100).optional(),
+  recipientName: z.string().trim().max(100).optional(),
 });
 clientReferralsRouter.post("/withdrawals", async (req, res) => {
   const clientId = (req as unknown as { clientId: string }).clientId;
@@ -162,6 +164,16 @@ clientReferralsRouter.post("/withdrawals", async (req, res) => {
   }
   if (!wdCfg.withdrawalMethods.includes(method)) {
     return res.status(400).json({ message: "Выбранный способ вывода недоступен" });
+  }
+  const bankName = (parsed.data.bankName ?? "").trim();
+  const recipientName = (parsed.data.recipientName ?? "").trim();
+  if (method === "card") {
+    if (!bankName) {
+      return res.status(400).json({ message: "Укажите банк получателя" });
+    }
+    if (!recipientName) {
+      return res.status(400).json({ message: "Укажите имя или ФИО получателя" });
+    }
   }
   const rawDetails = (parsed.data.details ?? parsed.data.walletTrc20 ?? "").trim();
   if (!rawDetails) {
@@ -201,6 +213,8 @@ clientReferralsRouter.post("/withdrawals", async (req, res) => {
           amount,
           method,
           details: formattedDetails,
+          bankName: method === "card" ? bankName : null,
+          recipientName: method === "card" ? recipientName : null,
           walletTrc20: method === "usdt" ? formattedDetails : null,
           status: "PENDING",
         },
@@ -229,6 +243,8 @@ clientReferralsRouter.post("/withdrawals", async (req, res) => {
     amount,
     method,
     details: formattedDetails,
+    bankName: method === "card" ? bankName : null,
+    recipientName: method === "card" ? recipientName : null,
     walletTrc20: method === "usdt" ? formattedDetails : null,
     status: wr.status,
   });

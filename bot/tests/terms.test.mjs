@@ -34,6 +34,16 @@ test('blocks commands, old callback buttons, text and photos before consent', as
   assert.deepEqual(messages[0].payload.reply_markup.inline_keyboard.map(row => row[0].text), ['Пользовательское соглашение', 'Публичная оферта', 'Политика возврата', 'Принимаю']);
   assert.ok(Buffer.byteLength(messages[0].payload.reply_markup.inline_keyboard.at(-1)[0].callback_data) <= 64);
 });
+test('renders administrator-defined document titles instead of built-in labels', async () => {
+  const h = setup({ getBotTerms: async () => ({ ...blocked, documents: [
+    { kind: 'agreement', url: 'https://example.com/terms', title: 'Условия использования' },
+    { kind: 'offer', url: 'https://example.com/offer', title: 'Конфиденциальность' },
+    { kind: 'refund', url: 'https://example.com/refund', title: null },
+  ] }) });
+  await h.bot.handleUpdate(update('/start'));
+  const message = h.calls.find(c => c.method === 'sendMessage');
+  assert.deepEqual(message.payload.reply_markup.inline_keyboard.map(row => row[0].text), ['Условия использования', 'Конфиденциальность', 'Политика возврата', 'Принимаю']);
+});
 test('preserves referral, promo, gift, renew, login and account-link payloads', async () => {
   const pending = [];
   const h = setup({ getBotTerms: async (_id, p) => { pending.push(p); return blocked; } });
