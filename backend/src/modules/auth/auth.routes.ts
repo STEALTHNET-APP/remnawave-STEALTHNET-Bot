@@ -1,3 +1,4 @@
+import { emailSchema, resolveAdminEmail } from "./email-identity.js";
 import { Router } from "express";
 import { z } from "zod";
 import { generateSecret, generateURI, verify } from "otplib";
@@ -17,7 +18,7 @@ import { requireAuth } from "./middleware.js";
 export const authRouter = Router();
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: emailSchema,
   password: z.string().min(1),
 });
 
@@ -28,7 +29,7 @@ authRouter.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Проверьте введённые данные", errors: body.error.flatten() });
     }
 
-    const admin = await prisma.admin.findUnique({ where: { email: body.data.email } });
+    const admin = await resolveAdminEmail(body.data.email);
     if (!admin) {
       return res.status(401).json({ message: "Неверный email или пароль" });
     }

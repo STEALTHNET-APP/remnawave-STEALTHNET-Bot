@@ -1,3 +1,4 @@
+import { emailSchema, normalizeEmail, emailWhere, resolveClientEmail } from "../auth/email-identity.js";
 import { findTelegramSubscriptions, checkTelegramSubscriptionOwners, restoreTelegramSubscriptions, isLiveRemnaSubscription, TelegramSubscriptionCheckError } from "./telegram-subscriptions.service.js";
 import { randomBytes, createHmac } from "crypto";
 import { verify } from "otplib";
@@ -87,7 +88,7 @@ const utmSchema = {
 };
 
 const registerSchema = z.object({
-  email: z.string().email().optional(),
+  email: emailSchema.transform(normalizeEmail).optional(),
   password: z.string().min(8).optional(),
   telegramId: z.string().optional(),
   telegramUsername: z.string().optional(),
@@ -121,7 +122,7 @@ clientAuthRouter.post("/register", async (req, res) => {
 
   // Регистрация по email: создаём ожидание и отправляем письмо с ссылкой
   if (hasEmail) {
-    const existing = await prisma.client.findUnique({ where: { email: data.email! } });
+    const existing = await prisma.client.findFirst({ where: emailWhere(data.email!), select: { id: true } });
     if (existing) return res.status(400).json({ message: "Этот email уже зарегистрирован" });
 
     const config = await getSystemConfig();
@@ -182,29 +183,35 @@ clientAuthRouter.post("/register", async (req, res) => {
         if (referrer) referrerId = referrer.id;
       }
       const passwordHash = data.password ? await hashPassword(data.password) : null;
-      const client = await prisma.client.create({
-        data: asClientUncheckedCreate({
-          email: data.email!,
-          passwordHash,
-          remnawaveUuid: null,
-          referralCode,
-          referrerId,
-          preferredLang: data.preferredLang,
-          preferredCurrency: data.preferredCurrency,
-          telegramId: null,
-          telegramUsername: null,
-          utmSource: data.utm_source ?? null,
-          utmMedium: data.utm_medium ?? null,
-          utmCampaign: data.utm_campaign ?? null,
-          utmContent: data.utm_content ?? null,
-          utmTerm: data.utm_term ?? null,
-          autoRenewEnabled: config.defaultAutoRenewEnabled ?? false,
-          onboardingCompleted: false,
-          registrationIp: clientIp,
-          registrationUa: (req.headers["user-agent"] as string)?.slice(0, 500) ?? null,
-          registrationSource: "web",
-        }),
-      });
+      let client;
+      try {
+        client = await prisma.client.create({
+          data: asClientUncheckedCreate({
+            email: data.email!,
+            passwordHash,
+            remnawaveUuid: null,
+            referralCode,
+            referrerId,
+            preferredLang: data.preferredLang,
+            preferredCurrency: data.preferredCurrency,
+            telegramId: null,
+            telegramUsername: null,
+            utmSource: data.utm_source ?? null,
+            utmMedium: data.utm_medium ?? null,
+            utmCampaign: data.utm_campaign ?? null,
+            utmContent: data.utm_content ?? null,
+            utmTerm: data.utm_term ?? null,
+            autoRenewEnabled: config.defaultAutoRenewEnabled ?? false,
+            onboardingCompleted: false,
+            registrationIp: clientIp,
+            registrationUa: (req.headers["user-agent"] as string)?.slice(0, 500) ?? null,
+            registrationSource: "web",
+          }),
+        });
+      } catch (error) {
+        if (isEmailUniqueViolation(error)) return res.status(400).json({ message: "Этот email уже зарегистрирован" });
+        throw error;
+      }
       notifyAdminsAboutNewClient(client.id).catch(() => {});
       const token = signClientToken(client.id);
       return res.status(201).json({ token, client: toClientShape(client) });
@@ -398,10 +405,9 @@ clientAuthRouter.post("/verify-link-email", async (req, res) => {
     await prisma.pendingEmailLink.deleteMany({ where: { id: pending.id } }).catch(() => {});
     return res.status(400).json({ message: "Ссылка просрочена. Запросите привязку почты снова." });
   }
-  const existingByEmail = await prisma.client.findUnique({
-    where: { email: pending.email },
-    select: { id: true, telegramId: true },
-  });
+  const match = await resolveClientEmail(pending.email);
+  if (match.ambiguous) return res.status(409).json({ message: "Найдено несколько аккаунтов с этой почтой. Обратитесь в поддержку." });
+  const existingByEmail = match.client;
   const clientSelect = { id: true, email: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true } as const;
   if (existingByEmail && existingByEmail.id !== pending.clientId) {
     // Почта уже принадлежит другому аккаунту. Владелец подтвердил, что почта его
@@ -413,7 +419,7 @@ clientAuthRouter.post("/verify-link-email", async (req, res) => {
       return res.status(400).json({ message: "Эта почта привязана к другому аккаунту с Telegram. Объединение невозможно — обратитесь в поддержку." });
     }
     try {
-      await mergeClients(pending.clientId, existingByEmail.id, { email: pending.email });
+      await mergeClients(pending.clientId, existingByEmail.id, { email: normalizeEmail(pending.email) });
     } catch (e) {
       console.error("[verify-link-email] merge failed:", e);
       await prisma.pendingEmailLink.deleteMany({ where: { id: pending.id } }).catch(() => {});
@@ -426,7 +432,7 @@ clientAuthRouter.post("/verify-link-email", async (req, res) => {
   }
   const client = await prisma.client.update({
     where: { id: pending.clientId },
-    data: { email: pending.email },
+    data: { email: normalizeEmail(pending.email) },
     select: clientSelect,
   });
   await prisma.pendingEmailLink.deleteMany({ where: { id: pending.id } }).catch(() => {});
@@ -450,7 +456,7 @@ clientAuthRouter.post("/verify-email", async (req, res) => {
   const now = new Date();
   const expired = pending ? now > pending.expiresAt : false;
   const existingClient = pending
-    ? await prisma.client.findUnique({ where: { email: pending.email }, select: { id: true } })
+    ? await prisma.client.findFirst({ where: emailWhere(pending.email), select: { id: true } })
     : null;
   const decision = decideVerifyEmail({ pendingExists: Boolean(pending), expired, clientExists: Boolean(existingClient) });
   if (!pending || decision === "invalid") return res.status(400).json({ message: "Ссылка недействительна или устарела" });
@@ -484,7 +490,7 @@ clientAuthRouter.post("/verify-email", async (req, res) => {
   try {
     client = await prisma.client.create({
       data: asClientUncheckedCreate({
-        email: pending.email,
+        email: normalizeEmail(pending.email),
         // #200: пароль не выбран → null → hasPassword: false → онбординг попросит задать пароль
         passwordHash: clientPasswordHashFromPending(pending.passwordHash),
         remnawaveUuid: null,
@@ -529,7 +535,7 @@ clientAuthRouter.post("/verify-email", async (req, res) => {
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: emailSchema,
   password: z.string().min(1),
 });
 
@@ -542,7 +548,7 @@ clientAuthRouter.post("/login", async (req, res) => {
     return res.status(400).json({ message: "Проверьте введённые данные" });
   }
 
-  const client = await prisma.client.findUnique({ where: { email: body.data.email } });
+  const { client } = await resolveClientEmail(body.data.email, true);
   if (!client || !client.passwordHash || client.isBlocked) {
     return res.status(401).json({ message: LOGIN_FAILED_MESSAGE });
   }
@@ -595,7 +601,7 @@ export function parseTelegramUser(initData: string): { id: number; username?: st
 
 // T-pwd-reset (портировано из WolfVPN + Issue #200 + Hybrid Telegram/Email): запрос сброса пароля.
 // respondOk всегда (защита от перебора email).
-const forgotPasswordSchema = z.object({ email: z.string().email() });
+const forgotPasswordSchema = z.object({ email: emailSchema });
 clientAuthRouter.post("/forgot-password", async (req, res) => {
   const cfg = await getSystemConfig();
   if (cfg.passwordResetEnabled === false) return res.status(404).json({ message: "Восстановление пароля временно недоступно" });
@@ -604,21 +610,7 @@ clientAuthRouter.post("/forgot-password", async (req, res) => {
   const email = body.data.email.toLowerCase().trim();
   const respondOk = () => res.json({ ok: true });
   try {
-    // поиск регистронезависимый. Регистрация/логин хранят email
-    // как ввёл юзер, а здесь он приводился к lowercase — юзер с «Test@example.com»
-    // в БД не находился, и письмо сброса молча не отправлялось (при ok:true в ответе).
-    const client = await prisma.client.findFirst({
-      where: { email: { equals: email, mode: "insensitive" } },
-      select: {
-        id: true,
-        email: true,
-        passwordHash: true,
-        isBlocked: true,
-        registrationSource: true,
-        telegramId: true,
-        preferredLang: true,
-      },
-    });
+    const { client } = await resolveClientEmail(body.data.email, true);
 
     if (!client || client.isBlocked) {
       console.info(`[forgot-password] Request for "${email}": client not found or blocked (silent ok)`);
@@ -995,10 +987,9 @@ clientAuthRouter.post("/google", async (req, res) => {
   }
 
   if (googleEmail && emailVerified) {
-    const byEmail = await prisma.client.findUnique({
-      where: { email: googleEmail },
-      select: { id: true, email: true, googleId: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
-    });
+    const match = await resolveClientEmail(googleEmail);
+    if (match.ambiguous) return res.status(409).json({ message: "Найдено несколько аккаунтов с этой почтой. Войдите с паролем или обратитесь в поддержку." });
+    const byEmail = match.client;
     if (byEmail) {
       if (byEmail.isBlocked) return res.status(403).json({ message: "Аккаунт заблокирован" });
       await prisma.client.update({ where: { id: byEmail.id }, data: { googleId } });
@@ -1018,7 +1009,7 @@ clientAuthRouter.post("/google", async (req, res) => {
   const referralCode = generateReferralCode();
   const client = await prisma.client.create({
     data: asClientUncheckedCreate({
-      email: googleEmail,
+      email: googleEmail ? normalizeEmail(googleEmail) : null,
       passwordHash: null,
       remnawaveUuid,
       referralCode,
@@ -1081,10 +1072,9 @@ clientAuthRouter.post("/apple", async (req, res) => {
   }
 
   if (appleEmail) {
-    const byEmail = await prisma.client.findUnique({
-      where: { email: appleEmail },
-      select: { id: true, email: true, appleId: true, telegramId: true, telegramUsername: true, preferredLang: true, preferredCurrency: true, balance: true, referralCode: true, referralPercent: true, remnawaveUuid: true, trialUsed: true, isBlocked: true, autoRenewEnabled: true, autoRenewTariffId: true, yoomoneyAccessToken: true, totpEnabled: true, createdAt: true, onboardingCompleted: true, passwordHash: true },
-    });
+    const match = await resolveClientEmail(appleEmail);
+    if (match.ambiguous) return res.status(409).json({ message: "Найдено несколько аккаунтов с этой почтой. Войдите с паролем или обратитесь в поддержку." });
+    const byEmail = match.client;
     if (byEmail) {
       if (byEmail.isBlocked) return res.status(403).json({ message: "Аккаунт заблокирован" });
       await prisma.client.update({ where: { id: byEmail.id }, data: { appleId: appleSub } });
@@ -1104,7 +1094,7 @@ clientAuthRouter.post("/apple", async (req, res) => {
   const referralCode = generateReferralCode();
   const client = await prisma.client.create({
     data: asClientUncheckedCreate({
-      email: appleEmail,
+      email: appleEmail ? normalizeEmail(appleEmail) : null,
       passwordHash: null,
       remnawaveUuid,
       referralCode,

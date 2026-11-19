@@ -9,6 +9,20 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fixture
+          POSTGRES_PASSWORD: fixture
+          POSTGRES_DB: email_case_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fixture -d email_case_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,6 +38,16 @@ jobs:
       - run: npm ci --prefix frontend
       - run: npm --prefix backend run db:generate
       - run: npm --prefix backend run build
+      - name: Email identity and recovery on isolated PostgreSQL
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:5432/email_case_test
+        run: |
+          npx prisma db push --skip-generate
+          node --test tests/email-case-postgres.test.mjs
+          node tests/email-signup-password.cjs
+          node tests/google-auth.cjs
+          node --test tests/forgot-password-hybrid.test.mjs
       - name: Account, AI and email regression checks
         working-directory: backend
         env:
