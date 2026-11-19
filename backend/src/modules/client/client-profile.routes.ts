@@ -1,3 +1,4 @@
+import { emailSchema, emailWhere, resolveClientEmail } from "../auth/email-identity.js";
 import { randomUUID } from "crypto";
 import { generateSecret, generateURI, verify } from "otplib";
 import { Router } from "express";
@@ -516,7 +517,7 @@ clientProfileRouter.get("/tariff-conversion-preview", async (req, res) => {
   });
 });
 
-const linkEmailDirectSchema = z.object({ email: z.string().email() });
+const linkEmailDirectSchema = z.object({ email: emailSchema });
 clientProfileRouter.post("/link-email-direct", async (req, res) => {
   const client = (req as unknown as { client: { id: string; email: string | null } }).client;
   if (client.email?.trim()) return res.status(400).json({ message: "Почта уже привязана" });
@@ -535,7 +536,7 @@ clientProfileRouter.post("/link-email-direct", async (req, res) => {
     return res.status(400).json({ message: "Требуется верификация. Используйте /link-email-request." });
   }
 
-  const existing = await prisma.client.findUnique({ where: { email } });
+  const existing = await prisma.client.findFirst({ where: emailWhere(email), select: { id: true } });
   if (existing && existing.id !== client.id) {
     return res.status(400).json({ message: "Эта почта уже используется другим аккаунтом" });
   }
@@ -549,7 +550,7 @@ clientProfileRouter.post("/link-email-direct", async (req, res) => {
 });
 
 /** Запросить привязку email (отправить письмо со ссылкой) */
-const linkEmailRequestSchema = z.object({ email: z.string().email() });
+const linkEmailRequestSchema = z.object({ email: emailSchema });
 clientProfileRouter.post("/link-email-request", async (req, res) => {
   const client = (req as unknown as { client: { id: string; email: string | null } }).client;
   if (client.email?.trim()) return res.status(400).json({ message: "Почта уже привязана" });
@@ -559,10 +560,9 @@ clientProfileRouter.post("/link-email-request", async (req, res) => {
   const config = await getSystemConfig();
   const smtpConfig = mailConfigFromSystem(config);
   if (!isMailConfigured(smtpConfig)) return res.status(503).json({ message: "Отправка писем не настроена. Обратитесь в поддержку." });
-  const existing = await prisma.client.findUnique({
-    where: { email },
-    select: { id: true, telegramId: true },
-  });
+  const match = await resolveClientEmail(email);
+  if (match.ambiguous) return res.status(409).json({ message: "Найдено несколько аккаунтов с этой почтой. Обратитесь в поддержку." });
+  const existing = match.client;
   // Почта занята другим аккаунтом. По схеме Алекса:
   //  - если у владельца почты НЕТ Telegram — слияние возможно (произойдёт после
   //    подтверждения письма, см. verify-link-email). Письмо всё равно шлём.
