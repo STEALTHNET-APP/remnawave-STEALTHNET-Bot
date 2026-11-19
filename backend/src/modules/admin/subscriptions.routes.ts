@@ -19,7 +19,7 @@ import {
 // extendSecondarySubscription — для админского продления конкретной
 // подписки (grant-extend): тот же механизм, что и оплаченное продление.
 import { extendSecondarySubscription } from "../tariff/tariff-activation.service.js";
-import { promoteSubscriptionToPrimary, updateSubscriptionDb, SubscriptionEditError } from "../subscription/subscription.helpers.js";
+import { promoteSubscriptionToPrimary, updateSubscriptionDb, normalizeClientSubscriptionSlots, SubscriptionEditError } from "../subscription/subscription.helpers.js";
 import { deleteDeviceSchema, getRemnaUserFieldsForMerge, remnaUpdateBodySchema, squadActionSchema } from "./clients.routes.js";
 import { chooseGrantExtendMode, extendSubscriptionDaysOnly } from "./grant-extend-days.service.js";
 
@@ -358,11 +358,22 @@ adminSubscriptionsRouter.post("/:subId/remna/unlink", asyncRoute(async (req, res
   if (!parsed.success) return res.status(400).json({ message: "Invalid subscription id" });
   const sub = await prisma.subscription.findUnique({
     where: { id: parsed.data.subId },
-    select: { id: true, remnawaveUuid: true },
+    select: { id: true, remnawaveUuid: true, ownerId: true },
   });
   if (!sub) return res.status(404).json({ message: "Подписка не найдена" });
   if (!sub.remnawaveUuid) return res.status(400).json({ message: "Подписка уже не привязана к Remna" });
   await prisma.subscription.update({ where: { id: sub.id }, data: { remnawaveUuid: null } });
+  await prisma.giftHistory.create({
+    data: {
+      clientId: sub.ownerId,
+      subscriptionId: sub.id,
+      eventType: "UNLINKED",
+      metadata: { unlinkedBy: "admin", remnawaveUuid: sub.remnawaveUuid },
+    },
+  });
+  await normalizeClientSubscriptionSlots(sub.ownerId, [sub.remnawaveUuid]).catch((e) => {
+    console.error("[admin/subscriptions] slot normalization failed:", e);
+  });
   return res.json({ ok: true });
 }));
 

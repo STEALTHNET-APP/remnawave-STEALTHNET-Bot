@@ -105,11 +105,17 @@ composer.command("referral", async (ctx) => {
       `• Приобрели подписку: ${stats?.l1Purchased ?? 0}`,
       `• Доход с рефералов 1 уровня: ${fmt(stats?.l1Earned ?? 0)}`,
       "",
-      `🤝 Рефералы 2 уровня: ${p2}%`,
-      `Вы получаете ${p2}% от пополнений рефералов ваших рефералов.`,
-      `• Приглашено вашими рефералами: ${stats?.l2InvitesCount ?? 0}`,
-      `• Доход с рефералов 2 уровня: ${fmt(stats?.l2Earned ?? 0)}`,
-      "",
+    ];
+    if (p2 > 0) {
+      lines.push(
+        `🤝 Рефералы 2 уровня: ${p2}%`,
+        `Вы получаете ${p2}% от пополнений рефералов ваших рефералов.`,
+        `• Приглашено вашими рефералами: ${stats?.l2InvitesCount ?? 0}`,
+        `• Доход с рефералов 2 уровня: ${fmt(stats?.l2Earned ?? 0)}`,
+        "",
+      );
+    }
+    lines.push(
       `💰 Ваш заработок (всего): ${fmt(stats?.totalEarned ?? 0)}`,
       `💸 Выведено: ${fmt(stats?.totalWithdrawn ?? 0)}`,
       `🛒 Потрачено: ${fmt(stats?.totalSpent ?? 0)}`,
@@ -119,7 +125,7 @@ composer.command("referral", async (ctx) => {
       "",
       "Telegram Бот:",
       linkBot,
-    ];
+    );
     const rewardLines = referralRewardLines(stats);
     if (rewardLines) lines.splice(2, lines.indexOf("🔗 Ваша реферальная ссылка:") - 2, ...rewardLines);
     if (linkSite) {
@@ -306,11 +312,17 @@ composer.command("referral", async (ctx) => {
         `• Приобрели подписку: ${stats?.l1Purchased ?? 0}`,
         `• Доход с рефералов 1 уровня: ${fmt(stats?.l1Earned ?? 0)}`,
         "",
-        `🤝 Рефералы 2 уровня: ${p2}%`,
-        `Вы получаете ${p2}% от пополнений рефералов ваших рефералов.`,
-        `• Приглашено вашими рефералами: ${stats?.l2InvitesCount ?? 0}`,
-        `• Доход с рефералов 2 уровня: ${fmt(stats?.l2Earned ?? 0)}`,
-        "",
+      ];
+      if (p2 > 0) {
+        lines.push(
+          `🤝 Рефералы 2 уровня: ${p2}%`,
+          `Вы получаете ${p2}% от пополнений рефералов ваших рефералов.`,
+          `• Приглашено вашими рефералами: ${stats?.l2InvitesCount ?? 0}`,
+          `• Доход с рефералов 2 уровня: ${fmt(stats?.l2Earned ?? 0)}`,
+          "",
+        );
+      }
+      lines.push(
         `💰 Ваш заработок (всего): ${fmt(stats?.totalEarned ?? 0)}`,
         `💸 Выведено: ${fmt(stats?.totalWithdrawn ?? 0)}`,
         `🛒 Потрачено: ${fmt(stats?.totalSpent ?? 0)}`,
@@ -320,7 +332,7 @@ composer.command("referral", async (ctx) => {
         "",
         "Telegram Бот:",
         linkBot,
-      ];
+      );
       const rewardLines = referralRewardLines(stats);
       if (rewardLines) lines.splice(2, lines.indexOf("🔗 Ваша реферальная ссылка:") - 2, ...rewardLines);
       if (linkSite) {

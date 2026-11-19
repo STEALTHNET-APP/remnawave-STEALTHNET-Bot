@@ -1422,8 +1422,13 @@ export const api = {
   ): Promise<AdminSecondarySubscriptionDetail> {
     return request(`/admin/secondary-subscriptions/${id}`, { token });
   },
-  async deleteSecondarySubscription(token: string, id: string): Promise<{ success: boolean }> {
-    return request(`/admin/secondary-subscriptions/${id}`, { method: "DELETE", token });
+  async deleteSecondarySubscription(
+    token: string,
+    id: string,
+    deleteRemnaUser = false
+  ): Promise<{ success: boolean; remnaUserDeleted: boolean; remnaUserKeptReason: string | null }> {
+    const q = deleteRemnaUser ? "?deleteRemnaUser=true" : "";
+    return request(`/admin/secondary-subscriptions/${id}${q}`, { method: "DELETE", token });
   },
   /** редактирование доп. подписки админом —
    *  addDays (+/− дней к текущему expireAt), trafficLimitBytes (0 = безлимит, null = не менять). */
@@ -1438,8 +1443,13 @@ export const api = {
       token,
     });
   },
-  async deleteSecondarySubscriptionsBulk(token: string, ids: string[]): Promise<{ success: boolean; deleted: number }> {
-    return request("/admin/secondary-subscriptions/bulk", {
+  async deleteSecondarySubscriptionsBulk(
+    token: string,
+    ids: string[],
+    deleteRemnaUser = false
+  ): Promise<{ success: boolean; deleted: number; remnaUserDeleted: number; remnaUserKept: number }> {
+    const q = deleteRemnaUser ? "?deleteRemnaUser=true" : "";
+    return request(`/admin/secondary-subscriptions/bulk${q}`, {
       method: "DELETE",
       body: JSON.stringify({ ids }),
       token,

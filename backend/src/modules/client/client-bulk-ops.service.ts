@@ -24,6 +24,7 @@ import {
   remnaUsernameFromClient,
   extractRemnaUuid,
   isRemnaConfigured,
+  isRemnaNotFoundError,
 } from "../remna/remna.client.js";
 
 export type BulkOpItem = {
@@ -248,6 +249,23 @@ export async function syncAllSubscriptionsFromRemna(clientId: string): Promise<B
     }
     const r = await remnaGetUser(sub.remnawaveUuid);
     if (r.error || !r.data) {
+      if (isRemnaNotFoundError(r.status, r.error)) {
+        await prisma.subscription.update({
+          where: { id: sub.id },
+          data: { remnawaveUuid: null, remnaStatus: "MISSING", remnaSyncedAt: new Date() },
+        });
+        if (sub.subscriptionIndex === 0) {
+          await prisma.client.update({ where: { id: clientId }, data: { remnawaveUuid: null } }).catch(() => {});
+        }
+        pushItem(report, {
+          subscriptionId: sub.id,
+          subscriptionIndex: sub.subscriptionIndex,
+          remnawaveUuid: sub.remnawaveUuid,
+          status: "ok",
+          message: "Удалён в Remna (привязка очищена)",
+        });
+        continue;
+      }
       pushItem(report, { subscriptionId: sub.id, subscriptionIndex: sub.subscriptionIndex, remnawaveUuid: sub.remnawaveUuid, status: "error", message: r.error ?? "no data" });
       continue;
     }

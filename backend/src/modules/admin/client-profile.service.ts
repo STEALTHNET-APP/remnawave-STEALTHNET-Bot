@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../db.js";
+import { isRemnaConfigured, remnaUpdateUser } from "../remna/remna.client.js";
 
 const telegramIdSchema = z.string().trim().max(16).nullable().transform(value => value || null).refine(
   value => value === null || (/^[1-9]\d*$/.test(value) && Number(value) <= 4503599627370495),
@@ -25,9 +26,41 @@ export class ClientProfileError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
+type TelegramBindingClient = {
+  id: string;
+  telegramId: string | null;
+  remnawaveUuid: string | null;
+};
+
+async function pushTelegramBindingToRemna(client: TelegramBindingClient): Promise<void> {
+  if (!isRemnaConfigured()) return;
+  const subscriptions = await prisma.subscription.findMany({
+    where: { ownerId: client.id, remnawaveUuid: { not: null } },
+    select: { remnawaveUuid: true },
+  });
+  const uuids = new Set<string>();
+  if (client.remnawaveUuid) uuids.add(client.remnawaveUuid);
+  for (const subscription of subscriptions) {
+    if (subscription.remnawaveUuid) uuids.add(subscription.remnawaveUuid);
+  }
+  if (!uuids.size) return;
+  const telegramId = client.telegramId ? Number(client.telegramId) : null;
+  for (const uuid of uuids) {
+    try {
+      const result = await remnaUpdateUser({ uuid, telegramId });
+      if (result.error) {
+        console.warn(`[admin/clients] не удалось обновить Telegram в Remnawave (${uuid}): ${result.error}`);
+      }
+    } catch (error) {
+      console.warn(`[admin/clients] не удалось обновить Telegram в Remnawave (${uuid}):`, error);
+    }
+  }
+}
+
 export async function updateAdminClientProfile(id: string, data: z.infer<typeof updateClientSchema>) {
+  let telegramBindingChanged = false;
   try {
-    return await prisma.$transaction(async tx => {
+    const updated = await prisma.$transaction(async tx => {
       const rows = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM clients WHERE id = ${id} FOR UPDATE`;
       if (!rows.length) throw new ClientProfileError(404, "Клиент не найден");
       const client = await tx.client.findUniqueOrThrow({ where: { id } });
@@ -55,6 +88,7 @@ export async function updateAdminClientProfile(id: string, data: z.infer<typeof 
           updates.telegramUsername = null;
           updates.telegramUnreachable = false;
           await tx.pendingTelegramLink.deleteMany({ where: { clientId: id } });
+          telegramBindingChanged = true;
         }
       }
       return tx.client.update({
@@ -83,6 +117,12 @@ export async function updateAdminClientProfile(id: string, data: z.infer<typeof 
         },
       });
     });
+    if (telegramBindingChanged) {
+      await pushTelegramBindingToRemna(updated).catch(error => {
+        console.warn("[admin/clients] не удалось синхронизировать Telegram с Remnawave:", error);
+      });
+    }
+    return updated;
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const target = String(error.meta?.target ?? "");

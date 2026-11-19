@@ -3,6 +3,7 @@
  */
 
 import { prisma } from "../../db.js";
+import { Prisma } from "@prisma/client";
 import {
   isRemnaConfigured,
   remnaGetUsers,
@@ -14,6 +15,7 @@ import {
   remnaGetUserByUsername,
   extractRemnaUuid,
   remnaUsernameFromClient,
+  isRemnaNotFoundError,
 } from "../remna/remna.client.js";
 import { getSystemConfig } from "../client/client.service.js";
 import { upsertSubscriptionByRemnaUuid } from "../subscription/subscription.helpers.js";
@@ -173,23 +175,70 @@ export async function syncFromRemna(): Promise<{
             clientTargetId = existing.id;
             result.updated++;
           } else {
-            const refCode = "REF-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
-            const created = await prisma.client.create({
-              data: {
-                remnawaveUuid: uuid,
-                email: email ?? null,
-                telegramId,
-                telegramUsername: username ?? null,
-                referralCode: refCode,
-                preferredLang: defaultLang,
-                preferredCurrency: defaultCurrency,
-                autoRenewEnabled: config.defaultAutoRenewEnabled ?? false,
-                trialUsed: true,
+            const freshMatch = await prisma.client.findFirst({
+              where: {
+                OR: [
+                  ...(telegramId ? [{ telegramId }] : []),
+                  ...(email ? [{ email }] : []),
+                ],
               },
+              select: { id: true, remnawaveUuid: true },
             });
-            rememberClient(created);
-            clientTargetId = created.id;
-            result.created++;
+            if (freshMatch) {
+              const updated = await prisma.client.update({
+                where: { id: freshMatch.id },
+                data: {
+                  ...(freshMatch.remnawaveUuid ? {} : { remnawaveUuid: uuid }),
+                  ...(telegramId ? { telegramId } : {}),
+                  ...(email ? { email } : {}),
+                  ...(username ? { telegramUsername: username } : {}),
+                  trialUsed: true,
+                },
+              });
+              rememberClient(updated);
+              clientTargetId = updated.id;
+              result.updated++;
+            } else {
+              const refCode = "REF-" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
+              try {
+                const created = await prisma.client.create({
+                  data: {
+                    remnawaveUuid: uuid,
+                    email: email ?? null,
+                    telegramId,
+                    telegramUsername: username ?? null,
+                    referralCode: refCode,
+                    preferredLang: defaultLang,
+                    preferredCurrency: defaultCurrency,
+                    autoRenewEnabled: config.defaultAutoRenewEnabled ?? false,
+                    trialUsed: true,
+                  },
+                });
+                rememberClient(created);
+                clientTargetId = created.id;
+                result.created++;
+              } catch (error) {
+                if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+                const retry = await prisma.client.findFirst({
+                  where: { OR: [...(telegramId ? [{ telegramId }] : []), ...(email ? [{ email }] : [])] },
+                  select: { id: true, remnawaveUuid: true },
+                });
+                if (!retry) throw error;
+                const updated = await prisma.client.update({
+                  where: { id: retry.id },
+                  data: {
+                    ...(retry.remnawaveUuid ? {} : { remnawaveUuid: uuid }),
+                    ...(telegramId ? { telegramId } : {}),
+                    ...(email ? { email } : {}),
+                    ...(username ? { telegramUsername: username } : {}),
+                    trialUsed: true,
+                  },
+                });
+                rememberClient(updated);
+                clientTargetId = updated.id;
+                result.updated++;
+              }
+            }
           }
           const linked = await upsertSubscriptionByRemnaUuid(clientTargetId, { remnawaveUuid: uuid });
           subscriptionByUuid.set(uuid, { subscriptionIndex: linked.subscriptionIndex, owner: clientById.get(clientTargetId)! });
@@ -230,16 +279,6 @@ function extractRemnaUserFields(data: unknown): {
     ...(email !== undefined && { email: email != null ? String(email) : null }),
     activeInternalSquads: squads,
   };
-}
-
-/** Проверка, что ошибка Remna — «пользователь не найден» (удалён в Remna или не существует). */
-function isRemnaNotFoundError(status: number, error?: string): boolean {
-  if (status === 404) return true;
-  // ⚠️ Remnawave 3.x: идентификатор юзера стал числовым. Старый строковый uuid
-  // не проходит валидацию пути и возвращает 400 (а не 404). Для нас это то же
-  // самое «пользователя нет» — иначе клиент навсегда завис бы с битой привязкой.
-  if (status === 400) return true;
-  return typeof error === "string" && /not found|not exist|validation/i.test(error);
 }
 
 /** Повторить запрос к Remna один раз при сетевой ошибке («fetch failed» и подобные). */
