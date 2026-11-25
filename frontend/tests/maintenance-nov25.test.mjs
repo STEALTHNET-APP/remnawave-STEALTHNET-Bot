@@ -15,11 +15,13 @@ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const browser=await chromium.launch({executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH});
 const base=`http://127.0.0.1:${server.address().port}`;
 try {
- await test('RivaraPay form keeps promo actions separate from saving; mode, keys and franchise reach the form',async()=>{
+ await test('RivaraPay offer shows merchant terms; mode, keys and franchise reach the form',async()=>{
   const page=await browser.newPage({viewport:{width:1100,height:1050}});await page.goto(base);
   await page.getByText('Ищете платёжную систему?').waitFor();
   assert.equal(await page.getByRole('link',{name:'Хочу подключиться!'}).getAttribute('href'),'https://rivarapay.io');
-  await page.getByRole('button',{name:'Скопировать код'}).click();assert.equal(await page.evaluate(()=>window.submits||0),0);
+  const offer=page.locator('section[aria-label="Партнёрское предложение RivaraPay"]');
+  assert.match(await offer.innerText(),/3,5%/);assert.match(await offer.innerText(),/STEALTHNET/);assert.doesNotMatch(await offer.innerText(),/15%|марж/);
+  assert.equal(await offer.getByRole('link').count(),1);
   await page.getByRole('switch',{name:'Включить RivaraPay'}).click();await page.getByRole('switch',{name:'Тестовый режим RivaraPay'}).click();
   await page.getByLabel('API-ключ магазина').fill('test_fixture');await page.getByLabel('Секрет уведомлений').fill('fixture-secret');
   await page.getByText('Данные франшизного магазина',{exact:true}).click();await page.getByLabel('Тип филиала',{exact:true}).fill('telegram');await page.getByLabel('Адрес филиала',{exact:true}).fill('@fixture_bot');await page.getByLabel('Telegram ID владельца',{exact:true}).fill('9000111222');
