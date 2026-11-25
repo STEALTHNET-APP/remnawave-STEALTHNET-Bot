@@ -25,6 +25,7 @@ const routerFutureFlags = {
   v7_relativeSplatPath: true,
 };
 
+const LutatBabloPage = lazyPage(() => import("@/pages/lutatbablo").then(module => ({ default: module.LutatBabloPage })));
 const CabinetDesignEditorPage = lazyPage(() => import("@/pages/cabinet-design-editor").then(module => ({ default: module.CabinetDesignEditorPage })));
 const CabinetDesignPreviewPage = lazyPage(() => import("@/pages/cabinet-design-preview").then(module => ({ default: module.CabinetDesignPreviewPage })));
 const DashboardPage = lazyPage(() => import("@/pages/dashboard").then(module => ({ default: module.DashboardPage })));
@@ -261,6 +262,7 @@ function AppRoutes() {
     <MaintenanceGate><CabinetDesignRuntime /><Routes>
       {/* Главная: лендинг (если включён в настройках) или редирект в кабинет */}
       <Route path="/" element={<RootRoute />} />
+      <Route path="/lutatbablo" element={<LutatBabloPage />} />
 
       <Route path="/admin/landing-preview" element={<RequireAuth><ForceChangePassword><LandingPreviewPage /></ForceChangePassword></RequireAuth>} />
       <Route path="/cabinet-design-preview" element={<RequireAuth><CabinetDesignPreviewPage /></RequireAuth>} />
