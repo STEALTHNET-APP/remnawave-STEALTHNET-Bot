@@ -35,11 +35,11 @@ docker compose version
 
 ## Скачайте релиз
 
-Проверьте [список релизов](https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot/releases/latest). Пример ниже устанавливает `v7.0.2`. Для более нового выпуска замените тег его точным именем.
+Проверьте [список релизов](https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot/releases/latest). Пример ниже устанавливает `v7.0.3`. Для более нового выпуска замените тег его точным именем.
 
 ```bash
 cd /opt
-git clone --branch v7.0.2 https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git
+git clone --branch v7.0.3 https://github.com/STEALTHNET-APP/remnawave-STEALTHNET-Bot.git
 cd remnawave-STEALTHNET-Bot
 bash install.sh
 ```
