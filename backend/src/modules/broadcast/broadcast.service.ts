@@ -842,8 +842,7 @@ export async function runBroadcast(options: {
           if (!tid) continue;
           await delay(sendDelay);
           await sendOne(tid);
-          // Report не чаще раз в ~50 сообщений чтобы не дёргать DB-progress-write.
-          if (idx % 50 === 0) report();
+          report();
         }
       };
 

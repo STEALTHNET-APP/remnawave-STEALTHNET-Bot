@@ -483,7 +483,7 @@ adminRouter.use("/subscriptions", adminSubscriptionsRouter);
 // Настройки (языки, валюты, название сервиса) — для бота, mini app, сайта
 adminRouter.get("/settings", asyncRoute(async (_req, res) => {
   const config = await getSystemConfig();
-  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "", groqApiKey: config.groqApiKey ? "********" : "" });
+  return res.json({ ...config, rivarapayApiKey: config.rivarapayApiKey ? "********" : "", rivarapayWebhookSecret: config.rivarapayWebhookSecret ? "********" : "", cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "", groqApiKey: config.groqApiKey ? "********" : "" });
 }));
 
 const aiModelsSchema = z.object({
@@ -842,6 +842,14 @@ const updateSettingsSchema = z.object({
   paritypayApiKey: z.string().max(500).nullable().optional(),
   paritypaySigningSecret: z.string().max(500).nullable().optional(),
   paritypayEnabled: z.boolean().optional(),
+  rivarapayEnabled: z.boolean().optional(),
+  rivarapayApiKey: z.string().max(500).optional(),
+  rivarapayWebhookSecret: z.string().max(500).optional(),
+  rivarapaySandbox: z.boolean().optional(),
+  rivarapayFranchiseType: z.string().max(500).optional(),
+  rivarapayFranchiseAddress: z.string().max(500).optional(),
+  rivarapayFranchiseOwnerId: z.string().max(500).optional(),
+  rivarapayFranchiseOwnerUsername: z.string().max(500).optional(),
   cispayEnabled: z.boolean().optional(),
   cispayShopId: z.union([z.string().uuid(), z.literal("")]).optional(),
   cispayApiKey: z.string().max(500).optional(),
@@ -1617,6 +1625,11 @@ adminRouter.patch("/settings", async (req, res) => {
     const val = updates.paritypayEnabled ? "true" : "false";
     await prisma.systemSetting.upsert({ where: { key: "paritypay_enabled" }, create: { key: "paritypay_enabled", value: val }, update: { value: val } });
   }
+  for (const [field, key] of [["rivarapayEnabled", "rivarapay_enabled"], ["rivarapayApiKey", "rivarapay_api_key"], ["rivarapayWebhookSecret", "rivarapay_webhook_secret"], ["rivarapaySandbox", "rivarapay_sandbox"], ["rivarapayFranchiseType", "rivarapay_franchise_type"], ["rivarapayFranchiseAddress", "rivarapay_franchise_address"], ["rivarapayFranchiseOwnerId", "rivarapay_franchise_owner_id"], ["rivarapayFranchiseOwnerUsername", "rivarapay_franchise_owner_username"]] as const) {
+    const value = updates[field];
+    if (value === undefined || (["rivarapayApiKey", "rivarapayWebhookSecret"].includes(field) && value === "********")) continue;
+    await prisma.systemSetting.upsert({ where: { key }, create: { key, value: String(value) }, update: { value: String(value) } });
+  }
   for (const [field, key] of [["cispayEnabled", "cispay_enabled"], ["cispayShopId", "cispay_shop_id"], ["cispayApiKey", "cispay_api_key"], ["cispaySandbox", "cispay_sandbox"]] as const) {
     const value = updates[field];
     if (value === undefined || (field === "cispayApiKey" && value === "********")) continue;
@@ -2384,7 +2397,7 @@ adminRouter.patch("/settings", async (req, res) => {
   // invalidate cache до возврата свежего config'а.
   invalidateSystemConfigCache();
   const config = await getSystemConfig();
-  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "", groqApiKey: config.groqApiKey ? "********" : "" });
+  return res.json({ ...config, rivarapayApiKey: config.rivarapayApiKey ? "********" : "", rivarapayWebhookSecret: config.rivarapayWebhookSecret ? "********" : "", cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "", groqApiKey: config.groqApiKey ? "********" : "" });
 });
 
 adminRouter.post("/nalog/test", asyncRoute(async (_req, res) => {
@@ -2429,7 +2442,7 @@ adminRouter.post("/settings/reset-landing-text", asyncRoute(async (req, res) => 
     });
   }
   const config = await getSystemConfig();
-  return res.json({ ...config, cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "", groqApiKey: config.groqApiKey ? "********" : "" });
+  return res.json({ ...config, rivarapayApiKey: config.rivarapayApiKey ? "********" : "", rivarapayWebhookSecret: config.rivarapayWebhookSecret ? "********" : "", cispayApiKey: config.cispayApiKey ? "********" : "", botWebhookSecret: config.botWebhookSecret ? "********" : "", cloudpaymentsApiSecret: config.cloudpaymentsApiSecret ? "********" : "", aiApiKey: config.aiApiKey ? "********" : "", groqApiKey: config.groqApiKey ? "********" : "" });
 }));
 
 adminRouter.use("/tickets", adminTicketsRouter);
@@ -2503,10 +2516,12 @@ adminRouter.use("/analytics", adminAnalyticsRouter);
 //  АВТО-БЭКАП — ручной запуск
 // ═══════════════════════════════════════════════════════════════
 
-adminRouter.post("/backup/send-to-telegram", asyncRoute(async (_req, res) => {
+adminRouter.post("/backup/send-to-telegram", asyncRoute(async (req, res) => {
+  const parsed = z.object({ comment: z.string().trim().max(1000).optional() }).safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ message: "Комментарий должен быть не длиннее 1000 символов" });
   const { runAutoBackup } = await import("../backup/auto-backup.scheduler.js");
   try {
-    await runAutoBackup({ force: true });
+    await runAutoBackup({ force: true, comment: parsed.data.comment });
     return res.json({ ok: true, message: "Бэкап создан и отправлен в Telegram" });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

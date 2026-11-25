@@ -1764,3 +1764,15 @@ model PaymentDelivery {
   @@index([state, createdAt])
   @@map("payment_deliveries")
 }
+
+model PaymentWebhookReceipt {
+  provider   String
+  eventId    String @map("event_id")
+  paymentId  String @map("payment_id")
+  digest     String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@id([provider, eventId])
+  @@index([paymentId])
+  @@map("payment_webhook_receipts")
+}

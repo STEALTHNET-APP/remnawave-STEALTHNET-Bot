@@ -12,7 +12,7 @@ mock.module('../dist/modules/remna/remna.client.js', { namedExports: {
 process.env.DATABASE_URL = 'postgresql://user:password@database/bot';
 mock.module('../dist/modules/client/client.service.js', { namedExports: { getSystemConfig: async () => ({ ...config }) } });
 mock.module('../dist/modules/proxy-util/get-proxy-url.js', { namedExports: { getProxyUrl: async () => null } });
-mock.module('node:fs/promises', { namedExports: { writeFile: async (...args) => markers.push(args), mkdtemp: async () => '', readFile: async () => '', rm: async () => {}, readdir: async () => [], stat: async () => ({}), mkdir: async () => {} } });
+mock.module('node:fs/promises', { namedExports: { statfs: async () => ({ bsize: 4096, blocks: 100, bavail: 50 }), writeFile: async (...args) => markers.push(args), mkdtemp: async () => '', readFile: async () => '', rm: async () => {}, readdir: async () => [], stat: async () => ({}), mkdir: async () => {} } });
 mock.module('../dist/modules/backup/backup-archive.js', { namedExports: {
   AUTO_BACKUPS_DIR: '/backups', TELEGRAM_PART_BYTES: 10,
   saveCompressedBackup: async (_db, source) => {
@@ -102,4 +102,13 @@ test('manifest rejection prevents marking or pruning that archive', async () => 
   await assert.rejects(runAutoBackup({ force: true }), /Telegram rejected/);
   assert.equal(markers.length, 0);
   assert.equal(pruned.length, 0);
+});
+
+test('manual comment is included only in the requested manifest and never reused by scheduled backups', async () => {
+  await runAutoBackup({force:true,comment:'  Перед зачисткой пользователей  '});
+  assert.equal(JSON.parse(markers[0][1]).comment,'Перед зачисткой пользователей');
+  await runAutoBackup({comment:'must not leak'});
+  assert.equal(JSON.parse(markers[1][1]).comment,undefined);
+  await runAutoBackup({force:true,comment:'   '});
+  assert.equal(JSON.parse(markers[2][1]).comment,undefined);
 });

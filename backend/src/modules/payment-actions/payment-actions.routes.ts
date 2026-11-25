@@ -121,6 +121,7 @@ paymentActionsRouter.post(
 
     const payment = await prisma.payment.findUnique({ where: { id } });
     if (!payment) return res.status(404).json({ message: "Платёж не найден" });
+    if (payment.provider === "rivarapay") return res.status(409).json({ message: "Оформите возврат в кабинете RivaraPay. Панель обновит статус после подтверждения провайдера." });
     if (payment.status === "REFUNDED") return res.status(400).json({ message: "Уже возвращён" });
     if (payment.status === "FAILED") return res.status(400).json({ message: "Платёж уже FAILED — refund не нужен" });
 
@@ -230,6 +231,7 @@ paymentActionsRouter.post(
     const id = req.params.id;
     const payment = await prisma.payment.findUnique({ where: { id } });
     if (!payment) return res.status(404).json({ message: "Платёж не найден" });
+    if (JSON.parse(payment.metadata || "{}").rivarapayRefundReview) return res.status(409).json({ message: "RivaraPay подтвердил возврат. Повторная выдача заблокирована." });
     if (JSON.parse(payment.metadata || "{}").cispayRefundRequestedAt) return res.status(409).json({ message: "По платежу запрошен возврат CisPay. Повторная выдача заблокирована." });
     if (payment.status !== "PAID") return res.status(400).json({ message: `Активацию можно повторить только для PAID платежей. Текущий статус: ${payment.status}` });
 
@@ -251,7 +253,7 @@ paymentActionsRouter.post(
     const claimed = await prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM payments WHERE id = ${id} FOR UPDATE`;
       const current = await tx.payment.findUniqueOrThrow({ where: { id } });
-      if (current.status !== "PAID" || JSON.parse(current.metadata || "{}").cispayRefundRequestedAt) return false;
+      if (current.status !== "PAID" || (JSON.parse(current.metadata || "{}").cispayRefundRequestedAt || JSON.parse(current.metadata || "{}").rivarapayRefundReview)) return false;
       if (job) return (await tx.paymentDelivery.updateMany({ where: { paymentId: id, state: "REVIEW", updatedAt: job.updatedAt }, data: { state: "PENDING", error: null, startedAt: null } })).count > 0;
       await tx.paymentDelivery.create({ data: { paymentId: id } });
       return true;

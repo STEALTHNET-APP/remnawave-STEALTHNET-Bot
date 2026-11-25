@@ -101,6 +101,7 @@ export function BackupPage() {
   const [autoBackupCron, setAutoBackupCron] = useState<string | null>(null);
   const [autoBackupSaving, setAutoBackupSaving] = useState(false);
   const [autoBackupSending, setAutoBackupSending] = useState(false);
+  const [backupComment, setBackupComment] = useState("");
   const [autoBackupMsg, setAutoBackupMsg] = useState<string | null>(null);
 
   const [retentionValue, setRetentionValue] = useState<number | null>(null);
@@ -189,7 +190,8 @@ export function BackupPage() {
     if (!t) return;
     setAutoBackupSending(true);
     try {
-      const res = await api.sendBackupToTelegram(t);
+      const res = await api.sendBackupToTelegram(t, backupComment);
+      if (res.ok) setBackupComment("");
       flashAutoBackup(res.message || "Бэкап отправлен");
       void queryClient.invalidateQueries({ queryKey: qk.admin.backupList(), exact: false });
     } catch (e) {
@@ -588,6 +590,11 @@ export function BackupPage() {
               </p>
             </div>
 
+            <div className="space-y-1.5">
+              <Label htmlFor="backup-comment">Комментарий к ручному бэкапу</Label>
+              <Input id="backup-comment" value={backupComment} maxLength={1000} disabled={autoBackupSending} onChange={e => setBackupComment(e.target.value)} placeholder="Например, перед удалением пользователей" />
+              <p className="text-xs text-muted-foreground">Попадёт в манифест при отправке сейчас. Бэкапы по расписанию его не используют.</p>
+            </div>
             <div className="flex items-center gap-2 flex-wrap pt-1">
               <Button size="sm" onClick={saveAutoBackup} disabled={autoBackupSaving}>
                 {autoBackupSaving ? "Сохранение…" : "Сохранить"}

@@ -1,3 +1,4 @@
+import { rivarapayWebhooksRouter } from "./modules/rivarapay/rivarapay.webhooks.js";
 import { cloudWebhooksRouter } from "./modules/cloudpayments/cloudpayments.webhooks.js";
 import { cloudPublicRouter } from "./modules/cloudpayments/cloudpayments.routes.js";
 import { cabinetDesignAdminRouter, cabinetDesignPublicRouter } from "./modules/cabinet-design/routes.js";
@@ -155,6 +156,7 @@ app.use("/api/webhooks/cryptopay", express.raw({ type: "application/json" }), cr
 app.use("/api/webhooks/heleket", express.raw({ type: "application/json" }), heleketWebhooksRouter);
 // RollyPay подписывает СЫРОЕ тело — express.raw обязателен, иначе подпись не сойдётся.
 app.use("/api/webhooks/paritypay", express.raw({ type: "application/json", limit: "64kb" }), paritypayWebhooksRouter);
+app.use("/api/webhooks/rivarapay", express.raw({ type: "application/json", limit: "64kb" }), rivarapayWebhooksRouter);
 app.use("/api/webhooks/cispay", express.raw({ type: "application/json", limit: "64kb" }), cispayWebhooksRouter);
 app.use("/api/webhooks/rollypay", express.raw({ type: "application/json" }), rollypayWebhooksRouter);
 app.use("/api/webhooks/lava", express.raw({ type: "application/json" }), lavaWebhooksRouter);

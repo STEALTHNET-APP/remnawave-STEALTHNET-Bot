@@ -162,6 +162,7 @@ export async function getPublicConfig(force = false): Promise<{
   telegramStarsRubPerStar?: number;
   cryptopayEnabled?: boolean;
   heleketEnabled?: boolean;
+  rivarapayEnabled?: boolean;
   cispayEnabled?: boolean;
   rollypayEnabled?: boolean;
   cloudpaymentsBotDirect?: boolean;
@@ -268,13 +269,15 @@ export async function getPublicConfig(force = false): Promise<{
   const cfg = await fetchJson<{
     paymentProviders?: { id: string; label: string; sortOrder: number }[];
     telegramStarsEnabled?: boolean;
+    rivarapayEnabled?: boolean;
     cispayEnabled?: boolean;
   } | null>("/api/public/config");
 
   try {
-    const { setProviderLabels, setPaymentProviders, setStarsPaymentsEnabled, setCispayEnabled } = await import("./keyboard.js");
+    const { setProviderLabels, setPaymentProviders, setStarsPaymentsEnabled, setCispayEnabled, setRivarapayEnabled } = await import("./keyboard.js");
     setProviderLabels(cfg?.paymentProviders ?? null);
     setPaymentProviders(cfg?.paymentProviders ?? null);
+    setRivarapayEnabled(cfg?.rivarapayEnabled === true);
     setCispayEnabled(cfg?.cispayEnabled === true);
     setStarsPaymentsEnabled(cfg?.telegramStarsEnabled === true);
   } catch {}
@@ -639,6 +642,12 @@ export async function createRollypayPayment(
   body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
 ): Promise<{ paymentId: string; payUrl: string }> {
   return fetchJson("/api/client/rollypay/create-payment", { method: "POST", body, token });
+}
+export async function createRivarapayPayment(
+  token: string,
+  body: { amount?: number; currency?: string; tariffId?: string; tariffPriceOptionId?: string; deviceCount?: number; proxyTariffId?: string; singboxTariffId?: string; promoCode?: string; extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string; targetSubscriptionId?: string }; asAdditional?: boolean; extendsSecondarySubId?: string; asGift?: boolean; removeExtrasOnActivate?: boolean; replaceTrialSubId?: string }
+): Promise<{ paymentId: string; payUrl: string }> {
+  return fetchJson("/api/client/rivarapay/create-payment", { method: "POST", body, token });
 }
 export async function createCispayPayment(
   token: string,

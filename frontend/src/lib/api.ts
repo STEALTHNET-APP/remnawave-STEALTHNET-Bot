@@ -2003,8 +2003,8 @@ export const api = {
   },
 
   /** Восстановить БД из бэкапа на сервере (path из списка) */
-  async sendBackupToTelegram(token: string): Promise<{ ok: boolean; message: string }> {
-    return request("/admin/backup/send-to-telegram", { method: "POST", token });
+  async sendBackupToTelegram(token: string, comment?: string): Promise<{ ok: boolean; message: string }> {
+    return request("/admin/backup/send-to-telegram", { method: "POST", token, body: JSON.stringify({ comment }) });
   },
 
   async restoreBackupFromServer(token: string, path: string): Promise<{ message: string }> {
@@ -2712,6 +2712,32 @@ export const api = {
     }
   ): Promise<{ paymentId: string; payUrl: string }> {
     return request("/client/rollypay/create-payment", { method: "POST", body: JSON.stringify(data), token });
+  },
+  async rivarapayCreatePayment(
+    token: string,
+    data: {
+      amount?: number;
+      currency?: string;
+      tariffId?: string;
+      tariffPriceOptionId?: string;
+      deviceCount?: number;
+      proxyTariffId?: string;
+      singboxTariffId?: string;
+      promoCode?: string;
+      extraOption?: { kind: "traffic" | "devices" | "servers"; productId: string; targetSubscriptionId?: string };
+      customBuild?: { days: number; devices: number; trafficGb?: number };
+
+
+
+      extendsSecondarySubId?: string;
+      asAdditional?: boolean;
+      asGift?: boolean;
+      removeExtrasOnActivate?: boolean;
+
+      replaceTrialSubId?: string;
+    }
+  ): Promise<{ paymentId: string; payUrl: string }> {
+    return request("/client/rivarapay/create-payment", { method: "POST", body: JSON.stringify(data), token });
   },
   async cispayCreatePayment(
     token: string,
@@ -3786,6 +3812,13 @@ export type UpdateSettingsPayload = {
   cryptopayTestnet?: boolean;
   heleketMerchantId?: string | null;
   heleketApiKey?: string | null;
+  rivarapayApiKey?: string;
+  rivarapayWebhookSecret?: string;
+  rivarapaySandbox?: boolean;
+  rivarapayFranchiseType?: string;
+  rivarapayFranchiseAddress?: string;
+  rivarapayFranchiseOwnerId?: string;
+  rivarapayFranchiseOwnerUsername?: string;
   cispayShopId?: string;
   cispayApiKey?: string;
   cispaySandbox?: boolean;
@@ -3807,6 +3840,7 @@ export type UpdateSettingsPayload = {
   rollypaySigningSecret?: string | null;
   paritypaySigningSecret?: string | null;
   rollypayTestMode?: boolean;
+  rivarapayEnabled?: boolean;
   cispayEnabled?: boolean;
   rollypayEnabled?: boolean;
   lavaShopId?: string | null;
@@ -4380,6 +4414,13 @@ export interface AdminSettings {
   cryptopayTestnet?: boolean;
   heleketMerchantId?: string | null;
   heleketApiKey?: string | null;
+  rivarapayApiKey?: string;
+  rivarapayWebhookSecret?: string;
+  rivarapaySandbox?: boolean;
+  rivarapayFranchiseType?: string;
+  rivarapayFranchiseAddress?: string;
+  rivarapayFranchiseOwnerId?: string;
+  rivarapayFranchiseOwnerUsername?: string;
   cispayShopId?: string;
   cispayApiKey?: string;
   cispaySandbox?: boolean;
@@ -4401,6 +4442,7 @@ export interface AdminSettings {
   rollypaySigningSecret?: string | null;
   paritypaySigningSecret?: string | null;
   rollypayTestMode?: boolean;
+  rivarapayEnabled?: boolean;
   cispayEnabled?: boolean;
   rollypayEnabled?: boolean;
   lavaShopId?: string | null;
@@ -5950,6 +5992,7 @@ export interface PublicConfig {
   telegramStarsRubPerStar?: number;
   cryptopayEnabled?: boolean;
   heleketEnabled?: boolean;
+  rivarapayEnabled?: boolean;
   cispayEnabled?: boolean;
   rollypayEnabled?: boolean;
   cloudpaymentsEnabled?: boolean;

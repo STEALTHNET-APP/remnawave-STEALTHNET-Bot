@@ -313,7 +313,7 @@ body[data-cabinet-ui="minimal"] .cabinet-tariff-config button[aria-pressed] [cla
 body[data-cabinet-ui="minimal"] .classic-cabinet .tariff-duration-picker input:checked + span { background: hsl(var(--muted)); border-color: hsl(var(--foreground)); }
 body[data-cabinet-ui="minimal"] .classic-cabinet .tariff-duration-picker input + span { background: hsl(var(--card)); border-radius: 6px; }
 .classic-cabinet #tariff-category-title { font-size: 20px; font-weight: 550; }
-body[data-cabinet-ui="minimal"] .cabinet-chat-toolbar [data-tour="floating-chat-button"] > button { width: 40px; height: 40px; background: transparent; border: 0; border-radius: 6px; }
+body[data-cabinet-ui="minimal"] .cabinet-chat-toolbar [data-tour="floating-chat-button"] > button { width: 40px; height: 40px; background: transparent; color: hsl(var(--foreground)); border: 0; border-radius: 6px; }
 body[data-cabinet-ui="minimal"] .cabinet-chat-toolbar [data-fab-icon] svg { width: 18px; height: 18px; }
 body[data-cabinet-ui="minimal"] .cabinet-chat-toolbar [data-fab-badge] { width: 16px; height: 16px; font-size: 10px; top: 0; right: 0; border-width: 1px; }
 body[data-cabinet-ui="minimal"] .cabinet-chat-toolbar .cabinet-floating-chat { background: hsl(var(--card)); border-color: hsl(var(--border)); }
@@ -444,3 +444,6 @@ body[data-cabinet-ui="minimal"] .cabinet-withdraw-dialog { width: calc(100vw - 3
 body[data-cabinet-ui="minimal"] .cabinet-withdraw-dialog h2 { font-size: 20px; font-weight: 550; }
 body[data-cabinet-ui="minimal"] .cabinet-withdraw-dialog h2 > svg { display: none; }
 body[data-cabinet-ui="minimal"] .cabinet-withdraw-dialog p { text-align: left; font-size: 13px; }
+
+body[data-cabinet-ui="minimal"] .cabinet-floating-chat .cabinet-chat-tabs > button[aria-pressed="true"] { background: hsl(var(--foreground)); color: hsl(var(--background)) !important; border-color: hsl(var(--foreground)); }
+body[data-cabinet-ui="minimal"] .cabinet-floating-chat .cabinet-chat-tabs > button[aria-pressed="false"] { background: hsl(var(--card)); color: hsl(var(--muted-foreground)) !important; border-color: hsl(var(--border)); }

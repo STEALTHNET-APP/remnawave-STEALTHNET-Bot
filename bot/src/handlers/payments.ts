@@ -1,3 +1,4 @@
+import { parseTopupAmount } from "../topup-amount.js";
 import { purchaseChoiceText } from "../purchase-choice.js";
 import { Composer } from "grammy";
 import type { Context } from "grammy";
@@ -528,7 +529,7 @@ export function createPaymentHandlers(): Composer<Context> {
       return;
     }
 
-    if (data.startsWith("pay_option_cryptopay:") || data.startsWith("pay_option_stars:")) {
+    if (data.startsWith("pay_option_cryptopay:") || data.startsWith("pay_option_stars:") || data.startsWith("pay_option_rivarapay:")) {
       const option = findSellOption(data, config);
       if (!option) {
         await editMessageContent(ctx, "Опция не найдена.", backToMenu(config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds));
@@ -543,7 +544,7 @@ export function createPaymentHandlers(): Composer<Context> {
         personalDiscountPercent: me?.personalDiscountPercent ?? 0,
       });
       try {
-        const payment = await (data.startsWith("pay_option_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, {
+        const payment = await (data.startsWith("pay_option_rivarapay:") ? api.createRivarapayPayment : data.startsWith("pay_option_stars:") ? api.createStarsPayment : api.createCryptopayPayment)(token, {
           extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId },
         });
         const msg = buildPaymentMessage(config, {
@@ -1084,7 +1085,7 @@ export function createPaymentHandlers(): Composer<Context> {
         awaitingCustomTopup.add(userId);
         await editMessageContent(
           ctx,
-          "✏️ Введите сумму пополнения числом (например: 250, 750, 1500). Минимум 50 ₽.",
+          "✏️ Введите сумму пополнения числом (например: 250, 750, 1500). Минимум 1 в валюте вашего баланса.",
           { inline_keyboard: [[{ text: backButton(config?.botEmojis ?? null).text, callback_data: "menu:topup" }]] },
         );
         return;
@@ -1118,7 +1119,7 @@ export function createPaymentHandlers(): Composer<Context> {
       const paritypayEnabled = !!config?.paritypayEnabled;
       const lavaEnabled = !!config?.lavaEnabled;
       // Если есть >1 способа любого типа — показываем выбор
-      const anyOnline = config?.telegramStarsEnabled || yooEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || config?.cispayEnabled || paritypayEnabled || config?.cloudpaymentsEnabled || lavaEnabled;
+      const anyOnline = config?.telegramStarsEnabled || yooEnabled || yookassaEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || config?.rivarapayEnabled || config?.cispayEnabled || paritypayEnabled || config?.cloudpaymentsEnabled || lavaEnabled;
       if (methods.length > 1 || anyOnline) {
         const topupPay2 = titleWithEmoji("CARD", `Пополнение на ${formatMoney(amount, client.preferredCurrency)}\n\nВыберите способ оплаты:`, config?.botEmojis);
         await editMessageContent(ctx, topupPay2.text, topupPaymentMethodButtons(amountStr, methods, config?.botBackLabel ?? null, innerStyles?.back, innerEmojiIds, { currency: client.preferredCurrency, yoomoneyEnabled: yooEnabled, yookassaEnabled, cryptopayEnabled, heleketEnabled, rollypayEnabled, paritypayEnabled, cloudpaymentsEnabled: !!config?.cloudpaymentsEnabled, lavaEnabled }), topupPay2.entities);
@@ -1380,11 +1381,10 @@ export function createPaymentCustomTopupHandlers(): Composer<Context> {
     const publicConfig = await api.getPublicConfig().catch(() => null);
     if (await enforceSubscription(ctx, publicConfig)) return;
 
-    const raw = ctx.message.text.trim().replace(/[,\s]/g, ".").replace(/[^\d.]/g, "");
-    const amount = parseFloat(raw);
+    const amount = parseTopupAmount(ctx.message.text);
     awaitingCustomTopup.delete(userId);
-    if (!Number.isFinite(amount) || amount < 50) {
-      await ctx.reply("❌ Минимальная сумма — 50 ₽. Попробуйте снова через «💳 Пополнить баланс».", { reply_markup: { inline_keyboard: [[{ text: "💳 Пополнить баланс", callback_data: "menu:topup" }]] } });
+    if (amount === null) {
+      await ctx.reply("❌ Минимальная сумма — 1 в валюте вашего баланса. Попробуйте снова через «💳 Пополнить баланс».", { reply_markup: { inline_keyboard: [[{ text: "💳 Пополнить баланс", callback_data: "menu:topup" }]] } });
       return;
     }
     // Эмулируем callback topup:<amount> чтобы отрисовался стандартный пикер методов.
@@ -1450,7 +1450,7 @@ export function createPaymentNumericHandlers(): Composer<Context> {
     const rollypayEnabledMsg = !!config?.rollypayEnabled;
     const paritypayEnabledMsg = !!config?.paritypayEnabled;
     const lavaEnabledMsg = !!config?.lavaEnabled;
-    if (!methods.length && !yooEnabled && !yookassaEnabledMsg && !cryptopayEnabledMsg && !heleketEnabledMsg && !rollypayEnabledMsg && !config?.cispayEnabled && !paritypayEnabledMsg && !config?.cloudpaymentsEnabled && !lavaEnabledMsg && !config?.telegramStarsEnabled) {
+    if (!methods.length && !yooEnabled && !yookassaEnabledMsg && !cryptopayEnabledMsg && !heleketEnabledMsg && !rollypayEnabledMsg && !config?.rivarapayEnabled && !config?.cispayEnabled && !paritypayEnabledMsg && !config?.cloudpaymentsEnabled && !lavaEnabledMsg && !config?.telegramStarsEnabled) {
       await ctx.reply("Пополнение временно недоступно.");
       return;
     }
@@ -1468,7 +1468,7 @@ export function createPaymentNumericHandlers(): Composer<Context> {
           connect: botEmojis.SERVERS?.tgEmojiId || botEmojis.CONNECT?.tgEmojiId,
         }
       : undefined;
-    const enabledOnlineMsg = [config?.telegramStarsEnabled, yooEnabled, yookassaEnabledMsg, cryptopayEnabledMsg, heleketEnabledMsg, rollypayEnabledMsg, config?.cispayEnabled, config?.cloudpaymentsEnabled, paritypayEnabledMsg, lavaEnabledMsg].filter(Boolean).length;
+    const enabledOnlineMsg = [config?.telegramStarsEnabled, yooEnabled, yookassaEnabledMsg, cryptopayEnabledMsg, heleketEnabledMsg, rollypayEnabledMsg, config?.rivarapayEnabled, config?.cispayEnabled, config?.cloudpaymentsEnabled, paritypayEnabledMsg, lavaEnabledMsg].filter(Boolean).length;
     const anyOnlineMsg = enabledOnlineMsg > 0;
     if (methods.length > 1 || anyOnlineMsg) {
       const topupMsg1 = titleWithEmoji("CARD", `Пополнение на ${formatMoney(num, client.preferredCurrency)}\n\nВыберите способ оплаты:`, config?.botEmojis);

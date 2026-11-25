@@ -104,8 +104,8 @@ const ChatSwitcher = ({ activeChat, setActiveChat, aiUnread, supportUnread, isFl
       )}
     </button>
     <button
-      aria-pressed={true}
-          onClick={() => setActiveChat(showSupportTab ? "support" : "ai")}
+      aria-pressed={activeChat === "support"}
+      onClick={() => setActiveChat("support")}
       className={cn(
         "flex-1 sm:flex-none sm:w-[160px] flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold transition-all duration-300 relative z-10",
         activeChat === "support" ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-card"

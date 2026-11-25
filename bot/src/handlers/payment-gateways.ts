@@ -98,6 +98,16 @@ export type TopupGateway = {
 
 export const PRODUCT_GATEWAYS: ProductGateway[] = [
   {
+    prefix: "pay_proxy_rivarapay:",
+    kind: "proxy",
+    create: async (token, tariff) => ({ url: (await api.createRivarapayPayment(token, { proxyTariffId: tariff.id })).payUrl }),
+  },
+  {
+    prefix: "pay_singbox_rivarapay:",
+    kind: "singbox",
+    create: async (token, tariff) => ({ url: (await api.createRivarapayPayment(token, { singboxTariffId: tariff.id })).payUrl }),
+  },
+  {
     prefix: "pay_proxy_yoomoney:",
     kind: "proxy",
     create: async (token, tariff) => ({
@@ -195,6 +205,12 @@ export const TARIFF_GATEWAYS: TariffGateway[] = [
     create: async (token, body) => ({ url: (await api.createRollypayPayment(token, body)).payUrl }),
   },
   {
+    prefix: "pay_tariff_rivarapay:",
+    errorText: "Ошибка создания платежа RivaraPay",
+    errorMarkup: "back",
+    create: async (token, body) => ({ url: (await api.createRivarapayPayment(token, body)).payUrl }),
+  },
+  {
     prefix: "pay_tariff_cispay:",
     errorText: "Ошибка создания платежа CisPay",
     errorMarkup: "back",
@@ -262,6 +278,13 @@ export const TOPUP_GATEWAYS: TopupGateway[] = [
     errorText: "Ошибка создания платежа RollyPay",
     create: async (token, amount, currency) => ({
       url: (await api.createRollypayPayment(token, { amount, currency })).payUrl,
+    }),
+  },
+  {
+    prefix: "topup_rivarapay:",
+    errorText: "Ошибка создания платежа RivaraPay",
+    create: async (token, amount, currency) => ({
+      url: (await api.createRivarapayPayment(token, { amount, currency })).payUrl,
     }),
   },
   {
