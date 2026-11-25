@@ -1,3 +1,4 @@
+import { createRivarapayPayment, rivarapayConfig, rivarapayIdentity, rivarapayConfigurationError } from "../rivarapay/rivarapay.service.js";
 import { Router } from "express";
 import { randomUUID } from "crypto";
 import { z } from "zod";
@@ -611,14 +612,21 @@ clientPaymentsCryptoRouter.post("/heleket/create-payment", requireRemnaPaymentOn
   }
 }));
 
-clientPaymentsCryptoRouter.post(["/rollypay/create-payment", "/cispay/create-payment"], requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
+clientPaymentsCryptoRouter.post(["/rollypay/create-payment", "/cispay/create-payment", "/rivarapay/create-payment"], requireRemnaPaymentOnline, asyncHandler(async (req, res) => {
   try {
-    const provider = req.path === "/cispay/create-payment" ? "cispay" : "rollypay";
+    const provider = req.path === "/rivarapay/create-payment" ? "rivarapay" : req.path === "/cispay/create-payment" ? "cispay" : "rollypay";
+    const payer = await prisma.client.findUniqueOrThrow({ where: { id: (req as unknown as { clientId: string }).clientId }, select: { email: true, telegramId: true, telegramUsername: true } });
     const clientId = (req as unknown as { clientId: string }).clientId;
     const parsed = heleketCreatePaymentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Неверные параметры", errors: parsed.error.flatten() });
     const config = await getSystemConfig();
     if (provider === "cispay" && (!config.cispayEnabled || !config.cispayShopId || !config.cispayApiKey)) return res.status(503).json({ message: "CisPay не настроен или отключён" });
+    if (provider === "rivarapay" && (!config.rivarapayEnabled || !config.rivarapayApiKey || !config.rivarapayWebhookSecret)) return res.status(503).json({ message: "RivaraPay не настроен или отключён" });
+    if (provider === "rivarapay") {
+      const error = rivarapayConfigurationError(rivarapayConfig(config));
+      if (error) return res.status(503).json({ message: error });
+    }
+    if (provider === "rivarapay" && !rivarapayIdentity(payer)) return res.status(400).json({ message: "Для оплаты RivaraPay привяжите почту или Telegram в профиле" });
     if (provider === "rollypay" && !config.rollypayEnabled) return res.status(503).json({ message: "RollyPay отключён" });
     const rollypayConfig = {
       apiKey: (config as { rollypayApiKey?: string | null }).rollypayApiKey ?? "",
@@ -763,6 +771,7 @@ clientPaymentsCryptoRouter.post(["/rollypay/create-payment", "/cispay/create-pay
       }
     }
 
+    if (provider === "rivarapay" && currencyUpper !== "RUB") return res.status(400).json({ message: "RivaraPay принимает RUB" });
     if (provider === "cispay" && !["RUB", "USD"].includes(currencyUpper)) return res.status(400).json({ message: "CisPay принимает RUB и USD" });
     if (extraOption?.targetSubscriptionId && metadataObj.extraOption) metadataObj.targetSubscriptionId = extraOption.targetSubscriptionId;
     if (amountRounded < 1) return res.status(400).json({ message: "Минимальная сумма платежа — 1" });
@@ -817,7 +826,7 @@ clientPaymentsCryptoRouter.post(["/rollypay/create-payment", "/cispay/create-pay
         singboxTariffId: singboxTariffIdToStore,
         // see yookassa endpoint for explanation.
         metadata: (() => {
-          const meta: Record<string, unknown> = { ...metadataObj, ...(provider === "cispay" ? { cispaySandbox: config.cispaySandbox, cispayShopId: config.cispayShopId } : { rollypayTestMode: rollypayConfig.testMode === true }) };
+          const meta: Record<string, unknown> = { ...metadataObj, ...(provider === "rivarapay" ? { rivarapaySandbox: config.rivarapaySandbox } : provider === "cispay" ? { cispaySandbox: config.cispaySandbox, cispayShopId: config.cispayShopId } : { rollypayTestMode: rollypayConfig.testMode === true }) };
           if (asAdditional && tariffIdToStore) {
             meta.isAdditionalSubscription = true;
           }
@@ -847,7 +856,7 @@ clientPaymentsCryptoRouter.post(["/rollypay/create-payment", "/cispay/create-pay
     const urlSuccess = appUrl ? `${appUrl}/cabinet?rollypay=success` : undefined;
     const urlFail = appUrl ? `${appUrl}/cabinet?rollypay=fail` : undefined;
 
-    const result = provider === "cispay" ? await createCispayPayment({ config: { shopId: config.cispayShopId, apiKey: config.cispayApiKey }, amount: rpCharge, currency: currencyUpper, orderId, customerId: clientId, description: `${serviceName}: ${orderId}`, returnUrl: appUrl ? `${appUrl}/cabinet?cispay=return` : undefined }) : await createRollypayPayment({
+    const result = provider === "rivarapay" ? await createRivarapayPayment({ config: rivarapayConfig(config), amount: rpCharge, currency: currencyUpper, orderId, client: payer, description: `${serviceName}: ${orderId}`, returnUrl: appUrl ? `${appUrl}/cabinet?rivarapay=return` : undefined }) : provider === "cispay" ? await createCispayPayment({ config: { shopId: config.cispayShopId, apiKey: config.cispayApiKey }, amount: rpCharge, currency: currencyUpper, orderId, customerId: clientId, description: `${serviceName}: ${orderId}`, returnUrl: appUrl ? `${appUrl}/cabinet?cispay=return` : undefined }) : await createRollypayPayment({
       config: rollypayConfig,
       amount: String(rpCharge),
       currency: currencyUpper,

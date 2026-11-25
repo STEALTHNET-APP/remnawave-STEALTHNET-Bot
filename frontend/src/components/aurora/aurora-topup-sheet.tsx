@@ -28,7 +28,7 @@ interface Props {
 
 interface PaymentMethodItem {
   id: string;
-  kind: "yookassa" | "yoomoney" | "cryptopay" | "telegram_stars" | "platega" | "heleket" | "rollypay" | "cispay" | "paritypay" | "cloudpayments" | "lava" | "overpay";
+  kind: "yookassa" | "yoomoney" | "cryptopay" | "telegram_stars" | "platega" | "heleket" | "rollypay" | "rivarapay" | "cispay" | "paritypay" | "cloudpayments" | "lava" | "overpay";
   label: string;
   subLabel?: string;
   plategaId?: number;
@@ -128,6 +128,16 @@ export function AuroraTopUpSheet({ open, onClose }: Props) {
         id: "rollypay",
         kind: "rollypay",
         label: providerLabel("rollypay", "RollyPay"),
+        subLabel: "Банковские карты",
+        icon: CreditCard,
+      });
+    }
+
+    if (Boolean(config.rivarapayEnabled) && isRub) {
+      list.push({
+        id: "rivarapay",
+        kind: "rivarapay",
+        label: providerLabel("rivarapay", "RivaraPay"),
         subLabel: "Банковские карты",
         icon: CreditCard,
       });
@@ -282,6 +292,11 @@ if (Boolean(config.paritypayEnabled) && isRub) {
         const res = await api.rollypayCreatePayment(token, { amount: num, currency });
         if (res.payUrl) {
           setReadyUrl({ url: res.payUrl, provider: "RollyPay", paymentId: res.paymentId });
+        }
+      } else if (method.kind === "rivarapay") {
+        const res = await api.rivarapayCreatePayment(token, { amount: num, currency });
+        if (res.payUrl) {
+          setReadyUrl({ url: res.payUrl, provider: "CisPay", paymentId: res.paymentId });
         }
       } else if (method.kind === "cispay") {
         const res = await api.cispayCreatePayment(token, { amount: num, currency });
@@ -451,6 +466,7 @@ if (Boolean(config.paritypayEnabled) && isRub) {
                       <span
                         className={cn(
                           "flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors",
+                          paymentLabelHasIcon(m.label) && "hidden",
                           isSelected
                             ? "bg-[linear-gradient(135deg,var(--au-from),var(--au-to))] text-white"
                             : "bg-[var(--au-bg)] text-[var(--au-muted)]",

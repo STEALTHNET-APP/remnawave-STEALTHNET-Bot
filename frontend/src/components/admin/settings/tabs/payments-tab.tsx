@@ -2,6 +2,7 @@ import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BarChart3, Check, ChevronDown, ChevronUp, Copy, CreditCard, GripVertical, RotateCw, Sparkles, Wallet } from "lucide-react";
+import { RivarapaySettings } from "@/components/admin/rivarapay-settings";
 import { CispaySettings } from "@/components/admin/cispay-settings";
 import { CloudPaymentsSettings } from "@/components/admin/cloudpayments-settings";
 import { Button } from "@/components/ui/button";
@@ -146,6 +147,8 @@ function isPaymentProviderActive(id: string, s: AdminSettings | null): boolean {
         s.paritypayApiKey?.trim() &&
         s.paritypaySigningSecret?.trim()
       );
+    case "rivarapay":
+      return Boolean(s.rivarapayEnabled && s.rivarapayApiKey?.trim() && s.rivarapayWebhookSecret?.trim());
     case "cispay":
       return Boolean(s.cispayEnabled && s.cispayShopId?.trim() && s.cispayApiKey?.trim());
     case "rollypay":
@@ -517,7 +520,7 @@ export function PaymentsTab({
                     </div>
                     <div className="space-y-2">
                       <Label>{t("admin.settings.payment_methods")}</Label>
-                      <p className="text-xs text-muted-foreground">{t("admin.settings.payment_methods_hint")}</p>
+                      <p className="text-xs text-muted-foreground">Способы можно включить здесь. Названия и порядок кнопок меняются в списке платёжных систем выше.</p>
                       <div className="rounded-md border divide-y">
                         {(settings.plategaMethods ?? DEFAULT_PLATEGA_METHODS).map((m) => (
                           <div key={m.id} className="flex items-center gap-4 p-3">
@@ -540,23 +543,7 @@ export function PaymentsTab({
                             <Label htmlFor={`platega-method-${m.id}`} className="shrink-0 w-8 cursor-pointer">
                               {m.id}
                             </Label>
-                            <Input
-                              className="flex-1"
-                              value={m.label}
-                              onChange={(e) =>
-                                setSettings((s) =>
-                                  s
-                                    ? {
-                                        ...s,
-                                        plategaMethods: (s.plategaMethods ?? DEFAULT_PLATEGA_METHODS).map((x) =>
-                                          x.id === m.id ? { ...x, label: e.target.value } : x
-                                        ),
-                                      }
-                                    : s
-                                )
-                              }
-                              placeholder={t("admin.settings.platega_btn_placeholder")}
-                            />
+                            <span className="min-w-0 flex-1 text-sm">{settings.paymentProviders?.find(p => p.id === `platega_${m.id}`)?.label || m.label}</span>
                           </div>
                         ))}
                       </div>
@@ -1055,6 +1042,7 @@ export function PaymentsTab({
                 </CollapsibleContent>
               </Collapsible>
             </Card>
+            <RivarapaySettings settings={settings} onChange={patch => setSettings(s => s ? { ...s, ...patch } : s)} saving={saving} />
             <CispaySettings settings={settings} onChange={patch => setSettings(s => s ? { ...s, ...patch } : s)} saving={saving} />
             <Card>
               <Collapsible defaultOpen={false} className="group">

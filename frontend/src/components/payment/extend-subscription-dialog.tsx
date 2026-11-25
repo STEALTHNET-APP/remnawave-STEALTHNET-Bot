@@ -1,3 +1,4 @@
+import { paymentLabelHasIcon } from "@/lib/payment-label";
 /**
  * красивая модалка продления подписки прямо из дашборда.
  *
@@ -205,6 +206,9 @@ export function ExtendSubscriptionDialog({
       } else if (providerId === "rollypay") {
         const r = await api.rollypayCreatePayment(token, payBase);
         url = r.payUrl; paymentId = r.paymentId; providerLabel = "RollyPay";
+      } else if (providerId === "rivarapay") {
+        const r = await api.rivarapayCreatePayment(token, payBase);
+        url = r.payUrl; paymentId = r.paymentId; providerLabel = "RivaraPay";
       } else if (providerId === "cispay") {
         const r = await api.cispayCreatePayment(token, payBase);
         url = r.payUrl; paymentId = r.paymentId; providerLabel = "CisPay";
@@ -237,6 +241,7 @@ export function ExtendSubscriptionDialog({
       { id: "cryptopay", enabled: Boolean(config.cryptopayEnabled), fb: "Crypto Bot" },
       { id: "heleket", enabled: Boolean(config.heleketEnabled), fb: "Heleket" },
       { id: "rollypay", enabled: Boolean(config.rollypayEnabled), fb: "RollyPay" },
+      { id: "rivarapay", enabled: Boolean(config.rivarapayEnabled) && isRub, fb: "RivaraPay" },
       { id: "cispay", enabled: Boolean(config.cispayEnabled), fb: "CisPay" },
       { id: "paritypay", enabled: Boolean(config.paritypayEnabled), fb: "ParityPay" },
       { id: "cloudpayments", enabled: Boolean(config.cloudpaymentsEnabled), fb: "CloudPayments" },
@@ -396,7 +401,7 @@ export function ExtendSubscriptionDialog({
                   onClick={() => payWith(p.id)}
                   className="w-full h-14 justify-start gap-3 rounded-xl border-border bg-white/[0.03] hover:bg-white/[0.07] px-5"
                 >
-                  <span className="p-1.5 rounded-xl bg-primary/10">
+                  <span className={cn("p-1.5 rounded-xl bg-primary/10", paymentLabelHasIcon(p.label) && "hidden")}>
                     <CreditCard className="h-4 w-4 text-primary" />
                   </span>
                   <span className="font-bold text-sm">{p.label}</span>

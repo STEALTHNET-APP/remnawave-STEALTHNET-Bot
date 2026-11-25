@@ -48,12 +48,15 @@ jobs:
           node tests/email-signup-password.cjs
           node tests/google-auth.cjs
           node --test tests/forgot-password-hybrid.test.mjs
+          node --experimental-vm-modules --experimental-test-module-mocks --test tests/rivarapay.integration.mjs tests/rivarapay-checkout.integration.mjs
       - name: Account, AI and email regression checks
         working-directory: backend
         env:
           DATABASE_URL: postgresql://fixture:fixture@127.0.0.1:1/unused
           JWT_SECRET: test-secret-for-isolated-regressions
         run: |
+          node --test tests/rivarapay.test.mjs tests/broadcast-progress.test.mjs
+          node --experimental-vm-modules --experimental-test-module-mocks --test tests/backup-scheduler.test.mjs
           node tests/merge-clients-remna.cjs
           node tests/email-template-legacy-subject.cjs
           node --experimental-vm-modules --experimental-test-module-mocks --test tests/groq-models.test.mjs tests/telegram-subscriptions.test.mjs tests/telegram-register-discovery.test.mjs tests/remna-duplicate-profiles.test.mjs tests/email-unsubscribe.test.mjs tests/maintenance-nov19.test.mjs

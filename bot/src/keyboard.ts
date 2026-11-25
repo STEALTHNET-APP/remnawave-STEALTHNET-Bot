@@ -1,6 +1,8 @@
 import type { ButtonStyle, InlineButton, WebAppButton, UrlButton, InlineMarkup, BotButtonConfig } from "./main-menu.js";
 export { mainMenu, DEFAULT_CABINET_GROUPED_IDS } from "./main-menu.js";
 export type { InlineButton, InlineMarkup, BotButtonConfig } from "./main-menu.js";
+let rivarapayEnabled = false;
+export function setRivarapayEnabled(enabled: boolean) { rivarapayEnabled = enabled; }
 let cispayEnabled = false;
 export function setCispayEnabled(enabled: boolean) { cispayEnabled = enabled; }
 /**
@@ -607,6 +609,8 @@ export function tariffPaymentMethodButtons(
       if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `pay_tariff_cryptopay:${tariffId}`, undefined, cardId)]);
     } else if (id === "heleket") {
       if (heleketEnabled) rows.push([btn(providerLabel("heleket", "💳 Heleket — криптовалюта"), `pay_tariff_heleket:${tariffId}`, undefined, cardId)]);
+    } else if (id === "rivarapay") {
+      if (rivarapayEnabled && (tariffCurrency ?? "RUB").toUpperCase() === "RUB") rows.push([btn(providerLabel("rivarapay", "💳 RivaraPay — карта / СБП / криптовалюта"), `pay_tariff_rivarapay:${tariffId}`, undefined, cardId)]);
     } else if (id === "cispay") {
       if (cispayEnabled && ["RUB", "USD"].includes((tariffCurrency ?? "RUB").toUpperCase())) rows.push([btn(providerLabel("cispay", "💳 CisPay — карта / СБП / криптовалюта"), `pay_tariff_cispay:${tariffId}`, undefined, cardId)]);
     } else if (id === "rollypay") {
@@ -617,7 +621,7 @@ export function tariffPaymentMethodButtons(
       if (cloudpaymentsEnabled && isRub) rows.push([btn(providerLabel("cloudpayments", "💳 Карта (CloudPayments)"), `pay_tariff_cloudpayments:${tariffId}`, undefined, cardId)]);
     }
   };
-  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "lava", "lavatop", "cryptopay", "heleket", "cispay", "rollypay", "paritypay", "cloudpayments"])) addProvider(id);
+  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "lava", "lavatop", "cryptopay", "heleket", "rivarapay", "cispay", "rollypay", "paritypay", "cloudpayments"])) addProvider(id);
   for (const m of methods) addProvider(`platega_${m.id}`);
   // «🏠 Главное меню» → «← Назад» (callback menu:tariffs).
   // Юзер хочет возвращаться к списку тарифов, а не уходить в главное меню.
@@ -753,11 +757,13 @@ export function proxyPaymentMethodButtons(
       if (yoomoneyEnabled && isRub) rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_proxy_yoomoney:${proxyTariffId}`, undefined, cardId)]);
     } else if (id === "yookassa") {
       if (yookassaEnabled && isRub) rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `pay_proxy_yookassa:${proxyTariffId}`, undefined, cardId)]);
+    } else if (id === "rivarapay") {
+      if (rivarapayEnabled && isRub) rows.push([btn(providerLabel("rivarapay", "💳 RivaraPay"), `pay_proxy_rivarapay:${proxyTariffId}`, undefined, cardId)]);
     } else if (id === "cryptopay") {
       if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `pay_proxy_cryptopay:${proxyTariffId}`, undefined, cardId)]);
     }
   };
-  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "cryptopay"])) addProvider(id);
+  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "cryptopay", "rivarapay"])) addProvider(id);
   for (const m of methods) addProvider(`platega_${m.id}`);
   rows.push([btn(back, "menu:proxy", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
@@ -852,11 +858,13 @@ export function singboxPaymentMethodButtons(
       if (yoomoneyEnabled && isRub) rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_singbox_yoomoney:${singboxTariffId}`, undefined, cardId)]);
     } else if (id === "yookassa") {
       if (yookassaEnabled && isRub) rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `pay_singbox_yookassa:${singboxTariffId}`, undefined, cardId)]);
+    } else if (id === "rivarapay") {
+      if (rivarapayEnabled && isRub) rows.push([btn(providerLabel("rivarapay", "💳 RivaraPay"), `pay_singbox_rivarapay:${singboxTariffId}`, undefined, cardId)]);
     } else if (id === "cryptopay") {
       if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `pay_singbox_cryptopay:${singboxTariffId}`, undefined, cardId)]);
     }
   };
-  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "cryptopay"])) addProvider(id);
+  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "cryptopay", "rivarapay"])) addProvider(id);
   for (const m of methods) addProvider(`platega_${m.id}`);
   rows.push([btn(back, "menu:singbox", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
@@ -907,6 +915,8 @@ export function topupPaymentMethodButtons(
       if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `topup_cryptopay:${amount}`, "primary", cardId)]);
     } else if (id === "heleket") {
       if (heleketEnabled) rows.push([btn(providerLabel("heleket", "💳 Heleket — криптовалюта"), `topup_heleket:${amount}`, "primary", cardId)]);
+    } else if (id === "rivarapay") {
+      if (rivarapayEnabled && (providers.currency ?? "RUB").toUpperCase() === "RUB") rows.push([btn(providerLabel("rivarapay", "💳 RivaraPay — карта / СБП / криптовалюта"), `topup_rivarapay:${amount}`, undefined, cardId)]);
     } else if (id === "cispay") {
       if (cispayEnabled && ["RUB", "USD"].includes((providers.currency ?? "RUB").toUpperCase())) rows.push([btn(providerLabel("cispay", "💳 CisPay — карта / СБП / криптовалюта"), `topup_cispay:${amount}`, undefined, cardId)]);
     } else if (id === "rollypay") {
@@ -917,7 +927,7 @@ export function topupPaymentMethodButtons(
       if (cloudpaymentsEnabled) rows.push([btn(providerLabel("cloudpayments", "💳 Карта (CloudPayments)"), `topup_cloudpayments:${amount}`, "primary", cardId)]);
     }
   };
-  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "lava", "cryptopay", "heleket", "cispay", "rollypay", "paritypay", "cloudpayments"])) addProvider(id);
+  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "lava", "cryptopay", "heleket", "rivarapay", "cispay", "rollypay", "paritypay", "cloudpayments"])) addProvider(id);
   for (const m of methods) addProvider(`platega_${m.id}`);
   rows.push([btn(back, "menu:topup", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };
@@ -991,11 +1001,13 @@ export function optionPaymentMethodButtons(
       if (yoomoneyEnabled) rows.push([btn(providerLabel("yoomoney", "💳 ЮMoney — карта"), `pay_option_yoomoney:${option.kind}:${option.id}`, undefined, cardId)]);
     } else if (id === "yookassa") {
       if (yookassaEnabled !== false) rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `pay_option_yookassa:${option.kind}:${option.id}`, undefined, cardId)]);
+    } else if (id === "rivarapay") {
+      if (rivarapayEnabled && option.currency?.toUpperCase() === "RUB") rows.push([btn(providerLabel("rivarapay", "💳 RivaraPay"), `pay_option_rivarapay:${option.kind}:${option.id}`, undefined, cardId)]);
     } else if (id === "cryptopay") {
       if (cryptopayEnabled) rows.push([btn(providerLabel("cryptopay", "💳 Crypto Bot — криптовалюта"), `pay_option_cryptopay:${option.kind}:${option.id}`, undefined, cardId)]);
     }
   };
-  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "cryptopay"])) addProvider(id);
+  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "cryptopay", "rivarapay"])) addProvider(id);
   for (const m of plategaMethods) addProvider(`platega_${m.id}`);
   if (rows.length === 0) {
     rows.push([btn(providerLabel("yookassa", "💳 Оплата (ЮKassa)"), `pay_option_yookassa:${option.kind}:${option.id}`, undefined, cardId)]);
@@ -1389,6 +1401,8 @@ export function giftPaymentButtons(
       if (yookassaEnabled && isRub) rows.push([btn(providerLabel("yookassa", "💳 ЮKassa — карта / СБП"), `gift_pay_yookassa:${tariffId}`, undefined, cardId)]);
     } else if (id === "lava") {
       if (lavaEnabled && isRub) rows.push([btn(providerLabel("lava", "💳 Lava — СБП / Карты"), `gift_pay_lava:${tariffId}`, undefined, cardId)]);
+    } else if (id === "rivarapay") {
+      if (rivarapayEnabled && (tariffCurrency ?? "RUB").toUpperCase() === "RUB") rows.push([btn(providerLabel("rivarapay", "💳 RivaraPay — карта / СБП / криптовалюта"), `gift_pay_rivarapay:${tariffId}`, undefined, cardId)]);
     } else if (id === "cispay") {
       if (cispayEnabled && ["RUB", "USD"].includes((tariffCurrency ?? "RUB").toUpperCase())) rows.push([btn(providerLabel("cispay", "💳 CisPay — карта / СБП / криптовалюта"), `gift_pay_cispay:${tariffId}`, undefined, cardId)]);
     } else if (id === "paritypay") {
@@ -1401,7 +1415,7 @@ export function giftPaymentButtons(
       if (heleketEnabled) rows.push([btn(providerLabel("heleket", "💳 Heleket — криптовалюта"), `gift_pay_heleket:${tariffId}`, undefined, cardId)]);
     }
   };
-  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "lava", "cispay", "paritypay", "cloudpayments", "cryptopay", "heleket"])) addProvider(id);
+  for (const id of orderedProviderIds(["telegram_stars", "yoomoney", "yookassa", "lava", "rivarapay", "cispay", "paritypay", "cloudpayments", "cryptopay", "heleket"])) addProvider(id);
   for (const m of plategaMethods) addProvider(`platega_${m.id}`);
   rows.push([btn(back, "gift:buy", backSty, emojiIds?.back)]);
   return { inline_keyboard: rows };

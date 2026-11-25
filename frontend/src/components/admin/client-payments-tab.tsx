@@ -110,6 +110,7 @@ export function ClientPaymentsTab({ clientId, token }: Props) {
     if (provider === "heleket") return "Heleket";
     if (provider === "cloudpayments") return "CloudPayments";
     if (provider === "lavatop" || provider === "lava") return "Lava";
+    if (provider === "rivarapay") return "RivaraPay";
     if (provider === "cispay" || provider === "cis pay") return "CisPay";
     return provider;
   };

@@ -16,6 +16,7 @@ export type PayMethodKind =
   | "cryptopay"
   | "heleket"
   | "rollypay"
+  | "rivarapay"
   | "cispay"
   | "paritypay"
   | "cloudpayments"
@@ -113,6 +114,7 @@ const DEFAULT_METHOD_ORDER: PayMethodKind[] = [
   "cryptopay",
   "heleket",
   "rollypay",
+  "rivarapay",
   "cispay",
   "cloudpayments",
   "paritypay",
@@ -130,6 +132,7 @@ const METHOD_LABELS: Record<PayMethodKind, string> = {
   cryptopay: "Crypto Pay",
   heleket: "Heleket",
   rollypay: "RollyPay",
+  rivarapay: "RivaraPay",
   cispay: "CisPay",
   paritypay: "ParityPay",
   cloudpayments: "CloudPayments",
@@ -451,6 +454,7 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
     if (config.cryptopayEnabled) push("cryptopay", METHOD_LABELS.cryptopay);
     if (config.heleketEnabled) push("heleket", METHOD_LABELS.heleket);
     if (config.rollypayEnabled) push("rollypay", METHOD_LABELS.rollypay);
+    if (config.rivarapayEnabled && currency.toUpperCase() === "RUB") push("rivarapay", METHOD_LABELS.rivarapay);
     if (config.cispayEnabled) push("cispay", METHOD_LABELS.cispay);
     if (config.cloudpaymentsEnabled) push("cloudpayments", METHOD_LABELS.cloudpayments);
     if (config.paritypayEnabled) push("paritypay", METHOD_LABELS.paritypay);
@@ -755,6 +759,10 @@ export function useCabinetTariffPurchase(options: CabinetTariffPurchaseOptions =
         paymentId = result.paymentId;
       } else if (method.kind === "rollypay") {
         const result = await api.rollypayCreatePayment(token, { ...base, ...amountValues });
+        url = result.payUrl;
+        paymentId = result.paymentId;
+      } else if (method.kind === "rivarapay") {
+        const result = await api.rivarapayCreatePayment(token, { ...base, ...amountValues });
         url = result.payUrl;
         paymentId = result.paymentId;
       } else if (method.kind === "cispay") {

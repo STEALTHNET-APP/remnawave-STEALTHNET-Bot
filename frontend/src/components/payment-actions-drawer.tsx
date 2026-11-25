@@ -410,7 +410,8 @@ export function PaymentActionsDrawer({ paymentId, onClose, onRefreshList }: Prop
                   )}
 
                   {/* Refund — для PAID */}
-                  {isPaid && (
+                  {isPaid && p?.provider === "rivarapay" && <p className="text-xs text-muted-foreground">Возврат оформляется в кабинете RivaraPay. После подтверждения обновится статус платежа. Частичный возврат и выданный доступ требуют ручной сверки.</p>}
+                  {isPaid && p?.provider !== "rivarapay" && (
                     <>
                       {p?.provider === "cispay" ? (
                         <p className="text-xs text-muted-foreground">Запрос полного возврата карты или СБП будет отправлен в CisPay. Пополнение и реферальные начисления отменятся после подтверждения. Выданный доступ отключите отдельно; криптовалюта через API не возвращается.</p>

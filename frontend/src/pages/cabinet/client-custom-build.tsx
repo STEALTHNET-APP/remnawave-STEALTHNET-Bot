@@ -1,3 +1,4 @@
+import { paymentLabelHasIcon } from "@/lib/payment-label";
 import { useEffect, useMemo, useState } from "react";
 import { Layers, CreditCard, Wallet, Loader2, Calendar, Smartphone, Wifi, Zap, Tag } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth";
@@ -209,6 +210,23 @@ function ClassicCustomBuildPage() {
         promoCode: promoCode.trim() || undefined,
       });
       if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "RollyPay" });
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
+    } finally {
+      setPayLoading(false);
+    }
+  }
+  async function payByRivarapay() {
+    if (!token || !cb) return;
+    setPayError(null);
+    setPayLoading(true);
+    try {
+      const res = await api.rivarapayCreatePayment(token, {
+        customBuild: customBuildPayload,
+        currency: cb.currency,
+        promoCode: promoCode.trim() || undefined,
+      });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "RivaraPay" });
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {
@@ -529,6 +547,7 @@ async function payByCloudpayments() {
                   cryptopay: { bg10: "bg-yellow-500/10", bg20: "group-hover:bg-yellow-500/20", text: "text-yellow-500" },
                   heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
                   rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                  rivarapay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                   cispay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                   paritypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                   cloudpayments: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
@@ -545,6 +564,7 @@ async function payByCloudpayments() {
                   { id: "cryptopay", enabled: !!config?.cryptopayEnabled, onClick: () => payByCryptopay(), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
                   { id: "heleket", enabled: !!config?.heleketEnabled, onClick: () => payByHeleket(), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
                   { id: "rollypay", enabled: !!config?.rollypayEnabled, onClick: () => payByRollypay(), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
+                  { id: "rivarapay", enabled: !!config?.rivarapayEnabled && cb.currency.toUpperCase() === "RUB", onClick: () => payByRivarapay(), label: providerLabel("rivarapay", "RivaraPay"), icon: "card" },
                   { id: "cispay", enabled: !!config?.cispayEnabled, onClick: () => payByCispay(), label: providerLabel("cispay", "CisPay"), icon: "card" },
                   { id: "paritypay", enabled: !!config?.paritypayEnabled, onClick: () => payByParitypay(), label: providerLabel("paritypay", "ParityPay"), icon: "card" },
                   { id: "cloudpayments", enabled: !!config?.cloudpaymentsEnabled, onClick: () => payByCloudpayments(), label: providerLabel("cloudpayments", "CloudPayments"), icon: "card" },
@@ -573,14 +593,14 @@ async function payByCloudpayments() {
                       <Button key={p.id} size="lg" variant="outline" onClick={p.onClick} disabled={payLoading} className={btnCls}>
                         {isMobileOrMiniapp ? (
                           <>
-                            <div className={cn("p-2 rounded-xl", c.bg10)}>
+                            <div className={cn("p-2 rounded-xl", c.bg10, !payLoading && paymentLabelHasIcon(p.label) && "hidden")}>
                               {payLoading ? <Loader2 className={cn("h-6 w-6 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-6 w-6", c.text)} /> : <CreditCard className={cn("h-6 w-6", c.text)} />}
                             </div>
                             <span className="text-base font-bold">{p.label}</span>
                           </>
                         ) : (
                           <>
-                            <div className={cn("absolute left-6 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20)}>
+                            <div className={cn("absolute left-6 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20, !payLoading && paymentLabelHasIcon(p.label) && "hidden")}>
                               {payLoading ? <Loader2 className={cn("h-5 w-5 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-5 w-5", c.text)} /> : <CreditCard className={cn("h-5 w-5", c.text)} />}
                             </div>
                             <span className="text-base font-medium">{p.label}</span>

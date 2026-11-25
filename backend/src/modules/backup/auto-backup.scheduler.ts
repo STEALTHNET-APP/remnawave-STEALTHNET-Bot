@@ -142,7 +142,7 @@ async function sendDocument(destination: TelegramDestination, buffer: Buffer, fi
   throw new Error(`Telegram upload failed: ${filename}`);
 }
 
-export async function runAutoBackup(options: { force?: boolean } = {}): Promise<void> {
+export async function runAutoBackup(options: { force?: boolean; comment?: string } = {}): Promise<void> {
   if (running) throw new Error("Создание бэкапа уже выполняется");
   running = true;
   try {
@@ -180,6 +180,7 @@ export async function runAutoBackup(options: { force?: boolean } = {}): Promise<
           }
           const manifest = {
             filename: archive.filename,
+            ...(options.force && options.comment?.trim() ? { comment: options.comment.trim().slice(0, 1000) } : {}),
             stealthnetVersion: APP_VERSION,
             remnawaveVersion,
             bytes: archive.bytes,

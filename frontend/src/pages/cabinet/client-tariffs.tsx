@@ -803,14 +803,14 @@ function ClassicTariffsPage() {
                       <Button key={id} size="lg" variant="outline" onClick={() => startPayment(method)} disabled={payLoading} className={btnCls}>
                         {isMobileOrMiniapp ? (
                           <>
-                            <div className={cn("p-2 rounded-xl", c.bg10)}>
+                            <div className={cn("p-2 rounded-xl", c.bg10, !payLoading && paymentLabelHasIcon(label) && "hidden")}>
                               {payLoading ? <Loader2 className={cn("h-6 w-6 animate-spin", c.text)} /> : paymentLabelHasIcon(label) ? null : crypto ? <Zap className={cn("h-6 w-6", c.text)} /> : <CreditCard className={cn("h-6 w-6", c.text)} />}
                             </div>
                             <span className="text-base font-bold">{label}</span>
                           </>
                         ) : (
                           <>
-                            <div className={cn("shrink-0 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20)}>
+                            <div className={cn("shrink-0 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20, !payLoading && paymentLabelHasIcon(label) && "hidden")}>
                               {payLoading ? <Loader2 className={cn("h-5 w-5 animate-spin", c.text)} /> : paymentLabelHasIcon(label) ? null : crypto ? <Zap className={cn("h-5 w-5", c.text)} /> : <CreditCard className={cn("h-5 w-5", c.text)} />}
                             </div>
                             <span className="text-sm font-medium">{label}</span>

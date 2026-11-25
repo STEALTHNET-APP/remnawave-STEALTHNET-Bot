@@ -13,11 +13,16 @@ function metadata(raw: string | null): Record<string, unknown> {
   try { const m = JSON.parse(raw || "{}"); return m && typeof m === "object" && !Array.isArray(m) ? m : {}; } catch { return {}; }
 }
 
-export async function acceptPaidPayment(paymentId: string, provider: string, externalId: string) {
+export async function acceptPaidPayment(paymentId: string, provider: string, externalId: string, event?: { id: string; digest: string }) {
   const result = await prisma.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM payments WHERE id = ${paymentId} FOR UPDATE`;
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
     if (payment.provider !== provider) throw new Error("Payment provider mismatch");
+    if (event) {
+      const previous = await tx.paymentWebhookReceipt.findUnique({ where: { provider_eventId: { provider, eventId: event.id } } });
+      if (previous && (previous.paymentId !== paymentId || previous.digest !== event.digest)) throw Error("Webhook event identity mismatch");
+      if (!previous) await tx.paymentWebhookReceipt.create({ data: { provider, eventId: event.id, paymentId, digest: event.digest } });
+    }
     const meta = metadata(payment.metadata);
     const product = !!(payment.tariffId || payment.proxyTariffId || payment.singboxTariffId || meta.extraOption || meta.customBuild);
     const claim = await tx.payment.updateMany({ where: { id: paymentId, status: { in: ["PENDING", "FAILED"] } }, data: {
@@ -30,8 +35,11 @@ export async function acceptPaidPayment(paymentId: string, provider: string, ext
     return { payment, accepted: true, product };
   });
   if (result.accepted && !result.product) {
-    await notifyBalanceToppedUp(result.payment.clientId, result.payment.amount, result.payment.currency, provider).catch(() => {});
-    await distributeReferralRewards(paymentId).catch(() => {});
+    const followup = async () => {
+      await notifyBalanceToppedUp(result.payment.clientId, result.payment.amount, result.payment.currency, provider).catch(() => {});
+      await distributeReferralRewards(paymentId).catch(() => {});
+    };
+    if (event) void followup().catch(() => {}); else await followup();
   }
   return result;
 }
@@ -41,7 +49,7 @@ export async function processPaymentDelivery(paymentId: string): Promise<void> {
   const claim = await prisma.$transaction(async tx => {
     await tx.$queryRaw`SELECT id FROM payments WHERE id = ${paymentId} FOR UPDATE`;
     const payment = await tx.payment.findUnique({ where: { id: paymentId } });
-    if (payment?.status !== "PAID" || metadata(payment.metadata).cispayRefundRequestedAt) return { count: 0 };
+    if (payment?.status !== "PAID" || (metadata(payment.metadata).cispayRefundRequestedAt || metadata(payment.metadata).rivarapayRefundReview)) return { count: 0 };
     return tx.paymentDelivery.updateMany({ where: { paymentId, state: "PENDING" }, data: { state: "PROCESSING", startedAt } });
   });
   if (!claim.count) return;

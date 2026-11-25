@@ -1,3 +1,4 @@
+import { paymentLabelHasIcon } from "@/lib/payment-label";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -66,6 +67,7 @@ function ClassicExtraOptionsPage() {
   const [cryptopayEnabled, setCryptopayEnabled] = useState(false);
   const [heleketEnabled, setHeleketEnabled] = useState(false);
   const [rollypayEnabled, setRollypayEnabled] = useState(false);
+  const [rivarapayEnabled, setRivarapayEnabled] = useState(false);
   const [cispayEnabled, setCispayEnabled] = useState(false);
   const [paritypayEnabled, setParitypayEnabled] = useState(false);
   const [cloudpaymentsEnabled, setCloudpaymentsEnabled] = useState(false);
@@ -97,6 +99,7 @@ function ClassicExtraOptionsPage() {
       setTelegramStarsEnabled(Boolean(c.telegramStarsEnabled));
       setHeleketEnabled(Boolean(c.heleketEnabled));
       setRollypayEnabled(Boolean(c.rollypayEnabled));
+      setRivarapayEnabled(Boolean(c.rivarapayEnabled));
       setCispayEnabled(Boolean(c.cispayEnabled));
       setParitypayEnabled(Boolean(c.paritypayEnabled));
       setCloudpaymentsEnabled(Boolean(c.cloudpaymentsEnabled));
@@ -215,6 +218,21 @@ function ClassicExtraOptionsPage() {
         extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId: selectedSubId ?? undefined },
       });
       if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "RollyPay", paymentId: res.paymentId });
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
+    } finally {
+      setPayLoading(false);
+    }
+  }
+  async function startRivarapayPayment(option: PublicSellOption) {
+    if (!token) return;
+    setPayError(null);
+    setPayLoading(true);
+    try {
+      const res = await api.rivarapayCreatePayment(token, {
+        extraOption: { kind: option.kind, productId: option.id, targetSubscriptionId: selectedSubId ?? undefined },
+      });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "RivaraPay", paymentId: res.paymentId });
     } catch (e) {
       setPayError(e instanceof Error ? e.message : "Ошибка создания платежа");
     } finally {
@@ -511,6 +529,7 @@ async function startCloudpaymentsPayment(option: PublicSellOption) {
                 cryptopay: { bg10: "bg-yellow-500/10", bg20: "group-hover:bg-yellow-500/20", text: "text-yellow-500" },
                 heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
                 rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                rivarapay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 cispay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 paritypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 cloudpayments: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
@@ -526,6 +545,7 @@ async function startCloudpaymentsPayment(option: PublicSellOption) {
                 { id: "cryptopay", enabled: cryptopayEnabled, onClick: () => startCryptopayPayment(payModal!), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
                 { id: "heleket", enabled: heleketEnabled, onClick: () => startHeleketPayment(payModal!), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
                 { id: "rollypay", enabled: rollypayEnabled, onClick: () => startRollypayPayment(payModal!), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
+                { id: "rivarapay", enabled: rivarapayEnabled && payModal!.currency.toUpperCase() === "RUB", onClick: () => startRivarapayPayment(payModal!), label: providerLabel("rivarapay", "RivaraPay"), icon: "card" },
                 { id: "cispay", enabled: cispayEnabled, onClick: () => startCispayPayment(payModal!), label: providerLabel("cispay", "CisPay"), icon: "card" },
                 { id: "paritypay", enabled: paritypayEnabled, onClick: () => startParitypayPayment(payModal!), label: providerLabel("paritypay", "ParityPay"), icon: "card" },
                 { id: "cloudpayments", enabled: cloudpaymentsEnabled, onClick: () => startCloudpaymentsPayment(payModal!), label: providerLabel("cloudpayments", "CloudPayments"), icon: "card" },
@@ -554,14 +574,14 @@ async function startCloudpaymentsPayment(option: PublicSellOption) {
                     <Button key={p.id} size="lg" variant="outline" onClick={p.onClick} disabled={payLoading} className={btnCls}>
                       {isMobileOrMiniapp ? (
                         <>
-                          <div className={cn("p-2 rounded-xl", c.bg10)}>
+                          <div className={cn("p-2 rounded-xl", c.bg10, !payLoading && paymentLabelHasIcon(p.label) && "hidden")}>
                             {payLoading ? <Loader2 className={cn("h-6 w-6 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-6 w-6", c.text)} /> : <CreditCard className={cn("h-6 w-6", c.text)} />}
                           </div>
                           <span className="text-base font-bold">{p.label}</span>
                         </>
                       ) : (
                         <>
-                          <div className={cn("absolute left-6 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20)}>
+                          <div className={cn("absolute left-6 p-1.5 rounded-lg transition-colors", c.bg10, c.bg20, !payLoading && paymentLabelHasIcon(p.label) && "hidden")}>
                             {payLoading ? <Loader2 className={cn("h-5 w-5 animate-spin", c.text)} /> : p.icon === "crypto" ? <Zap className={cn("h-5 w-5", c.text)} /> : <CreditCard className={cn("h-5 w-5", c.text)} />}
                           </div>
                           <span className="text-base font-medium">{p.label}</span>

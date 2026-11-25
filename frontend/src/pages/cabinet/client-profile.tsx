@@ -59,6 +59,7 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false, accountO
   const [cryptopayEnabled, setCryptopayEnabled] = useState(false);
   const [heleketEnabled, setHeleketEnabled] = useState(false);
   const [rollypayEnabled, setRollypayEnabled] = useState(false);
+  const [rivarapayEnabled, setRivarapayEnabled] = useState(false);
   const [cispayEnabled, setCispayEnabled] = useState(false);
   const [paritypayEnabled, setParitypayEnabled] = useState(false);
   const [cloudpaymentsEnabled, setCloudpaymentsEnabled] = useState(false);
@@ -327,6 +328,7 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false, accountO
       setTelegramStarsEnabled(Boolean(c.telegramStarsEnabled));
       setHeleketEnabled(Boolean(c.heleketEnabled));
       setRollypayEnabled(Boolean(c.rollypayEnabled));
+      setRivarapayEnabled(Boolean(c.rivarapayEnabled));
       setCispayEnabled(Boolean(c.cispayEnabled));
       setParitypayEnabled(Boolean(c.paritypayEnabled));
       setCloudpaymentsEnabled(Boolean(c.cloudpaymentsEnabled));
@@ -466,6 +468,24 @@ export function ClassicProfilePage({ aurora = false, topupOnly = false, accountO
     try {
       const res = await api.rollypayCreatePayment(token, { amount, currency });
       if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "RollyPay", paymentId: res.paymentId });
+    } catch (e) {
+      setTopUpError(e instanceof Error ? e.message : t("cabinet.profile.top_up_error"));
+    } finally {
+      setTopUpLoading(false);
+    }
+  }
+  async function startTopUpRivarapay() {
+    if (!token || !client) return;
+    const amount = Number(topUpAmount?.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setTopUpError(t("cabinet.profile.top_up_enter_amount"));
+      return;
+    }
+    setTopUpError(null);
+    setTopUpLoading(true);
+    try {
+      const res = await api.rivarapayCreatePayment(token, { amount, currency });
+      if (res.payUrl) setReadyUrl({ url: res.payUrl, provider: "RivaraPay", paymentId: res.paymentId });
     } catch (e) {
       setTopUpError(e instanceof Error ? e.message : t("cabinet.profile.top_up_error"));
     } finally {
@@ -648,7 +668,7 @@ async function startTopUpCloudpayments() {
   // Реальный miniapp (TG WebApp) — только если доступен initData
   const isTgMiniapp = isMiniapp && Boolean((window as { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp?.initData?.trim());
 
-  const topupCard = (plategaMethods.length > 0 || yoomoneyEnabled || yookassaEnabled || telegramStarsEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || cispayEnabled || paritypayEnabled || cloudpaymentsEnabled || lavaEnabled || overpayEnabled) && (
+  const topupCard = (plategaMethods.length > 0 || yoomoneyEnabled || yookassaEnabled || telegramStarsEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || rivarapayEnabled || cispayEnabled || paritypayEnabled || cloudpaymentsEnabled || lavaEnabled || overpayEnabled) && (
           <div id="topup" className="relative flex flex-col rounded-[2rem] shadow-[0_8px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)]">
             <div className="absolute inset-0 overflow-hidden rounded-[2rem] border border-white/10 dark:border-white/5 bg-background/40 backdrop-blur-2xl">
               <div className="absolute -top-32 -left-32 h-64 w-64 rounded-full bg-primary/20 blur-[80px] pointer-events-none" />
@@ -790,6 +810,7 @@ async function startTopUpCloudpayments() {
                 cryptopay: { bg10: "bg-yellow-500/10", bg20: "group-hover:bg-yellow-500/20", text: "text-yellow-500" },
                 heleket: { bg10: "bg-orange-500/10", bg20: "group-hover:bg-orange-500/20", text: "text-orange-500" },
                 rollypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
+                rivarapay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 cispay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 paritypay: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
                 cloudpayments: { bg10: "bg-sky-500/10", bg20: "group-hover:bg-sky-500/20", text: "text-sky-500" },
@@ -805,6 +826,7 @@ async function startTopUpCloudpayments() {
                 { id: "cryptopay", enabled: cryptopayEnabled, onClick: () => startTopUpCryptopay(), label: providerLabel("cryptopay", "Crypto Bot"), icon: "crypto" },
                 { id: "heleket", enabled: heleketEnabled, onClick: () => startTopUpHeleket(), label: providerLabel("heleket", "Heleket"), icon: "crypto" },
                 { id: "rollypay", enabled: rollypayEnabled, onClick: () => startTopUpRollypay(), label: providerLabel("rollypay", "RollyPay"), icon: "card" },
+                { id: "rivarapay", enabled: rivarapayEnabled && currency.toUpperCase() === "RUB", onClick: () => startTopUpRivarapay(), label: providerLabel("rivarapay", "RivaraPay"), icon: "card" },
                 { id: "cispay", enabled: cispayEnabled, onClick: () => startTopUpCispay(), label: providerLabel("cispay", "CisPay"), icon: "card" },
                 { id: "paritypay", enabled: paritypayEnabled, onClick: () => startTopUpParitypay(), label: providerLabel("paritypay", "ParityPay"), icon: "card" },
                 { id: "cloudpayments", enabled: cloudpaymentsEnabled, onClick: () => startTopUpCloudpayments(), label: providerLabel("cloudpayments", "CloudPayments"), icon: "card" },
@@ -876,9 +898,9 @@ async function startTopUpCloudpayments() {
           <label className="au-amount-label" htmlFor="au-topup">Сумма пополнения, {currency.toUpperCase()}</label>
           <input id="au-topup" type="number" inputMode="decimal" min="1" step="0.01" placeholder="Введите сумму" value={topUpAmount} onChange={e=>setTopUpAmount(e.target.value)}/>
           <div className="au-amount-presets">{[currency.toLowerCase() === "rub" ? 150 : 100,300,500,1000].map(n=><button key={n} aria-pressed={topUpAmount===String(n)} onClick={()=>setTopUpAmount(String(n))}>{n}</button>)}</div>
-          <button className="au-balance-pay" onClick={()=>{const amount=Number(topUpAmount.replace(",","."));if(!Number.isFinite(amount)||amount<1){setTopUpError(t("cabinet.profile.top_up_min"));return;}setTopUpError(null);setTopUpModalOpen(true);}} disabled={!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || telegramStarsEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || cispayEnabled || paritypayEnabled || cloudpaymentsEnabled || lavaEnabled || overpayEnabled)}><CreditCard size={18}/>Пополнить баланс</button>
+          <button className="au-balance-pay" onClick={()=>{const amount=Number(topUpAmount.replace(",","."));if(!Number.isFinite(amount)||amount<1){setTopUpError(t("cabinet.profile.top_up_min"));return;}setTopUpError(null);setTopUpModalOpen(true);}} disabled={!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || telegramStarsEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || rivarapayEnabled || cispayEnabled || paritypayEnabled || cloudpaymentsEnabled || lavaEnabled || overpayEnabled)}><CreditCard size={18}/>Пополнить баланс</button>
           {topUpError&&<p role="alert">{topUpError}</p>}
-          {!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || telegramStarsEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || cispayEnabled || paritypayEnabled || cloudpaymentsEnabled || lavaEnabled || overpayEnabled)&&<p>Пополнение сейчас недоступно</p>}
+          {!(plategaMethods.length || yoomoneyEnabled || yookassaEnabled || telegramStarsEnabled || cryptopayEnabled || heleketEnabled || rollypayEnabled || rivarapayEnabled || cispayEnabled || paritypayEnabled || cloudpaymentsEnabled || lavaEnabled || overpayEnabled)&&<p>Пополнение сейчас недоступно</p>}
         </section>
         <button className="au-profile-action" onClick={()=>setPaymentsHistoryOpen(true)}><Wallet size={20}/><span>История операций<small>{payments.length ? `${payments.length} операций` : "Платежей пока нет"}</small></span><span aria-hidden="true">→</span></button>
         <section className="au-profile-section"><h2>Мои устройства <span>{devices.length}</span></h2>

@@ -1,3 +1,5 @@
+import { createProgressWriter } from "../modules/broadcast/progress-writer.js";
+import type { BroadcastProgress } from "../modules/broadcast/broadcast.service.js";
 /**
  * отдельный worker-процесс для рассылок.
  *
@@ -26,7 +28,7 @@ import {
 } from "../modules/broadcast/broadcast.service.js";
 
 const POLL_INTERVAL_MS = 3000;
-const PROGRESS_FLUSH_MS = 3000;
+
 
 function log(...args: unknown[]): void {
   console.log(`[broadcast-worker]`, ...args);
@@ -107,7 +109,12 @@ async function processOne(job: NonNullable<Awaited<ReturnType<typeof claimNextJo
     })();
   }, 2000);
 
-  let lastProgressFlushAt = 0;
+  const progressWriter = createProgressWriter<BroadcastProgress>(async p => {
+    await prisma.broadcastHistory.updateMany({
+      where: { id: job.id, status: "running" },
+      data: { totalTelegram: p.totalTelegram, sentTelegram: p.sentTelegram, failedTelegram: p.failedTelegram, totalEmail: p.totalEmail, sentEmail: p.sentEmail, failedEmail: p.failedEmail },
+    }).catch(() => {});
+  });
   let finalStatus: "completed" | "cancelled" | "error" | "pending" = "completed";
   let finalError: string | null = null;
   let lastResult: Awaited<ReturnType<typeof runBroadcast>> | undefined;
@@ -123,22 +130,7 @@ async function processOne(job: NonNullable<Awaited<ReturnType<typeof claimNextJo
       targetGroup: (job.target_group ?? undefined) as BroadcastTargetGroup | undefined,
       broadcastId: job.id,
       isCancelled: () => cancelRequested || shuttingDown,
-      onProgress: (p) => {
-        const now = Date.now();
-        if (now - lastProgressFlushAt < PROGRESS_FLUSH_MS) return;
-        lastProgressFlushAt = now;
-        void prisma.broadcastHistory.update({
-          where: { id: job.id },
-          data: {
-            totalTelegram: p.totalTelegram,
-            sentTelegram: p.sentTelegram,
-            failedTelegram: p.failedTelegram,
-            totalEmail: p.totalEmail,
-            sentEmail: p.sentEmail,
-            failedEmail: p.failedEmail,
-          },
-        }).catch(() => { /* ignore */ });
-      },
+      onProgress: p => progressWriter.report(p),
     });
     // различаем источник cancel:
     //   • cancel_requested=true в DB — это пользователь нажал «Остановить» → cancelled
@@ -156,6 +148,7 @@ async function processOne(job: NonNullable<Awaited<ReturnType<typeof claimNextJo
     log(`  ERROR running ${job.id}:`, finalError);
   } finally {
     clearInterval(cancelPoller);
+    await progressWriter.finish();
   }
 
   // Финализируем
